@@ -17,6 +17,8 @@ let mollymawk =
   let packages =
     [
       package "logs" ;
+      package "x509" ;
+      package "tls-mirage" ;
       package "albatross" ;
     ]
   and keys = Key.([ v albatross_server ; v port ])
