@@ -4,7 +4,11 @@ let unikernel_info (unikernel_name, info) =
     | `Quit -> `String "quit"
     | `Restart ex ->
       let els = Option.value ~default:[] (Option.map Vmm_core.IS.elements ex) in
-      `Assoc [("restart", `Null) ; ("exit_code", `List (List.map (fun e -> `Int e) els))]
+      `Assoc [
+        ("restart", `Null);
+        ("exit_code", `List (List.map (fun e -> `Int e) els));
+        ("all_exit_codes", `Bool (ex = None));
+      ]
   and cpuid c = `Int c
   and memory m = `Int m
   and block_devices bs =
