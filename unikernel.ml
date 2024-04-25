@@ -187,6 +187,9 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
           let resp = Httpaf.Response.create ~headers `OK in
           Httpaf.Reqd.respond_with_string reqd resp data
         in
+        let reply_json json =
+          reply ~content_type:"application/json" (Yojson.Basic.to_string json)
+        in
         let path =
           Uri.(pct_decode (path (of_string (Httpaf.Reqd.request reqd).Httpaf.Request.target)))
         in
@@ -204,11 +207,14 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
               Logs.info (fun m -> m "albatross returned: %a"
                             (Vmm_commands.pp_wire ~verbose:true) w);
               match w with
-              | (_, `Success `Unikernel_info i) ->
-                let data = `List (List.map Albatross_json.unikernel_info i) |> Yojson.Basic.to_string in
-                reply ~content_type:"application/json" data
-              | w ->
-                reply (Fmt.to_to_string (Vmm_commands.pp_wire ~verbose:true) w)))
+            | (_, `Success `Unikernel_info is) ->
+              reply_json (Albatross_json.unikernel_infos is)
+            | (_, `Success `Policies ps) ->
+              reply_json (Albatross_json.policy_infos ps)
+            | (_, `Success `Block_devices bs) ->
+              reply_json (Albatross_json.block_infos bs)
+            | w ->
+              reply (Fmt.to_to_string (Vmm_commands.pp_wire ~verbose:true) w)))
         | "/main.js" ->
           Lwt.return (reply ~content_type:"text/plain" js_file)
         | _ ->

@@ -37,3 +37,26 @@ let unikernel_info (unikernel_name, info) =
     ("arguments", argv info.argv);
     ("digest", digest info.digest);
   ]
+
+let unikernel_infos is = `List (List.map unikernel_info is)
+
+let block_info (name, size, used) =
+  `Assoc [
+    ("name", `String (Vmm_core.Name.to_string name));
+    ("size", `Int size);
+    ("used", `Bool used);
+  ]
+
+let block_infos bs = `List (List.map block_info bs)
+
+let policy_info (name, policy) =
+  `Assoc [
+    ("name", `String (Vmm_core.Name.to_string name));
+    ("allowed_vms", `Int policy.Vmm_core.Policy.vms);
+    ("allowed_cpuids", `List (List.map (fun id -> `Int id) (Vmm_core.IS.elements policy.cpuids)));
+    ("allowed_memory", `Int policy.memory);
+    ("allowed_block_size", `Int (Option.value ~default:0 policy.block));
+    ("allowed_bridges", `List (List.map (fun b -> `String b) (Vmm_core.String_set.elements policy.bridges)))
+  ]
+
+let policy_infos ps = `List (List.map policy_info ps)
