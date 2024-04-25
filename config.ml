@@ -1,6 +1,7 @@
 open Mirage
 
 let data = crunch "keys"
+let js = crunch "assets"
 
 let mollymawk =
   let packages =
@@ -10,6 +11,8 @@ let mollymawk =
       package "tls-mirage" ;
       package "albatross" ;
       package "yojson";
+      package "uri";
+      package "tyxml";
       package "paf" ~sublibs:[ "mirage" ] ~min:"0.5.0" ;
     ]
   and runtime_args =
@@ -20,8 +23,8 @@ let mollymawk =
   in
   main
     ~runtime_args ~packages "Unikernel.Main"
-    (random @-> pclock @-> mclock @-> time @-> stackv4v6 @-> kv_ro @-> job)
+    (random @-> pclock @-> mclock @-> time @-> stackv4v6 @-> kv_ro @-> kv_ro @-> job)
 
 let () =
   register "mollymawk"
-    [mollymawk $ default_random $ default_posix_clock $ default_monotonic_clock $ default_time $ generic_stackv4v6 default_network $ data]
+    [mollymawk $ default_random $ default_posix_clock $ default_monotonic_clock $ default_time $ generic_stackv4v6 default_network $ data $ js]

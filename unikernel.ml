@@ -20,7 +20,7 @@ module K = struct
     Arg.(value & (opt int 1025 doc))
 end
 
-module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MCLOCK) (T : Mirage_time.S) (S : Tcpip.Stack.V4V6) (KV : Mirage_kv.RO) = struct
+module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MCLOCK) (T : Mirage_time.S) (S : Tcpip.Stack.V4V6) (KV : Mirage_kv.RO) (KV_JS : Mirage_kv.RO) = struct
   module Paf = Paf_mirage.Make(S.TCP)
 
   let retrieve_credentials data =
@@ -46,6 +46,17 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
       exit Mirage_runtime.argument_error
     end;
     (key, cert, certs, server)
+
+  let js_contents js =
+    let file = KV_JS.get js (Mirage_kv.Key.v "main.js") in
+    let result =
+      file >|= fun content ->
+      match content with
+      | Error _e -> "JS file could not be loaded"
+      | Ok js -> js
+    in
+    Lwt_main.run result
+
 
   module TLS = Tls_mirage.Make(S.TCP)
 
@@ -165,9 +176,9 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
       Error ()
     end
 
-  let request_handler stack credentials remote (_ipaddr, _port) reqd =
+  let request_handler stack credentials remote js_file (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
-        let reply ?(content_type="text/plain")data =
+        let reply ?(content_type="text/plain") data =
           let headers = Httpaf.Headers.of_list [
               "content-length", string_of_int (String.length data) ;
               "content-type", content_type ;
@@ -176,21 +187,32 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
           let resp = Httpaf.Response.create ~headers `OK in
           Httpaf.Reqd.respond_with_string reqd resp data
         in
-        query_albatross stack credentials remote ((* `Block_cmd `Block_info *) (* `Policy_cmd `Policy_info *) `Unikernel_cmd `Unikernel_info) >|= function
-        | Error () -> reply "error while querying albatross"
-        | Ok None -> reply "got none"
-        | Ok Some data ->
-          match decode_reply data with
-          | Error () -> reply "couldn't decode albatross' reply"
-          | Ok w ->
-            Logs.info (fun m -> m "albatross returned: %a"
-                          (Vmm_commands.pp_wire ~verbose:true) w);
-            match w with
-            | (_, `Success `Unikernel_info i) ->
-              let data = `List (List.map Albatross_json.unikernel_info i) |> Yojson.Basic.to_string in
-              reply ~content_type:"application/json" data
-            | w ->
-              reply (Fmt.to_to_string (Vmm_commands.pp_wire ~verbose:true) w))
+        let path =
+          Uri.(pct_decode (path (of_string (Httpaf.Reqd.request reqd).Httpaf.Request.target)))
+        in
+        match path with
+        | "/" ->
+          Lwt.return (reply ~content_type:"text/html" Index.index_page)
+        | "/unikernel-info" ->
+          (query_albatross stack credentials remote ((* `Block_cmd `Block_info *) (* `Policy_cmd `Policy_info *) `Unikernel_cmd `Unikernel_info) >|= function
+          | Error () -> reply "error while querying albatross"
+          | Ok None -> reply "got none"
+          | Ok Some data ->
+            (match decode_reply data with
+            | Error () -> reply "couldn't decode albatross' reply"
+            | Ok w ->
+              Logs.info (fun m -> m "albatross returned: %a"
+                            (Vmm_commands.pp_wire ~verbose:true) w);
+              match w with
+              | (_, `Success `Unikernel_info i) ->
+                let data = `List (List.map Albatross_json.unikernel_info i) |> Yojson.Basic.to_string in
+                reply ~content_type:"application/json" data
+              | w ->
+                reply (Fmt.to_to_string (Vmm_commands.pp_wire ~verbose:true) w)))
+        | "/main.js" ->
+          Lwt.return (reply ~content_type:"text/plain" js_file)
+        | _ ->
+          Lwt.return_unit)
 
   let pp_error ppf = function
     | #Httpaf.Status.t as code -> Httpaf.Status.pp_hum ppf code
@@ -201,12 +223,14 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
                  pp_error err
                  Fmt.(option ~none:(any "unknown") Httpaf.Request.pp_hum) request)
 
-  let start _ _ _ _ stack data host port =
+
+  let start _ _ _ _ stack data js host port =
+    let js_file = js_contents js in
     retrieve_credentials data >>= fun credentials ->
     let remote = host, port in
     let port = 8080 in
     Logs.info (fun m -> m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/" port) ;
-    let request_handler _flow = request_handler stack credentials remote in
+    let request_handler _flow = request_handler stack credentials remote js_file in
     Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
     let http = Paf.http_service ~error_handler request_handler in
     let (`Initialized th) = Paf.serve http service in
