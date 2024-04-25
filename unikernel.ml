@@ -167,10 +167,10 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
 
   let request_handler stack credentials remote (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
-        let reply data =
+        let reply ?(content_type="text/plain")data =
           let headers = Httpaf.Headers.of_list [
               "content-length", string_of_int (String.length data) ;
-              "content-type", "text/plain" ;
+              "content-type", content_type ;
             ]
           in
           let resp = Httpaf.Response.create ~headers `OK in
@@ -185,7 +185,12 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
           | Ok w ->
             Logs.info (fun m -> m "albatross returned: %a"
                           (Vmm_commands.pp_wire ~verbose:true) w);
-            reply (Fmt.to_to_string (Vmm_commands.pp_wire ~verbose:true) w))
+            match w with
+            | (_, `Success `Unikernel_info i) ->
+              let data = `List (List.map Albatross_json.unikernel_info i) |> Yojson.Basic.to_string in
+              reply ~content_type:"application/json" data
+            | w ->
+              reply (Fmt.to_to_string (Vmm_commands.pp_wire ~verbose:true) w))
 
   let pp_error ppf = function
     | #Httpaf.Status.t as code -> Httpaf.Status.pp_hum ppf code

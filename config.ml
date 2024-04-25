@@ -9,6 +9,7 @@ let mollymawk =
       package "x509" ;
       package "tls-mirage" ;
       package "albatross" ;
+      package "yojson";
       package "paf" ~sublibs:[ "mirage" ] ~min:"0.5.0" ;
     ]
   and runtime_args =
