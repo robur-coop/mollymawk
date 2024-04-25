@@ -71,3 +71,11 @@ let success = function
   | `Old_unikernels _ -> `String "old unikernels not supported"
   | `Unikernel_image _ -> `String "unikernel image not supported"
   | `Block_device_image _ -> `String "block device image not supported"
+
+let res = function
+  | `Command _ -> `String "command not supported"
+  | `Success s -> success s
+  | `Failure f -> `String ("failure: " ^ f)
+  | `Data (`Console_data (ts, data)) ->
+    `Assoc [ ("timestamp", `String (Ptime.to_rfc3339 ts)) ; ("line", `String data) ]
+  | `Data (`Stats_data _) -> `String "stats not supported"

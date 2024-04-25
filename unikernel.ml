@@ -203,14 +203,10 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
           | Ok Some data ->
             (match decode_reply data with
             | Error () -> reply "couldn't decode albatross' reply"
-            | Ok w ->
+            | Ok (hdr, res) ->
               Logs.info (fun m -> m "albatross returned: %a"
-                            (Vmm_commands.pp_wire ~verbose:true) w);
-            match w with
-            | (_, `Success s) ->
-              reply_json (Albatross_json.success s)
-            | w ->
-              reply (Fmt.to_to_string (Vmm_commands.pp_wire ~verbose:true) w)))
+                            (Vmm_commands.pp_wire ~verbose:true) (hdr, res));
+              reply_json (Albatross_json.res res)))
         | "/main.js" ->
           Lwt.return (reply ~content_type:"text/plain" js_file)
         | _ ->
