@@ -9,7 +9,19 @@ let err_to_exit pp = function
     Logs.err (fun m -> m "received error %a" pp e);
     exit Mirage_runtime.argument_error
 
+module K = struct
+  open Cmdliner
+  let albatross_server =
+    let doc = Arg.info ~doc:"albatross server IP" ["albatross-server"] in
+    Arg.(value & (opt Mirage_runtime_network.Arg.ip_address (Ipaddr.of_string_exn "192.168.1.3") doc))
+
+  let port =
+    let doc = Arg.info ~doc:"server port" ["port"] in
+    Arg.(value & (opt int 1025 doc))
+end
+
 module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MCLOCK) (T : Mirage_time.S) (S : Tcpip.Stack.V4V6) (KV : Mirage_kv.RO) = struct
+  module Paf = Paf_mirage.Make(S.TCP)
 
   let retrieve_credentials data =
     (KV.get data (Mirage_kv.Key.v "key.pem") >|=
@@ -153,16 +165,45 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
       Error ()
     end
 
-  let start _ _ _ _ stack data =
+  let request_handler stack credentials remote (_ipaddr, _port) reqd =
+    Lwt.async (fun () ->
+        let reply data =
+          let headers = Httpaf.Headers.of_list [
+              "content-length", string_of_int (String.length data) ;
+              "content-type", "text/plain" ;
+            ]
+          in
+          let resp = Httpaf.Response.create ~headers `OK in
+          Httpaf.Reqd.respond_with_string reqd resp data
+        in
+        query_albatross stack credentials remote ((* `Block_cmd `Block_info *) (* `Policy_cmd `Policy_info *) `Unikernel_cmd `Unikernel_info) >|= function
+        | Error () -> reply "error while querying albatross"
+        | Ok None -> reply "got none"
+        | Ok Some data ->
+          match decode_reply data with
+          | Error () -> reply "couldn't decode albatross' reply"
+          | Ok w ->
+            Logs.info (fun m -> m "albatross returned: %a"
+                          (Vmm_commands.pp_wire ~verbose:true) w);
+            reply (Fmt.to_to_string (Vmm_commands.pp_wire ~verbose:true) w))
+
+  let pp_error ppf = function
+    | #Httpaf.Status.t as code -> Httpaf.Status.pp_hum ppf code
+    | `Exn exn -> Fmt.pf ppf "exception %s" (Printexc.to_string exn)
+
+  let error_handler _dst ?request err _ =
+    Logs.err (fun m -> m "error %a while processing request %a"
+                 pp_error err
+                 Fmt.(option ~none:(any "unknown") Httpaf.Request.pp_hum) request)
+
+  let start _ _ _ _ stack data host port =
     retrieve_credentials data >>= fun credentials ->
-    let remote = Key_gen.albatross_server (), Key_gen.port () in
-    query_albatross stack credentials remote (`Block_cmd `Block_info (* `Policy_cmd `Policy_info *) (* `Unikernel_cmd `Unikernel_info *)) >|= function
-    | Error () -> ()
-    | Ok None -> Logs.warn (fun m -> m "received EOF")
-    | Ok Some data ->
-      match decode_reply data with
-      | Error () -> ()
-      | Ok w ->
-        Logs.info (fun m -> m "albatross returned: %a"
-                      (Vmm_commands.pp_wire ~verbose:true) w)
+    let remote = host, port in
+    let port = 8080 in
+    Logs.info (fun m -> m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/" port) ;
+    let request_handler _flow = request_handler stack credentials remote in
+    Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
+    let http = Paf.http_service ~error_handler request_handler in
+    let (`Initialized th) = Paf.serve http service in
+    th
 end
