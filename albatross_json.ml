@@ -60,3 +60,14 @@ let policy_info (name, policy) =
   ]
 
 let policy_infos ps = `List (List.map policy_info ps)
+
+let success = function
+  | `Empty -> `Null
+  | `String m -> `String m
+  | `Policies ps -> policy_infos ps
+  | `Old_unikernel_info is -> unikernel_infos is
+  | `Unikernel_info is -> unikernel_infos is
+  | `Block_devices bs -> block_infos bs
+  | `Old_unikernels _ -> `String "old unikernels not supported"
+  | `Unikernel_image _ -> `String "unikernel image not supported"
+  | `Block_device_image _ -> `String "block device image not supported"

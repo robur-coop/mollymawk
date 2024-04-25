@@ -206,13 +206,9 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
             | Ok w ->
               Logs.info (fun m -> m "albatross returned: %a"
                             (Vmm_commands.pp_wire ~verbose:true) w);
-              match w with
-            | (_, `Success `Unikernel_info is) ->
-              reply_json (Albatross_json.unikernel_infos is)
-            | (_, `Success `Policies ps) ->
-              reply_json (Albatross_json.policy_infos ps)
-            | (_, `Success `Block_devices bs) ->
-              reply_json (Albatross_json.block_infos bs)
+            match w with
+            | (_, `Success s) ->
+              reply_json (Albatross_json.success s)
             | w ->
               reply (Fmt.to_to_string (Vmm_commands.pp_wire ~verbose:true) w)))
         | "/main.js" ->
