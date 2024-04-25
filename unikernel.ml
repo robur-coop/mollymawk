@@ -71,7 +71,7 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
     match
       (* subtracting some seconds here to not require perfectly synchronised
          clocks on client and server *)
-      Ptime.sub_span now (Ptime.Span.of_int_s 10),
+      Ptime.sub_span now (Ptime.Span.of_int_s (validity / 2)),
       Ptime.add_span now (Ptime.Span.of_int_s validity)
     with
     | None, _ | _, None -> invalid_arg "span too big - reached end of ptime"
