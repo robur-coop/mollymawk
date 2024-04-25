@@ -209,6 +209,19 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
               reply_json (Albatross_json.res res)))
         | "/main.js" ->
           Lwt.return (reply ~content_type:"text/plain" js_file)
+        | path when String.(length path >= 20 && sub path 0 20 = "/unikernel/shutdown/") ->
+          let unikernel_name = String.sub path 21 (String.length path - 21) in
+          print_endline unikernel_name;
+            (query_albatross stack credentials remote (`Unikernel_cmd `Unikernel_destroy) ~name:unikernel_name >|= function
+            | Error () -> reply "error while querying albatross"
+            | Ok None -> reply "got none"
+            | Ok Some data ->
+              (match decode_reply data with
+              | Error () -> reply "couldn't decode albatross' reply"
+              | Ok (hdr, res) ->
+                Logs.info (fun m -> m "albatross returned: %a"
+                              (Vmm_commands.pp_wire ~verbose:true) (hdr, res));
+                reply_json (Albatross_json.res res)))
         | _ ->
           Lwt.return_unit)
 
