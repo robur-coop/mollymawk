@@ -259,7 +259,32 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
                               (Vmm_commands.pp_wire ~verbose:true) (hdr, res));
                 reply_json (Albatross_json.res res)))
         | "/unikernel/deploy" ->
-            let _data = Httpaf.Reqd.request_body reqd in
+          let response_body = Httpaf.Reqd.request_body reqd in
+          let finished, notify_finished = Lwt.wait () in
+          let wakeup v =
+            Lwt.wakeup_later notify_finished v
+          in
+          let on_eof data () = wakeup data in
+          let f acc s = acc ^ s in
+          let rec on_read on_eof acc bs ~off ~len =
+            let str = Bigstringaf.substring ~off ~len bs in
+            let acc =
+              acc >>= fun acc ->
+              Lwt.return (f acc str)
+            in
+            Httpaf.Body.schedule_read response_body
+              ~on_read:(on_read on_eof acc)
+              ~on_eof:(on_eof acc)
+          in
+          let f_init = Lwt.return "" in
+          Httpaf.Body.schedule_read response_body
+            ~on_read:(on_read on_eof f_init)
+            ~on_eof:(on_eof f_init);
+          finished >>= fun data ->
+          data >>= fun data ->
+          (*           Multipart_form.of_string_to_tree data  *)
+          
+          Logs.info (fun m -> m "read %u bytes: %S" (String.length data) data);
             (query_albatross stack credentials remote (`Unikernel_cmd `Unikernel_info) >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
