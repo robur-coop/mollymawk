@@ -316,7 +316,7 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
              Logs.warn (fun m -> m "couldn't multipart: %s" msg);
                Lwt.return (reply ("couldn't multipart: " ^ msg))
              | Ok (m, assoc) ->
-               let m, r = to_map ~assoc m in
+               let m, _r = to_map ~assoc m in
                match Map.find_opt "arguments" m,
                      Map.find_opt "name" m,
                      Map.find_opt "binary" m

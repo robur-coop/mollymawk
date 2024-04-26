@@ -349,7 +349,7 @@ function deployUnikernel() {
   let binaryFile = Array.from(binaryUnikernel.files)[0]
   let name = document.getElementById("unikernel-name")
   let arguments = document.getElementById("unikernel-arguments")
-  let argumentsData = JSON.stringify(arguments.value)
+  let argumentsData = arguments.value
   let formData = new FormData();
   formData.append("name", name.value);
   formData.append("binary", binaryFile)
