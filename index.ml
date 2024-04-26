@@ -18,7 +18,7 @@ let index_page =
             [ section
                 [ h1 ~a:[a_class ["font-bold text-3xl text-center text-gray-100"]; a_id "molly-text"] [txt "Mollymawk"]
                 ; p ~a:[a_class ["font-semibold text-md text-gray-200 text-center"]; a_id "molly-desc"] [txt "A MirageOS unikernel to....oh just have some Molly..."] ]
-                ; button ~a:[a_id "add-btn"; a_class ["py-1 px-3 rounded bg-transparent border border-2 text-white hover:bg-gray-500 hover:text-black text-right"]] [txt "Create"]
+                ; button ~a:[a_id "add-btn"; a_class ["py-1 px-3 rounded bg-transparent border border-2 text-white hover:bg-white hover:text-black text-right"]] [txt "Create"]
                 ; p ~a:[a_id "no-molly"; a_class ["font-semibold text-sm text-gray-200 text-center hidden"]] [txt "Nothing yet..you gotta deploy some unikernels. Come on chop chop"]
             ; section ~a:[a_id "unikernel-container"; a_class ["my-5 hidden"]  ][]
             ; p ~a:[a_id "deploy-unikernel"][]
