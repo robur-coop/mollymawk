@@ -13,6 +13,7 @@ let mollymawk =
       package "yojson";
       package "uri";
       package "tyxml";
+      package "multipart_form";
       package "paf" ~sublibs:[ "mirage" ] ~min:"0.5.0" ;
     ]
   and runtime_args =

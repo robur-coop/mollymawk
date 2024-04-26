@@ -186,6 +186,28 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
       Error ()
     end
 
+  module Map = Map.Make (String)
+
+  let to_map ~assoc m =
+    let open Multipart_form in
+    let rec go (map, rest) = function
+      | Leaf { header; body } -> (
+          let filename =
+            Option.bind
+              (Header.content_disposition header)
+              Content_disposition.filename in
+          match
+            Option.bind
+              (Header.content_disposition header)
+              Content_disposition.name
+          with
+          | Some name -> (Map.add name (filename, List.assoc body assoc) map, rest)
+          | None -> (map, (body, (filename, List.assoc body assoc)) :: rest))
+      | Multipart { body; _ } ->
+        let fold acc = function Some elt -> go acc elt | None -> acc in
+        List.fold_left fold (map, rest) body in
+    go (Map.empty, []) m
+
   let request_handler stack credentials remote js_file html (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let reply ?(content_type="text/plain") data =
@@ -282,19 +304,50 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
             ~on_eof:(on_eof f_init);
           finished >>= fun data ->
           data >>= fun data ->
-          (*           Multipart_form.of_string_to_tree data  *)
-          
-          Logs.info (fun m -> m "read %u bytes: %S" (String.length data) data);
-            (query_albatross stack credentials remote (`Unikernel_cmd `Unikernel_info) >|= function
-            | Error () -> reply "error while querying albatross"
-            | Ok None -> reply "got none"
-            | Ok Some data ->
-              (match decode_reply data with
-              | Error () -> reply "couldn't decode albatross' reply"
-              | Ok (hdr, res) ->
-                Logs.info (fun m -> m "albatross returned: %a"
-                              (Vmm_commands.pp_wire ~verbose:true) (hdr, res));
-                reply_json (Albatross_json.res res)))
+          let content_type = Httpaf.(Headers.get_exn (Reqd.request reqd).Request.headers "content-type") in
+          let ct = Multipart_form.Content_type.of_string (content_type ^ "\r\n") in
+          (match ct with
+           | Error `Msg msg ->
+             Logs.warn (fun m -> m "couldn't content-type: %s" msg);
+             Lwt.return (reply "couldn't content-type")
+           | Ok ct ->
+             match Multipart_form.of_string_to_list data ct with
+             | Error `Msg msg ->
+             Logs.warn (fun m -> m "couldn't multipart: %s" msg);
+               Lwt.return (reply ("couldn't multipart: " ^ msg))
+             | Ok (m, assoc) ->
+               let m, r = to_map ~assoc m in
+               match Map.find_opt "arguments" m,
+                     Map.find_opt "name" m,
+                     Map.find_opt "binary" m
+               with
+               | Some (_, args), Some (_, name), Some (_, binary) ->
+                 Logs.info (fun m -> m "args %s" args);
+                 (match Albatross_json.config_of_json args with
+                  | Ok cfg ->
+                    let config = { cfg with image = Cstruct.of_string binary } in
+                    (query_albatross stack credentials remote ~name (`Unikernel_cmd (`Unikernel_create config)) >|= function
+                      | Error () ->
+                        Logs.warn (fun m -> m "error querying albatross");
+                        reply "error while querying albatross"
+                      | Ok None ->
+                        Logs.warn (fun m -> m "got none");
+                        reply "got none"
+                      | Ok Some data ->
+                        (match decode_reply data with
+                         | Error () ->
+                           Logs.warn (fun m -> m "couldn't decode albatross reply");
+                           reply "couldn't decode albatross' reply"
+                         | Ok (hdr, res) ->
+                           Logs.info (fun m -> m "albatross returned: %a"
+                                         (Vmm_commands.pp_wire ~verbose:true) (hdr, res));
+                           reply_json (Albatross_json.res res)))
+                  | Error `Msg msg ->
+                    Logs.warn (fun m -> m "couldn't decode data %s" msg);
+                    Lwt.return (reply ("couldn't decode data (of_json): " ^ msg)))
+               | _ ->
+                 Logs.warn (fun m -> m "couldn't find fields");
+                 Lwt.return (reply "couldn't find fields"))
         | _ ->
           Lwt.return (reply ~content_type:"text/plain" "Error 404: this endpoint doesn't exist"))
 
