@@ -57,6 +57,16 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
     in
     Lwt_main.run result
 
+  let create_html_form js =
+    let file = KV_JS.get js (Mirage_kv.Key.v "create_unikernel.html") in
+    let result =
+      file >|= fun content ->
+      match content with
+      | Error _e -> "Form could not be loaded"
+      | Ok html -> html
+    in
+    Lwt_main.run result
+
 
   module TLS = Tls_mirage.Make(S.TCP)
 
@@ -176,7 +186,7 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
       Error ()
     end
 
-  let request_handler stack credentials remote js_file (_ipaddr, _port) reqd =
+  let request_handler stack credentials remote js_file html (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let reply ?(content_type="text/plain") data =
           let headers = Httpaf.Headers.of_list [
@@ -207,11 +217,37 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
               Logs.info (fun m -> m "albatross returned: %a"
                             (Vmm_commands.pp_wire ~verbose:true) (hdr, res));
               reply_json (Albatross_json.res res)))
+        | path when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/") ->
+          let unikernel_name = String.sub path 17 (String.length path - 17) in
+          print_endline unikernel_name;
+          (query_albatross stack credentials remote (`Unikernel_cmd `Unikernel_info) ~name:unikernel_name >|= function
+          | Error () -> reply "error while querying albatross"
+          | Ok None -> reply "got none"
+          | Ok Some data ->
+            (match decode_reply data with
+            | Error () -> reply "couldn't decode albatross' reply"
+            | Ok (hdr, res) ->
+              Logs.info (fun m -> m "albatross returned: %a"
+                            (Vmm_commands.pp_wire ~verbose:true) (hdr, res));
+                            reply_json (Albatross_json.res res)))
+        | path when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/") ->
+          let unikernel_name = String.sub path 17 (String.length path - 17) in
+          (query_albatross stack credentials remote (`Unikernel_cmd `Unikernel_info) ~name:unikernel_name >|= function
+          | Error () -> reply "error while querying albatross"
+          | Ok None -> reply "got none"
+          | Ok Some data ->
+            (match decode_reply data with
+            | Error () -> reply "couldn't decode albatross' reply"
+            | Ok (hdr, res) ->
+              Logs.info (fun m -> m "albatross returned: %a"
+                            (Vmm_commands.pp_wire ~verbose:true) (hdr, res));
+                            reply_json (Albatross_json.res res)))
         | "/main.js" ->
           Lwt.return (reply ~content_type:"text/plain" js_file)
+        | "/unikernel/create" ->
+          Lwt.return (reply ~content_type:"text/html" html)
         | path when String.(length path >= 20 && sub path 0 20 = "/unikernel/shutdown/") ->
           let unikernel_name = String.sub path 21 (String.length path - 21) in
-          print_endline unikernel_name;
             (query_albatross stack credentials remote (`Unikernel_cmd `Unikernel_destroy) ~name:unikernel_name >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
@@ -222,8 +258,20 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
                 Logs.info (fun m -> m "albatross returned: %a"
                               (Vmm_commands.pp_wire ~verbose:true) (hdr, res));
                 reply_json (Albatross_json.res res)))
+        | "/unikernel/deploy" ->
+            let _data = Httpaf.Reqd.request_body reqd in
+            (query_albatross stack credentials remote (`Unikernel_cmd `Unikernel_info) >|= function
+            | Error () -> reply "error while querying albatross"
+            | Ok None -> reply "got none"
+            | Ok Some data ->
+              (match decode_reply data with
+              | Error () -> reply "couldn't decode albatross' reply"
+              | Ok (hdr, res) ->
+                Logs.info (fun m -> m "albatross returned: %a"
+                              (Vmm_commands.pp_wire ~verbose:true) (hdr, res));
+                reply_json (Albatross_json.res res)))
         | _ ->
-          Lwt.return_unit)
+          Lwt.return (reply ~content_type:"text/plain" "Error 404: this endpoint doesn't exist"))
 
   let pp_error ppf = function
     | #Httpaf.Status.t as code -> Httpaf.Status.pp_hum ppf code
@@ -237,11 +285,12 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
 
   let start _ _ _ _ stack data js host port =
     let js_file = js_contents js in
+    let html = create_html_form js in
     retrieve_credentials data >>= fun credentials ->
     let remote = host, port in
     let port = 8080 in
     Logs.info (fun m -> m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/" port) ;
-    let request_handler _flow = request_handler stack credentials remote js_file in
+    let request_handler _flow = request_handler stack credentials remote js_file html in
     Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
     let http = Paf.http_service ~error_handler request_handler in
     let (`Initialized th) = Paf.serve http service in
