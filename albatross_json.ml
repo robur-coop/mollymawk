@@ -13,8 +13,8 @@ let unikernel_info (unikernel_name, info) =
   and memory m = `Int m
   and block_devices bs =
     let block (name, dev, sec) =
-      let dev = Option.value ~default:name dev in
-      let s = Option.value ~default:0 sec in
+      let dev = Option.value ~default:"none specified (name is used)" dev in
+      let s = Option.value ~default:(-1) sec in
       `Assoc [("name", `String name) ; ("host_device", `String dev); ("sector_size", `Int s)]
     in
     `List (List.map block bs)
@@ -83,3 +83,117 @@ let res = function
   | `Data (`Console_data (ts, data)) ->
     `Assoc [ ("timestamp", `String (Ptime.to_rfc3339 ts)) ; ("line", `String data) ]
   | `Data (`Stats_data _) -> `String "stats not supported"
+
+let get key assoc =
+  match List.find_opt (fun (k, _) -> String.equal k key) assoc with
+  | None -> None
+  | Some (_, f) -> Some f
+
+let fail_behaviour_of_json js =
+  let ( let* ) = Result.bind in
+  match js with
+  | `String "quit" -> Ok `Quit
+  | `Assoc rs ->
+    (match
+       get "restart" rs, get "exit_code" rs, get "all_exit_codes" rs
+     with
+     | None, _, _ -> Error (`Msg "expected a restart")
+     | Some _, Some `List codes, _ ->
+       let* codes =
+         try Ok (List.map (function `Int n -> n | _ -> failwith "not an integer") codes) with
+           Failure s -> Error (`Msg ("expected integer values as exit codes, error: " ^ s))
+       in
+       Ok (`Restart (Some (Vmm_core.IS.of_list codes)))
+     | Some _, Some _, _ -> Error (`Msg "expected a list of integers as exit_code payload")
+     | Some _, _, _ -> Ok (`Restart None))
+  | _ -> Error (`Msg "fail behaviour must be quit or restart")
+
+let bridge_of_json (js : Yojson.Basic.t) =
+  (* we support [ "foo" ] as well as [ { name: "foo" ; host_device: "myfoo" ; mac: "aa:bb:cc:dd:ee:ff" *)
+  let ( let* ) = Result.bind in
+  match js with
+  | `String bridge -> Ok (bridge, None, None)
+  | `Assoc xs ->
+    (match get "name" xs, get "host_device" xs, get "mac" xs with
+     | None, _, _ -> Error (`Msg "name must be present in the json")
+     | Some `String name, None, None -> Ok (name, None, None)
+     | Some `String name, Some `String host, None -> Ok (name, Some host, None)
+     | Some `String name, None, Some `String mac ->
+       let* mac = Macaddr.of_string mac in
+       Ok (name, None, Some mac)
+     | Some `String name, Some `String host, Some `String mac ->
+       let* mac = Macaddr.of_string mac in
+       Ok (name, Some host, Some mac)
+     | _, _, _ -> Error (`Msg "couldn't decode json"))
+  | _ -> Error (`Msg "bad json, either string or assoc")
+
+let block_device_of_json js =
+  (* we support [ "foo" ] as well as [ { name: "foo" ; host_device: "myfoo" ; sector_size: 20 *)
+  match js with
+  | `String name -> Ok (name, None, None)
+  | `Assoc xs ->
+    (match get "name" xs, get "host_device" xs, get "sector_size" xs with
+     | None, _, _ -> Error (`Msg "name must be present in the json")
+     | Some `String name, None, None -> Ok (name, None, None)
+     | Some `String name, Some `String host, None -> Ok (name, Some host, None)
+     | Some `String name, None, Some `Int sector_size -> Ok (name, None, Some sector_size)
+     | Some `String name, Some `String host, Some `Int sector_size -> Ok (name, Some host, Some sector_size)
+     | _, _, _ -> Error (`Msg "couldn't decode json"))
+  | _ -> Error (`Msg "bad json, either string or assoc")
+
+let config_of_json str =
+  let ( let* ) = Result.bind in
+  let* json = try Ok (Yojson.Basic.from_string str) with Yojson.Json_error s -> Error (`Msg s) in
+  let* dict = match json with `Assoc r -> Ok r | _ -> Error (`Msg "not a json assoc") in
+  let* fail_behaviour =
+    Option.fold ~none:(Ok `Quit)
+      ~some:fail_behaviour_of_json (get "fail_behaviour" dict)
+  in
+  let* cpuid =
+    Option.fold ~none:(Ok 0)
+      ~some:(function `Int n -> Ok n | _ -> Error (`Msg "cpuid must be an integer"))
+      (get "cpuid" dict)
+  in
+  let* memory =
+    Option.fold ~none:(Ok 32)
+      ~some:(function `Int n -> Ok n | _ -> Error (`Msg "memory must be an integer"))
+      (get "memory" dict)
+  in
+  let* bridges =
+    match get "network_interfaces" dict with
+    | None -> Ok []
+    | Some `List bs ->
+      List.fold_left (fun r x ->
+          let* r = r in
+          let* b = bridge_of_json x in
+          Ok (b :: r))
+        (Ok []) bs
+    | Some _ -> Error (`Msg "expected a list of network devices")
+  in
+  let* block_devices =
+    match get "block_devices" dict with
+    | None -> Ok []
+    | Some `List bs ->
+      List.fold_left (fun r x ->
+          let* r = r in
+          let* b = block_device_of_json x in
+          Ok (b :: r))
+        (Ok []) bs
+    | Some _ -> Error (`Msg "expected a list of block devices")
+  in
+  let* argv =
+    try
+      Option.fold ~none:(Ok None)
+        ~some:(function
+            | `List bs ->
+              Ok (Some (List.map (function
+                  | `String n -> n
+                  | _ -> failwith "argument is not a string") bs))
+            | _ -> Error (`Msg "arguments must be a list of strings"))
+      (get "arguments" dict)
+    with
+      Failure s -> Error (`Msg ("expected strings as argv, error: " ^ s))
+  in
+  Ok { Vmm_core.Unikernel.typ = `Solo5 ; compressed = false ;
+       image = Cstruct.empty ; fail_behaviour ; cpuid ;
+       memory ; block_devices ; bridges ; argv }
