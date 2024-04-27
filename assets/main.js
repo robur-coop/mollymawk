@@ -1,4 +1,5 @@
 let previousContent = [];
+var unikernel_name
 
 async function fetchUnikernelInfo() {
   try {
@@ -62,7 +63,6 @@ async function fetchAndDisplayInfo() {
         viewButton.classList.add("py-1","px-3","rounded", "bg-transparent", "border", "hover:border-0", "border-2", "text-white", "hover:bg-blue-500");
         viewButton.textContent = "View"
         viewButton.addEventListener("click", (event) => getUnikernelInfo(item));
-        // viewButtonLink.href = `unikernel/info/${item.name}`;
 
         title.classList.add("text-gray-200","border-t-0","px-6","align-middle","border-l-0","border-r-0","text-md","whitespace-nowrap","p-4");
         type.classList.add("text-gray-200","border-t-0","px-6","align-middle","border-l-0","border-r-0","text-md","whitespace-nowrap","p-4")
@@ -91,10 +91,11 @@ async function fetchAndDisplayInfo() {
   previousContent = content;
 }
 
-
+var querySelector = false
 
 document.addEventListener("DOMContentLoaded", function() {
   fetchAndDisplayInfo()
+  setInterval(getConsoleOutput,300)
   const createButton = document.getElementById("add-btn")
   createButton.addEventListener("click", (event) => {
     window.location.replace("/unikernel/create")
@@ -139,52 +140,54 @@ function shutdownUnikernel()
     });
 }
 
-function getConsoleOutput(unikernel, uniDiv)
+var consoleArea = document.createElement("textarea");
+function getConsoleOutput()
 {
-  const consoleDiv = document.createElement("div")
+  console.log(unikernel_name)
+  if(unikernel_name) {
+  const consoleDiv = document.getElementById("console-container")
   consoleDiv.id = "console-container"
-  consoleDiv.classList.add("border", "rounded", "bg-transparent", "text-white", "text-left", "p-4")
-  const consoleLabel = document.createElement("p");
-  consoleLabel.classList.add("text-xl", "font-semibold", "text-blue-700")
-  consoleLabel.textContent = "Console output"
-  consoleDiv.appendChild(consoleLabel)
-
-  const consoleTable = document.createElement("table")
-  const consoleTBody = document.createElement("tbody");
-  fetch("/unikernel/console/"+unikernel.name, {
+  consoleDiv.classList.add("rounded", "bg-transparent", "text-white", "text-left", "p-4", "overflow-hidden", "h-screen")
+  consoleArea.classList.add("w-full", "bg-transparent", "text-white", "border-0", "h-screen", "overflow-hidden")
+  fetch("/unikernel/console/"+unikernel_name, {
     method: "get",
   })
-    .then((response) => response.text())
+    .then((response) => response.json())
     .then((responseText) => {
-      const tr = document.createElement("tr");
-      const td = document.createElement("td");
-      td.textContent = responseText
-      tr.appendChild(td)
-      consoleTBody.appendChild(tr)
+      let data= ""
+      responseText.forEach(item => {
+        data += `${item.timestamp} - ${item.line} \n`
+      })
+      consoleArea.textContent = ""
+      consoleArea.textContent = data
       console.log("response is"+responseText);
     })
     .catch((error) => {
-      postAlert("bg-red-500", `${unikernel.name} ${error}`)
+      postAlert("bg-red-500", `${unikernel_name} ${error}`)
       console.error(error)
     })
     .finally(() => {
 
     });
-    consoleTable.appendChild(consoleTBody)
-    consoleDiv.appendChild(consoleTable)
-    uniDiv.appendChild(consoleDiv)
+    consoleDiv.appendChild(consoleArea)
+  }
 }
 
 
 function getUnikernelInfo(unikernel)
 {
 
+  unikernel_name = unikernel.name
   fetch("/unikernel/info/"+unikernel.name, {
     method: "get",
   })
     .then((response) => response.json())
     .then((responseText) => {
       let uni = responseText[0];
+      const uniCon = document.getElementById("unikernel-container")
+      uniCon.classList.remove("hidden")
+      uniCon.classList.add("block")
+      const uniDiv = document.getElementById("info-container");
       postAlert("bg-green-500", `${uni.name} loaded succesfully`)
       const mollyText = document.getElementById("molly-text");
       const mollyDesc = document.getElementById("molly-desc");
@@ -201,12 +204,9 @@ function getUnikernelInfo(unikernel)
       shutdownButton.classList.add("my-3");
       shutdownButton.classList.add("py-2", "px-3", "rounded", "bg-red-500", "text-white", "hover:bg-red-700");
       shutdownButton.textContent = "Shutdown"
-      // shutdownButtonLink.href = `unikernel/shutdown/${unikernel.name}`;
       shutdownButtonDiv.appendChild(shutdownButton)
-      // window.location.replace("/unikernel/"+unikernel.name)
       const uniTable = document.getElementById("unikernel-info");
       uniTable.classList.add("hidden")
-      const uniDiv = document.getElementById("unikernel-container");
       uniDiv.classList.remove("hidden")
       uniDiv.classList.add("block")
 
@@ -403,8 +403,6 @@ function getUnikernelInfo(unikernel)
       infoDiv.appendChild(memDiv);
       infoDiv.appendChild(typDiv);
       uniDiv.appendChild(infoDiv);
-      const pollingInterval = 1000;
-      setInterval(getConsoleOutput(unikernel, uniDiv), pollingInterval);
       uniDiv.appendChild(otherInfo);
       uniDiv.appendChild(shutdownButtonDiv);
 
