@@ -330,7 +330,7 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
                 reply_json (Albatross_json.res res)))
         | path when String.(length path >= 19 && sub path 0 19 = "/unikernel/console/") ->
           let unikernel_name = String.sub path 20 (String.length path - 20) in
-            (query_albatross stack credentials remote (`Console_cmd (`Console_subscribe (`Count 10)))  ~name:unikernel_name >|= function
+          (query_albatross stack credentials remote (`Console_cmd (`Console_subscribe (`Count 10)))  ~name:unikernel_name >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
             | Ok Some data ->
@@ -338,8 +338,10 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
               | Error () -> reply "couldn't decode albatross' reply"
               | Ok (hdr, res) ->
                 Logs.info (fun m -> m "albatross returned: %a"
-                              (Vmm_commands.pp_wire ~verbose:true) (hdr, res));
-                reply_json (Albatross_json.res res)))
+                              (Vmm_commands.pp_wire ~verbose:true) (hdr, res)))) >>= fun () ->
+          let data = Option.value ~default:[] (Map.find_opt unikernel_name !console_output) in
+          reply_json (`List data);
+          Lwt.return_unit
         | "/unikernel/deploy" ->
           let response_body = Httpaf.Reqd.request_body reqd in
           let finished, notify_finished = Lwt.wait () in
