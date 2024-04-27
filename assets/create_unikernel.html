@@ -5,33 +5,60 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <script src="https://cdn.tailwindcss.com"></script>
         <title>Mollyhawk | Create Unikernel</title>
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+        <link
+            rel="icon"
+            type="image/png"
+            sizes="32x32"
+            href="/favicon-32x32.png"
+        >
+        <link
+            rel="icon"
+            type="image/png"
+            sizes="16x16"
+            href="/favicon-16x16.png"
+        >
+        <link rel="manifest" href="/site.webmanifest">
     </head>
-    <body class="bg-black px-10 py-10 max-w-7xl mx-auto">
+    <body class="bg-gray-900 px-10 py-10 max-w-7xl mx-auto">
+        <div id="alert-container" class="fixed top-4 right-4 z-50 p-3"></div>
         <h2 class="text-center text-white font-semibold">Deply a Unikernel</h2>
         <section class="max-w-5xl px-4 mx-auto my-5">
             <div class="my-4">
                 <div class="py-2">
                     <label class="px-1 text-sm text-white">Unikernel Name</label>
                     <input
+                        required
                         id="unikernel-name"
                         name="unikernel_name"
                         type="text"
-                        class="text-md block px-3 py-2  rounded-lg w-full
-                bg-gray-300 border-2 border-gray-300 shadow-md focus:border-gray-600 focus:outline-none"
+                        class="text-md block px-3 py-2 bg-transparent text-white rounded-lg w-full border-2 border-gray-600 shadow-md focus:border-gray-300 focus:outline-none"
                     >
                 </div>
             </div>
             <div>
                 <label class="px-1 text-sm text-white">Unikernel Arguments</label>
-                <textarea name="" id="unikernel-arguments" cols="10" rows="10" class="w-full rounded bg-gray-300"></textarea>
+                <textarea
+                    name=""
+                    id="unikernel-arguments"
+                    cols="10"
+                    rows="10"
+                    class="w-full rounded bg-gray-300 bg-transparent text-white border-2 border-gray-600 shadow-md focus:border-gray-300 focus:outline-none"
+                ></textarea>
             </div>
             <div>
-                    <label class="px-1 text-sm text-white">Unikernel Binary</label>
-                    <br>
-                    <input type="file" name="unikernel-binary" class="text-white" id="unikernel-binary">
+                <label class="px-1 text-sm text-white">Unikernel Binary</label>
+                <br>
+                <input
+                    required
+                    type="file"
+                    name="unikernel-binary"
+                    class="text-white"
+                    id="unikernel-binary"
+                >
             </div>
             <div class="flex justify-end space-x-4 my-5">
-                <button id="deploy-unikernel" class="px-5 py-1 rounded-md bg-green-500 hover:bg-green-700 text-gray-100 font-semibold">Deploy</button>
+                <button id="deploy-unikernel" class="px-5 py-1 rounded-md bg-blue-500 hover:bg-blue-700 text-gray-100 font-semibold">Deploy</button>
             </div>
         </section>
         <p id="add-btn"></p>

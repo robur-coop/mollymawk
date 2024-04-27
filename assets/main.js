@@ -7,9 +7,11 @@ async function fetchUnikernelInfo() {
   try {
     const response = await fetch("/unikernel-info");
     const data = await response.json();
+    postAlert("bg-green-500", "Unikernels loaded")
     console.log("Fetched content:", data);
     return data;
   } catch (error) {
+    postAlert("bg-red-500", error)
     console.error("Error fetching content:", error);
     return [];
   }
@@ -26,19 +28,24 @@ async function fetchAndDisplayInfo() {
   const typTitle = document.createElement("th");
   const cpuTitle = document.createElement("th");
   const memTitle = document.createElement("th");
+  const actionTitle = document.createElement("th")
   nameTitle.classList.add("text-white","px-6","bg-blueGray-50","text-blueGray-500","align-middle","border","border-solid","border-blueGray-100","py-3", "text-xs","uppercase","border-l-0","border-r-0","whitespace-nowrap","font-semibold","text-left");
   typTitle.classList.add("text-white","px-6","bg-blueGray-50","text-blueGray-500","align-middle","border","border-solid","border-blueGray-100","py-3", "text-xs","uppercase","border-l-0","border-r-0","whitespace-nowrap","font-semibold","text-left");
   cpuTitle.classList.add("text-white","px-6","bg-blueGray-50","text-blueGray-500","align-middle","border","border-solid","border-blueGray-100","py-3", "text-xs","uppercase","border-l-0","border-r-0","whitespace-nowrap","font-semibold","text-left");
   memTitle.classList.add("text-white","px-6","bg-blueGray-50","text-blueGray-500","align-middle","border","border-solid","border-blueGray-100","py-3", "text-xs","uppercase","border-l-0","border-r-0","whitespace-nowrap","font-semibold","text-left");
+  actionTitle.classList.add("text-white","px-6","bg-blueGray-50","text-blueGray-500","align-middle","border","border-solid","border-blueGray-100","py-3", "text-xs","uppercase","border-l-0","border-r-0","whitespace-nowrap","font-semibold","text-left");
   nameTitle.textContent = "Name";
   typTitle.textContent = "Type";
   cpuTitle.textContent = "CPU";
   memTitle.textContent = "Memory";
+  actionTitle.textContent = "Action";
+  uniTHead.classList.add("bg-gray-700")
   uniTHead.appendChild(nameTitle);
   uniTHead.appendChild(typTitle);
   uniTHead.appendChild(cpuTitle);
   uniTHead.appendChild(memTitle);
   uniTable.appendChild(uniTHead);
+  uniTHead.appendChild(actionTitle);
 
   if (content.length === 0) {
     emptyMessage.classList.remove("hidden");
@@ -52,15 +59,10 @@ async function fetchAndDisplayInfo() {
         const cpu = document.createElement("td");
         const memory = document.createElement("td");
 
-        const stopButtonLink = document.createElement("a");
-        stopButtonLink.classList.add("py-2", "px-3", "rounded", "bg-blue-500", "text-white");
-        stopButtonLink.textContent = "Stop"
-        stopButtonLink.href = `unikernel/shutdown/${item.name}`;
-
         const viewButtonDiv = document.createElement("div");
         viewButtonDiv.classList.add("my-3");
         const viewButton = document.createElement("button");
-        viewButton.classList.add("py-1","px-3","rounded", "bg-transparent", "border", "border-2", "text-white", "hover:bg-gray-300", "hover:text-black");
+        viewButton.classList.add("py-1","px-3","rounded", "bg-transparent", "border", "hover:border-0", "border-2", "text-white", "hover:bg-blue-500");
         viewButton.textContent = "View"
         viewButton.addEventListener("click", (event) => getUnikernelInfo(item));
         // viewButtonLink.href = `unikernel/info/${item.name}`;
@@ -80,6 +82,7 @@ async function fetchAndDisplayInfo() {
         tr.appendChild(type);
         tr.appendChild(cpu);
         tr.appendChild(memory);
+        tr.classList.add("border-b")
         viewButtonDiv.appendChild(viewButton);
         tr.appendChild(viewButtonDiv)
         uniTBody.appendChild(tr);
@@ -106,40 +109,99 @@ document.addEventListener("DOMContentLoaded", function() {
   })
 });
 
+function postAlert(bg_color, content) {
+  const alertContainer = document.getElementById("alert-container");
+  const alert = document.createElement("div");
+  alert.className = `text-white p-4 rounded-md transition ease-in-out delay-150 duration-300 my-2 p-3 ${bg_color}`;
+  alert.textContent = content;
+  alertContainer.appendChild(alert);
+  setTimeout(() => {
+    alertContainer.removeChild(alert);
+  }, 1600);
+}
+
+
+function shutdownUnikernel()
+{
+  let name = document.getElementById("uni-name").textContent
+  fetch(`/unikernel/shutdown/${name}`, {
+    method: "GET",
+  })
+    .then((response) => response.text())
+    .then((responseText) => {
+      postAlert("bg-green-500", responseText)
+      window.location.reload
+      console.log(responseText)
+    })
+    .catch((error) => {
+      postAlert("bg-red-500", error)
+      console.error(error)
+    })
+    .finally(() => {
+
+    });
+}
 
 
 function getUnikernelInfo(unikernel)
 {
+  let consoleOutput = new WebSocket(`ws://${window.location.host}/unikernel/console/${unikernel.name}`)
+
+  consoleOutput.onopen = (event) => {
+    console.log("Message from the server:", event.data);
+  };
+
+  consoleOutput.onerror = (event) => {
+    console.error(event)
+  }
+
+
+  const consoleDiv = document.createElement("div");
+  consoleDiv.classList.add("border", "rounded", "bg-transparent", "text-white", "text-left", "p-4")
+  const consoleLabel = document.createElement("p");
+  consoleLabel.classList.add("text-xl", "font-semibold", "text-blue-700")
+  consoleLabel.textContent = "Console output"
+  const consoleOut = document.createElement("textarea")
+  consoleOut.classList.add("bg-transparent", "w-full", "text-sm", "focus:border-0", "focus:outline-none", "active:outline-none")
+  consoleOut.readOnly = true
+  consoleOut.textContent = "hello world ---------- 20:08pm"
+  consoleDiv.appendChild(consoleLabel)
+  consoleDiv.appendChild(consoleOut)
+
 
   fetch("/unikernel/info/"+unikernel.name, {
     method: "get",
   })
     .then((response) => response.json())
     .then((responseText) => {
-      console.log(responseText[0].name)
-         const mollyText = document.getElementById("molly-text");
-         const mollyDesc = document.getElementById("molly-desc");
-         const createBtn = document.getElementById("add-btn")
-         createBtn.classList.add("hidden")
-         mollyText.classList.remove("text-center", "text-3xl")
-         mollyText.classList.add("text-left", "text-sm")
-         mollyDesc.classList.add("hidden")
-        const shutdownButtonDiv = document.createElement("div");
-        shutdownButtonDiv.classList.add("text-right", "my-3")
-        const shutdownButtonLink = document.createElement("a");
-        shutdownButtonLink.classList.add("my-3");
-        shutdownButtonLink.classList.add("py-2", "px-3", "rounded", "bg-red-500", "text-white", "hover:bg-red-700");
-        shutdownButtonLink.textContent = "Shutdown"
-        shutdownButtonLink.href = `unikernel/shutdown/${unikernel.name}`;
-        shutdownButtonDiv.appendChild(shutdownButtonLink)
+      let uni = responseText[0];
+      postAlert("bg-green-500", `${uni.name} loaded succesfully`)
+      const mollyText = document.getElementById("molly-text");
+      const mollyDesc = document.getElementById("molly-desc");
+      const createBtn = document.getElementById("add-btn")
+      createBtn.classList.add("hidden")
+      mollyText.classList.remove("text-center", "text-3xl")
+      mollyText.classList.add("text-left", "text-sm")
+      mollyDesc.classList.add("hidden")
+      const shutdownButtonDiv = document.createElement("div");
+      shutdownButtonDiv.classList.add("text-right", "my-3")
+      const shutdownButton = document.createElement("button");
+      shutdownButton.id = "shutdown-button";
+      shutdownButton.onclick = shutdownUnikernel
+      shutdownButton.classList.add("my-3");
+      shutdownButton.classList.add("py-2", "px-3", "rounded", "bg-red-500", "text-white", "hover:bg-red-700");
+      shutdownButton.textContent = "Shutdown"
+      // shutdownButtonLink.href = `unikernel/shutdown/${unikernel.name}`;
+      shutdownButtonDiv.appendChild(shutdownButton)
       // window.location.replace("/unikernel/"+unikernel.name)
       const uniTable = document.getElementById("unikernel-info");
       uniTable.classList.add("hidden")
       const uniDiv = document.getElementById("unikernel-container");
       uniDiv.classList.remove("hidden")
       uniDiv.classList.add("block")
-      let uni = responseText[0];
+
       const name = document.createElement("h2");
+      name.id = "uni-name"
       name.textContent = uni.name;
       const digest = document.createElement("p");
       digest.classList.add("text-xs", "text-white", "font-semibold")
@@ -150,7 +212,7 @@ function getUnikernelInfo(unikernel)
       infoDiv.classList.add("grid", "grid-cols-3", "gap-3", "text-white", "my-5")
 
       const cpuDiv = document.createElement("div");
-      cpuDiv.classList.add("p-4", "rounded", "bg-gray-900")
+      cpuDiv.classList.add("p-4", "rounded", "bg-gray-900", "border", "border-gray-700")
       const cpuSubDiv = document.createElement("div");
       cpuSubDiv.classList.add("flex", "justify-between")
       const cpu = document.createElement("p");
@@ -160,14 +222,14 @@ function getUnikernelInfo(unikernel)
       cpu.textContent = `${uni.cpuid}`
       cpuLabel.textContent = "CPU"
       const cpuIcon = document.createElement("i");
-      cpuIcon.classList.add("fa-solid","fa-microchip", "text-md")
+      cpuIcon.classList.add("fa-solid","fa-microchip", "text-xl")
       cpuSubDiv.appendChild(cpuIcon);
       cpuSubDiv.appendChild(cpuLabel);
       cpuDiv.appendChild(cpuSubDiv)
       cpuDiv.appendChild(cpu)
 
       const memDiv = document.createElement("div");
-      memDiv.classList.add("p-4", "rounded", "bg-gray-900")
+      memDiv.classList.add("p-4", "rounded", "bg-gray-900", "border", "border-gray-700")
       const memSubDiv = document.createElement("div");
       memSubDiv.classList.add("flex", "justify-between")
       const mem = document.createElement("p");
@@ -176,7 +238,7 @@ function getUnikernelInfo(unikernel)
       mem.textContent = `${uni.memory}MB`
       memLabel.textContent = "Memory"
       const memIcon = document.createElement("i");
-      memIcon.classList.add("fa-solid","fa-hard-drive", "text-md")
+      memIcon.classList.add("fa-solid","fa-hard-drive", "text-xl")
       memSubDiv.appendChild(memIcon);
       memSubDiv.appendChild(memLabel);
       memDiv.appendChild(memSubDiv)
@@ -184,7 +246,7 @@ function getUnikernelInfo(unikernel)
 
       const typDiv = document.createElement("div");
       const typSubDiv = document.createElement("div")
-      typDiv.classList.add("p-4", "rounded", "bg-gray-900")
+      typDiv.classList.add("p-4", "rounded", "bg-gray-900", "border", "border-gray-700")
       typSubDiv.classList.add("flex", "justify-between")
       const typ = document.createElement("p");
       const typLabel = document.createElement("p")
@@ -192,7 +254,7 @@ function getUnikernelInfo(unikernel)
       typ.textContent = `${uni.typ}`
       typLabel.textContent = "Type"
       const typIcon = document.createElement("i");
-      typIcon.classList.add("fa-solid","fa-warehouse", "text-md")
+      typIcon.classList.add("fa-solid","fa-warehouse", "text-xl")
       typSubDiv.appendChild(typIcon);
       typSubDiv.appendChild(typLabel);
       typDiv.appendChild(typSubDiv)
@@ -200,7 +262,7 @@ function getUnikernelInfo(unikernel)
 
 
       const otherInfo = document.createElement("div");
-      otherInfo.classList.add("rounded", "my-4", "bg-gray-900", "text-white", "p-4", "divide-y-2")
+      otherInfo.classList.add("rounded", "my-4", "bg-gray-900", "text-white", "p-4", "divide-y","border", "border-gray-700")
 
       const argDiv = document.createElement("div")
       const argLabel = document.createElement("p")
@@ -326,17 +388,20 @@ function getUnikernelInfo(unikernel)
       otherInfo.appendChild(failDiv)
 
 
+
       uniDiv.appendChild(name);
       uniDiv.appendChild(digest);
       infoDiv.appendChild(cpuDiv);
       infoDiv.appendChild(memDiv);
       infoDiv.appendChild(typDiv);
       uniDiv.appendChild(infoDiv);
+      uniDiv.appendChild(consoleDiv);
       uniDiv.appendChild(otherInfo);
       uniDiv.appendChild(shutdownButtonDiv);
 
     })
     .catch((error) => {
+      postAlert("bg-red-500", `${uni.name} ${error}`)
       console.error(error)
     })
     .finally(() => {
@@ -354,7 +419,6 @@ function deployUnikernel() {
   formData.append("name", name.value);
   formData.append("binary", binaryFile)
   formData.append("arguments", argumentsData)
-  // Disable the button temporarily to prevent multiple click
 
   // Send post request to unikernel with the formData
   fetch("/unikernel/deploy", {
@@ -364,9 +428,11 @@ function deployUnikernel() {
   })
     .then((response) => response.text())
     .then((responseText) => {
+      postAlert("bg-green-500", responseText)
       console.log(responseText)
     })
     .catch((error) => {
+      postAlert("bg-red-500", error)
       console.error(error)
     })
     .finally(() => {
