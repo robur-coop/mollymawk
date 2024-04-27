@@ -121,42 +121,6 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
       | Ok mycert ->
         Ok (`Single (mycert :: cert :: certs, tmpkey))
 
-  let query_albatross stack (key, cert, certs, server_cert) remote ?(name = ".") cmd =
-    S.TCP.create_connection (S.tcp stack) remote >>= function
-    | Error e ->
-      Logs.err (fun m -> m "error connecting to albatross: %a" S.TCP.pp_error e);
-      Lwt.return (Error ())
-    | Ok flow ->
-      match gen_cert cert ~certs key cmd name with
-      | Error () ->
-        S.TCP.close flow >|= fun () ->
-        Error ()
-      | Ok certificates ->
-        let tls_config =
-          let authenticator =
-            X509.Authenticator.chain_of_trust
-              ~time:(fun () -> Some (Ptime.v (P.now_d_ps ())))
-              [server_cert]
-          in
-          Tls.Config.client ~authenticator ~certificates ()
-        in
-        TLS.client_of_flow tls_config flow >>= function
-        | Error e ->
-          Logs.err (fun m -> m "error establishing TLS handshake: %a"
-                       TLS.pp_write_error e);
-          S.TCP.close flow >|= fun () ->
-          Error ()
-        | Ok tls_flow ->
-          TLS.read tls_flow >>= fun r ->
-          TLS.close tls_flow >|= fun () ->
-          match r with
-          | Ok `Data d -> Ok (Some d)
-          | Ok `Eof -> Ok None
-          | Error e ->
-            Logs.err (fun m -> m "received error while reading: %a"
-                         TLS.pp_error e);
-            Error ()
-
   let decode_reply data =
     if Cstruct.length data >= 4 then
       let len = Int32.to_int (Cstruct.BE.get_uint32 data 0) in
@@ -187,6 +151,90 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
     end
 
   module Map = Map.Make (String)
+
+  let console_output : Yojson.Basic.t list Map.t ref = ref Map.empty
+
+  module Set = Set.Make (String)
+
+  let active_console_readers = ref Set.empty
+
+  let rec continue_reading name flow =
+    TLS.read flow >>= function
+    | Ok `Data d ->
+      (match decode_reply d with
+       | Error () -> ()
+       | Ok (_, `Data `Console_data (ts, data)) ->
+         let d = Albatross_json.console_data_to_json (ts, data) in
+         console_output :=
+           Map.update name
+             (function
+               | None -> Some [ d ]
+               | Some xs ->
+                 let xs =
+                   if List.length xs > 20 then
+                     List.tl xs
+                   else
+                     xs
+                 in
+                 Some (xs @ [ d ]))
+             !console_output
+       | _ ->
+         Logs.warn (fun m -> m "unexpected reply, expected console output"));
+      continue_reading name flow
+    | Ok `Eof ->
+      active_console_readers := Set.remove name !active_console_readers;
+      TLS.close flow
+    | Error e ->
+      active_console_readers := Set.remove name !active_console_readers;
+      TLS.close flow >|= fun () ->
+      Logs.err (fun m -> m "received error while reading: %a" TLS.pp_error e)
+
+  let query_albatross stack (key, cert, certs, server_cert) remote ?(name = ".") cmd =
+    match cmd with
+    | `Console_cmd `Console_subscribe _ when Set.mem name !active_console_readers ->
+      Lwt.return (Ok None)
+    | _ ->
+    S.TCP.create_connection (S.tcp stack) remote >>= function
+    | Error e ->
+      Logs.err (fun m -> m "error connecting to albatross: %a" S.TCP.pp_error e);
+      Lwt.return (Error ())
+    | Ok flow ->
+      match gen_cert cert ~certs key cmd name with
+      | Error () ->
+        S.TCP.close flow >|= fun () ->
+        Error ()
+      | Ok certificates ->
+        let tls_config =
+          let authenticator =
+            X509.Authenticator.chain_of_trust
+              ~time:(fun () -> Some (Ptime.v (P.now_d_ps ())))
+              [server_cert]
+          in
+          Tls.Config.client ~authenticator ~certificates ()
+        in
+        TLS.client_of_flow tls_config flow >>= function
+        | Error e ->
+          Logs.err (fun m -> m "error establishing TLS handshake: %a"
+                       TLS.pp_write_error e);
+          S.TCP.close flow >|= fun () ->
+          Error ()
+        | Ok tls_flow ->
+          TLS.read tls_flow >>= fun r ->
+          match r with
+          | Ok `Data d ->
+            (match snd (Vmm_commands.endpoint cmd) with
+             | `End -> TLS.close tls_flow
+             | `Read ->
+               active_console_readers := Set.add name !active_console_readers;
+               Lwt.async (fun () -> continue_reading name tls_flow);
+               Lwt.return_unit) >|= fun () ->
+            Ok (Some d)
+          | Ok `Eof -> TLS.close tls_flow >|= fun () -> Ok None
+          | Error e ->
+            TLS.close tls_flow >|= fun () ->
+            Logs.err (fun m -> m "received error while reading: %a"
+                         TLS.pp_error e);
+            Error ()
 
   let to_map ~assoc m =
     let open Multipart_form in

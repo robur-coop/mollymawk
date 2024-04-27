@@ -76,12 +76,14 @@ let success = function
   | `Unikernel_image _ -> `String "unikernel image not supported"
   | `Block_device_image _ -> `String "block device image not supported"
 
+let console_data_to_json (ts, data) =
+  `Assoc [ ("timestamp", `String (Ptime.to_rfc3339 ts)) ; ("line", `String data) ]
+
 let res = function
   | `Command _ -> `String "command not supported"
   | `Success s -> success s
   | `Failure f -> `String ("failure: " ^ f)
-  | `Data (`Console_data (ts, data)) ->
-    `Assoc [ ("timestamp", `String (Ptime.to_rfc3339 ts)) ; ("line", `String data) ]
+  | `Data (`Console_data (ts, data)) -> console_data_to_json (ts, data)
   | `Data (`Stats_data _) -> `String "stats not supported"
 
 let get key assoc =
