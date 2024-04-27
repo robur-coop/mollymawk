@@ -1,7 +1,4 @@
-// fetchAndDisplayInfo();
-// const pollingInterval = 3000;
 let previousContent = [];
-// setInterval(fetchAndDisplayInfo, pollingInterval);
 
 async function fetchUnikernelInfo() {
   try {
@@ -130,7 +127,7 @@ function shutdownUnikernel()
     .then((response) => response.text())
     .then((responseText) => {
       postAlert("bg-green-500", responseText)
-      window.location.reload
+      window.location = "/"
       console.log(responseText)
     })
     .catch((error) => {
@@ -142,32 +139,45 @@ function shutdownUnikernel()
     });
 }
 
-
-function getUnikernelInfo(unikernel)
+function getConsoleOutput(unikernel, uniDiv)
 {
-  let consoleOutput = new WebSocket(`ws://${window.location.host}/unikernel/console/${unikernel.name}`)
-
-  consoleOutput.onopen = (event) => {
-    console.log("Message from the server:", event.data);
-  };
-
-  consoleOutput.onerror = (event) => {
-    console.error(event)
-  }
-
-
-  const consoleDiv = document.createElement("div");
+  const consoleDiv = document.createElement("div")
+  consoleDiv.id = "console-container"
   consoleDiv.classList.add("border", "rounded", "bg-transparent", "text-white", "text-left", "p-4")
   const consoleLabel = document.createElement("p");
   consoleLabel.classList.add("text-xl", "font-semibold", "text-blue-700")
   consoleLabel.textContent = "Console output"
-  const consoleOut = document.createElement("textarea")
-  consoleOut.classList.add("bg-transparent", "w-full", "text-sm", "focus:border-0", "focus:outline-none", "active:outline-none")
-  consoleOut.readOnly = true
-  consoleOut.textContent = "hello world ---------- 20:08pm"
   consoleDiv.appendChild(consoleLabel)
-  consoleDiv.appendChild(consoleOut)
 
+  const consoleTable = document.createElement("table")
+  const consoleTBody = document.createElement("tbody");
+  fetch("/unikernel/console/"+unikernel.name, {
+    method: "get",
+  })
+    .then((response) => response.text())
+    .then((responseText) => {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.textContent = responseText
+      tr.appendChild(td)
+      consoleTBody.appendChild(tr)
+      console.log("response is"+responseText);
+    })
+    .catch((error) => {
+      postAlert("bg-red-500", `${unikernel.name} ${error}`)
+      console.error(error)
+    })
+    .finally(() => {
+
+    });
+    consoleTable.appendChild(consoleTBody)
+    consoleDiv.appendChild(consoleTable)
+    uniDiv.appendChild(consoleDiv)
+}
+
+
+function getUnikernelInfo(unikernel)
+{
 
   fetch("/unikernel/info/"+unikernel.name, {
     method: "get",
@@ -254,7 +264,7 @@ function getUnikernelInfo(unikernel)
       typ.textContent = `${uni.typ}`
       typLabel.textContent = "Type"
       const typIcon = document.createElement("i");
-      typIcon.classList.add("fa-solid","fa-warehouse", "text-xl")
+      typIcon.classList.add("fa-solid","fa-warehouse", "text-xlt")
       typSubDiv.appendChild(typIcon);
       typSubDiv.appendChild(typLabel);
       typDiv.appendChild(typSubDiv)
@@ -387,21 +397,20 @@ function getUnikernelInfo(unikernel)
       otherInfo.appendChild(networkDiv)
       otherInfo.appendChild(failDiv)
 
-
-
       uniDiv.appendChild(name);
       uniDiv.appendChild(digest);
       infoDiv.appendChild(cpuDiv);
       infoDiv.appendChild(memDiv);
       infoDiv.appendChild(typDiv);
       uniDiv.appendChild(infoDiv);
-      uniDiv.appendChild(consoleDiv);
+      const pollingInterval = 1000;
+      setInterval(getConsoleOutput(unikernel, uniDiv), pollingInterval);
       uniDiv.appendChild(otherInfo);
       uniDiv.appendChild(shutdownButtonDiv);
 
     })
     .catch((error) => {
-      postAlert("bg-red-500", `${uni.name} ${error}`)
+      postAlert("bg-red-500", `${unikernel.name} ${error}`)
       console.error(error)
     })
     .finally(() => {
@@ -429,6 +438,7 @@ function deployUnikernel() {
     .then((response) => response.text())
     .then((responseText) => {
       postAlert("bg-green-500", responseText)
+      // window.location = ("/")
       console.log(responseText)
     })
     .catch((error) => {
