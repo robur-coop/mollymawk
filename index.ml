@@ -14,11 +14,13 @@ let index_page =
             ; script ~a:[a_src "https://kit.fontawesome.com/d1697f2fa9.js"] (txt "")]
             )
 
-        (body ~a:[a_class["bg-black px-10 py-10 max-w-7xl mx-auto"]]
+        (body ~a:[a_class["bg-gray-900 px-10 py-10 max-w-7xl mx-auto"]]
             [ section
                 [ h1 ~a:[a_class ["font-bold text-3xl text-center text-gray-100"]; a_id "molly-text"] [txt "Mollymawk"]
+                ; div ~a:[ a_id "alert-container"; a_class ["fixed top-4 right-4 z-50 p-3"]] []
                 ; p ~a:[a_class ["font-semibold text-md text-gray-200 text-center"]; a_id "molly-desc"] [txt "A MirageOS unikernel to....oh just have some Molly..."] ]
-                ; button ~a:[a_id "add-btn"; a_class ["py-1 px-3 rounded bg-transparent border border-2 text-white hover:bg-white hover:text-black text-right"]] [txt "Create"]
+                ; div ~a:[a_class ["flex justify-end"]][
+                  button ~a:[a_id "add-btn"; a_class ["py-1 px-3 rounded bg-blue-500 text-white hover:bg-blue-700"]] [txt "Deploy Unikernel"]]
                 ; p ~a:[a_id "no-molly"; a_class ["font-semibold text-sm text-gray-200 text-center hidden"]] [txt "Nothing yet..you gotta deploy some unikernels. Come on chop chop"]
             ; section ~a:[a_id "unikernel-container"; a_class ["my-5 hidden"]  ][]
             ; p ~a:[a_id "deploy-unikernel"][]
