@@ -121,23 +121,26 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
       | Ok mycert ->
         Ok (`Single (mycert :: cert :: certs, tmpkey))
 
+  let decode data =
+    match Vmm_asn.wire_of_cstruct data with
+    | Error (`Msg msg) ->
+      Logs.err (fun m -> m "error %s while decoding data" msg) ;
+      Error ()
+    | (Ok (hdr, _)) as w ->
+      if not Vmm_commands.(is_current hdr.version) then
+        Logs.warn (fun m -> m "version mismatch, received %a current %a"
+                      Vmm_commands.pp_version hdr.Vmm_commands.version
+                      Vmm_commands.pp_version Vmm_commands.current);
+      w
+
   let decode_reply data =
     if Cstruct.length data >= 4 then
       let len = Int32.to_int (Cstruct.BE.get_uint32 data 0) in
       if Cstruct.length data >= 4 + len then
-        match Vmm_asn.wire_of_cstruct (Cstruct.sub data 4 len) with
-        | Error (`Msg msg) ->
-          Logs.err (fun m -> m "error %s while decoding data" msg) ;
-          Error ()
-        | (Ok (hdr, _)) as w ->
-          if Cstruct.length data > 4 + len then
-            Logs.warn (fun m -> m "received %d trailing bytes"
-                          (Cstruct.length data - len - 4));
-          if not Vmm_commands.(is_current hdr.version) then
-            Logs.warn (fun m -> m "version mismatch, received %a current %a"
-                          Vmm_commands.pp_version hdr.Vmm_commands.version
-                          Vmm_commands.pp_version Vmm_commands.current);
-          w
+        (if Cstruct.length data > 4 + len then
+           Logs.warn (fun m -> m "received %d trailing bytes"
+                         (Cstruct.length data - len - 4));
+         decode (Cstruct.sub data 4 len))
       else
         begin
           Logs.err (fun m -> m "buffer too short (%d bytes), need %d + 4 bytes"
@@ -150,6 +153,26 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
       Error ()
     end
 
+  let split_many data =
+    let rec split acc data =
+      if Cstruct.length data >= 4 then
+        let len = Int32.to_int (Cstruct.BE.get_uint32 data 0) in
+        if Cstruct.length data >= 4 + len then
+          split ((Cstruct.sub data 4 len) :: acc) (Cstruct.shift data (len + 4))
+        else
+          (Logs.warn (fun m -> m "buffer too small: %u bytes, requires %u bytes"
+                         (Cstruct.length data - 4) len);
+           acc)
+      else if Cstruct.length data = 0 then
+        acc
+      else
+        (Logs.warn (fun m -> m "buffer too small: %u bytes leftover"
+                       (Cstruct.length data));
+         acc)
+    in
+    split [] data |> List.rev
+
+
   module Map = Map.Make (String)
 
   let console_output : Yojson.Basic.t list Map.t ref = ref Map.empty
@@ -161,25 +184,28 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
   let rec continue_reading name flow =
     TLS.read flow >>= function
     | Ok `Data d ->
-      (match decode_reply d with
-       | Error () -> ()
-       | Ok (_, `Data `Console_data (ts, data)) ->
-         let d = Albatross_json.console_data_to_json (ts, data) in
-         console_output :=
-           Map.update name
-             (function
-               | None -> Some [ d ]
-               | Some xs ->
-                 let xs =
-                   if List.length xs > 20 then
-                     List.tl xs
-                   else
-                     xs
-                 in
-                 Some (xs @ [ d ]))
-             !console_output
-       | _ ->
-         Logs.warn (fun m -> m "unexpected reply, expected console output"));
+      let bufs = split_many d in
+      List.iter (fun d ->
+          match decode d with
+           | Error () -> ()
+           | Ok (_, `Data `Console_data (ts, data)) ->
+             let d = Albatross_json.console_data_to_json (ts, data) in
+             console_output :=
+               Map.update name
+                 (function
+                   | None -> Some [ d ]
+                   | Some xs ->
+                     let xs =
+                       if List.length xs > 20 then
+                         List.tl xs
+                       else
+                         xs
+                     in
+                     Some (xs @ [ d ]))
+                 !console_output
+           | _ ->
+             Logs.warn (fun m -> m "unexpected reply, expected console output"))
+        bufs;
       continue_reading name flow
     | Ok `Eof ->
       active_console_readers := Set.remove name !active_console_readers;
