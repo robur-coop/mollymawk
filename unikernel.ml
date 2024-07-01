@@ -48,25 +48,14 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
     (key, cert, certs, server)
 
   let js_contents js =
-    let file = KV_JS.get js (Mirage_kv.Key.v "main.js") in
-    let result =
-      file >|= fun content ->
-      match content with
-      | Error _e -> "JS file could not be loaded"
-      | Ok js -> js
-    in
-    Lwt_main.run result
+    KV_JS.get js (Mirage_kv.Key.v "main.js") >|= function
+    | Error _e -> invalid_arg "JS file could not be loaded"
+    | Ok js -> js
 
   let create_html_form js =
-    let file = KV_JS.get js (Mirage_kv.Key.v "create_unikernel.html") in
-    let result =
-      file >|= fun content ->
-      match content with
-      | Error _e -> "Form could not be loaded"
-      | Ok html -> html
-    in
-    Lwt_main.run result
-
+    KV_JS.get js (Mirage_kv.Key.v "create_unikernel.html") >|= function
+    | Error _e -> invalid_arg "Form could not be loaded"
+    | Ok html -> html
 
   module TLS = Tls_mirage.Make(S.TCP)
 
@@ -450,8 +439,8 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
 
 
   let start _ _ _ _ stack data js host port =
-    let js_file = js_contents js in
-    let html = create_html_form js in
+    js_contents js >>= fun js_file ->
+    create_html_form js >>= fun html ->
     retrieve_credentials data >>= fun credentials ->
     let remote = host, port in
     let port = 8080 in
