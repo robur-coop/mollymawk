@@ -1,0 +1,32 @@
+name: ocamlformat
+
+on: [push, pull_request]
+
+jobs:
+  format:
+    name: ocamlformat
+
+    strategy:
+      fail-fast: false
+      matrix:
+        ocaml-version: ["4.14.2"]
+        operating-system: [ubuntu-latest]
+
+    runs-on: ${{ matrix.operating-system }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Use OCaml ${{ matrix.ocaml-version }}
+        uses: ocaml/setup-ocaml@v2
+        with:
+          ocaml-compiler: ${{ matrix.ocaml-version }}
+
+      - name: Install ocamlformat
+        run: grep version .ocamlformat | cut -d '=' -f 2 | xargs -I V opam install ocamlformat=V
+
+      - name: Format code
+        run: |
+          find . -name \*\.ml -maxdepth 1 | xargs opam exec -- ocamlformat --inplace
+          git diff --quiet
