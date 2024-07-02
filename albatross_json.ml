@@ -84,6 +84,7 @@ let res = function
   | `Success s -> success s
   | `Failure f -> `String ("failure: " ^ f)
   | `Data (`Console_data (ts, data)) -> console_data_to_json (ts, data)
+  | `Data (`Utc_console_data (ts, data)) -> console_data_to_json (ts, data)
   | `Data (`Stats_data _) -> `String "stats not supported"
 
 let get key assoc =
