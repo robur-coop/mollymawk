@@ -13,7 +13,7 @@ let footer =
                 ; dd ~a:[a_class["font-medium flex flex-col items-start"]][
                   a ~a:[a_href "/about"; a_class["hover:text-primary-500 transition-colors"]] [txt "About"]
                 ; a ~a:[a_href "/pricing"; a_class["hover:text-primary-500 transition-colors"]] [txt "Pricing"]
-                ; a ~a:[a_href "robur.coop"; a_class["hover:text-primary-500 transition-colors"]] [txt "Robur.coop"]
+                ; a ~a:[a_href "https://robur.coop"; a_class["hover:text-primary-500 transition-colors"]] [txt "Robur.coop"]
                 ]
               ]
             ; dl [
