@@ -29,4 +29,11 @@ jobs:
       - name: Format code
         run: |
           find . -name \*\.ml -maxdepth 1 | xargs opam exec -- ocamlformat --inplace
-          git diff --quiet
+
+      - name: Commit and push changes
+        run: |
+          git config --global user.name "Auto-OCamlformat"
+          git config --global user.email "auto@ocaml.format"
+          git add -A
+          git commit -m "formatted code"
+          git push
