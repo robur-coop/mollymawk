@@ -1,7 +1,7 @@
 open Mirage
 
 let data = crunch "keys"
-let js = crunch "assets"
+let assets = crunch "assets"
 
 let mollymawk =
   let packages =
@@ -28,4 +28,4 @@ let mollymawk =
 
 let () =
   register "mollymawk"
-    [mollymawk $ default_random $ default_posix_clock $ default_monotonic_clock $ default_time $ generic_stackv4v6 default_network $ data $ js]
+    [mollymawk $ default_random $ default_posix_clock $ default_monotonic_clock $ default_time $ generic_stackv4v6 default_network $ data $ assets]
