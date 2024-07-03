@@ -1,5 +1,10 @@
 open Lwt.Infix
 
+type images = {
+  molly_img: string;
+  robur_img: string;
+}
+
 let pp_msg ppf (`Msg msg) =
   Fmt.pf ppf "%s" msg
 
@@ -57,10 +62,17 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
     | Error _e -> invalid_arg "CSS file could not be loaded"
     | Ok css -> css
 
-  let molly_image assets =
-    KV_ASSETS.get assets (Mirage_kv.Key.v "molly_bird.jpeg") >|= function
+  let read_image assets key =
+    KV_ASSETS.get assets (Mirage_kv.Key.v key) >|= function
     | Error _e -> invalid_arg "Image could not be loaded"
     | Ok img -> img
+
+  let images assets =
+    let molly_img = read_image assets "molly_bird.jpeg" in
+    let robur_img = read_image assets "robur.png" in
+    Lwt.both molly_img robur_img >|= fun ((molly, robur)) ->
+      { molly_img = molly; robur_img = robur; }
+
 
   let create_html_form assets =
     KV_ASSETS.get assets (Mirage_kv.Key.v "create_unikernel.html") >|= function
@@ -281,7 +293,7 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
         List.fold_left fold (map, rest) body in
     go (Map.empty, []) m
 
-  let request_handler stack credentials remote js_file css_file molly_image html (_ipaddr, _port) reqd =
+  let request_handler stack credentials remote js_file css_file imgs html (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let reply ?(content_type="text/plain") data =
           let headers = Httpaf.Headers.of_list [
@@ -340,7 +352,9 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
         | "/main.js" ->
           Lwt.return (reply ~content_type:"text/plain" js_file)
         | "/images/molly_bird.jpeg" ->
-          Lwt.return (reply molly_image)
+          Lwt.return (reply imgs.molly_img)
+        | "/images/robur.png" ->
+          Lwt.return (reply imgs.robur_img)
         | "/style.css" ->
           Lwt.return (reply ~content_type:"text/css" css_file)
         | "/sign-up" ->
@@ -457,13 +471,13 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
   let start _ _ _ _ stack data assets host port =
     js_contents assets >>= fun js_file ->
     css_contents assets >>= fun css_file ->
-    molly_image assets >>= fun molly_image ->
+    images assets >>= fun imgs ->
     create_html_form assets >>= fun html ->
     retrieve_credentials data >>= fun credentials ->
     let remote = host, port in
     let port = 8080 in
     Logs.info (fun m -> m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/" port) ;
-    let request_handler _flow = request_handler stack credentials remote js_file css_file molly_image html in
+    let request_handler _flow = request_handler stack credentials remote js_file css_file imgs html in
     Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
     let http = Paf.http_service ~error_handler request_handler in
     let (`Initialized th) = Paf.serve http service in
