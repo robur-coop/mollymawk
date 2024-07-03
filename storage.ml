@@ -66,6 +66,6 @@ module Make (BLOCK : Mirage_block.S) = struct
     write_data (disk, t) >|= function
     | Ok () -> Ok (disk, t)
     | Error we ->
-        error_msgf "erro while writing storage: %a" Stored_data.pp_write_error
+        error_msgf "error while writing storage: %a" Stored_data.pp_write_error
           we
 end
