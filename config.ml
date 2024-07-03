@@ -17,6 +17,7 @@ let mollymawk =
       package "mirage-crypto-rng";
       package "uuidm";
       package "paf" ~sublibs:[ "mirage" ] ~min:"0.5.0";
+      package "oneffs";
     ]
   and runtime_args =
     [
@@ -26,7 +27,9 @@ let mollymawk =
   in
   main ~runtime_args ~packages "Unikernel.Main"
     (random @-> pclock @-> mclock @-> time @-> stackv4v6 @-> kv_ro @-> kv_ro
-   @-> job)
+   @-> block @-> job)
+
+let block = block_of_file "data"
 
 let () =
   register "mollymawk"
@@ -34,5 +37,5 @@ let () =
       mollymawk $ default_random $ default_posix_clock $ default_monotonic_clock
       $ default_time
       $ generic_stackv4v6 default_network
-      $ data $ assets;
+      $ data $ assets $ block;
     ]

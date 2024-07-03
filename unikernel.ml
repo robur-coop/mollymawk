@@ -33,7 +33,8 @@ module Main
     (T : Mirage_time.S)
     (S : Tcpip.Stack.V4V6)
     (KV : Mirage_kv.RO)
-    (KV_ASSETS : Mirage_kv.RO) =
+    (KV_ASSETS : Mirage_kv.RO)
+    (BLOCK : Mirage_block.S) =
 struct
   module Paf = Paf_mirage.Make (S.TCP)
 
@@ -96,6 +97,7 @@ struct
     | Error _e -> invalid_arg "Form could not be loaded"
     | Ok html -> html
 
+  module Store = Storage.Make (BLOCK)
   module TLS = Tls_mirage.Make (S.TCP)
 
   let key_ids exts pub issuer =
@@ -322,7 +324,7 @@ struct
     in
     go (Map.empty, []) m
 
-  let request_handler stack credentials remote js_file css_file imgs html
+  let request_handler stack credentials remote js_file css_file imgs html store
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let reply ?(content_type = "text/plain") data =
@@ -487,19 +489,30 @@ struct
                            \"" ^ s ^ "\"}"
                         in
                         Lwt.return (reply ~content_type:"application/json" res)
-                    | Ok _ ->
+                    | Ok _ -> (
                         let user =
                           User_model.create_user ~name ~email ~password
                         in
-                        let res =
-                          "{\"status\": 200, \"success\": true, \"message\": \
-                           {\"user\": "
-                          ^ Yojson.Basic.to_string
-                              (User_model.user_to_json user)
-                          ^ "}}"
-                        in
-                        Lwt.return (reply ~content_type:"application/json" res))
-                )
+                        Store.add_user !store user >>= function
+                        | Ok store' ->
+                            store := store';
+                            let res =
+                              "{\"status\": 200, \"success\": true, \
+                               \"message\": {\"user\": "
+                              ^ Yojson.Basic.to_string
+                                  (User_model.user_to_json user)
+                              ^ "}}"
+                            in
+                            Lwt.return
+                              (reply ~content_type:"application/json" res)
+                        | Error (`Msg msg) ->
+                            let res =
+                              "{\"status\": 400, \"success\": false, \
+                               \"message\": \"Something went wrong. Wait a few \
+                               seconds and try again.\"}"
+                            in
+                            Lwt.return
+                              (reply ~content_type:"application/json" res))))
             | _ ->
                 let res =
                   "{\"status\": 400, \"success\": false, \"message\": \"Bad \
@@ -649,21 +662,28 @@ struct
           Fmt.(option ~none:(any "unknown") Httpaf.Request.pp_hum)
           request)
 
-  let start _ _ _ _ stack data assets host port =
+  let start _ _ _ _ stack data assets storage host port =
     js_contents assets >>= fun js_file ->
     css_contents assets >>= fun css_file ->
     images assets >>= fun imgs ->
     create_html_form assets >>= fun html ->
     retrieve_credentials data >>= fun credentials ->
-    let remote = (host, port) in
-    let port = 8080 in
-    Logs.info (fun m ->
-        m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/" port);
-    let request_handler _flow =
-      request_handler stack credentials remote js_file css_file imgs html
-    in
-    Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
-    let http = Paf.http_service ~error_handler request_handler in
-    let (`Initialized th) = Paf.serve http service in
-    th
+    Store.Stored_data.connect storage >>= fun stored_data ->
+    Store.read_data stored_data >>= function
+    | Error (`Msg msg) -> failwith msg
+    | Ok data ->
+        let store = ref data in
+        let remote = (host, port) in
+        let port = 8080 in
+        Logs.info (fun m ->
+            m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
+              port);
+        let request_handler _flow =
+          request_handler stack credentials remote js_file css_file imgs html
+            store
+        in
+        Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
+        let http = Paf.http_service ~error_handler request_handler in
+        let (`Initialized th) = Paf.serve http service in
+        th
 end
