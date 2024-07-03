@@ -44,14 +44,9 @@ let user_to_json u : Yojson.Basic.t =
   ]
 
 let encrypt_password password uuid =
-  let enc = Mirage_crypto.Hash.SHA256.digest
+  let hash = Mirage_crypto.Hash.SHA256.digest
     (Cstruct.of_string (uuid ^ "-" ^ password)) in
-  match Base64.encode (Cstruct.to_string enc) with
-  | Error (`Msg s) ->
-      Logs.warn (fun m ->
-          m "Failed to generate user token for: %s" s);
-      None
-  | Ok pass -> Some pass
+  Base64.encode_string (Cstruct.to_string hash)
 
 let generate_uuid () =
   let data = Rng.generate 16 in
