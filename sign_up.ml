@@ -1,10 +1,10 @@
 open Tyxml
 
-let register_page =
+let register_page ~icon () =
   let page =
     Html.(
       html
-        (Header_layout.header ~page_title:"Sign up | Mollymawk" ())
+        (Header_layout.header ~page_title:"Sign up | Mollymawk" ~icon ())
 
         (body
             [
@@ -18,8 +18,9 @@ let register_page =
                   div ~a:[a_class["w-full max-w-lg mt-16 pb-16 mx-auto"]] [
                     h1 ~a:[a_class["font-semibold text-2xl md:text-3xl mb-8 text-primary-800 p-6"]] [txt "Sign up for an Account"]
                   ; div ~a:[a_class["space-y-6 mt-8 shadow-md p-6"]][
-                      div [
-                        label ~a:[a_class["block text-sm font-medium"]; a_label_for "name"][txt "Name"]
+                     p ~a:[a_id "form-alert"][]
+                    ;  div [
+                        label ~a:[a_class["block text-sm font-medium"]; a_label_for "name"][txt "Name*"]
                       ; input ~a:[
                                   a_autocomplete `On;
                                   a_autofocus ();
@@ -29,9 +30,10 @@ let register_page =
                                   a_class["ring-primary-100 mt-1.5 transition appearance-none block w-full px-3 py-3 rounded-xl shadow-sm border hover:border-primary-200
                                            focus:border-primary-300 bg-primary-50 bg-opacity-0 hover:bg-opacity-50 focus:bg-opacity-50 ring-primary-200 focus:ring-primary-200
                                            focus:ring-[1px] focus:outline-none"]] ()
+                      ; p ~a:[a_id "name-alert"][]
                       ]
                      ; div [
-                        label ~a:[a_class["block text-sm font-medium"]; a_label_for "email"][txt "Email Address"]
+                        label ~a:[a_class["block text-sm font-medium"]; a_label_for "email"][txt "Email Address*"]
                       ; input ~a:[
                                   a_autocomplete `On;
                                   a_input_type `Text;
@@ -40,9 +42,10 @@ let register_page =
                                   a_class["ring-primary-100 mt-1.5 transition appearance-none block w-full px-3 py-3 rounded-xl shadow-sm border hover:border-primary-200
                                            focus:border-primary-300 bg-primary-50 bg-opacity-0 hover:bg-opacity-50 focus:bg-opacity-50 ring-primary-200 focus:ring-primary-200
                                            focus:ring-[1px] focus:outline-none"]] ()
+                      ; p ~a:[a_id "email-alert"][]
                       ]
                       ; div [
-                        label ~a:[a_class["block text-sm font-medium"]; a_label_for "password"][txt "Password"]
+                        label ~a:[a_class["block text-sm font-medium"]; a_label_for "password"][txt "Password*"]
                       ; input ~a:[
                                   a_input_type `Password;
                                   a_name "password";
@@ -50,6 +53,7 @@ let register_page =
                                   a_class["ring-primary-100 mt-1.5 transition appearance-none block w-full px-3 py-3 rounded-xl shadow-sm border hover:border-primary-200
                                            focus:border-primary-300 bg-primary-50 bg-opacity-0 hover:bg-opacity-50 focus:bg-opacity-50 ring-primary-200 focus:ring-primary-200
                                            focus:ring-[1px] focus:outline-none"]] ()
+                      ; p ~a:[a_id "password-alert"][]
                       ]
                     ; div ~a:[a_class["flex items-center justify-between text-sm font-medium text-primary-500"]][
                         a ~a:[a_class["hover:text-primary-800 transition-colors cursor-pointer"]][txt "Forgot Your Password?"]
@@ -65,6 +69,70 @@ let register_page =
                   img ~src:"/images/molly_bird.jpeg" ~alt:"Mollymawk delivering unikernels" ~a:[a_class["absolute inset-1 max-w-none w-full h-full object-cover"]]()
                 ]]
             ; Footer_layout.footer
+            ; script (txt "
+            const registerButton = document.getElementById('register-button')
+            registerButton.addEventListener('click', async function() {
+                const name = document.getElementById('name').value
+                const email = document.getElementById('email').value.toLowerCase()
+                const password = document.getElementById('password').value
+                let form_alert = document.getElementById('form-alert')
+                let name_alert = document.getElementById('name-alert')
+                let email_alert = document.getElementById('email-alert')
+                let password_alert = document.getElementById('password-alert')
+
+                form_alert.classList.add('hidden')
+                name_alert.classList.add('hidden')
+                email_alert.classList.add('hidden')
+                password_alert.classList.add('hidden')
+
+                if (!name || !email || !password) {
+                    form_alert.classList.remove('hidden')
+                    form_alert.classList.add('text-secondary-500', 'block')
+                    form_alert.textContent = 'All fields are required'
+                    return;
+                }
+
+                if (name.length < 3) {
+                    name_alert.classList.remove('hidden')
+                    name_alert.classList.add('text-secondary-500', 'block')
+                    name_alert.textContent = 'Name must be at least 4 characters.'
+                    return;
+                }
+
+                //const emailPattern
+                //if (!emailPattern.test(email)) {
+                //    email_alert.classList.remove('hidden')
+                //    email_alert.classList.add('text-secondary-500', 'block')
+                //    email_alert.textContent = 'Please enter a valid email address.'
+                //    return;
+               // }
+
+                if (password.length < 8) {
+                    password_alert.classList.remove('hidden')
+                    password_alert.classList.add('text-secondary-500', 'block')
+                    password_alert.textContent = 'Password must be at least 8 characters long.'
+                    return;
+                }
+
+                try {
+                    const response = await fetch ('/api/register', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ name, email, password })
+                    })
+                    const data = await response.json();
+                    console.log(data);
+                } catch (error) {
+                    form_alert.classList.remove('hidden')
+                    form_alert.classList.add('text-secondary-500', 'block')
+                    form_alert.textContent = error
+                    return;
+                }
+            })
+
+            ")
            ]))
     in
     Format.asprintf "%a" (Html.pp()) (page)
