@@ -60,7 +60,7 @@ let register_page ~icon () =
                       ;  a ~a:[a_class["hover:text-primary-800 transition-colors cursor-pointer"]][txt "Have an account?"]
                     ]
                     ; div [
-                        button ~a:[a_class["py-3 rounded bg-primary-500 hover:bg-primary-800 w-full text-gray-50 font-semibold"]][txt "Create Account"]
+                        button ~a:[a_id "register-button" ;a_class["py-3 rounded bg-primary-500 hover:bg-primary-800 w-full text-gray-50 font-semibold"]][txt "Create Account"]
                     ]
                   ]
                   ]
@@ -69,70 +69,70 @@ let register_page ~icon () =
                   img ~src:"/images/molly_bird.jpeg" ~alt:"Mollymawk delivering unikernels" ~a:[a_class["absolute inset-1 max-w-none w-full h-full object-cover"]]()
                 ]]
             ; Footer_layout.footer
-            ; script (txt "
-            const registerButton = document.getElementById('register-button')
-            registerButton.addEventListener('click', async function() {
-                const name = document.getElementById('name').value
-                const email = document.getElementById('email').value.toLowerCase()
-                const password = document.getElementById('password').value
-                let form_alert = document.getElementById('form-alert')
-                let name_alert = document.getElementById('name-alert')
-                let email_alert = document.getElementById('email-alert')
-                let password_alert = document.getElementById('password-alert')
+            ; Tyxml.Html.Unsafe.data "
+              <script>
+                const registerButton = document.getElementById('register-button')
+                registerButton.addEventListener('click', async function() {
+                    const name = document.getElementById('name').value
+                    const email = document.getElementById('email').value.toLowerCase()
+                    const password = document.getElementById('password').value
+                    let form_alert = document.getElementById('form-alert')
+                    let name_alert = document.getElementById('name-alert')
+                    let email_alert = document.getElementById('email-alert')
+                    let password_alert = document.getElementById('password-alert')
 
-                form_alert.classList.add('hidden')
-                name_alert.classList.add('hidden')
-                email_alert.classList.add('hidden')
-                password_alert.classList.add('hidden')
+                    form_alert.classList.add('hidden')
+                    name_alert.classList.add('hidden')
+                    email_alert.classList.add('hidden')
+                    password_alert.classList.add('hidden')
 
-                if (!name || !email || !password) {
-                    form_alert.classList.remove('hidden')
-                    form_alert.classList.add('text-secondary-500', 'block')
-                    form_alert.textContent = 'All fields are required'
-                    return;
-                }
+                    if (!name || !email || !password) {
+                        form_alert.classList.remove('hidden')
+                        form_alert.classList.add('text-secondary-500', 'block')
+                        form_alert.textContent = 'All fields are required'
+                        return;
+                    }
 
-                if (name.length < 3) {
-                    name_alert.classList.remove('hidden')
-                    name_alert.classList.add('text-secondary-500', 'block')
-                    name_alert.textContent = 'Name must be at least 4 characters.'
-                    return;
-                }
+                    if (name.length < 3) {
+                        name_alert.classList.remove('hidden')
+                        name_alert.classList.add('text-secondary-500', 'block')
+                        name_alert.textContent = 'Name must be at least 4 characters.'
+                        return;
+                    }
 
-                //const emailPattern
-                //if (!emailPattern.test(email)) {
-                //    email_alert.classList.remove('hidden')
-                //    email_alert.classList.add('text-secondary-500', 'block')
-                //    email_alert.textContent = 'Please enter a valid email address.'
-                //    return;
-               // }
+                    //const emailPattern
+                    //if (!emailPattern.test(email)) {
+                    //    email_alert.classList.remove('hidden')
+                    //    email_alert.classList.add('text-secondary-500', 'block')
+                    //    email_alert.textContent = 'Please enter a valid email address.'
+                    //    return;
+                  // }
 
-                if (password.length < 8) {
-                    password_alert.classList.remove('hidden')
-                    password_alert.classList.add('text-secondary-500', 'block')
-                    password_alert.textContent = 'Password must be at least 8 characters long.'
-                    return;
-                }
+                    if (password.length < 8) {
+                        password_alert.classList.remove('hidden')
+                        password_alert.classList.add('text-secondary-500', 'block')
+                        password_alert.textContent = 'Password must be at least 8 characters long.'
+                        return;
+                    }
 
-                try {
-                    const response = await fetch ('/api/register', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ name, email, password })
-                    })
-                    const data = await response.json();
-                    console.log(data);
-                } catch (error) {
-                    form_alert.classList.remove('hidden')
-                    form_alert.classList.add('text-secondary-500', 'block')
-                    form_alert.textContent = error
-                    return;
-                }
-            })
-
-            ")
+                    try {
+                        const response = await fetch ('/api/register', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ name, email, password })
+                        })
+                        const data = await response.json();
+                        console.log(data);
+                    } catch (error) {
+                        form_alert.classList.remove('hidden')
+                        form_alert.classList.add('text-secondary-500', 'block')
+                        form_alert.textContent = error
+                        return;
+                    }
+                })
+            </script>"
            ]))
     in
     Format.asprintf "%a" (Html.pp()) (page)
