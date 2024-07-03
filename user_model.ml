@@ -1,29 +1,82 @@
 module Rng = Mirage_crypto_rng
 
 type token = {
-  token_type: string;
-  access_token: string;
-  expires_in: int; (* After 1 hour (3660 seconds) of inactivity *)
-  expires_on: int;
-  refresh_token: string
+  token_type : string;
+  access_token : string;
+  expires_in : int; (* After 1 hour (3660 seconds) of inactivity *)
 }
+let clean_string s =
+  (* Remove backslashes and double quotes from the string *)
+  let buffer = Buffer.create (String.length s) in
+  String.iter (fun c ->
+    match c with
+    | '\\' -> ()
+    | '"' -> ()
+    | _ -> Buffer.add_char buffer c
+  ) s;
+  Buffer.contents buffer
+
+
+let token_to_json t : Yojson.Basic.t  =
+  `Assoc [
+    ("token_type", `String t.token_type);
+    ("access_token", `String t.access_token);
+    ("expires_in", `Int t.expires_in)
+  ]
 
 type user = {
-  name: string;
-  email: string;
-  password: string;
-  uuid: string option;
-  token: token option;
+  name : string;
+  email : string;
+  password : string;
+  uuid : string;
+  token : token option;
 }
 
-let encrypt_password password =
+let user_to_json u : Yojson.Basic.t =
+  `Assoc [
+    ("name", `String u.name);
+    ("email", `String u.email);
+    ("password", `String u.password);
+    ("uuid", `String u.uuid);
+    ("token", match u.token with
+              | Some t -> token_to_json t
+              | None -> `Null)
+  ]
+
+let encrypt_password password uuid =
+  let enc = Mirage_crypto.Hash.SHA256.digest
+    (Cstruct.of_string (uuid ^ "-" ^ password)) in
+  match Base64.encode (Cstruct.to_string enc) with
+  | Error (`Msg s) ->
+      Logs.warn (fun m ->
+          m "Failed to generate user token for: %s" s);
+      None
+  | Ok pass -> Some pass
+
+let generate_uuid ~email =
+  let email_length = String.length email in
+  Uuidm.v4_gen (Random.State.make [| email_length |]) ()
+
+let generate_token ~uuid =
   let salt = Rng.generate 16 in
-  Mirage_crypto.Hash.SHA256.digest (Cstruct.of_string (Cstruct.to_string salt ^ "-" ^ password))
+  let hash =
+    Mirage_crypto.Hash.SHA256.digest (Cstruct.of_string (uuid ^ (Cstruct.to_string salt)))
+  in
+  match Base64.encode (Cstruct.to_string hash) with
+  | Error (`Msg s) ->
+      Logs.warn (fun m ->
+          m "Failed to generate user token for: %s with %s" uuid s);
+      None
+  | Ok token ->
+      Some { token_type = "Bearer"; access_token = token; expires_in = 3600 }
 
-let generate_uuid email =
-  let email_int = int_of_string email in
-  Uuidm.v4_gen (Random.State.make [|email_int|]) ()
-
-let generate_token (user: user) =
-  let hash = Mirage_crypto.Hash.SHA256.digest (Cstruct.of_string (user.name ^ "-" ^ user.email)) in
-  Base64.encode (Cstruct.to_string hash)
+let create_user ~name ~email ~password =
+  let uuid = Uuidm.to_string (generate_uuid ~email) in
+  let user_password = Option.get (encrypt_password password uuid) in
+  {
+    name = clean_string name;
+    email = clean_string email;
+    password = user_password;
+    uuid = uuid;
+    token = None;
+  }

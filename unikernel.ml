@@ -363,8 +363,41 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
           let request = Httpaf.Reqd.request reqd in
           (match request.meth with
           | `POST ->
-            let _request_body = Httpaf.Reqd.request_body reqd in
-            Lwt.return (reply ~content_type:"application/json" "Registration reached here")
+            let request_body = Httpaf.Reqd.request_body reqd in
+            let finished, notify_finished = Lwt.wait () in
+            let wakeup v =
+              Lwt.wakeup_later notify_finished v
+            in
+            let on_eof data () = wakeup data in
+            let f acc s = acc ^ s in
+            let rec on_read on_eof acc bs ~off ~len =
+              let str = Bigstringaf.substring ~off ~len bs in
+              let acc =
+                acc >>= fun acc ->
+                Lwt.return (f acc str)
+              in
+              Httpaf.Body.schedule_read request_body
+                ~on_read:(on_read on_eof acc)
+                ~on_eof:(on_eof acc)
+            in
+            let f_init = Lwt.return "" in
+            Httpaf.Body.schedule_read request_body
+              ~on_read:(on_read on_eof f_init)
+              ~on_eof:(on_eof f_init);
+            finished >>= fun data ->
+            data >>= fun data ->
+            let json = try Ok (Yojson.Basic.from_string data) with Yojson.Json_error s -> Error (`Msg s) in
+            (match json with
+            | Error `Msg s ->
+              Logs.warn (fun m -> m "Failed to parse JSON: %s" s);
+              let res = "{\"status\": 400, \"message\": \"Bad request body\"}" in
+              Lwt.return (reply ~content_type:"application/json" res)
+            | Ok json ->
+              let name = json |> Yojson.Basic.Util.member "name" |> Yojson.Basic.to_string in
+              let email = json |> Yojson.Basic.Util.member "email" |> Yojson.Basic.to_string in
+              let password = json |> Yojson.Basic.Util.member "password" |> Yojson.Basic.to_string in
+              let user = User_model.create_user ~name ~email ~password in
+              Lwt.return (reply ~content_type:"application/json" (Yojson.Basic.to_string (User_model.user_to_json user))))
           | _ ->
             let res = "{\"status\": 400, \"message\": \"Bad request method\"}" in
             Lwt.return (reply ~content_type:"application/json" res))
