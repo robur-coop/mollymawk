@@ -312,7 +312,7 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
         in
         match path with
         | "/" ->
-          Lwt.return (reply ~content_type:"text/html" Index.index_page)
+          Lwt.return (reply ~content_type:"text/html" (Index.index_page ~icon:"/images/robur.png"))
         | "/unikernel-info" ->
           (query_albatross stack credentials remote ((* `Block_cmd `Block_info *) (* `Policy_cmd `Policy_info *) `Unikernel_cmd `Unikernel_info) >|= function
           | Error () -> reply "error while querying albatross"
@@ -358,7 +358,16 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
         | "/style.css" ->
           Lwt.return (reply ~content_type:"text/css" css_file)
         | "/sign-up" ->
-          Lwt.return (reply ~content_type:"text/html" Sign_up.register_page)
+          Lwt.return (reply ~content_type:"text/html" (Sign_up.register_page ~icon:"/images/robur.png" ()))
+        | "/api/register" ->
+          let request = Httpaf.Reqd.request reqd in
+          (match request.meth with
+          | `POST ->
+            let _request_body = Httpaf.Reqd.request_body reqd in
+            Lwt.return (reply ~content_type:"application/json" "Registration reached here")
+          | _ ->
+            let res = "{\"status\": 400, \"message\": \"Bad request method\"}" in
+            Lwt.return (reply ~content_type:"application/json" res))
         | "/unikernel/create" ->
           Lwt.return (reply ~content_type:"text/html" html)
         | path when String.(length path >= 20 && sub path 0 20 = "/unikernel/shutdown/") ->
