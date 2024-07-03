@@ -7,10 +7,16 @@ let register_page =
         (Header_layout.header ~page_title:"Sign up | Mollymawk" ())
 
         (body
-            [ main ~a:[a_class["w-full grid grid-cols-3 text-gray-700"]]
-                [section ~a:[a_class["h-full flex flex-col justify-center items-center p-6 lg:p-10 col-span-2"]] [
-                  div ~a:[a_class["w-full max-w-lg mt-16 pb-16 mb-auto"]] [
-                    h1 ~a:[a_class["font-semibold text-2xl md:text-3xl mb-8 text-primary-800"]] [txt "Sign up for an Account"]
+            [
+              section ~a:[a_class["max-w-7xl relative px-5 mx-auto"]] [
+                div ~a:[a_class["absolute"]] [
+                  img ~a:[a_class["md:w-20 w-14"]] ~src:"/images/robur.png" ~alt:"Robur.coop" ()
+                ]
+              ]
+             ; main ~a:[a_class["w-full grid grid-cols-3 text-gray-700 md:h-screen"]]
+                [section ~a:[a_class["h-full flex justify-center items-center col-span-2 md:py-10 py-5"]] [
+                  div ~a:[a_class["w-full max-w-lg mt-16 pb-16 mx-auto"]] [
+                    h1 ~a:[a_class["font-semibold text-2xl md:text-3xl mb-8 text-primary-800 p-6"]] [txt "Sign up for an Account"]
                   ; div ~a:[a_class["space-y-6 mt-8 shadow-md p-6"]][
                       div [
                         label ~a:[a_class["block text-sm font-medium"]; a_label_for "name"][txt "Name"]
@@ -22,7 +28,7 @@ let register_page =
                                   a_id "name";
                                   a_class["ring-primary-100 mt-1.5 transition appearance-none block w-full px-3 py-3 rounded-xl shadow-sm border hover:border-primary-200
                                            focus:border-primary-300 bg-primary-50 bg-opacity-0 hover:bg-opacity-50 focus:bg-opacity-50 ring-primary-200 focus:ring-primary-200
-                                           focus:ring-[3px] focus:outline-none"]] ()
+                                           focus:ring-[1px] focus:outline-none"]] ()
                       ]
                      ; div [
                         label ~a:[a_class["block text-sm font-medium"]; a_label_for "email"][txt "Email Address"]
@@ -33,7 +39,7 @@ let register_page =
                                   a_id "email";
                                   a_class["ring-primary-100 mt-1.5 transition appearance-none block w-full px-3 py-3 rounded-xl shadow-sm border hover:border-primary-200
                                            focus:border-primary-300 bg-primary-50 bg-opacity-0 hover:bg-opacity-50 focus:bg-opacity-50 ring-primary-200 focus:ring-primary-200
-                                           focus:ring-[3px] focus:outline-none"]] ()
+                                           focus:ring-[1px] focus:outline-none"]] ()
                       ]
                       ; div [
                         label ~a:[a_class["block text-sm font-medium"]; a_label_for "password"][txt "Password"]
@@ -43,7 +49,7 @@ let register_page =
                                   a_id "password";
                                   a_class["ring-primary-100 mt-1.5 transition appearance-none block w-full px-3 py-3 rounded-xl shadow-sm border hover:border-primary-200
                                            focus:border-primary-300 bg-primary-50 bg-opacity-0 hover:bg-opacity-50 focus:bg-opacity-50 ring-primary-200 focus:ring-primary-200
-                                           focus:ring-[3px] focus:outline-none"]] ()
+                                           focus:ring-[1px] focus:outline-none"]] ()
                       ]
                     ; div ~a:[a_class["flex items-center justify-between text-sm font-medium text-primary-500"]][
                         a ~a:[a_class["hover:text-primary-800 transition-colors cursor-pointer"]][txt "Forgot Your Password?"]
