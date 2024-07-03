@@ -56,7 +56,7 @@ let generate_token ?(expires_in = 3600) () =
 
 let create_user ~name ~email ~password =
   let uuid = Uuidm.to_string (generate_uuid ()) in
-  let user_password = hash_password password uuid in
+  let password = hash_password password uuid in
   {
     name = clean_string name;
     email = clean_string email;
