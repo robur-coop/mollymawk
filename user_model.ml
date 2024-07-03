@@ -52,18 +52,9 @@ let generate_uuid () =
   let data = Rng.generate 16 in
   Uuidm.v4 (Cstruct.to_bytes data)
 
-let generate_token ~uuid =
-  let salt = Rng.generate 16 in
-  let hash =
-    Mirage_crypto.Hash.SHA256.digest (Cstruct.of_string (uuid ^ (Cstruct.to_string salt)))
-  in
-  match Base64.encode (Cstruct.to_string hash) with
-  | Error (`Msg s) ->
-      Logs.warn (fun m ->
-          m "Failed to generate user token for: %s with %s" uuid s);
-      None
-  | Ok token ->
-      Some { token_type = "Bearer"; access_token = token; expires_in = 3600 }
+let generate_token ?(expires_in = 3600) () =
+  let token = generate_uuid () in
+  { token_type = "Bearer"; access_token = Uuidm.to_string token; expires_in }
 
 let create_user ~name ~email ~password =
   let uuid = Uuidm.to_string (generate_uuid ~email) in
