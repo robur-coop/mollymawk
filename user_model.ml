@@ -29,7 +29,7 @@ type user = {
   email : string;
   password : string;
   uuid : string;
-  token : token list;
+  tokens : token list;
 }
 
 let user_to_json u : Yojson.Basic.t =
@@ -39,6 +39,7 @@ let user_to_json u : Yojson.Basic.t =
     ("password", `String u.password);
     ("uuid", `String u.uuid);
     ("token", `List (List.map token_to_json u.token))
+    ("token", `List (List.map token_to_json u.tokens)
   ]
 
 let hash_password password uuid =
@@ -62,5 +63,5 @@ let create_user ~name ~email ~password =
     email = clean_string email;
     password = user_password;
     uuid = uuid;
-    token = [];
+    tokens = [];
   }
