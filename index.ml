@@ -1,10 +1,10 @@
 open Tyxml
 
-let index_page =
+let index_page ~icon =
   let page =
     Html.(
       html
-        (Header_layout.header ~page_title:"Home | Mollymawk" ())
+        (Header_layout.header ~page_title:"Home | Mollymawk" ~icon ())
 
         (body
             [ section [
