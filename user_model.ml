@@ -43,7 +43,7 @@ let user_to_json u : Yojson.Basic.t =
               | None -> `Null)
   ]
 
-let encrypt_password password uuid =
+let hash_password password uuid =
   let hash = Mirage_crypto.Hash.SHA256.digest
     (Cstruct.of_string (uuid ^ "-" ^ password)) in
   Base64.encode_string (Cstruct.to_string hash)
