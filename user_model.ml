@@ -29,7 +29,7 @@ type user = {
   email : string;
   password : string;
   uuid : string;
-  token : token option;
+  token : token list;
 }
 
 let user_to_json u : Yojson.Basic.t =
