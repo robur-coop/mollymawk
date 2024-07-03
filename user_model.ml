@@ -53,9 +53,9 @@ let encrypt_password password uuid =
       None
   | Ok pass -> Some pass
 
-let generate_uuid ~email =
-  let email_length = String.length email in
-  Uuidm.v4_gen (Random.State.make [| email_length |]) ()
+let generate_uuid () =
+  let data = Rng.generate 16 in
+  Uuidm.v4 (Cstruct.to_bytes data)
 
 let generate_token ~uuid =
   let salt = Rng.generate 16 in
