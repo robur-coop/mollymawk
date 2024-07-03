@@ -14,6 +14,8 @@ let mollymawk =
       package "uri";
       package "tyxml";
       package "multipart_form";
+      package "mirage-crypto-rng";
+      package "uuidm";
       package "paf" ~sublibs:[ "mirage" ] ~min:"0.5.0" ;
     ]
   and runtime_args =
