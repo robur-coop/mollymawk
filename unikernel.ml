@@ -393,14 +393,40 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
               let res = "{\"status\": 400, \"message\": \"Bad request body\"}" in
               Lwt.return (reply ~content_type:"application/json" res)
             | Ok json ->
+              let validate_email_re =
+                Re.Perl.re "[a-zA-Z0-9.$_!]+@[a-zA-Z0-9]+\\.[a-z]{2,3}"
+                |> Re.compile
+              in
+              let validate_user_input name email password =
+                if name = "" || email = "" || password = "" then
+                  Error "All fields must be filled."
+                else
+                  if String.length name < 4 then
+                    Error "Name must be at least 3 characters long."
+                  else if not (Re.execp validate_email_re email) then
+                    Error "Invalid email address."
+                  else if String.length password < 8 then
+                    Error "Password must be at least 8 characters long."
+                  else
+                    Ok "Validation passed."
+              in
               let name = json |> Yojson.Basic.Util.member "name" |> Yojson.Basic.to_string in
               let email = json |> Yojson.Basic.Util.member "email" |> Yojson.Basic.to_string in
               let password = json |> Yojson.Basic.Util.member "password" |> Yojson.Basic.to_string in
-              let user = User_model.create_user ~name ~email ~password in
-              Lwt.return (reply ~content_type:"application/json" (Yojson.Basic.to_string (User_model.user_to_json user))))
+              let validate_user = validate_user_input name email password in
+              match validate_user with
+              | Error s ->
+                let res = "{\"status\": 400, \"success\": false, \"message\": \""^ s ^ "\"}" in
+                Lwt.return (reply ~content_type:"application/json" res)
+              | Ok _ ->
+                let user = User_model.create_user ~name ~email ~password in
+                let res = "{\"status\": 200, \"success\": true, \"message\": {\"user\": "^ (Yojson.Basic.to_string (User_model.user_to_json user)) ^"}}" in
+                Lwt.return (reply ~content_type:"application/json" res))
           | _ ->
-            let res = "{\"status\": 400, \"message\": \"Bad request method\"}" in
+            let res = "{\"status\": 400, \"success\": false, \"message\": \"Bad request method\"}" in
             Lwt.return (reply ~content_type:"application/json" res))
+        | "/dashboard" ->
+          Lwt.return (reply ~content_type:"text/html" "This is going to be the Dashboard :-)")
         | "/unikernel/create" ->
           Lwt.return (reply ~content_type:"text/html" html)
         | path when String.(length path >= 20 && sub path 0 20 = "/unikernel/shutdown/") ->

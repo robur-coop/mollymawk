@@ -86,27 +86,27 @@ let register_page ~icon () =
                     email_alert.classList.add('hidden')
                     password_alert.classList.add('hidden')
 
-                    if (!name || !email || !password) {
+                   if (!name || !email || !password) {
                         form_alert.classList.remove('hidden')
                         form_alert.classList.add('text-secondary-500', 'block')
                         form_alert.textContent = 'All fields are required'
                         return;
                     }
 
-                    if (name.length < 3) {
+                    if (name.length < 4) {
                         name_alert.classList.remove('hidden')
                         name_alert.classList.add('text-secondary-500', 'block')
                         name_alert.textContent = 'Name must be at least 4 characters.'
                         return;
                     }
 
-                    //const emailPattern
-                    //if (!emailPattern.test(email)) {
-                    //    email_alert.classList.remove('hidden')
-                    //    email_alert.classList.add('text-secondary-500', 'block')
-                    //    email_alert.textContent = 'Please enter a valid email address.'
-                    //    return;
-                  // }
+                    const emailPattern = /^[a-zA-Z0-9.$_!]+@[a-zA-Z0-9]+\\.[a-z]{2,3}$/;
+                    if (!emailPattern.test(email)) {
+                        email_alert.classList.remove('hidden')
+                        email_alert.classList.add('text-secondary-500', 'block')
+                        email_alert.textContent = 'Please enter a valid email address.'
+                        return;
+                   }
 
                     if (password.length < 8) {
                         password_alert.classList.remove('hidden')
@@ -124,7 +124,14 @@ let register_page ~icon () =
                             body: JSON.stringify({ name, email, password })
                         })
                         const data = await response.json();
-                        console.log(data);
+                        if (data.status === 200) {
+                          window.location.replace('/dashboard')
+                        } else {
+                            form_alert.classList.remove('hidden')
+                            form_alert.classList.add('text-secondary-500', 'block')
+                            form_alert.textContent = data.message
+                            console.log(data);
+                        }
                     } catch (error) {
                         form_alert.classList.remove('hidden')
                         form_alert.classList.add('text-secondary-500', 'block')
