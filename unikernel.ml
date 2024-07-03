@@ -490,29 +490,39 @@ struct
                         in
                         Lwt.return (reply ~content_type:"application/json" res)
                     | Ok _ -> (
-                        let user =
-                          User_model.create_user ~name ~email ~password
-                        in
-                        Store.add_user !store user >>= function
-                        | Ok store' ->
-                            store := store';
-                            let res =
-                              "{\"status\": 200, \"success\": true, \
-                               \"message\": {\"user\": "
-                              ^ Yojson.Basic.to_string
-                                  (User_model.user_to_json user)
-                              ^ "}}"
-                            in
-                            Lwt.return
-                              (reply ~content_type:"application/json" res)
-                        | Error (`Msg msg) ->
-                            let res =
-                              "{\"status\": 400, \"success\": false, \
-                               \"message\": \"Something went wrong. Wait a few \
-                               seconds and try again.\"}"
-                            in
-                            Lwt.return
-                              (reply ~content_type:"application/json" res))))
+                        let _, (s : Storage.t) = !store in
+                        let users = s.users in
+                        if User_model.check_if_user_exists email users then
+                          let res =
+                            "{\"status\": 400, \"message\": \"A user with this email already \
+                             exists.\"}"
+                          in
+                          Lwt.return
+                            (reply ~content_type:"application/json" res)
+                        else
+                          let user =
+                            User_model.create_user ~name ~email ~password
+                          in
+                          Store.add_user !store user >>= function
+                          | Ok store' ->
+                              store := store';
+                              let res =
+                                "{\"status\": 200, \"success\": true, \
+                                 \"message\": {\"user\": "
+                                ^ Yojson.Basic.to_string
+                                    (User_model.user_to_json user)
+                                ^ "}}"
+                              in
+                              Lwt.return
+                                (reply ~content_type:"application/json" res)
+                          | Error (`Msg _msg) ->
+                              let res =
+                                "{\"status\": 400, \"success\": false, \
+                                 \"message\": \"Something went wrong. Wait a \
+                                 few seconds and try again.\"}"
+                              in
+                              Lwt.return
+                                (reply ~content_type:"application/json" res))))
             | _ ->
                 let res =
                   "{\"status\": 400, \"success\": false, \"message\": \"Bad \

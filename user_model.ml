@@ -101,6 +101,9 @@ let generate_token ?(expires_in = 3600) () =
   let token = generate_uuid () in
   { token_type = "Bearer"; value = Uuidm.to_string token; expires_in }
 
+let check_if_user_exists email users =
+  List.exists (fun user -> user.email = clean_string email) users
+
 let create_user ~name ~email ~password =
   let uuid = Uuidm.to_string (generate_uuid ()) in
   let password = hash_password password uuid in
