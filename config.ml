@@ -17,7 +17,7 @@ let mollymawk =
       package "mirage-crypto-rng";
       package "uuidm";
       package "paf" ~sublibs:[ "mirage" ] ~min:"0.5.0";
-      package "oneffs" ;
+      package "oneffs";
     ]
   and runtime_args =
     [

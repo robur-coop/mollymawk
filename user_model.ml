@@ -30,12 +30,16 @@ let get key assoc =
   | Some (_, f) -> Some f
 
 let token_of_json = function
-  | `Assoc xs ->
-    begin match get "token_type" xs, get "value" xs, get "expires_in" xs with
-      | Some `String token_type, Some `String value, Some `Int expires_in ->
-        Ok { token_type ; value ; expires_in }
-      | _ -> Error (`Msg "invalid json for token: requires token_type, value, and expires_in")
-    end
+  | `Assoc xs -> (
+      match (get "token_type" xs, get "value" xs, get "expires_in" xs) with
+      | Some (`String token_type), Some (`String value), Some (`Int expires_in)
+        ->
+          Ok { token_type; value; expires_in }
+      | _ ->
+          Error
+            (`Msg
+              "invalid json for token: requires token_type, value, and \
+               expires_in"))
   | _ -> Error (`Msg "invalid json for token: expected assoc")
 
 type user = {
@@ -57,19 +61,30 @@ let user_to_json u : Yojson.Basic.t =
     ]
 
 let user_of_json = function
-  | `Assoc xs ->
-    let ( let* ) = Result.bind in
-    begin match get "name" xs, get "email" xs, get "password" xs, get "uuid" xs, get "tokens" xs with
-      | Some `String name, Some `String email, Some `String password, Some `String uuid, Some `List tokens ->
-        let* tokens = List.fold_left (fun acc js ->
-            let* acc = acc in
-            let* token = token_of_json js in
-            Ok (token :: acc))
-            (Ok []) tokens
-        in
-        Ok { name ; email ; password ; uuid ; tokens }
-      | _ -> Error (`Msg "invalid json for user")
-    end
+  | `Assoc xs -> (
+      let ( let* ) = Result.bind in
+      match
+        ( get "name" xs,
+          get "email" xs,
+          get "password" xs,
+          get "uuid" xs,
+          get "tokens" xs )
+      with
+      | ( Some (`String name),
+          Some (`String email),
+          Some (`String password),
+          Some (`String uuid),
+          Some (`List tokens) ) ->
+          let* tokens =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* token = token_of_json js in
+                Ok (token :: acc))
+              (Ok []) tokens
+          in
+          Ok { name; email; password; uuid; tokens }
+      | _ -> Error (`Msg "invalid json for user"))
   | _ -> Error (`Msg "invalid json for user")
 
 let hash_password password uuid =
