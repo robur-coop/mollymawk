@@ -506,9 +506,10 @@ struct
                             Lwt.return
                               (reply ~content_type:"application/json" res)
                         | Error (`Msg msg) ->
-                            Lwt.return
-                              (reply ~content_type:"text/plain"
-                                 "Error while writing to storage"))))
+                   let res =
+                  "{\"status\": 400, \"success\": false, \"message\": \"Something went wrong. Wait a few seconds and try again.\"}"
+                in
+                Lwt.return (reply ~content_type:"application/json" res))))
             | _ ->
                 let res =
                   "{\"status\": 400, \"success\": false, \"message\": \"Bad \
