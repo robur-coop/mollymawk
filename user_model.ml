@@ -3,7 +3,7 @@ module Rng = Mirage_crypto_rng
 type token = {
   token_type : string;
   access_token : string;
-  expires_in : int; (* After 1 hour (3660 seconds) of inactivity *)
+  expires_in : int; (* In seconds, so after 1 hour would be 3600 seconds of inactivity *)
 }
 let clean_string s =
   (* Remove backslashes and double quotes from the string *)
