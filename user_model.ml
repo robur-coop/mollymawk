@@ -57,7 +57,7 @@ let generate_token ?(expires_in = 3600) () =
   { token_type = "Bearer"; access_token = Uuidm.to_string token; expires_in }
 
 let create_user ~name ~email ~password =
-  let uuid = Uuidm.to_string (generate_uuid ~email) in
+  let uuid = Uuidm.to_string (generate_uuid ()) in
   let user_password = Option.get (encrypt_password password uuid) in
   {
     name = clean_string name;
