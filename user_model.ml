@@ -38,8 +38,7 @@ let user_to_json u : Yojson.Basic.t =
     ("email", `String u.email);
     ("password", `String u.password);
     ("uuid", `String u.uuid);
-    ("token", `List (List.map token_to_json u.token))
-    ("token", `List (List.map token_to_json u.tokens)
+    ("tokens", `List (List.map token_to_json u.tokens))
   ]
 
 let hash_password password uuid =
