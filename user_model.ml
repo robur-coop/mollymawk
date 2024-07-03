@@ -2,7 +2,7 @@ module Rng = Mirage_crypto_rng
 
 type token = {
   token_type : string;
-  access_token : string;
+  value : string;
   expires_in : int; (* In seconds, so after 1 hour would be 3600 seconds of inactivity *)
 }
 let clean_string s =
@@ -20,7 +20,7 @@ let clean_string s =
 let token_to_json t : Yojson.Basic.t  =
   `Assoc [
     ("token_type", `String t.token_type);
-    ("access_token", `String t.access_token);
+    ("value", `String t.value);
     ("expires_in", `Int t.expires_in)
   ]
 
@@ -52,7 +52,7 @@ let generate_uuid () =
 
 let generate_token ?(expires_in = 3600) () =
   let token = generate_uuid () in
-  { token_type = "Bearer"; access_token = Uuidm.to_string token; expires_in }
+  { token_type = "Bearer"; value = Uuidm.to_string token; expires_in }
 
 let create_user ~name ~email ~password =
   let uuid = Uuidm.to_string (generate_uuid ()) in
