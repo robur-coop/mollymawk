@@ -60,7 +60,7 @@ let create_user ~name ~email ~password =
   {
     name = clean_string name;
     email = clean_string email;
-    password = user_password;
-    uuid = uuid;
+    password;
+    uuid;
     tokens = [];
   }
