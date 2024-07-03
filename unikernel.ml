@@ -352,7 +352,7 @@ module Main (R : Mirage_random.S) (P : Mirage_clock.PCLOCK) (M : Mirage_clock.MC
         | "/main.js" ->
           Lwt.return (reply ~content_type:"text/plain" js_file)
         | "/images/molly_bird.jpeg" ->
-          Lwt.return (reply imgs.molly_img)
+          Lwt.return (reply ~content_type:"image/jpeg" imgs.molly_img)
         | "/images/robur.png" ->
           Lwt.return (reply imgs.robur_img)
         | "/style.css" ->
