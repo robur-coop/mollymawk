@@ -191,7 +191,7 @@ struct
             (Cstruct.length data));
       Error ())
 
-  let deccode_request_body reqd =
+  let decode_request_body reqd =
     let request_body = Httpaf.Reqd.request_body reqd in
     let finished, notify_finished = Lwt.wait () in
     let wakeup v = Lwt.wakeup_later notify_finished v in
@@ -443,7 +443,7 @@ struct
             let request = Httpaf.Reqd.request reqd in
             match request.meth with
             | `POST -> (
-                deccode_request_body reqd >>= fun data ->
+                decode_request_body reqd >>= fun data ->
                 let json =
                   try Ok (Yojson.Basic.from_string data)
                   with Yojson.Json_error s -> Error (`Msg s)
@@ -542,7 +542,7 @@ struct
           let request = Httpaf.Reqd.request reqd in
           match request.meth with
           | `POST -> (
-              deccode_request_body reqd >>= fun data ->
+              decode_request_body reqd >>= fun data ->
               let json =
                 try Ok (Yojson.Basic.from_string data)
                 with Yojson.Json_error s -> Error (`Msg s)
