@@ -191,6 +191,24 @@ struct
             (Cstruct.length data));
       Error ())
 
+  let deccode_request_body reqd =
+    let request_body = Httpaf.Reqd.request_body reqd in
+    let finished, notify_finished = Lwt.wait () in
+    let wakeup v = Lwt.wakeup_later notify_finished v in
+    let on_eof data () = wakeup data in
+    let f acc s = acc ^ s in
+    let rec on_read on_eof acc bs ~off ~len =
+      let str = Bigstringaf.substring ~off ~len bs in
+      let acc = acc >>= fun acc -> Lwt.return (f acc str) in
+      Httpaf.Body.schedule_read request_body
+        ~on_read:(on_read on_eof acc) ~on_eof:(on_eof acc)
+    in
+    let f_init = Lwt.return "" in
+    Httpaf.Body.schedule_read request_body
+      ~on_read:(on_read on_eof f_init) ~on_eof:(on_eof f_init);
+    finished >>= fun data ->
+    data
+
   let split_many data =
     let rec split acc data =
       if Cstruct.length data >= 4 then
@@ -417,26 +435,15 @@ struct
             Lwt.return
               (reply ~content_type:"text/html"
                  (Sign_up.register_page ~icon:"/images/robur.png" ()))
+        | "/sign-in" ->
+        Lwt.return
+          (reply ~content_type:"text/html"
+              (Sign_in.login_page ~icon:"/images/robur.png" ()))
         | "/api/register" -> (
             let request = Httpaf.Reqd.request reqd in
             match request.meth with
             | `POST -> (
-                let request_body = Httpaf.Reqd.request_body reqd in
-                let finished, notify_finished = Lwt.wait () in
-                let wakeup v = Lwt.wakeup_later notify_finished v in
-                let on_eof data () = wakeup data in
-                let f acc s = acc ^ s in
-                let rec on_read on_eof acc bs ~off ~len =
-                  let str = Bigstringaf.substring ~off ~len bs in
-                  let acc = acc >>= fun acc -> Lwt.return (f acc str) in
-                  Httpaf.Body.schedule_read request_body
-                    ~on_read:(on_read on_eof acc) ~on_eof:(on_eof acc)
-                in
-                let f_init = Lwt.return "" in
-                Httpaf.Body.schedule_read request_body
-                  ~on_read:(on_read on_eof f_init) ~on_eof:(on_eof f_init);
-                finished >>= fun data ->
-                data >>= fun data ->
+                deccode_request_body reqd >>= fun data ->
                 let json =
                   try Ok (Yojson.Basic.from_string data)
                   with Yojson.Json_error s -> Error (`Msg s)
@@ -494,8 +501,8 @@ struct
                         let users = s.users in
                         if User_model.check_if_user_exists email users then
                           let res =
-                            "{\"status\": 400, \"message\": \"A user with this email already \
-                             exists.\"}"
+                            "{\"status\": 400, \"message\": \"A user with this \
+                             email already exists.\"}"
                           in
                           Lwt.return
                             (reply ~content_type:"application/json" res)
@@ -658,9 +665,11 @@ struct
                         Logs.warn (fun m -> m "couldn't find fields");
                         Lwt.return (reply "couldn't find fields"))))
         | _ ->
-            Lwt.return
-              (reply ~content_type:"text/plain"
-                 "Error 404: this endpoint doesn't exist"))
+          let res =
+            "{\"status\": 404, \"success\": false, \"message\": \"This \
+          service does not exist.\"}"
+          in
+          Lwt.return (reply ~content_type:"application/json" res))
 
   let pp_error ppf = function
     | #Httpaf.Status.t as code -> Httpaf.Status.pp_hum ppf code
