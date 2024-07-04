@@ -186,6 +186,7 @@ let register_page ~icon () =
                                  a
                                    ~a:
                                      [
+                                      a_href "/sign-in";
                                        a_class
                                          [
                                            "hover:text-primary-800 \
