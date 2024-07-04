@@ -101,9 +101,6 @@ let generate_token ?(expires_in = 3600) () =
   let token = generate_uuid () in
   { token_type = "Bearer"; value = Uuidm.to_string token; expires_in }
 
-let check_if_user_exists email users =
-  List.exists (fun user -> user.email = clean_string email) users
-
 let create_user ~name ~email ~password =
   let uuid = Uuidm.to_string (generate_uuid ()) in
   let password = hash_password password uuid in
@@ -115,15 +112,15 @@ let create_user ~name ~email ~password =
     tokens = [];
   }
 
-let find_user ~email users =
+let check_if_user_exists ~email users =
   List.find_opt (fun user -> user.email = clean_string email) users
 
 let login_user ~email ~password users =
-  let user = find_user ~email users in
+  let user = check_if_user_exists ~email users in
   match user with
-  | None -> Error (`Msg "Invalid email or password")
+  | None -> Error (`Msg "This account does not exist.")
   | Some u ->
       let pass = hash_password password u.uuid in
-      if u.password = pass then Ok true
-      else Error (`Msg "Invalid email or password")
+      if u.password = pass then Ok (`Msg "Login succesful.")
+      else Error (`Msg "Invalid email or password.")
 (* Invalid email or password is a trick error message to at least prevent malicious users from guessing login details :).*)
