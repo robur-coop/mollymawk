@@ -114,3 +114,16 @@ let create_user ~name ~email ~password =
     uuid;
     tokens = [];
   }
+
+let find_user ~email users =
+  List.find_opt (fun user -> user.email = clean_string email) users
+
+let login_user ~email ~password users =
+  let user = find_user ~email users in
+  match user with
+  | None -> Error (`Msg "Invalid email or password")
+  | Some u ->
+      let pass = hash_password password u.uuid in
+      if u.password = pass then Ok true
+      else Error (`Msg "Invalid email or password")
+(* Invalid email or password is a trick error message to at least prevent malicious users from guessing login details :).*)
