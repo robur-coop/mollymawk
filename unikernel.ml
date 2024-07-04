@@ -499,14 +499,16 @@ struct
                     | Ok _ -> (
                         let _, (s : Storage.t) = !store in
                         let users = s.users in
-                        if User_model.check_if_user_exists email users then
+                        let user = User_model.check_if_user_exists ~email users in
+                        match user with
+                        | Some _ ->
                           let res =
                             "{\"status\": 400, \"message\": \"A user with this \
                              email already exists.\"}"
                           in
                           Lwt.return
                             (reply ~content_type:"application/json" res)
-                        else
+                        | None ->
                           let user =
                             User_model.create_user ~name ~email ~password
                           in
@@ -536,6 +538,80 @@ struct
                    request method\"}"
                 in
                 Lwt.return (reply ~content_type:"application/json" res))
+        | "/api/login" -> (
+          let request = Httpaf.Reqd.request reqd in
+          match request.meth with
+          | `POST -> (
+              deccode_request_body reqd >>= fun data ->
+              let json =
+                try Ok (Yojson.Basic.from_string data)
+                with Yojson.Json_error s -> Error (`Msg s)
+              in
+              match json with
+              | Error (`Msg s) ->
+                  Logs.warn (fun m -> m "Failed to parse JSON: %s" s);
+                  let res =
+                    "{\"status\": 400, \"message\": \"Bad request body\"}"
+                  in
+                  Lwt.return (reply ~content_type:"application/json" res)
+              | Ok json -> (
+                  let validate_email_re =
+                    Re.Perl.re "[a-zA-Z0-9.$_!]+@[a-zA-Z0-9]+\\.[a-z]{2,3}"
+                    |> Re.compile
+                  in
+                  let validate_user_input email password =
+                    if email = "" || password = "" then
+                      Error "All fields must be filled."
+                    else if not (Re.execp validate_email_re email) then
+                      Error "Invalid email address."
+                    else if String.length password < 8 then
+                      Error "Password must be at least 8 characters long."
+                    else Ok "Validation passed."
+                  in
+                  let email =
+                    json
+                    |> Yojson.Basic.Util.member "email"
+                    |> Yojson.Basic.to_string
+                  in
+                  let password =
+                    json
+                    |> Yojson.Basic.Util.member "password"
+                    |> Yojson.Basic.to_string
+                  in
+                  let validate_user =
+                    validate_user_input email password
+                  in
+                  match validate_user with
+                  | Error s ->
+                      let res =
+                        "{\"status\": 400, \"success\": false, \"message\": \
+                          \"" ^ s ^ "\"}"
+                      in
+                      Lwt.return (reply ~content_type:"application/json" res)
+                  | Ok _ -> (
+                      let _, (s : Storage.t) = !store in
+                      let users = s.users in
+                      let login = User_model.login_user ~email ~password users in
+                      match login with
+                      | Error `Msg s ->
+                        let res =
+                          "{\"status\": 404, \"message\": \""^s^"\"}"
+                        in
+                        Lwt.return
+                          (reply ~content_type:"application/json" res)
+                      | Ok `Msg s ->
+                        let res =
+                          "{\"status\": 200, \"message\": \""^s^"\"}"
+                        in
+                        Lwt.return
+                          (reply ~content_type:"application/json" res)
+                      )))
+          | _ ->
+              let res =
+                "{\"status\": 400, \"success\": false, \"message\": \"Bad \
+                  request method\"}"
+              in
+              Lwt.return (reply ~content_type:"application/json" res))
         | "/dashboard" ->
             Lwt.return
               (reply ~content_type:"text/html"
