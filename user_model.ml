@@ -7,6 +7,13 @@ type token = {
       (* In seconds, so after 1 hour would be 3600 seconds of inactivity *)
 }
 
+type cookie = {
+  name : string;
+  value : string;
+  expires_in : int;
+  uuid : string option;
+}
+
 let clean_string s =
   (* Remove backslashes and double quotes from the string *)
   let buffer = Buffer.create (String.length s) in

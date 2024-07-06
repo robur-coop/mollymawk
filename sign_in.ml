@@ -22,7 +22,10 @@ let login_page ~icon () =
                ~a:
                  [
                    a_class
-                     [ "w-full grid grid-cols-3 text-gray-700 md:h-screen" ];
+                     [
+                       "w-full grid md:grid-cols-3 grid-cols-1 text-gray-700 \
+                        md:h-screen";
+                     ];
                  ]
                [
                  section
@@ -148,7 +151,7 @@ let login_page ~icon () =
                                  a
                                    ~a:
                                      [
-                                      a_href "/sign-up";
+                                       a_href "/sign-up";
                                        a_class
                                          [
                                            "hover:text-primary-800 \
@@ -176,7 +179,11 @@ let login_page ~icon () =
                        ];
                    ];
                  aside
-                   ~a:[ a_class [ "relative h-full p-16 col-span-1" ] ]
+                   ~a:
+                     [
+                       a_class
+                         [ "relative h-full p-16 col-span-1 md:block hidden" ];
+                     ]
                    [
                      img ~src:"/images/molly_bird.jpeg"
                        ~alt:"Mollymawk delivering unikernels"
@@ -193,59 +200,78 @@ let login_page ~icon () =
                ];
              Footer_layout.footer;
              Tyxml.Html.Unsafe.data
-               "<script>
-                  const loginButton = document.getElementById('login-button')
-                  loginButton.addEventListener('click', async function() {
-                    const email = document.getElementById('email').value.toLowerCase()
-                    const password = document.getElementById('password').value
-                    let form_alert = document.getElementById('form-alert')
-                    let email_alert = document.getElementById('email-alert')
-                    let password_alert = document.getElementById('password-alert')
-                    form_alert.classList.add('hidden')
-                    email_alert.classList.add('hidden')
-                    password_alert.classList.add('hidden')
-                    if (!email || !password) {
-                      form_alert.classList.remove('hidden')
-                      form_alert.classList.add('text-secondary-500', 'block')
-                      form_alert.textContent = 'All fields are required'
-                      return;
-                    }
-                    const emailPattern = /^[a-zA-Z0-9.$_!]+@[a-zA-Z0-9]+\\.[a-z]{2,3}$/;
-                    if (!emailPattern.test(email)) {
-                      email_alert.classList.remove('hidden')
-                      email_alert.classList.add('text-secondary-500', 'block')
-                      email_alert.textContent = 'Please enter a valid email address.'
-                      return;
-                    }
-                    if (password.length < 8) {
-                      password_alert.classList.remove('hidden')
-                      password_alert.classList.add('text-secondary-500', 'block')
-                      password_alert.textContent = 'Password must be at least 8 characters long.'
-                      return;
-                    }
-                    try {
-                      const response = await fetch('/api/login', {
-                                           method: 'POST',
-                                           headers: {
-                                            'Content-Type': 'application/json',
-                                           },
-                                           body: JSON.stringify({email, password })
-                                        })
-                      const data = await response.json();
-                      if (data.status === 200) {
-                        window.location.replace('/dashboard')
-                      } else {
-                        form_alert.classList.remove('hidden')
-                        form_alert.classList.add('text-secondary-500', 'block')
-                        form_alert.textContent = data.message
-                      }
-                    } catch (error) {
-                          form_alert.classList.remove('hidden')
-                          form_alert.classList.add('text-secondary-500', 'block')
-                          form_alert.textContent = error
-                          return;
-                      }})
-                </script>";
+               "<script>\n\
+               \                  const loginButton = \
+                document.getElementById('login-button')\n\
+               \                  loginButton.addEventListener('click', async \
+                function() {\n\
+               \                    const email = \
+                document.getElementById('email').value.toLowerCase()\n\
+               \                    const password = \
+                document.getElementById('password').value\n\
+               \                    let form_alert = \
+                document.getElementById('form-alert')\n\
+               \                    let email_alert = \
+                document.getElementById('email-alert')\n\
+               \                    let password_alert = \
+                document.getElementById('password-alert')\n\
+               \                    form_alert.classList.add('hidden')\n\
+               \                    email_alert.classList.add('hidden')\n\
+               \                    password_alert.classList.add('hidden')\n\
+               \                    if (!email || !password) {\n\
+               \                      form_alert.classList.remove('hidden')\n\
+               \                      \
+                form_alert.classList.add('text-secondary-500', 'block')\n\
+               \                      form_alert.textContent = 'All fields are \
+                required'\n\
+               \                      return;\n\
+               \                    }\n\
+               \                    const emailPattern = \
+                /^[a-zA-Z0-9.$_!]+@[a-zA-Z0-9]+\\.[a-z]{2,3}$/;\n\
+               \                    if (!emailPattern.test(email)) {\n\
+               \                      email_alert.classList.remove('hidden')\n\
+               \                      \
+                email_alert.classList.add('text-secondary-500', 'block')\n\
+               \                      email_alert.textContent = 'Please enter \
+                a valid email address.'\n\
+               \                      return;\n\
+               \                    }\n\
+               \                    if (password.length < 8) {\n\
+               \                      password_alert.classList.remove('hidden')\n\
+               \                      \
+                password_alert.classList.add('text-secondary-500', 'block')\n\
+               \                      password_alert.textContent = 'Password \
+                must be at least 8 characters long.'\n\
+               \                      return;\n\
+               \                    }\n\
+               \                    try {\n\
+               \                      const response = await \
+                fetch('/api/login', {\n\
+               \                                           method: 'POST',\n\
+               \                                           headers: {\n\
+               \                                            'Content-Type': \
+                'application/json',\n\
+               \                                           },\n\
+               \                                           body: \
+                JSON.stringify({email, password })\n\
+               \                                        })\n\
+               \                      const data = await response.json();\n\
+               \                      if (data.status === 200) {\n\
+               \                        window.location.replace('/dashboard')\n\
+               \                      } else {\n\
+               \                        form_alert.classList.remove('hidden')\n\
+               \                        \
+                form_alert.classList.add('text-secondary-500', 'block')\n\
+               \                        form_alert.textContent = data.message\n\
+               \                      }\n\
+               \                    } catch (error) {\n\
+               \                          form_alert.classList.remove('hidden')\n\
+               \                          \
+                form_alert.classList.add('text-secondary-500', 'block')\n\
+               \                          form_alert.textContent = error\n\
+               \                          return;\n\
+               \                      }})\n\
+               \                </script>";
            ]))
   in
   Format.asprintf "%a" (Html.pp ()) page
