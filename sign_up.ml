@@ -22,7 +22,10 @@ let register_page ~icon () =
                ~a:
                  [
                    a_class
-                     [ "w-full grid grid-cols-3 text-gray-700 md:h-screen" ];
+                     [
+                       "w-full grid md:grid-cols-3 grid-cols-1 text-gray-700 \
+                        md:h-screen";
+                     ];
                  ]
                [
                  section
@@ -186,7 +189,7 @@ let register_page ~icon () =
                                  a
                                    ~a:
                                      [
-                                      a_href "/sign-in";
+                                       a_href "/sign-in";
                                        a_class
                                          [
                                            "hover:text-primary-800 \
@@ -214,7 +217,11 @@ let register_page ~icon () =
                        ];
                    ];
                  aside
-                   ~a:[ a_class [ "relative h-full p-16 col-span-1" ] ]
+                   ~a:
+                     [
+                       a_class
+                         [ "relative h-full p-16 col-span-1 md:block hidden" ];
+                     ]
                    [
                      img ~src:"/images/molly_bird.jpeg"
                        ~alt:"Mollymawk delivering unikernels"
