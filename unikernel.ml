@@ -609,7 +609,7 @@ struct
                               (reply ~content_type:"application/json" res)
                         | Ok user -> (
                             Store.update_user !store user >>= function
-                            | Ok store' ->
+                            | Ok store' -> (
                                 store := store';
                                 let res =
                                   "{\"status\": 200, \"success\": true, \
@@ -624,7 +624,7 @@ struct
                                       c.name = "molly_session")
                                     user.cookies
                                 in
-                                (match cookie with
+                                match cookie with
                                 | Some cookie ->
                                     let cookie_value =
                                       cookie.name ^ "=" ^ cookie.value
@@ -638,16 +638,16 @@ struct
                                     in
                                     Lwt.return
                                       (reply ~header_list
-                                        ~content_type:"application/json" res)
+                                         ~content_type:"application/json" res)
                                 | None ->
-                                  let res =
-                                    "{\"status\": 400, \"success\": false, \
-                                     \"message\": \"Something went wrong. Wait a \
-                                     few seconds and try again.\"}"
-                                  in
-                                  Lwt.return
-                                    (reply ~content_type:"application/json" res))
-
+                                    let res =
+                                      "{\"status\": 400, \"success\": false, \
+                                       \"message\": \"Something went wrong. \
+                                       Wait a few seconds and try again.\"}"
+                                    in
+                                    Lwt.return
+                                      (reply ~content_type:"application/json"
+                                         res))
                             | Error (`Msg _msg) ->
                                 let res =
                                   "{\"status\": 400, \"success\": false, \
@@ -677,12 +677,11 @@ struct
               (reply ~content_type:"application/json"
                  (Yojson.Basic.to_string (Storage.t_to_json t)))
         | "/unikernel/create" ->
-          let _, (t : Storage.t) = !store in
-          let users = User_model.create_user_session_map t.users in
-          let middlewares = [ Middleware.auth_middleware ~users ] in
+            let _, (t : Storage.t) = !store in
+            let users = User_model.create_user_session_map t.users in
+            let middlewares = [ Middleware.auth_middleware ~users ] in
             Middleware.apply_middleware middlewares
-              (fun _reqd ->
-                Lwt.return (reply ~content_type:"text/html" html))
+              (fun _reqd -> Lwt.return (reply ~content_type:"text/html" html))
               reqd
         | path
           when String.(
