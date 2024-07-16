@@ -23,6 +23,8 @@ type user = {
   cookies : cookie list;
 }
 
+let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
+
 let get key assoc =
   match List.find_opt (fun (k, _) -> String.equal k key) assoc with
   | None -> None
@@ -193,7 +195,7 @@ let create_user ~name ~email ~password =
   let password = hash_password password uuid in
   let auth_token = generate_token () in
   let session =
-    generate_cookie ~name:"molly_session" ~expires_in:604800 ~uuid ()
+    generate_cookie ~name:"molly_session" ~expires_in:week ~uuid ()
   in
   (* auth sessions should expire after a week (24hrs * 7days * 60mins * 60secs) *)
   {
@@ -231,10 +233,10 @@ let login_user ~email ~password users =
   | None -> Error (`Msg "This account does not exist.")
   | Some u -> (
       let pass = hash_password password u.uuid in
-      match u.password = pass with
+      match String.equal u.password pass with
       | true ->
           let new_session =
-            generate_cookie ~name:"molly_session" ~expires_in:604800
+            generate_cookie ~name:"molly_session" ~expires_in:week
               ~uuid:u.uuid ()
           in
           let cookies = update_cookies u.cookies new_session in

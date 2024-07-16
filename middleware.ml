@@ -53,12 +53,12 @@ let auth_middleware ~users handler reqd =
               let user_session =
                 List.find_opt
                   (fun (cookie : User_model.cookie) ->
-                    cookie.name = "molly_session")
+                    String.equal cookie.name "molly_session")
                   user.cookies
               in
               match user_session with
               | Some cookie -> (
-                  match cookie.value = value with
+                  match String.equal cookie.value value with
                   | true -> handler reqd
                   | false ->
                       Logs.err (fun m ->

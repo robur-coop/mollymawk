@@ -456,7 +456,7 @@ struct
                     in
                     Lwt.return (reply ~content_type:"application/json" res)
                 | Ok json -> (
-                    let validate_user_input name email password =
+                    let validate_user_input ~name ~email ~password =
                       if name = "" || email = "" || password = "" then
                         Error "All fields must be filled."
                       else if String.length name < 4 then
@@ -482,10 +482,7 @@ struct
                       |> Yojson.Basic.Util.member "password"
                       |> Yojson.Basic.to_string
                     in
-                    let validate_user =
-                      validate_user_input name email password
-                    in
-                    match validate_user with
+                    match validate_user_input ~name ~email ~password with
                     | Error s ->
                         let res =
                           "{\"status\": 400, \"success\": false, \"message\": \
@@ -571,7 +568,7 @@ struct
                     in
                     Lwt.return (reply ~content_type:"application/json" res)
                 | Ok json -> (
-                    let validate_user_input email password =
+                    let validate_user_input ~email ~password =
                       if email = "" || password = "" then
                         Error "All fields must be filled."
                       else if not (Utils.Email.validate_email email) then
@@ -590,8 +587,7 @@ struct
                       |> Yojson.Basic.Util.member "password"
                       |> Yojson.Basic.to_string
                     in
-                    let validate_user = validate_user_input email password in
-                    match validate_user with
+                    match validate_user_input ~email ~password with
                     | Error s ->
                         let res =
                           "{\"status\": 400, \"success\": false, \"message\": \
@@ -623,24 +619,35 @@ struct
                                   ^ "}}"
                                 in
                                 let cookie =
-                                  List.find
+                                  List.find_opt
                                     (fun (c : User_model.cookie) ->
                                       c.name = "molly_session")
                                     user.cookies
                                 in
-                                let cookie_value =
-                                  cookie.name ^ "=" ^ cookie.value
-                                  ^ ";Path=/;HttpOnly=true"
-                                in
-                                let header_list =
-                                  [
-                                    ("Set-Cookie", cookie_value);
-                                    ("location", "/dashboard");
-                                  ]
-                                in
-                                Lwt.return
-                                  (reply ~header_list
-                                     ~content_type:"application/json" res)
+                                (match cookie with
+                                | Some cookie ->
+                                    let cookie_value =
+                                      cookie.name ^ "=" ^ cookie.value
+                                      ^ ";Path=/;HttpOnly=true"
+                                    in
+                                    let header_list =
+                                      [
+                                        ("Set-Cookie", cookie_value);
+                                        ("location", "/dashboard");
+                                      ]
+                                    in
+                                    Lwt.return
+                                      (reply ~header_list
+                                        ~content_type:"application/json" res)
+                                | None ->
+                                  let res =
+                                    "{\"status\": 400, \"success\": false, \
+                                     \"message\": \"Something went wrong. Wait a \
+                                     few seconds and try again.\"}"
+                                  in
+                                  Lwt.return
+                                    (reply ~content_type:"application/json" res))
+
                             | Error (`Msg _msg) ->
                                 let res =
                                   "{\"status\": 400, \"success\": false, \
@@ -670,7 +677,13 @@ struct
               (reply ~content_type:"application/json"
                  (Yojson.Basic.to_string (Storage.t_to_json t)))
         | "/unikernel/create" ->
-            Lwt.return (reply ~content_type:"text/html" html)
+          let _, (t : Storage.t) = !store in
+          let users = User_model.create_user_session_map t.users in
+          let middlewares = [ Middleware.auth_middleware ~users ] in
+            Middleware.apply_middleware middlewares
+              (fun _reqd ->
+                Lwt.return (reply ~content_type:"text/html" html))
+              reqd
         | path
           when String.(
                  length path >= 20 && sub path 0 20 = "/unikernel/shutdown/")
