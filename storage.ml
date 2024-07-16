@@ -68,4 +68,18 @@ module Make (BLOCK : Mirage_block.S) = struct
     | Error we ->
         error_msgf "error while writing storage: %a" Stored_data.pp_write_error
           we
+
+  let update_user (disk, t) (user : User_model.user) =
+    let users =
+      List.map
+        (fun (u : User_model.user) ->
+          match u.uuid = user.uuid with true -> user | false -> u)
+        t.users
+    in
+    let t = { t with users } in
+    write_data (disk, t) >|= function
+    | Ok () -> Ok (disk, t)
+    | Error we ->
+        error_msgf "error while writing storage: %a" Stored_data.pp_write_error
+          we
 end

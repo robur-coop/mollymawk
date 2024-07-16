@@ -1,10 +1,10 @@
 open Tyxml
 
-let register_page ~icon () =
+let login_page ~icon () =
   let page =
     Html.(
       html
-        (Header_layout.header ~page_title:"Sign up | Mollymawk" ~icon ())
+        (Header_layout.header ~page_title:"Sign in | Mollymawk" ~icon ())
         (body
            [
              section
@@ -50,49 +50,11 @@ let register_page ~icon () =
                                     text-primary-800 p-6";
                                  ];
                              ]
-                           [ txt "Sign up for an Account" ];
+                           [ txt "Sign in to Your Account" ];
                          div
                            ~a:[ a_class [ "space-y-6 mt-8 shadow-md p-6" ] ]
                            [
                              p ~a:[ a_id "form-alert" ] [];
-                             div
-                               [
-                                 label
-                                   ~a:
-                                     [
-                                       a_class [ "block text-sm font-medium" ];
-                                       a_label_for "name";
-                                     ]
-                                   [ txt "Name*" ];
-                                 input
-                                   ~a:
-                                     [
-                                       a_autocomplete `On;
-                                       a_autofocus ();
-                                       a_input_type `Text;
-                                       a_name "name";
-                                       a_id "name";
-                                       a_class
-                                         [
-                                           "ring-primary-100 mt-1.5 transition \
-                                            appearance-none block w-full px-3 \
-                                            py-3 rounded-xl shadow-sm border \
-                                            hover:border-primary-200\n\
-                                           \                                           \
-                                            focus:border-primary-300 \
-                                            bg-primary-50 bg-opacity-0 \
-                                            hover:bg-opacity-50 \
-                                            focus:bg-opacity-50 \
-                                            ring-primary-200 \
-                                            focus:ring-primary-200\n\
-                                           \                                           \
-                                            focus:ring-[1px] \
-                                            focus:outline-none";
-                                         ];
-                                     ]
-                                   ();
-                                 p ~a:[ a_id "name-alert" ] [];
-                               ];
                              div
                                [
                                  label
@@ -189,21 +151,21 @@ let register_page ~icon () =
                                  a
                                    ~a:
                                      [
-                                       a_href "/sign-in";
+                                       a_href "/sign-up";
                                        a_class
                                          [
                                            "hover:text-primary-800 \
                                             transition-colors cursor-pointer";
                                          ];
                                      ]
-                                   [ txt "Have an account?" ];
+                                   [ txt "Need an account?" ];
                                ];
                              div
                                [
                                  button
                                    ~a:
                                      [
-                                       a_id "register-button";
+                                       a_id "login-button";
                                        a_class
                                          [
                                            "py-3 rounded bg-primary-500 \
@@ -211,7 +173,7 @@ let register_page ~icon () =
                                             text-gray-50 font-semibold";
                                          ];
                                      ]
-                                   [ txt "Create Account" ];
+                                   [ txt "Sign In" ];
                                ];
                            ];
                        ];
@@ -238,97 +200,78 @@ let register_page ~icon () =
                ];
              Footer_layout.footer;
              Tyxml.Html.Unsafe.data
-               "\n\
-               \              <script>\n\
-               \                const registerButton = \
-                document.getElementById('register-button')\n\
-               \                registerButton.addEventListener('click', async \
+               "<script>\n\
+               \                  const loginButton = \
+                document.getElementById('login-button')\n\
+               \                  loginButton.addEventListener('click', async \
                 function() {\n\
-               \                    const name = \
-                document.getElementById('name').value\n\
                \                    const email = \
                 document.getElementById('email').value.toLowerCase()\n\
                \                    const password = \
                 document.getElementById('password').value\n\
                \                    let form_alert = \
                 document.getElementById('form-alert')\n\
-               \                    let name_alert = \
-                document.getElementById('name-alert')\n\
                \                    let email_alert = \
                 document.getElementById('email-alert')\n\
                \                    let password_alert = \
-                document.getElementById('password-alert')\n\n\
+                document.getElementById('password-alert')\n\
                \                    form_alert.classList.add('hidden')\n\
-               \                    name_alert.classList.add('hidden')\n\
                \                    email_alert.classList.add('hidden')\n\
-               \                    password_alert.classList.add('hidden')\n\n\
-               \                   if (!name || !email || !password) {\n\
-               \                        form_alert.classList.remove('hidden')\n\
-               \                        \
+               \                    password_alert.classList.add('hidden')\n\
+               \                    if (!email || !password) {\n\
+               \                      form_alert.classList.remove('hidden')\n\
+               \                      \
                 form_alert.classList.add('text-secondary-500', 'block')\n\
-               \                        form_alert.textContent = 'All fields \
-                are required'\n\
-               \                        return;\n\
-               \                    }\n\n\
-               \                    if (name.length < 4) {\n\
-               \                        name_alert.classList.remove('hidden')\n\
-               \                        \
-                name_alert.classList.add('text-secondary-500', 'block')\n\
-               \                        name_alert.textContent = 'Name must be \
-                at least 4 characters.'\n\
-               \                        return;\n\
-               \                    }\n\n\
+               \                      form_alert.textContent = 'All fields are \
+                required'\n\
+               \                      return;\n\
+               \                    }\n\
                \                    const emailPattern = \
                 /^[a-zA-Z0-9.$_!]+@[a-zA-Z0-9]+\\.[a-z]{2,3}$/;\n\
                \                    if (!emailPattern.test(email)) {\n\
-               \                        email_alert.classList.remove('hidden')\n\
-               \                        \
+               \                      email_alert.classList.remove('hidden')\n\
+               \                      \
                 email_alert.classList.add('text-secondary-500', 'block')\n\
-               \                        email_alert.textContent = 'Please \
-                enter a valid email address.'\n\
-               \                        return;\n\
-               \                   }\n\n\
+               \                      email_alert.textContent = 'Please enter \
+                a valid email address.'\n\
+               \                      return;\n\
+               \                    }\n\
                \                    if (password.length < 8) {\n\
-               \                        \
-                password_alert.classList.remove('hidden')\n\
-               \                        \
+               \                      password_alert.classList.remove('hidden')\n\
+               \                      \
                 password_alert.classList.add('text-secondary-500', 'block')\n\
-               \                        password_alert.textContent = 'Password \
+               \                      password_alert.textContent = 'Password \
                 must be at least 8 characters long.'\n\
-               \                        return;\n\
-               \                    }\n\n\
+               \                      return;\n\
+               \                    }\n\
                \                    try {\n\
-               \                        const response = await fetch \
-                ('/api/register', {\n\
-               \                            method: 'POST',\n\
-               \                            headers: {\n\
-               \                                'Content-Type': \
+               \                      const response = await \
+                fetch('/api/login', {\n\
+               \                                           method: 'POST',\n\
+               \                                           headers: {\n\
+               \                                            'Content-Type': \
                 'application/json',\n\
-               \                            },\n\
-               \                            body: JSON.stringify({ name, \
-                email, password })\n\
-               \                        })\n\
-               \                        const data = await response.json();\n\
-               \                        if (data.status === 200) {\n\
-               \                          window.location.replace('/dashboard')\n\
-               \                        } else {\n\
-               \                            \
-                form_alert.classList.remove('hidden')\n\
-               \                            \
-                form_alert.classList.add('text-secondary-500', 'block')\n\
-               \                            form_alert.textContent = \
-                data.message\n\
-               \                            console.log(data);\n\
-               \                        }\n\
-               \                    } catch (error) {\n\
+               \                                           },\n\
+               \                                           body: \
+                JSON.stringify({email, password })\n\
+               \                                        })\n\
+               \                      const data = await response.json();\n\
+               \                      if (data.status === 200) {\n\
+               \                        window.location.replace('/dashboard')\n\
+               \                      } else {\n\
                \                        form_alert.classList.remove('hidden')\n\
                \                        \
                 form_alert.classList.add('text-secondary-500', 'block')\n\
-               \                        form_alert.textContent = error\n\
-               \                        return;\n\
-               \                    }\n\
-               \                })\n\
-               \            </script>";
+               \                        form_alert.textContent = data.message\n\
+               \                      }\n\
+               \                    } catch (error) {\n\
+               \                          form_alert.classList.remove('hidden')\n\
+               \                          \
+                form_alert.classList.add('text-secondary-500', 'block')\n\
+               \                          form_alert.textContent = error\n\
+               \                          return;\n\
+               \                      }})\n\
+               \                </script>";
            ]))
   in
   Format.asprintf "%a" (Html.pp ()) page
