@@ -16,6 +16,7 @@ let mollymawk =
       package "multipart_form";
       package "mirage-crypto-rng";
       package "uuidm";
+      package "emile";
       package "paf" ~sublibs:[ "mirage" ] ~min:"0.5.0";
       package "oneffs";
     ]

@@ -456,16 +456,12 @@ struct
                     in
                     Lwt.return (reply ~content_type:"application/json" res)
                 | Ok json -> (
-                    let validate_email_re =
-                      Re.Perl.re "[a-zA-Z0-9.$_!]+@[a-zA-Z0-9]+\\.[a-z]{2,3}"
-                      |> Re.compile
-                    in
                     let validate_user_input name email password =
                       if name = "" || email = "" || password = "" then
                         Error "All fields must be filled."
                       else if String.length name < 4 then
                         Error "Name must be at least 3 characters long."
-                      else if not (Re.execp validate_email_re email) then
+                      else if not (Utils.Email.validate_email email) then
                         Error "Invalid email address."
                       else if String.length password < 8 then
                         Error "Password must be at least 8 characters long."
@@ -575,14 +571,10 @@ struct
                     in
                     Lwt.return (reply ~content_type:"application/json" res)
                 | Ok json -> (
-                    let validate_email_re =
-                      Re.Perl.re "[a-zA-Z0-9.$_!]+@[a-zA-Z0-9]+\\.[a-z]{2,3}"
-                      |> Re.compile
-                    in
                     let validate_user_input email password =
                       if email = "" || password = "" then
                         Error "All fields must be filled."
-                      else if not (Re.execp validate_email_re email) then
+                      else if not (Utils.Email.validate_email email) then
                         Error "Invalid email address."
                       else if String.length password < 8 then
                         Error "Password must be at least 8 characters long."
