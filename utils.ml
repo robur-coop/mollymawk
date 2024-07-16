@@ -14,8 +14,6 @@ module Email = struct
     match Emile.of_string (Json.clean_string email) with
     | Ok _ -> true
     | Error s ->
-        Logs.err (fun m ->
-            m "Emile-Email-Validation %s"
-              (Format.asprintf "%a\n" Emile.pp_error s));
+        Logs.err (fun m -> m "Emile-Email-Validation: %a" Emile.pp_error s);
         false
 end
