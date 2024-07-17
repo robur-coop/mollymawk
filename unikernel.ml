@@ -669,7 +669,11 @@ struct
             let middlewares = [ Middleware.auth_middleware ~users ] in
             Middleware.apply_middleware middlewares
               (fun _reqd ->
-                Lwt.return (reply ~content_type:"application/json" "Dashboard"))
+                Lwt.return
+                  (reply ~content_type:"text/html"
+                     (Dashboard.dashboard_layout
+                        ~content:(Tyxml_html.txt "This is the dashboard ui")
+                        ~icon:"/images/robur.png" ())))
               reqd
         | "/users" ->
             let _, (t : Storage.t) = !store in

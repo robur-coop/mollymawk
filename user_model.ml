@@ -71,15 +71,6 @@ let cookie_of_string (s : string) : cookie option =
     Some { name; value; expires_in; uuid }
   with _ -> None
 
-let clean_string s =
-  (* Remove backslashes and double quotes from the string *)
-  let buffer = Buffer.create (String.length s) in
-  String.iter
-    (fun c ->
-      match c with '\\' -> () | '"' -> () | _ -> Buffer.add_char buffer c)
-    s;
-  Buffer.contents buffer
-
 let token_to_json t : Yojson.Basic.t =
   `Assoc
     [
@@ -199,8 +190,8 @@ let create_user ~name ~email ~password =
   in
   (* auth sessions should expire after a week (24hrs * 7days * 60mins * 60secs) *)
   {
-    name = clean_string name;
-    email = clean_string email;
+    name = Utils.Json.clean_string name;
+    email = Utils.Json.clean_string email;
     password;
     uuid;
     tokens = [ auth_token ];
@@ -208,7 +199,7 @@ let create_user ~name ~email ~password =
   }
 
 let check_if_user_exists ~email users =
-  List.find_opt (fun user -> user.email = clean_string email) users
+  List.find_opt (fun user -> user.email = Utils.Json.clean_string email) users
 
 let update_user user ?name ?email ?password ?tokens ?cookies () =
   {
