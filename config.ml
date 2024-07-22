@@ -19,6 +19,7 @@ let mollymawk =
       package "emile";
       package "paf" ~sublibs:[ "mirage" ] ~min:"0.5.0";
       package "oneffs";
+      package "duration";
     ]
   and runtime_args =
     [

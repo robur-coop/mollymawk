@@ -36,20 +36,8 @@ module TimeHelper = struct
     let span = Ptime.diff t1 t2 in
     match Ptime.Span.to_int_s span with Some s -> s | None -> 0
 
-  (* convert seconds to human-readable format *)
-  let human_readable_diff seconds =
-    if seconds < 60 then Printf.sprintf "%ds ago" seconds
-    else if seconds < 3600 then Printf.sprintf "%dm ago" (seconds / 60)
-    else if seconds < 86400 then Printf.sprintf "%dh ago" (seconds / 3600)
-    else if seconds < 2592000 then Printf.sprintf "%dd ago" (seconds / 86400)
-      (* 30 days *)
-    else if seconds < 31536000 then
-      Printf.sprintf "%dmo ago" (seconds / 2592000) (* 30 days in a month *)
-    else Printf.sprintf "%dy ago" (seconds / 31536000)
-  (* 365 days in a year *)
-
   (* print timestamp in human-readable form *)
   let print_human_readable ~now ~timestamp =
-    let seconds_diff = diff_in_seconds now timestamp in
-    human_readable_diff seconds_diff
+    let duration = diff_in_seconds now timestamp |> Duration.of_sec in
+    Format.asprintf "%a" Duration.pp duration
 end
