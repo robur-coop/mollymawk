@@ -504,8 +504,10 @@ struct
                             Lwt.return
                               (reply ~content_type:"application/json" res)
                         | None -> (
+                            let created_at = Ptime.v (P.now_d_ps ()) in
                             let user =
                               User_model.create_user ~name ~email ~password
+                                ~created_at
                             in
                             Store.add_user !store user >>= function
                             | Ok store' ->
@@ -595,10 +597,11 @@ struct
                         in
                         Lwt.return (reply ~content_type:"application/json" res)
                     | Ok _ -> (
+                        let now = Ptime.v (P.now_d_ps ()) in
                         let _, (t : Storage.t) = !store in
                         let users = t.users in
                         let login =
-                          User_model.login_user ~email ~password users
+                          User_model.login_user ~email ~password users ~now
                         in
                         match login with
                         | Error (`Msg s) ->

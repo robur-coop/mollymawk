@@ -17,3 +17,27 @@ module Email = struct
         Logs.err (fun m -> m "Emile-Email-Validation: %a" Emile.pp_error s);
         false
 end
+
+module TimeHelper = struct
+  let ptime_of_string (t_str : string) : (Ptime.t, [> `Msg of string ]) result =
+    match Ptime.of_rfc3339 t_str with
+    | Ok (ptime, _, _) -> Ok ptime
+    | Error (`RFC3339 (_, err)) ->
+        Logs.err (fun m -> m "string_to_ptime: %a" Ptime.pp_rfc3339_error err);
+        Error
+          (`Msg
+            (Format.asprintf "invalid created_at format: %a"
+               Ptime.pp_rfc3339_error err))
+
+  let string_of_ptime (t : Ptime.t) : string = Ptime.to_rfc3339 t ~frac_s:0
+
+  (* calculate the diff between two timestamps *)
+  let diff_in_seconds t1 t2 =
+    let span = Ptime.diff t1 t2 in
+    match Ptime.Span.to_int_s span with Some s -> s | None -> 0
+
+  (* print timestamp in human-readable form *)
+  let print_human_readable ~now ~timestamp =
+    let duration = diff_in_seconds now timestamp |> Duration.of_sec in
+    Format.asprintf "%a" Duration.pp duration
+end

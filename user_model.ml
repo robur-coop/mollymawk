@@ -4,6 +4,7 @@ type token = {
   token_type : string;
   value : string;
   expires_in : int;
+  created_at : Ptime.t;
       (* In seconds, so after 1 hour would be 3600 seconds of inactivity *)
 }
 
@@ -12,6 +13,7 @@ type cookie = {
   value : string;
   expires_in : int;
   uuid : string option;
+  created_at : Ptime.t;
 }
 
 type user = {
@@ -21,6 +23,7 @@ type user = {
   uuid : string;
   tokens : token list;
   cookies : cookie list;
+  created_at : Ptime.t;
 }
 
 let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
@@ -34,6 +37,8 @@ let cookie_to_json (cookie : cookie) : Yojson.Basic.t =
   `Assoc
     [
       ("name", `String cookie.name);
+      ( "created_at",
+        `String (Utils.TimeHelper.string_of_ptime cookie.created_at) );
       ("value", `String cookie.value);
       ("expires_in", `Int cookie.expires_in);
       ( "uuid",
@@ -43,16 +48,48 @@ let cookie_to_json (cookie : cookie) : Yojson.Basic.t =
 let cookie_of_json = function
   | `Assoc xs -> (
       match
-        (get "name" xs, get "value" xs, get "expires_in" xs, get "uuid" xs)
+        ( get "name" xs,
+          get "value" xs,
+          get "expires_in" xs,
+          get "uuid" xs,
+          get "created_at" xs )
       with
       | ( Some (`String name),
           Some (`String value),
           Some (`Int expires_in),
-          Some (`String uuid) ) ->
-          Ok { name; value; expires_in; uuid = Some uuid }
-      | Some (`String name), Some (`String value), Some (`Int expires_in), None
-        ->
-          Ok { name; value; expires_in; uuid = None }
+          Some (`String uuid),
+          Some (`String created_at_str) ) ->
+          let created_at =
+            match Utils.TimeHelper.ptime_of_string created_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          Ok
+            {
+              name;
+              value;
+              expires_in;
+              uuid = Some uuid;
+              created_at = Option.get created_at;
+            }
+      | ( Some (`String name),
+          Some (`String value),
+          Some (`Int expires_in),
+          None,
+          Some (`String created_at_str) ) ->
+          let created_at =
+            match Utils.TimeHelper.ptime_of_string created_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          Ok
+            {
+              name;
+              value;
+              expires_in;
+              uuid = None;
+              created_at = Option.get created_at;
+            }
       | _ -> Error (`Msg "invalid json for cookie"))
   | _ -> Error (`Msg "invalid json for cookie")
 
@@ -68,7 +105,15 @@ let cookie_of_string (s : string) : cookie option =
     let uuid =
       match json |> member "uuid" with `String uuid -> Some uuid | _ -> None
     in
-    Some { name; value; expires_in; uuid }
+    let created_at =
+      match
+        json |> member "created_at" |> to_string
+        |> Utils.TimeHelper.ptime_of_string
+      with
+      | Ok ptime -> Some ptime
+      | Error _ -> None
+    in
+    Some { name; value; expires_in; uuid; created_at = Option.get created_at }
   with _ -> None
 
 let token_to_json t : Yojson.Basic.t =
@@ -77,14 +122,33 @@ let token_to_json t : Yojson.Basic.t =
       ("token_type", `String t.token_type);
       ("value", `String t.value);
       ("expires_in", `Int t.expires_in);
+      ("created_at", `String (Utils.TimeHelper.string_of_ptime t.created_at));
     ]
 
 let token_of_json = function
   | `Assoc xs -> (
-      match (get "token_type" xs, get "value" xs, get "expires_in" xs) with
-      | Some (`String token_type), Some (`String value), Some (`Int expires_in)
-        ->
-          Ok { token_type; value; expires_in }
+      match
+        ( get "token_type" xs,
+          get "value" xs,
+          get "expires_in" xs,
+          get "created_at" xs )
+      with
+      | ( Some (`String token_type),
+          Some (`String value),
+          Some (`Int expires_in),
+          Some (`String created_at_str) ) ->
+          let created_at =
+            match Utils.TimeHelper.ptime_of_string created_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          Ok
+            {
+              token_type;
+              value;
+              expires_in;
+              created_at = Option.get created_at;
+            }
       | _ ->
           Error
             (`Msg
@@ -101,6 +165,7 @@ let user_to_json (u : user) : Yojson.Basic.t =
       ("uuid", `String u.uuid);
       ("tokens", `List (List.map token_to_json u.tokens));
       ("cookies", `List (List.map cookie_to_json u.cookies));
+      ("created_at", `String (Utils.TimeHelper.string_of_ptime u.created_at));
     ]
 
 let user_of_json = function
@@ -112,14 +177,21 @@ let user_of_json = function
           get "password" xs,
           get "uuid" xs,
           get "tokens" xs,
-          get "cookies" xs )
+          get "cookies" xs,
+          get "created_at" xs )
       with
       | ( Some (`String name),
           Some (`String email),
           Some (`String password),
           Some (`String uuid),
           Some (`List tokens),
-          Some (`List cookies) ) ->
+          Some (`List cookies),
+          Some (`String created_at_str) ) ->
+          let created_at =
+            match Utils.TimeHelper.ptime_of_string created_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
           let* tokens =
             List.fold_left
               (fun acc js ->
@@ -136,7 +208,16 @@ let user_of_json = function
                 Ok (cookie :: acc))
               (Ok []) cookies
           in
-          Ok { name; email; password; uuid; tokens; cookies }
+          Ok
+            {
+              name;
+              email;
+              password;
+              uuid;
+              tokens;
+              cookies;
+              created_at = Option.get created_at;
+            }
       | _ -> Error (`Msg "invalid json for user"))
   | _ -> Error (`Msg "invalid json for user")
 
@@ -150,17 +231,23 @@ let generate_uuid () =
   let data = Rng.generate 16 in
   Uuidm.v4 (Cstruct.to_bytes data)
 
-let generate_token ?(expires_in = 3600) () =
+let generate_token ?(expires_in = 3600) ~created_at () =
   let token = generate_uuid () in
-  { token_type = "Bearer"; value = Uuidm.to_string token; expires_in }
+  {
+    token_type = "Bearer";
+    value = Uuidm.to_string token;
+    expires_in;
+    created_at;
+  }
 
-let generate_cookie ~name ~uuid ?(expires_in = 3600) () =
+let generate_cookie ~name ~uuid ?(expires_in = 3600) ~created_at () =
   let id = generate_uuid () in
   {
     name;
     value = Base64.encode_string (Uuidm.to_string id);
     expires_in;
     uuid = Some uuid;
+    created_at;
   }
 
 let create_user_session_map (users : user list) : (string * user) list =
@@ -181,12 +268,12 @@ let find_user_by_key (uuid : string) (user_map : (string * user) list) :
     user option =
   List.assoc_opt uuid user_map
 
-let create_user ~name ~email ~password =
+let create_user ~name ~email ~password ~created_at =
   let uuid = Uuidm.to_string (generate_uuid ()) in
   let password = hash_password password uuid in
-  let auth_token = generate_token () in
+  let auth_token = generate_token ~created_at () in
   let session =
-    generate_cookie ~name:"molly_session" ~expires_in:week ~uuid ()
+    generate_cookie ~name:"molly_session" ~expires_in:week ~uuid ~created_at ()
   in
   (* auth sessions should expire after a week (24hrs * 7days * 60mins * 60secs) *)
   {
@@ -196,6 +283,7 @@ let create_user ~name ~email ~password =
     uuid;
     tokens = [ auth_token ];
     cookies = [ session ];
+    created_at;
   }
 
 let check_if_user_exists ~email users =
@@ -218,7 +306,7 @@ let update_cookies (cookies : cookie list) (cookie : cookie) : cookie list =
       match c.name = cookie.name with true -> cookie | false -> c)
     cookies
 
-let login_user ~email ~password users =
+let login_user ~email ~password users ~now =
   let user = check_if_user_exists ~email users in
   match user with
   | None -> Error (`Msg "This account does not exist.")
@@ -228,7 +316,7 @@ let login_user ~email ~password users =
       | true ->
           let new_session =
             generate_cookie ~name:"molly_session" ~expires_in:week ~uuid:u.uuid
-              ()
+              ~created_at:now ()
           in
           let cookies = update_cookies u.cookies new_session in
           let updated_user = update_user u ~cookies () in
