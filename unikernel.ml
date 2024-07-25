@@ -667,10 +667,11 @@ struct
                 in
                 Lwt.return (reply ~content_type:"application/json" res))
         | "/dashboard" ->
+            let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
             let users = User_model.create_user_session_map t.users in
             let middlewares = [ Middleware.auth_middleware ~users ] in
-            Middleware.apply_middleware middlewares
+            Middleware.apply_middleware ~now middlewares
               (fun _reqd ->
                 Lwt.return
                   (reply ~content_type:"text/html"
@@ -684,10 +685,11 @@ struct
               (reply ~content_type:"application/json"
                  (Yojson.Basic.to_string (Storage.t_to_json t)))
         | "/unikernel/create" ->
+            let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
             let users = User_model.create_user_session_map t.users in
             let middlewares = [ Middleware.auth_middleware ~users ] in
-            Middleware.apply_middleware middlewares
+            Middleware.apply_middleware ~now middlewares
               (fun _reqd -> Lwt.return (reply ~content_type:"text/html" html))
               reqd
         | path

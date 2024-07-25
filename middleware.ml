@@ -15,8 +15,10 @@ let has_session_cookie (reqd : Httpaf.Reqd.t) : bool =
         cookie_list
   | _ -> false
 
-let apply_middleware middlewares handler =
-  List.fold_right (fun middleware acc -> middleware acc) middlewares handler
+let apply_middleware ~now middlewares handler =
+  List.fold_right
+    (fun middleware acc -> middleware ~now acc)
+    middlewares handler
 
 let redirect_to_login reqd ?(msg = "") () =
   let headers = Httpaf.Headers.of_list [ ("location", "/sign-in") ] in
@@ -30,7 +32,7 @@ let redirect_to_dashboard reqd ?(msg = "") () =
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
-let auth_middleware ~users handler reqd =
+let auth_middleware ~now ~users handler reqd =
   let headers = (Httpaf.Reqd.request reqd).headers in
   match Httpaf.Headers.get headers "Cookie" with
   | Some cookies -> (
@@ -58,7 +60,10 @@ let auth_middleware ~users handler reqd =
               in
               match user_session with
               | Some cookie -> (
-                  match String.equal cookie.value value with
+                  match
+                    String.equal cookie.value value
+                    && User_model.is_valid_cookie ~cookie ~now
+                  with
                   | true -> handler reqd
                   | false ->
                       Logs.err (fun m ->

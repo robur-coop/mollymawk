@@ -306,6 +306,9 @@ let update_cookies (cookies : cookie list) (cookie : cookie) : cookie list =
       match c.name = cookie.name with true -> cookie | false -> c)
     cookies
 
+let is_valid_cookie ~(cookie : cookie) ~now =
+  Utils.TimeHelper.diff_in_seconds cookie.created_at now < cookie.expires_in
+
 let login_user ~email ~password users ~now =
   let user = check_if_user_exists ~email users in
   match user with
