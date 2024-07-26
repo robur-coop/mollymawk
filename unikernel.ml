@@ -431,14 +431,32 @@ struct
         | "/images/robur.png" ->
             Lwt.return (reply ~content_type:"image/png" imgs.robur_img)
         | "/style.css" -> Lwt.return (reply ~content_type:"text/css" css_file)
-        | "/sign-up" ->
-            Lwt.return
-              (reply ~content_type:"text/html"
-                 (Sign_up.register_page ~icon:"/images/robur.png" ()))
-        | "/sign-in" ->
-            Lwt.return
-              (reply ~content_type:"text/html"
-                 (Sign_in.login_page ~icon:"/images/robur.png" ()))
+        | "/sign-up" -> (
+            match Middleware.has_session_cookie reqd with
+            | Some cookie -> (
+                match Middleware.cookie_value_from_auth_cookie ~cookie with
+                | "" ->
+                    Lwt.return
+                      (reply ~content_type:"text/html"
+                         (Sign_up.register_page ~icon:"/images/robur.png" ()))
+                | _ -> Middleware.redirect_to_dashboard reqd ())
+            | None ->
+                Lwt.return
+                  (reply ~content_type:"text/html"
+                     (Sign_up.register_page ~icon:"/images/robur.png" ())))
+        | "/sign-in" -> (
+            match Middleware.has_session_cookie reqd with
+            | Some cookie -> (
+                match Middleware.cookie_value_from_auth_cookie ~cookie with
+                | "" ->
+                    Lwt.return
+                      (reply ~content_type:"text/html"
+                         (Sign_in.login_page ~icon:"/images/robur.png" ()))
+                | _ -> Middleware.redirect_to_dashboard reqd ())
+            | None ->
+                Lwt.return
+                  (reply ~content_type:"text/html"
+                     (Sign_in.login_page ~icon:"/images/robur.png" ())))
         | "/api/register" -> (
             let request = Httpaf.Reqd.request reqd in
             match request.meth with
@@ -671,7 +689,7 @@ struct
             let _, (t : Storage.t) = !store in
             let users = User_model.create_user_session_map t.users in
             let middlewares = [ Middleware.auth_middleware ~users ] in
-match Middleware.has_session_cookie reqd with
+            match Middleware.has_session_cookie reqd with
             | Some cookie -> (
                 match Middleware.user_from_auth_cookie ~cookie ~users with
                 | Some user ->
