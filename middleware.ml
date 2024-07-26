@@ -83,7 +83,21 @@ let auth_middleware ~now ~users handler reqd =
       | None ->
           Logs.err (fun m ->
               m "auth-middleware: No molly-session in cookie header.");
-          redirect_to_login reqd ())
-  | _ ->
-      Logs.err (fun m -> m "auth-middleware: No Cookie in request headers.\n");
-      redirect_to_login reqd ()
+          redirect_to_login ~now reqd ()
+
+let email_verified_middleware ~now ~users handler reqd =
+  match has_session_cookie reqd with
+  | Some cookie -> (
+      match user_from_auth_cookie ~cookie ~users with
+      | Some user -> (
+          match User_model.user_auth_cookie_from_user ~user with
+          | Some cookie -> (
+              match
+                User_model.(
+                  is_valid_cookie ~cookie ~now && is_email_verified ~user)
+              with
+              | true -> handler reqd
+              | false -> redirect_to_verify_email reqd ())
+          | None -> redirect_to_login ~now reqd ())
+      | None -> redirect_to_register ~now reqd ())
+  | None -> redirect_to_login ~now reqd ()

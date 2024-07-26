@@ -666,11 +666,34 @@ struct
                    request method\"}"
                 in
                 Lwt.return (reply ~content_type:"application/json" res))
-        | "/dashboard" ->
+        | "/verify-email" -> (
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
             let users = User_model.create_user_session_map t.users in
             let middlewares = [ Middleware.auth_middleware ~users ] in
+match Middleware.has_session_cookie reqd with
+            | Some cookie -> (
+                match Middleware.user_from_auth_cookie ~cookie ~users with
+                | Some user ->
+                    Middleware.apply_middleware ~now middlewares
+                      (fun _reqd ->
+                        Lwt.return
+                          (reply ~content_type:"text/html"
+                             (Verify_email.verify_page ~user
+                                ~icon:"/images/robur.png" ())))
+                      reqd
+                | None -> Middleware.redirect_to_register ~now reqd ())
+            | None -> Middleware.redirect_to_login ~now reqd ())
+        | "/dashboard" ->
+            let now = Ptime.v (P.now_d_ps ()) in
+            let _, (t : Storage.t) = !store in
+            let users = User_model.create_user_session_map t.users in
+            let middlewares =
+              [
+                Middleware.email_verified_middleware ~users;
+                Middleware.auth_middleware ~users;
+              ]
+            in
             Middleware.apply_middleware ~now middlewares
               (fun _reqd ->
                 Lwt.return

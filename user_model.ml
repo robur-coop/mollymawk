@@ -19,6 +19,7 @@ type cookie = {
 type user = {
   name : string;
   email : string;
+  email_verified : Ptime.t option;
   password : string;
   uuid : string;
   tokens : token list;
@@ -161,6 +162,7 @@ let user_to_json (u : user) : Yojson.Basic.t =
     [
       ("name", `String u.name);
       ("email", `String u.email);
+      ("email_verified", Utils.TimeHelper.ptime_to_json u.email_verified);
       ("password", `String u.password);
       ("uuid", `String u.uuid);
       ("tokens", `List (List.map token_to_json u.tokens));
@@ -174,6 +176,7 @@ let user_of_json = function
       match
         ( get "name" xs,
           get "email" xs,
+          get "email_verified" xs,
           get "password" xs,
           get "uuid" xs,
           get "tokens" xs,
@@ -182,6 +185,7 @@ let user_of_json = function
       with
       | ( Some (`String name),
           Some (`String email),
+          Some email_verified,
           Some (`String password),
           Some (`String uuid),
           Some (`List tokens),
@@ -192,6 +196,7 @@ let user_of_json = function
             | Ok ptime -> Some ptime
             | Error _ -> None
           in
+          let* email_verified = Utils.TimeHelper.ptime_of_json email_verified in
           let* tokens =
             List.fold_left
               (fun acc js ->
@@ -212,6 +217,7 @@ let user_of_json = function
             {
               name;
               email;
+              email_verified;
               password;
               uuid;
               tokens;
@@ -279,6 +285,7 @@ let create_user ~name ~email ~password ~created_at =
   {
     name = Utils.Json.clean_string name;
     email = Utils.Json.clean_string email;
+    email_verified = None;
     password;
     uuid;
     tokens = [ auth_token ];
@@ -289,11 +296,16 @@ let create_user ~name ~email ~password ~created_at =
 let check_if_user_exists ~email users =
   List.find_opt (fun user -> user.email = Utils.Json.clean_string email) users
 
-let update_user user ?name ?email ?password ?tokens ?cookies () =
+let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies ()
+    =
   {
     user with
     name = (match name with Some name -> name | _ -> user.name);
     email = (match email with Some email -> email | _ -> user.email);
+    email_verified =
+      (match email_verified with
+      | Some email_verified -> email_verified
+      | _ -> user.email_verified);
     password =
       (match password with Some password -> password | _ -> user.password);
     tokens = (match tokens with Some tokens -> tokens | _ -> user.tokens);
@@ -308,6 +320,13 @@ let update_cookies (cookies : cookie list) (cookie : cookie) : cookie list =
 
 let is_valid_cookie ~(cookie : cookie) ~now =
   Utils.TimeHelper.diff_in_seconds cookie.created_at now < cookie.expires_in
+
+let is_email_verified ~user = Option.is_some user.email_verified
+
+let user_auth_cookie_from_user ~(user : user) =
+  List.find_opt
+    (fun (cookie : cookie) -> String.equal cookie.name "molly_session")
+    user.cookies
 
 let login_user ~email ~password users ~now =
   let user = check_if_user_exists ~email users in

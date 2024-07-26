@@ -40,4 +40,18 @@ module TimeHelper = struct
   let print_human_readable ~now ~timestamp =
     let duration = diff_in_seconds now timestamp |> Duration.of_sec in
     Format.asprintf "%a" Duration.pp duration
+
+  (* parse Ptime.t option to json *)
+  let ptime_to_json = function
+    | Some ptime -> `String (string_of_ptime ptime)
+    | None -> `Null
+
+  (* parse Ptime.t option from a json *)
+  let ptime_of_json = function
+    | `String s -> (
+        match ptime_of_string s with
+        | Ok ptime -> Ok (Some ptime)
+        | Error _ -> Error (`Msg "invalid date string"))
+    | `Null -> Ok None
+    | _ -> Error (`Msg "invalid json for Ptime.t option")
 end
