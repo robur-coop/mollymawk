@@ -15,9 +15,9 @@ let has_session_cookie (reqd : Httpaf.Reqd.t) =
         cookie_list
   | _ -> None
 
-let apply_middleware ~now middlewares handler =
+let apply_middleware middlewares handler =
   List.fold_right
-    (fun middleware acc -> middleware ~now acc)
+    (fun middleware acc -> middleware acc)
     middlewares handler
 
 let redirect_to_login reqd ?(msg = "") () =
@@ -65,7 +65,7 @@ let cookie_value_from_auth_cookie cookie =
   | _ :: s :: _ -> Ok (String.trim s)
   | _ -> Error (`Msg "Bad cookie")
 
-let user_from_auth_cookie ~cookie ~users =
+let user_from_auth_cookie cookie users =
   match cookie_value_from_auth_cookie cookie with
   | Ok cookie_value -> (
       match User_model.find_user_by_key cookie_value users with
@@ -75,14 +75,14 @@ let user_from_auth_cookie ~cookie ~users =
       Logs.err (fun m -> m "Error: %s" s);
       Error (`Msg s)
 
-let auth_middleware ~now ~users handler reqd =
+let auth_middleware now users handler reqd =
   match has_session_cookie reqd with
   | Some auth_cookie -> (
-      match user_from_auth_cookie ~cookie:auth_cookie ~users with
+      match user_from_auth_cookie auth_cookie users with
       | Ok user -> (
-          match User_model.user_auth_cookie_from_user ~user with
+          match User_model.user_auth_cookie_from_user user with
           | Some cookie -> (
-              match User_model.is_valid_cookie ~cookie ~now with
+              match User_model.is_valid_cookie cookie now with
               | true -> handler reqd
               | false ->
                   Logs.err (fun m ->
@@ -105,16 +105,16 @@ let auth_middleware ~now ~users handler reqd =
           m "auth-middleware: No molly-session in cookie header.");
       redirect_to_login reqd ()
 
-let email_verified_middleware ~now ~users handler reqd =
+let email_verified_middleware now users handler reqd =
   match has_session_cookie reqd with
   | Some cookie -> (
-      match user_from_auth_cookie ~cookie ~users with
+      match user_from_auth_cookie cookie users with
       | Ok user -> (
-          match User_model.user_auth_cookie_from_user ~user with
+          match User_model.user_auth_cookie_from_user user with
           | Some cookie -> (
               match
                 User_model.(
-                  is_valid_cookie ~cookie ~now && is_email_verified ~user)
+                  is_valid_cookie cookie now && is_email_verified user)
               with
               | true -> handler reqd
               | false -> redirect_to_verify_email reqd ())

@@ -246,7 +246,7 @@ let generate_token ?(expires_in = 3600) ~created_at () =
     created_at;
   }
 
-let generate_cookie ~name ~uuid ?(expires_in = 3600) ~created_at () =
+let generate_cookie name uuid ?(expires_in = 3600) created_at () =
   let id = generate_uuid () in
   {
     name;
@@ -274,12 +274,12 @@ let find_user_by_key (uuid : string) (user_map : (string * user) list) :
     user option =
   List.assoc_opt uuid user_map
 
-let create_user ~name ~email ~password ~created_at =
+let create_user name email password created_at =
   let uuid = Uuidm.to_string (generate_uuid ()) in
   let password = hash_password password uuid in
   let auth_token = generate_token ~created_at () in
   let session =
-    generate_cookie ~name:"molly_session" ~expires_in:week ~uuid ~created_at ()
+    generate_cookie "molly_session" ~expires_in:week uuid created_at ()
   in
   (* auth sessions should expire after a week (24hrs * 7days * 60mins * 60secs) *)
   {
@@ -293,7 +293,7 @@ let create_user ~name ~email ~password ~created_at =
     created_at;
   }
 
-let check_if_user_exists ~email users =
+let check_if_user_exists email users =
   List.find_opt (fun user -> user.email = Utils.Json.clean_string email) users
 
 let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies ()
@@ -318,18 +318,18 @@ let update_cookies (cookies : cookie list) (cookie : cookie) : cookie list =
       match c.name = cookie.name with true -> cookie | false -> c)
     cookies
 
-let is_valid_cookie ~(cookie : cookie) ~now =
+let is_valid_cookie (cookie : cookie) now =
   Utils.TimeHelper.diff_in_seconds cookie.created_at now < cookie.expires_in
 
-let is_email_verified ~user = Option.is_some user.email_verified
+let is_email_verified user = Option.is_some user.email_verified
 
-let user_auth_cookie_from_user ~(user : user) =
+let user_auth_cookie_from_user (user : user) =
   List.find_opt
     (fun (cookie : cookie) -> String.equal cookie.name "molly_session")
     user.cookies
 
-let login_user ~email ~password users ~now =
-  let user = check_if_user_exists ~email users in
+let login_user email password users now =
+  let user = check_if_user_exists email users in
   match user with
   | None -> Error (`Msg "This account does not exist.")
   | Some u -> (
@@ -337,8 +337,8 @@ let login_user ~email ~password users ~now =
       match String.equal u.password pass with
       | true ->
           let new_session =
-            generate_cookie ~name:"molly_session" ~expires_in:week ~uuid:u.uuid
-              ~created_at:now ()
+            generate_cookie "molly_session" ~expires_in:week u.uuid
+              now ()
           in
           let cookies = update_cookies u.cookies new_session in
           let updated_user = update_user u ~cookies () in

@@ -511,7 +511,7 @@ struct
                         let _, (s : Storage.t) = !store in
                         let users = s.users in
                         let user =
-                          User_model.check_if_user_exists ~email users
+                          User_model.check_if_user_exists email users
                         in
                         match user with
                         | Some _ ->
@@ -524,8 +524,8 @@ struct
                         | None -> (
                             let created_at = Ptime.v (P.now_d_ps ()) in
                             let user =
-                              User_model.create_user ~name ~email ~password
-                                ~created_at
+                              User_model.create_user name email password
+                                created_at
                             in
                             Store.add_user !store user >>= function
                             | Ok store' ->
@@ -619,7 +619,7 @@ struct
                         let _, (t : Storage.t) = !store in
                         let users = t.users in
                         let login =
-                          User_model.login_user ~email ~password users ~now
+                          User_model.login_user email password users now
                         in
                         match login with
                         | Error (`Msg s) ->
@@ -688,12 +688,12 @@ struct
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
             let users = User_model.create_user_session_map t.users in
-            let middlewares = [ Middleware.auth_middleware ~users ] in
+            let middlewares = [ Middleware.auth_middleware now users ] in
             match Middleware.has_session_cookie reqd with
             | Some cookie -> (
-                match Middleware.user_from_auth_cookie ~cookie ~users with
+                match Middleware.user_from_auth_cookie cookie users with
                 | Ok user ->
-                    Middleware.apply_middleware ~now middlewares
+                    Middleware.apply_middleware middlewares
                       (fun _reqd ->
                         Lwt.return
                           (reply ~content_type:"text/html"
@@ -710,11 +710,11 @@ struct
             let users = User_model.create_user_session_map t.users in
             let middlewares =
               [
-                Middleware.email_verified_middleware ~users;
-                Middleware.auth_middleware ~users;
+                Middleware.email_verified_middleware now users;
+                Middleware.auth_middleware now users;
               ]
             in
-            Middleware.apply_middleware ~now middlewares
+            Middleware.apply_middleware middlewares
               (fun _reqd ->
                 Lwt.return
                   (reply ~content_type:"text/html"
@@ -731,8 +731,8 @@ struct
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
             let users = User_model.create_user_session_map t.users in
-            let middlewares = [ Middleware.auth_middleware ~users ] in
-            Middleware.apply_middleware ~now middlewares
+            let middlewares = [ Middleware.auth_middleware now users ] in
+            Middleware.apply_middleware middlewares
               (fun _reqd -> Lwt.return (reply ~content_type:"text/html" html))
               reqd
         | path
