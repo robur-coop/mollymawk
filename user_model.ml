@@ -337,8 +337,7 @@ let login_user email password users now =
       match String.equal u.password pass with
       | true ->
           let new_session =
-            generate_cookie "molly_session" ~expires_in:week u.uuid
-              now ()
+            generate_cookie "molly_session" ~expires_in:week u.uuid now ()
           in
           let cookies = update_cookies u.cookies new_session in
           let updated_user = update_user u ~cookies () in
