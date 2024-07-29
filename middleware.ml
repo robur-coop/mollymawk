@@ -22,7 +22,12 @@ let apply_middleware ~now middlewares handler =
 
 let redirect_to_login reqd ?(msg = "") () =
   let header_list =
-    [ ("Set-Cookie", "molly_session=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z"); ("location", "/sign-in") ]
+    [
+      ( "Set-Cookie",
+        "molly_session=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z"
+      );
+      ("location", "/sign-in");
+    ]
   in
   let headers = Httpaf.Headers.of_list header_list in
   let response = Httpaf.Response.create ~headers `Found in
@@ -31,7 +36,12 @@ let redirect_to_login reqd ?(msg = "") () =
 
 let redirect_to_register reqd ?(msg = "") () =
   let header_list =
-    [ ("Set-Cookie", "molly_session=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z"); ("location", "/sign-up") ]
+    [
+      ( "Set-Cookie",
+        "molly_session=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z"
+      );
+      ("location", "/sign-up");
+    ]
   in
   let headers = Httpaf.Headers.of_list header_list in
   let response = Httpaf.Response.create ~headers `Found in
@@ -50,26 +60,29 @@ let redirect_to_dashboard reqd ?(msg = "") () =
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
-let cookie_value_from_auth_cookie ~cookie =
-  let parts = String.trim cookie |> String.split_on_char '=' in
-  List.nth parts 1
+let cookie_value_from_auth_cookie cookie =
+  match String.split_on_char '=' (String.trim cookie) with
+  | _ :: s :: _ -> Ok (String.trim s)
+  | _ -> Error (`Msg "Bad cookie")
 
 let user_from_auth_cookie ~cookie ~users =
-  let cookie = cookie_value_from_auth_cookie ~cookie in
-  User_model.find_user_by_key cookie users
+  match cookie_value_from_auth_cookie cookie with
+  | Ok cookie_value -> (
+      match User_model.find_user_by_key cookie_value users with
+      | Some user -> Ok user
+      | None -> Error (`Msg "User not found"))
+  | Error (`Msg s) ->
+      Logs.err (fun m -> m "Error: %s" s);
+      Error (`Msg s)
 
 let auth_middleware ~now ~users handler reqd =
   match has_session_cookie reqd with
   | Some auth_cookie -> (
       match user_from_auth_cookie ~cookie:auth_cookie ~users with
-      | Some user -> (
+      | Ok user -> (
           match User_model.user_auth_cookie_from_user ~user with
           | Some cookie -> (
-              match
-                String.equal cookie.value
-                  (cookie_value_from_auth_cookie ~cookie:auth_cookie)
-                && User_model.is_valid_cookie ~cookie ~now
-              with
+              match User_model.is_valid_cookie ~cookie ~now with
               | true -> handler reqd
               | false ->
                   Logs.err (fun m ->
@@ -82,9 +95,10 @@ let auth_middleware ~now ~users handler reqd =
               Logs.err (fun m ->
                   m "auth-middleware: User doesn't have a session cookie.\n");
               redirect_to_login reqd ())
-      | None ->
+      | Error (`Msg s) ->
           Logs.err (fun m ->
-              m "auth-middleware: Failed to find user with key %s\n" auth_cookie);
+              m "auth-middleware: Failed to find user with key %s: %s\n"
+                auth_cookie s);
           redirect_to_register reqd ())
   | None ->
       Logs.err (fun m ->
@@ -95,7 +109,7 @@ let email_verified_middleware ~now ~users handler reqd =
   match has_session_cookie reqd with
   | Some cookie -> (
       match user_from_auth_cookie ~cookie ~users with
-      | Some user -> (
+      | Ok user -> (
           match User_model.user_auth_cookie_from_user ~user with
           | Some cookie -> (
               match
@@ -105,5 +119,9 @@ let email_verified_middleware ~now ~users handler reqd =
               | true -> handler reqd
               | false -> redirect_to_verify_email reqd ())
           | None -> redirect_to_login reqd ())
-      | None -> redirect_to_register reqd ())
+      | Error (`Msg s) ->
+          Logs.err (fun m ->
+              m "auth-middleware: Failed to find user with key %s : %s\n" cookie
+                s);
+          redirect_to_register reqd ())
   | None -> redirect_to_login reqd ()

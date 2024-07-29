@@ -434,8 +434,8 @@ struct
         | "/sign-up" -> (
             match Middleware.has_session_cookie reqd with
             | Some cookie -> (
-                match Middleware.cookie_value_from_auth_cookie ~cookie with
-                | "" ->
+                match Middleware.cookie_value_from_auth_cookie cookie with
+                | Ok "" ->
                     Lwt.return
                       (reply ~content_type:"text/html"
                          (Sign_up.register_page ~icon:"/images/robur.png" ()))
@@ -447,8 +447,8 @@ struct
         | "/sign-in" -> (
             match Middleware.has_session_cookie reqd with
             | Some cookie -> (
-                match Middleware.cookie_value_from_auth_cookie ~cookie with
-                | "" ->
+                match Middleware.cookie_value_from_auth_cookie cookie with
+                | Ok "" ->
                     Lwt.return
                       (reply ~content_type:"text/html"
                          (Sign_in.login_page ~icon:"/images/robur.png" ()))
@@ -692,7 +692,7 @@ struct
             match Middleware.has_session_cookie reqd with
             | Some cookie -> (
                 match Middleware.user_from_auth_cookie ~cookie ~users with
-                | Some user ->
+                | Ok user ->
                     Middleware.apply_middleware ~now middlewares
                       (fun _reqd ->
                         Lwt.return
@@ -700,7 +700,9 @@ struct
                              (Verify_email.verify_page ~user
                                 ~icon:"/images/robur.png" ())))
                       reqd
-                | None -> Middleware.redirect_to_register reqd ())
+                | Error (`Msg s) ->
+                    Logs.err (fun m -> m "Error: verify email endpoint %s" s);
+                    Middleware.redirect_to_register reqd ())
             | None -> Middleware.redirect_to_login reqd ())
         | "/dashboard" ->
             let now = Ptime.v (P.now_d_ps ()) in
