@@ -20,36 +20,18 @@ let apply_middleware ~now middlewares handler =
     (fun middleware acc -> middleware ~now acc)
     middlewares handler
 
-let get_expired_cookie ~now =
-  let current_day = Ptime.to_date_time now in
-  let (y, m, d), t = current_day in
-  let day_before = Option.get (Ptime.of_date_time ((y, m, d - 1), t)) in
-  let day_string = Utils.TimeHelper.string_of_ptime day_before in
-  let day_before_name =
-    match Ptime.weekday day_before with
-    | `Mon -> "Mon"
-    | `Tue -> "Tue"
-    | `Wed -> "Wed"
-    | `Thu -> "Thu"
-    | `Fri -> "Fri"
-    | `Sat -> "Sat"
-    | `Sun -> "Sun"
-  in
-  "molly_session=" ^ ";Path=/;HttpOnly=true;Expires=" ^ day_before_name ^ ", "
-  ^ day_string ^ " UTC"
-
-let redirect_to_login ~now reqd ?(msg = "") () =
+let redirect_to_login reqd ?(msg = "") () =
   let header_list =
-    [ ("Set-Cookie", get_expired_cookie ~now); ("location", "/sign-in") ]
+    [ ("Set-Cookie", "molly_session=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z"); ("location", "/sign-in") ]
   in
   let headers = Httpaf.Headers.of_list header_list in
   let response = Httpaf.Response.create ~headers `Found in
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
-let redirect_to_register ~now reqd ?(msg = "") () =
+let redirect_to_register reqd ?(msg = "") () =
   let header_list =
-    [ ("Set-Cookie", get_expired_cookie ~now); ("location", "/sign-up") ]
+    [ ("Set-Cookie", "molly_session=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z"); ("location", "/sign-up") ]
   in
   let headers = Httpaf.Headers.of_list header_list in
   let response = Httpaf.Response.create ~headers `Found in
@@ -95,19 +77,19 @@ let auth_middleware ~now ~users handler reqd =
                         "auth-middleware: Session value doesn't match user \
                          session %s\n"
                         auth_cookie);
-                  redirect_to_login ~now reqd ())
+                  redirect_to_login reqd ())
           | None ->
               Logs.err (fun m ->
                   m "auth-middleware: User doesn't have a session cookie.\n");
-              redirect_to_login ~now reqd ())
+              redirect_to_login reqd ())
       | None ->
           Logs.err (fun m ->
               m "auth-middleware: Failed to find user with key %s\n" auth_cookie);
-          redirect_to_register ~now reqd ())
+          redirect_to_register reqd ())
   | None ->
       Logs.err (fun m ->
           m "auth-middleware: No molly-session in cookie header.");
-      redirect_to_login ~now reqd ()
+      redirect_to_login reqd ()
 
 let email_verified_middleware ~now ~users handler reqd =
   match has_session_cookie reqd with
@@ -122,6 +104,6 @@ let email_verified_middleware ~now ~users handler reqd =
               with
               | true -> handler reqd
               | false -> redirect_to_verify_email reqd ())
-          | None -> redirect_to_login ~now reqd ())
-      | None -> redirect_to_register ~now reqd ())
-  | None -> redirect_to_login ~now reqd ()
+          | None -> redirect_to_login reqd ())
+      | None -> redirect_to_register reqd ())
+  | None -> redirect_to_login reqd ()

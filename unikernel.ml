@@ -700,8 +700,8 @@ struct
                              (Verify_email.verify_page ~user
                                 ~icon:"/images/robur.png" ())))
                       reqd
-                | None -> Middleware.redirect_to_register ~now reqd ())
-            | None -> Middleware.redirect_to_login ~now reqd ())
+                | None -> Middleware.redirect_to_register reqd ())
+            | None -> Middleware.redirect_to_login reqd ())
         | "/dashboard" ->
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
