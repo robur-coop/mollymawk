@@ -42,9 +42,9 @@ module TimeHelper = struct
     Format.asprintf "%a" Duration.pp duration
 
   (* parse Ptime.t option to json *)
-  let ptime_to_json = function
-    | Some ptime -> `String (string_of_ptime ptime)
-    | None -> `Null
+  let ptime_to_json ptime =
+    Option.value ~default:`Null
+      (Option.map (fun p -> `String (string_of_ptime p)) ptime)
 
   (* parse Ptime.t option from a json *)
   let ptime_of_json = function

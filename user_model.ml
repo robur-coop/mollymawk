@@ -246,7 +246,7 @@ let generate_token ?(expires_in = 3600) ~created_at () =
     created_at;
   }
 
-let generate_cookie name uuid ?(expires_in = 3600) created_at () =
+let generate_cookie ~name ~uuid ?(expires_in = 3600) ~created_at () =
   let id = generate_uuid () in
   {
     name;
@@ -274,12 +274,12 @@ let find_user_by_key (uuid : string) (user_map : (string * user) list) :
     user option =
   List.assoc_opt uuid user_map
 
-let create_user name email password created_at =
+let create_user ~name ~email ~password ~created_at =
   let uuid = Uuidm.to_string (generate_uuid ()) in
   let password = hash_password password uuid in
   let auth_token = generate_token ~created_at () in
   let session =
-    generate_cookie "molly_session" ~expires_in:week uuid created_at ()
+    generate_cookie ~name:"molly_session" ~expires_in:week ~uuid ~created_at ()
   in
   (* auth sessions should expire after a week (24hrs * 7days * 60mins * 60secs) *)
   {
@@ -302,10 +302,7 @@ let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies ()
     user with
     name = (match name with Some name -> name | _ -> user.name);
     email = (match email with Some email -> email | _ -> user.email);
-    email_verified =
-      (match email_verified with
-      | Some email_verified -> email_verified
-      | _ -> user.email_verified);
+    email_verified = Option.value ~default:user.email_verified email_verified;
     password =
       (match password with Some password -> password | _ -> user.password);
     tokens = (match tokens with Some tokens -> tokens | _ -> user.tokens);
@@ -328,7 +325,7 @@ let user_auth_cookie_from_user (user : user) =
     (fun (cookie : cookie) -> String.equal cookie.name "molly_session")
     user.cookies
 
-let login_user email password users now =
+let login_user ~email ~password users now =
   let user = check_if_user_exists email users in
   match user with
   | None -> Error (`Msg "This account does not exist.")
@@ -337,8 +334,8 @@ let login_user email password users now =
       match String.equal u.password pass with
       | true ->
           let new_session =
-            generate_cookie "molly_session" ~expires_in:week u.uuid
-              now ()
+            generate_cookie ~name:"molly_session" ~expires_in:week ~uuid:u.uuid
+              ~created_at:now ()
           in
           let cookies = update_cookies u.cookies new_session in
           let updated_user = update_user u ~cookies () in

@@ -16,9 +16,7 @@ let has_session_cookie (reqd : Httpaf.Reqd.t) =
   | _ -> None
 
 let apply_middleware middlewares handler =
-  List.fold_right
-    (fun middleware acc -> middleware acc)
-    middlewares handler
+  List.fold_right (fun middleware acc -> middleware acc) middlewares handler
 
 let redirect_to_login reqd ?(msg = "") () =
   let header_list =

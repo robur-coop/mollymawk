@@ -524,8 +524,8 @@ struct
                         | None -> (
                             let created_at = Ptime.v (P.now_d_ps ()) in
                             let user =
-                              User_model.create_user name email password
-                                created_at
+                              User_model.create_user ~name ~email ~password
+                                ~created_at
                             in
                             Store.add_user !store user >>= function
                             | Ok store' ->
@@ -619,7 +619,7 @@ struct
                         let _, (t : Storage.t) = !store in
                         let users = t.users in
                         let login =
-                          User_model.login_user email password users now
+                          User_model.login_user ~email ~password users now
                         in
                         match login with
                         | Error (`Msg s) ->

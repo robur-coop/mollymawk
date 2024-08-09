@@ -17,6 +17,7 @@ let mollymawk =
       package "mirage-crypto-rng";
       package "uuidm";
       package "emile";
+      package "sendmail";
       package "paf" ~sublibs:[ "mirage" ] ~min:"0.5.0";
       package "oneffs";
       package "duration";
