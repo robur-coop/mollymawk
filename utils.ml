@@ -9,15 +9,6 @@ module Json = struct
     Buffer.contents buffer
 end
 
-module Email = struct
-  let validate_email email =
-    match Emile.of_string (Json.clean_string email) with
-    | Ok _ -> true
-    | Error s ->
-        Logs.err (fun m -> m "Emile-Email-Validation: %a" Emile.pp_error s);
-        false
-end
-
 module TimeHelper = struct
   let ptime_of_string (t_str : string) : (Ptime.t, [> `Msg of string ]) result =
     match Ptime.of_rfc3339 t_str with
@@ -40,4 +31,64 @@ module TimeHelper = struct
   let print_human_readable ~now ~timestamp =
     let duration = diff_in_seconds now timestamp |> Duration.of_sec in
     Format.asprintf "%a" Duration.pp duration
+
+  (* parse Ptime.t option to json *)
+  let ptime_to_json ptime =
+    Option.value ~default:`Null
+      (Option.map (fun p -> `String (string_of_ptime p)) ptime)
+
+  (* parse Ptime.t option from a json *)
+  let ptime_of_json = function
+    | `String s -> (
+        match ptime_of_string s with
+        | Ok ptime -> Ok (Some ptime)
+        | Error _ -> Error (`Msg "invalid date string"))
+    | `Null -> Ok None
+    | _ -> Error (`Msg "invalid json for Ptime.t option")
+end
+
+module Email = struct
+  type config = {
+    smtp_host : string;
+    smtp_port : int;
+    username : string;
+    password : string;
+  }
+
+  let validate_email email =
+    match Emile.of_string (Json.clean_string email) with
+    | Ok _ -> true
+    | Error s ->
+        Logs.err (fun m -> m "Emile-Email-Validation: %a" Emile.pp_error s);
+        false
+
+  let generate_signature uuid timestamp =
+    let timestamp_str = TimeHelper.string_of_ptime timestamp in
+    Base64.encode_string
+      (Cstruct.to_string
+         (Mirage_crypto.Hash.SHA256.digest
+            (Cstruct.of_string (uuid ^ "-" ^ timestamp_str))))
+
+  let generate_verification_link uuid timestamp =
+    let signature = generate_signature uuid timestamp in
+    let encoded_uuid = Base64.encode_string uuid in
+    "/auth/verify/token=" ^ encoded_uuid ^ "/" ^ signature
+
+  let send_verification_email _email _now =
+    let config_data =
+      {
+        smtp_host = "sandbox.smtp.mailtrap.io";
+        smtp_port = 25;
+        username = "2b08693767f1d9";
+        password = "55168d154ddc56";
+      }
+    in
+    let authentication =
+      {
+        Sendmail.mechanism = PLAIN;
+        username = config_data.username;
+        password = config_data.password;
+      }
+    in
+    authentication
 end
