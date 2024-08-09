@@ -25,6 +25,7 @@ type user = {
   tokens : token list;
   cookies : cookie list;
   created_at : Ptime.t;
+  updated_at : Ptime.t;
 }
 
 let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
@@ -168,6 +169,7 @@ let user_to_json (u : user) : Yojson.Basic.t =
       ("tokens", `List (List.map token_to_json u.tokens));
       ("cookies", `List (List.map cookie_to_json u.cookies));
       ("created_at", `String (Utils.TimeHelper.string_of_ptime u.created_at));
+      ("updated_at", `String (Utils.TimeHelper.string_of_ptime u.updated_at));
     ]
 
 let user_of_json = function
@@ -181,7 +183,8 @@ let user_of_json = function
           get "uuid" xs,
           get "tokens" xs,
           get "cookies" xs,
-          get "created_at" xs )
+          get "created_at" xs,
+          get "updated_at" xs )
       with
       | ( Some (`String name),
           Some (`String email),
@@ -190,9 +193,15 @@ let user_of_json = function
           Some (`String uuid),
           Some (`List tokens),
           Some (`List cookies),
+          Some (`String updated_at_str),
           Some (`String created_at_str) ) ->
           let created_at =
             match Utils.TimeHelper.ptime_of_string created_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let updated_at =
+            match Utils.TimeHelper.ptime_of_string updated_at_str with
             | Ok ptime -> Some ptime
             | Error _ -> None
           in
@@ -223,6 +232,7 @@ let user_of_json = function
               tokens;
               cookies;
               created_at = Option.get created_at;
+              updated_at = Option.get updated_at;
             }
       | _ -> Error (`Msg "invalid json for user"))
   | _ -> Error (`Msg "invalid json for user")
@@ -291,13 +301,14 @@ let create_user ~name ~email ~password ~created_at =
     tokens = [ auth_token ];
     cookies = [ session ];
     created_at;
+    updated_at = created_at;
   }
 
 let check_if_user_exists email users =
   List.find_opt (fun user -> user.email = Utils.Json.clean_string email) users
 
-let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies ()
-    =
+let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
+    ?updated_at () =
   {
     user with
     name = (match name with Some name -> name | _ -> user.name);
@@ -307,6 +318,10 @@ let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies ()
       (match password with Some password -> password | _ -> user.password);
     tokens = (match tokens with Some tokens -> tokens | _ -> user.tokens);
     cookies = (match cookies with Some cookies -> cookies | _ -> user.cookies);
+    updated_at =
+      (match updated_at with
+      | Some updated_at -> updated_at
+      | _ -> user.updated_at);
   }
 
 let update_cookies (cookies : cookie list) (cookie : cookie) : cookie list =
@@ -319,6 +334,74 @@ let is_valid_cookie (cookie : cookie) now =
   Utils.TimeHelper.diff_in_seconds cookie.created_at now < cookie.expires_in
 
 let is_email_verified user = Option.is_some user.email_verified
+
+let verify_email users token timestamp =
+  let token_data = String.split_on_char '/' token in
+  let uuid =
+    match List.nth_opt token_data 0 with
+    | Some user_uuid ->
+        Logs.err (fun m -> m "email verification: user uuid is %s" user_uuid);
+        user_uuid
+    | None ->
+        Logs.err (fun m -> m "email verification: empty uuid in signature");
+        ""
+  in
+
+  let token_signature =
+    match List.nth_opt token_data 1 with
+    | Some token ->
+        Logs.err (fun m -> m "email verification: token sig is %s" token);
+        token
+    | None ->
+        Logs.err (fun m -> m "email verification: empty signature");
+        ""
+  in
+  let decoded_uuid =
+    match Base64.decode uuid with
+    | Ok d_uuid ->
+        Logs.err (fun m ->
+            m "email verification: decoded user uuid is %s" d_uuid);
+        d_uuid
+    | Error (`Msg s) ->
+        Logs.err (fun m ->
+            m "email verification: can't decode uuid with error %s" s);
+        ""
+  in
+  let user = find_user_by_key decoded_uuid users in
+  match user with
+  | Some u -> (
+      let is_valid_link =
+        3600 > Utils.TimeHelper.diff_in_seconds timestamp u.updated_at
+      in
+      match is_valid_link with
+      | true -> (
+          let computed_signature =
+            Utils.Email.generate_signature u.uuid u.updated_at
+          in
+          Logs.err (fun m ->
+              m "email verification: token signature is %s" token_signature);
+          Logs.err (fun m ->
+              m "email verification: computed signature is %s"
+                computed_signature);
+          match String.equal token_signature computed_signature with
+          | true ->
+              let updated_user =
+                update_user u ~email_verified:(Some timestamp)
+                  ~updated_at:timestamp ()
+              in
+              Ok updated_user
+          | false ->
+              Logs.err (fun m -> m "email verification: This link is invalid");
+              Error (`Msg "This link is invalid."))
+      | false ->
+          Logs.err (fun m -> m "email verification: This link has expired");
+          Error
+            (`Msg
+              "This link has expired. Please sign in to get a new verification \
+               link."))
+  | None ->
+      Logs.err (fun m -> m "email verification: This account does not exist.");
+      Error (`Msg "This account does not exist.")
 
 let user_auth_cookie_from_user (user : user) =
   List.find_opt
