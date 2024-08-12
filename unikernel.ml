@@ -693,15 +693,18 @@ struct
             | Some cookie -> (
                 match Middleware.user_from_auth_cookie cookie users with
                 | Ok user -> (
+                    let email_verification_uuid = User_model.generate_uuid () in
                     let updated_user =
-                      User_model.update_user user ~updated_at:now ()
+                      User_model.update_user user ~updated_at:now
+                        ~email_verification_uuid:(Some email_verification_uuid)
+                        ()
                     in
                     Store.update_user !store updated_user >>= function
                     | Ok store' ->
                         store := store';
                         let verification_link =
                           Utils.Email.generate_verification_link
-                            updated_user.uuid now
+                            email_verification_uuid
                         in
                         Logs.info (fun m ->
                             m "Verification link is: %s" verification_link);
@@ -733,10 +736,12 @@ struct
                 let _, (t : Storage.t) = !store in
                 let users = User_model.create_user_uuid_map t.users in
                 let now = Ptime.v (P.now_d_ps ()) in
-                let veification_token =
+                let verification_token =
                   String.sub path 19 (String.length path - 19)
                 in
-                match User_model.verify_email users veification_token now with
+                match
+                  User_model.verify_email_token users verification_token now
+                with
                 | Ok user -> (
                     Store.update_user !store user >>= function
                     | Ok store' ->
