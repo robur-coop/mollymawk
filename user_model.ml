@@ -328,17 +328,13 @@ let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
     ?updated_at ?email_verification_uuid () =
   {
     user with
-    name = (match name with Some name -> name | _ -> user.name);
-    email = (match email with Some email -> email | _ -> user.email);
+    name = Option.value ~default:user.name name;
+    email = Option.value ~default:user.email email;
     email_verified = Option.value ~default:user.email_verified email_verified;
-    password =
-      (match password with Some password -> password | _ -> user.password);
-    tokens = (match tokens with Some tokens -> tokens | _ -> user.tokens);
-    cookies = (match cookies with Some cookies -> cookies | _ -> user.cookies);
-    updated_at =
-      (match updated_at with
-      | Some updated_at -> updated_at
-      | _ -> user.updated_at);
+    password = Option.value ~default:user.password password;
+    tokens = Option.value ~default:user.tokens tokens;
+    cookies = Option.value ~default:user.cookies cookies;
+    updated_at = Option.value ~default:user.updated_at updated_at;
     email_verification_uuid =
       Option.value ~default:user.email_verification_uuid email_verification_uuid;
   }
