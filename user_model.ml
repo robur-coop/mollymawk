@@ -19,11 +19,14 @@ type cookie = {
 type user = {
   name : string;
   email : string;
+  email_verified : Ptime.t option;
   password : string;
   uuid : string;
   tokens : token list;
   cookies : cookie list;
   created_at : Ptime.t;
+  updated_at : Ptime.t;
+  email_verification_uuid : Uuidm.t option;
 }
 
 let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
@@ -161,11 +164,13 @@ let user_to_json (u : user) : Yojson.Basic.t =
     [
       ("name", `String u.name);
       ("email", `String u.email);
+      ("email_verified", Utils.TimeHelper.ptime_to_json u.email_verified);
       ("password", `String u.password);
       ("uuid", `String u.uuid);
       ("tokens", `List (List.map token_to_json u.tokens));
       ("cookies", `List (List.map cookie_to_json u.cookies));
       ("created_at", `String (Utils.TimeHelper.string_of_ptime u.created_at));
+      ("updated_at", `String (Utils.TimeHelper.string_of_ptime u.updated_at));
     ]
 
 let user_of_json = function
@@ -174,24 +179,36 @@ let user_of_json = function
       match
         ( get "name" xs,
           get "email" xs,
+          get "email_verified" xs,
           get "password" xs,
           get "uuid" xs,
           get "tokens" xs,
           get "cookies" xs,
-          get "created_at" xs )
+          get "created_at" xs,
+          get "updated_at" xs,
+          get "email_verification_uuid" xs )
       with
       | ( Some (`String name),
           Some (`String email),
+          Some email_verified,
           Some (`String password),
           Some (`String uuid),
           Some (`List tokens),
           Some (`List cookies),
-          Some (`String created_at_str) ) ->
+          Some (`String updated_at_str),
+          Some (`String created_at_str),
+          Some email_verification_uuid ) ->
           let created_at =
             match Utils.TimeHelper.ptime_of_string created_at_str with
             | Ok ptime -> Some ptime
             | Error _ -> None
           in
+          let updated_at =
+            match Utils.TimeHelper.ptime_of_string updated_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let* email_verified = Utils.TimeHelper.ptime_of_json email_verified in
           let* tokens =
             List.fold_left
               (fun acc js ->
@@ -208,15 +225,30 @@ let user_of_json = function
                 Ok (cookie :: acc))
               (Ok []) cookies
           in
+          let* email_verification_uuid =
+            match email_verification_uuid with
+            | `Null -> Ok None
+            | `String s ->
+                let* uuid =
+                  Option.to_result
+                    ~none:(`Msg "invalid UUID for email verification UUID")
+                    (Uuidm.of_string s)
+                in
+                Ok (Some uuid)
+            | _ -> Error (`Msg "invalid json data for email verification UUID")
+          in
           Ok
             {
               name;
               email;
+              email_verified;
               password;
               uuid;
               tokens;
               cookies;
               created_at = Option.get created_at;
+              updated_at = Option.get updated_at;
+              email_verification_uuid;
             }
       | _ -> Error (`Msg "invalid json for user"))
   | _ -> Error (`Msg "invalid json for user")
@@ -279,25 +311,36 @@ let create_user ~name ~email ~password ~created_at =
   {
     name = Utils.Json.clean_string name;
     email = Utils.Json.clean_string email;
+    email_verified = None;
     password;
     uuid;
     tokens = [ auth_token ];
     cookies = [ session ];
     created_at;
+    updated_at = created_at;
+    email_verification_uuid = None;
   }
 
-let check_if_user_exists ~email users =
+let check_if_user_exists email users =
   List.find_opt (fun user -> user.email = Utils.Json.clean_string email) users
 
-let update_user user ?name ?email ?password ?tokens ?cookies () =
+let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
+    ?updated_at ?email_verification_uuid () =
   {
     user with
     name = (match name with Some name -> name | _ -> user.name);
     email = (match email with Some email -> email | _ -> user.email);
+    email_verified = Option.value ~default:user.email_verified email_verified;
     password =
       (match password with Some password -> password | _ -> user.password);
     tokens = (match tokens with Some tokens -> tokens | _ -> user.tokens);
     cookies = (match cookies with Some cookies -> cookies | _ -> user.cookies);
+    updated_at =
+      (match updated_at with
+      | Some updated_at -> updated_at
+      | _ -> user.updated_at);
+    email_verification_uuid =
+      Option.value ~default:user.email_verification_uuid email_verification_uuid;
   }
 
 let update_cookies (cookies : cookie list) (cookie : cookie) : cookie list =
@@ -306,8 +349,49 @@ let update_cookies (cookies : cookie list) (cookie : cookie) : cookie list =
       match c.name = cookie.name with true -> cookie | false -> c)
     cookies
 
-let login_user ~email ~password users ~now =
-  let user = check_if_user_exists ~email users in
+let is_valid_cookie (cookie : cookie) now =
+  Utils.TimeHelper.diff_in_seconds cookie.created_at now < cookie.expires_in
+
+let is_email_verified user = Option.is_some user.email_verified
+
+let verify_email_token users token timestamp =
+  let ( let* ) = Result.bind in
+  let* uuid =
+    Option.to_result ~none:(`Msg "invalid UUID") (Uuidm.of_string token)
+  in
+  match
+    List.find_opt
+      (fun (_, user) ->
+        match user.email_verification_uuid with
+        | Some uu -> Uuidm.equal uu uuid
+        | None -> false)
+      users
+  with
+  | None ->
+      Logs.err (fun m -> m "email verification: Token couldn't be found.");
+      Error (`Msg "No token was found.")
+  | Some (_, u) -> (
+      match Utils.TimeHelper.diff_in_seconds timestamp u.updated_at < 3600 with
+      | true ->
+          let updated_user =
+            update_user u ~email_verified:(Some timestamp) ~updated_at:timestamp
+              ~email_verification_uuid:None ()
+          in
+          Ok updated_user
+      | false ->
+          Logs.err (fun m -> m "email verification: This link is expired.");
+          Error
+            (`Msg
+              "This link has expired. Please sign in to get a new verification \
+               link."))
+
+let user_auth_cookie_from_user (user : user) =
+  List.find_opt
+    (fun (cookie : cookie) -> String.equal cookie.name "molly_session")
+    user.cookies
+
+let login_user ~email ~password users now =
+  let user = check_if_user_exists email users in
   match user with
   | None -> Error (`Msg "This account does not exist.")
   | Some u -> (

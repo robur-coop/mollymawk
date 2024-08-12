@@ -431,14 +431,32 @@ struct
         | "/images/robur.png" ->
             Lwt.return (reply ~content_type:"image/png" imgs.robur_img)
         | "/style.css" -> Lwt.return (reply ~content_type:"text/css" css_file)
-        | "/sign-up" ->
-            Lwt.return
-              (reply ~content_type:"text/html"
-                 (Sign_up.register_page ~icon:"/images/robur.png" ()))
-        | "/sign-in" ->
-            Lwt.return
-              (reply ~content_type:"text/html"
-                 (Sign_in.login_page ~icon:"/images/robur.png" ()))
+        | "/sign-up" -> (
+            match Middleware.has_session_cookie reqd with
+            | Some cookie -> (
+                match Middleware.cookie_value_from_auth_cookie cookie with
+                | Ok "" ->
+                    Lwt.return
+                      (reply ~content_type:"text/html"
+                         (Sign_up.register_page ~icon:"/images/robur.png" ()))
+                | _ -> Middleware.redirect_to_dashboard reqd ())
+            | None ->
+                Lwt.return
+                  (reply ~content_type:"text/html"
+                     (Sign_up.register_page ~icon:"/images/robur.png" ())))
+        | "/sign-in" -> (
+            match Middleware.has_session_cookie reqd with
+            | Some cookie -> (
+                match Middleware.cookie_value_from_auth_cookie cookie with
+                | Ok "" ->
+                    Lwt.return
+                      (reply ~content_type:"text/html"
+                         (Sign_in.login_page ~icon:"/images/robur.png" ()))
+                | _ -> Middleware.redirect_to_dashboard reqd ())
+            | None ->
+                Lwt.return
+                  (reply ~content_type:"text/html"
+                     (Sign_in.login_page ~icon:"/images/robur.png" ())))
         | "/api/register" -> (
             let request = Httpaf.Reqd.request reqd in
             match request.meth with
@@ -493,7 +511,7 @@ struct
                         let _, (s : Storage.t) = !store in
                         let users = s.users in
                         let user =
-                          User_model.check_if_user_exists ~email users
+                          User_model.check_if_user_exists email users
                         in
                         match user with
                         | Some _ ->
@@ -601,7 +619,7 @@ struct
                         let _, (t : Storage.t) = !store in
                         let users = t.users in
                         let login =
-                          User_model.login_user ~email ~password users ~now
+                          User_model.login_user ~email ~password users now
                         in
                         match login with
                         | Error (`Msg s) ->
@@ -666,10 +684,93 @@ struct
                    request method\"}"
                 in
                 Lwt.return (reply ~content_type:"application/json" res))
-        | "/dashboard" ->
+        | "/verify-email" -> (
+            let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
             let users = User_model.create_user_session_map t.users in
-            let middlewares = [ Middleware.auth_middleware ~users ] in
+            let middlewares = [ Middleware.auth_middleware now users ] in
+            match Middleware.has_session_cookie reqd with
+            | Some cookie -> (
+                match Middleware.user_from_auth_cookie cookie users with
+                | Ok user -> (
+                    let email_verification_uuid = User_model.generate_uuid () in
+                    let updated_user =
+                      User_model.update_user user ~updated_at:now
+                        ~email_verification_uuid:(Some email_verification_uuid)
+                        ()
+                    in
+                    Store.update_user !store updated_user >>= function
+                    | Ok store' ->
+                        store := store';
+                        let verification_link =
+                          Utils.Email.generate_verification_link
+                            email_verification_uuid
+                        in
+                        Logs.info (fun m ->
+                            m "Verification link is: %s" verification_link);
+                        Middleware.apply_middleware middlewares
+                          (fun _reqd ->
+                            Lwt.return
+                              (reply ~content_type:"text/html"
+                                 (Verify_email.verify_page ~user
+                                    ~icon:"/images/robur.png" ())))
+                          reqd
+                    | Error (`Msg _msg) ->
+                        let res =
+                          "{\"status\": 400, \"success\": false, \"message\": \
+                           \"Something went wrong. Wait a few seconds and try \
+                           again.\"}"
+                        in
+                        Lwt.return (reply ~content_type:"application/json" res))
+                | Error (`Msg s) ->
+                    Logs.err (fun m -> m "Error: verify email endpoint %s" s);
+                    Middleware.redirect_to_register reqd ())
+            | None -> Middleware.redirect_to_login reqd ())
+        | path
+          when String.(
+                 length path >= 19 && sub path 0 19 = "/auth/verify/token=")
+          -> (
+            let request = Httpaf.Reqd.request reqd in
+            match request.meth with
+            | `GET -> (
+                let _, (t : Storage.t) = !store in
+                let users = User_model.create_user_uuid_map t.users in
+                let now = Ptime.v (P.now_d_ps ()) in
+                let verification_token =
+                  String.sub path 19 (String.length path - 19)
+                in
+                match
+                  User_model.verify_email_token users verification_token now
+                with
+                | Ok user -> (
+                    Store.update_user !store user >>= function
+                    | Ok store' ->
+                        store := store';
+                        Middleware.redirect_to_dashboard reqd ()
+                    | Error (`Msg _msg) ->
+                        let res =
+                          "{\"status\": 400, \"success\": false, \"message\": \
+                           \"Something went wrong. Wait a few seconds and try \
+                           again.\"}"
+                        in
+                        Lwt.return (reply ~content_type:"application/json" res))
+                | Error (`Msg s) -> Middleware.redirect_to_login reqd ~msg:s ())
+            | _ ->
+                let res =
+                  "{\"status\": 400, \"success\": false, \"message\": \"Bad \
+                   request method\"}"
+                in
+                Lwt.return (reply ~content_type:"application/json" res))
+        | "/dashboard" ->
+            let now = Ptime.v (P.now_d_ps ()) in
+            let _, (t : Storage.t) = !store in
+            let users = User_model.create_user_session_map t.users in
+            let middlewares =
+              [
+                Middleware.email_verified_middleware now users;
+                Middleware.auth_middleware now users;
+              ]
+            in
             Middleware.apply_middleware middlewares
               (fun _reqd ->
                 Lwt.return
@@ -684,9 +785,10 @@ struct
               (reply ~content_type:"application/json"
                  (Yojson.Basic.to_string (Storage.t_to_json t)))
         | "/unikernel/create" ->
+            let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
             let users = User_model.create_user_session_map t.users in
-            let middlewares = [ Middleware.auth_middleware ~users ] in
+            let middlewares = [ Middleware.auth_middleware now users ] in
             Middleware.apply_middleware middlewares
               (fun _reqd -> Lwt.return (reply ~content_type:"text/html" html))
               reqd
