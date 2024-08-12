@@ -7,6 +7,9 @@ module Json = struct
         match c with '\\' -> () | '"' -> () | _ -> Buffer.add_char buffer c)
       s;
     Buffer.contents buffer
+
+  let get key assoc =
+    Option.map snd (List.find_opt (fun (k, _) -> String.equal k key) assoc)
 end
 
 module TimeHelper = struct

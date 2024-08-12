@@ -1,3 +1,5 @@
+open Utils.Json
+
 let unikernel_info (unikernel_name, info) =
   let typ = function `Solo5 -> `String "solo5"
   and fail_behaviour = function
@@ -109,11 +111,6 @@ let res = function
   | `Data (`Console_data (ts, data)) -> console_data_to_json (ts, data)
   | `Data (`Utc_console_data (ts, data)) -> console_data_to_json (ts, data)
   | `Data (`Stats_data _) -> `String "stats not supported"
-
-let get key assoc =
-  match List.find_opt (fun (k, _) -> String.equal k key) assoc with
-  | None -> None
-  | Some (_, f) -> Some f
 
 let fail_behaviour_of_json js =
   let ( let* ) = Result.bind in

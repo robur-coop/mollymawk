@@ -1,11 +1,8 @@
+open Utils.Json
+
 type t = { version : int; users : User_model.user list }
 
 let current_version = 1
-
-let get key assoc =
-  match List.find_opt (fun (k, _) -> String.equal k key) assoc with
-  | None -> None
-  | Some (_, f) -> Some f
 
 let t_to_json t =
   `Assoc
