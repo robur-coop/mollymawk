@@ -392,25 +392,6 @@ struct
           when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
           -> (
             let unikernel_name = String.sub path 17 (String.length path - 17) in
-            print_endline unikernel_name;
-            query_albatross stack credentials remote
-              (`Unikernel_cmd `Unikernel_info) ~name:unikernel_name
-            >|= function
-            | Error () -> reply "error while querying albatross"
-            | Ok None -> reply "got none"
-            | Ok (Some data) -> (
-                match decode_reply data with
-                | Error () -> reply "couldn't decode albatross' reply"
-                | Ok (hdr, res) ->
-                    Logs.info (fun m ->
-                        m "albatross returned: %a"
-                          (Vmm_commands.pp_wire ~verbose:true)
-                          (hdr, res));
-                    reply_json (Albatross_json.res res)))
-        | path
-          when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
-          -> (
-            let unikernel_name = String.sub path 17 (String.length path - 17) in
             query_albatross stack credentials remote
               (`Unikernel_cmd `Unikernel_info) ~name:unikernel_name
             >|= function
