@@ -10,64 +10,16 @@ let err_to_exit pp = function
       Logs.err (fun m -> m "received error %a" pp e);
       exit Mirage_runtime.argument_error
 
-module K = struct
-  open Cmdliner
-
-  let albatross_server =
-    let doc = Arg.info ~doc:"albatross server IP" [ "albatross-server" ] in
-    Arg.(
-      value
-      & opt Mirage_runtime_network.Arg.ip_address
-          (Ipaddr.of_string_exn "192.168.1.3")
-          doc)
-
-  let port =
-    let doc = Arg.info ~doc:"server port" [ "port" ] in
-    Arg.(value & opt int 1025 doc)
-end
-
 module Main
     (R : Mirage_random.S)
     (P : Mirage_clock.PCLOCK)
     (M : Mirage_clock.MCLOCK)
     (T : Mirage_time.S)
     (S : Tcpip.Stack.V4V6)
-    (KV : Mirage_kv.RO)
     (KV_ASSETS : Mirage_kv.RO)
     (BLOCK : Mirage_block.S) =
 struct
   module Paf = Paf_mirage.Make (S.TCP)
-
-  let retrieve_credentials data =
-    ( KV.get data (Mirage_kv.Key.v "key.pem") >|= err_to_exit KV.pp_error
-    >|= fun key ->
-      err_to_exit pp_msg (X509.Private_key.decode_pem (Cstruct.of_string key))
-    )
-    >>= fun key ->
-    ( KV.get data (Mirage_kv.Key.v "cert.pem") >|= err_to_exit KV.pp_error
-    >|= fun cert ->
-      err_to_exit pp_msg
-        (X509.Certificate.decode_pem_multiple (Cstruct.of_string cert)) )
-    >|= fun certs ->
-    let cert =
-      match certs with
-      | hd :: [] -> hd
-      | [] ->
-          Logs.err (fun m -> m "no certificate found");
-          exit Mirage_runtime.argument_error
-      | _ ->
-          Logs.err (fun m -> m "multiple certificates found");
-          exit Mirage_runtime.argument_error
-    in
-    if
-      not
-        (Cstruct.equal
-           (X509.Public_key.fingerprint (X509.Certificate.public_key cert))
-           (X509.Public_key.fingerprint (X509.Private_key.public key)))
-    then (
-      Logs.err (fun m -> m "certificate and private key do not match");
-      exit Mirage_runtime.argument_error);
-    (key, cert)
 
   let js_contents assets =
     KV_ASSETS.get assets (Mirage_kv.Key.v "main.js") >|= function
@@ -694,22 +646,26 @@ struct
           Fmt.(option ~none:(any "unknown") Httpaf.Request.pp_hum)
           request)
 
-  let start _ _ _ _ stack data assets storage host port =
+  let start _ _ _ _ stack assets storage =
     js_contents assets >>= fun js_file ->
     css_contents assets >>= fun css_file ->
     images assets >>= fun imgs ->
     create_html_form assets >>= fun html ->
-    retrieve_credentials data >>= fun (key, cert) ->
     Store.Stored_data.connect storage >>= fun stored_data ->
     Store.read_data stored_data >>= function
     | Error (`Msg msg) -> failwith msg
     | Ok data ->
         let store = ref data in
-        Albatross.init stack host ~port cert key >>= fun albatross ->
+        let c = (snd data).Storage.configuration in
+        Albatross.init stack c.Configuration.server_ip ~port:c.server_port c.certificate c.private_key >>= fun albatross ->
         let port = 8080 in
         Logs.info (fun m ->
             m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
               port);
+        (* TODO we need a web thingy to edit and upload the albatross configuration:
+           ip address, port, certificate, private_key
+           and once updated, we need to (a) dump to the disk (b) update the "albatross" value (and call Albatross.init key)
+        *)
         let request_handler _flow =
           request_handler albatross js_file css_file imgs html store
         in
