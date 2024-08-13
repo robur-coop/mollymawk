@@ -269,8 +269,8 @@ struct
         TLS.close flow >|= fun () ->
         Logs.err (fun m -> m "received error while reading: %a" TLS.pp_error e)
 
-  let query_albatross stack (key, cert, certs, server_cert) remote ?(name = ".")
-      cmd =
+  let query_albatross stack (key, cert, certs, server_cert) remote ?domain:_
+      ?(name = ".") cmd =
     match cmd with
     | `Console_cmd (`Console_subscribe _)
       when Set.mem name !active_console_readers ->
@@ -754,11 +754,43 @@ struct
             in
             Middleware.apply_middleware middlewares
               (fun _reqd ->
-                Lwt.return
-                  (reply ~content_type:"text/html"
-                     (Dashboard.dashboard_layout
-                        ~content:(Unikernel_index.unikernel_index_layout ())
-                        ~icon:"/images/robur.png" ())))
+                match Middleware.user_of_cookie users now reqd with
+                | Ok user ->
+                    (query_albatross stack credentials remote
+                       ~domain:user.name (* TODO use uuid in the future *)
+                       (`Unikernel_cmd `Unikernel_info)
+                     >|= function
+                     | Error () ->
+                         Logs.err (fun m ->
+                             m "error while communicating with albatross");
+                         []
+                     | Ok None -> []
+                     | Ok (Some data) -> (
+                         match decode_reply data with
+                         | Error () ->
+                             Logs.err (fun m ->
+                                 m "couldn't decode albatross' reply");
+                             []
+                         | Ok (hdr, `Success (`Unikernel_info unikernels)) ->
+                             unikernels
+                         | Ok reply ->
+                             Logs.err (fun m ->
+                                 m
+                                   "expected a unikernel info reply, received \
+                                    %a"
+                                   (Vmm_commands.pp_wire ~verbose:false)
+                                   reply);
+                             []))
+                    >>= fun unikernels ->
+                    Lwt.return
+                      (reply ~content_type:"text/html"
+                         (Dashboard.dashboard_layout
+                            ~content:
+                              (Unikernel_index.unikernel_index_layout unikernels)
+                            ~icon:"/images/robur.png" ()))
+                | Error _ ->
+                    Logs.err (fun m -> m "couldn't find user of cookie");
+                    assert false)
               reqd
         | "/users" ->
             let _, (t : Storage.t) = !store in

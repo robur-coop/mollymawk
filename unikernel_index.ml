@@ -1,10 +1,11 @@
 open Tyxml
 
-let unikernel_index_layout ?unikernels () =
+let unikernel_index_layout unikernels =
   Tyxml_html.(
     section
       [
         table
+          ~a:[ a_class [ "table-auto" ] ]
           ~thead:
             (thead
                [
@@ -16,19 +17,25 @@ let unikernel_index_layout ?unikernels () =
                      th [ txt "Memory" ];
                    ];
                ])
-          [
-            tr
-              [
-                td [ txt "robur" ];
-                td [ txt "solo5" ];
-                td [ txt "1" ];
-                td [ txt "256 MB" ];
-                td
-                  [
-                    a
-                      ~a:[ a_href "/unikernel/[uuid]" ]
-                      [ button [ txt "View" ] ];
-                  ];
-              ];
-          ];
+          (List.map
+             (fun (name, unikernel) ->
+               tr
+                 [
+                   td [ txt (Vmm_core.Name.to_string name) ];
+                   td
+                     [
+                       txt
+                         (match unikernel.Vmm_core.Unikernel.typ with
+                         | `Solo5 -> "solo5");
+                     ];
+                   td [ txt (string_of_int unikernel.cpuid) ];
+                   td [ txt (string_of_int unikernel.memory ^ " MB") ];
+                   td
+                     [
+                       a
+                         ~a:[ a_href "/unikernel/[uuid]" ]
+                         [ button [ txt "View" ] ];
+                     ];
+                 ])
+             unikernels);
       ])
