@@ -581,7 +581,7 @@ struct
           when String.(
                  length path >= 20 && sub path 0 20 = "/unikernel/shutdown/")
           -> (
-            let unikernel_name = String.sub path 21 (String.length path - 21) in
+            let unikernel_name = String.sub path 20 (String.length path - 20) in
             Albatross.query albatross (`Unikernel_cmd `Unikernel_destroy)
               ~name:unikernel_name
             >|= function
@@ -591,7 +591,7 @@ struct
         | path
           when String.(
                  length path >= 19 && sub path 0 19 = "/unikernel/console/") ->
-            let unikernel_name = String.sub path 20 (String.length path - 20) in
+            let unikernel_name = String.sub path 19 (String.length path - 19) in
             ( Albatross.query albatross
                 (`Console_cmd (`Console_subscribe (`Count 10)))
                 ~name:unikernel_name
