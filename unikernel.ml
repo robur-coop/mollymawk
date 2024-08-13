@@ -174,12 +174,7 @@ struct
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
-            | Ok (Some (hdr, res)) ->
-                Logs.info (fun m ->
-                    m "albatross returned: %a"
-                      (Vmm_commands.pp_wire ~verbose:true)
-                      (hdr, res));
-                reply_json (Albatross_json.res res))
+            | Ok (Some (hdr, res)) -> reply_json (Albatross_json.res res))
         | path
           when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
           -> (
@@ -190,12 +185,7 @@ struct
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
-            | Ok (Some (hdr, res)) ->
-                Logs.info (fun m ->
-                    m "albatross returned: %a"
-                      (Vmm_commands.pp_wire ~verbose:true)
-                      (hdr, res));
-                reply_json (Albatross_json.res res))
+            | Ok (Some (hdr, res)) -> reply_json (Albatross_json.res res))
         | "/main.js" -> Lwt.return (reply ~content_type:"text/plain" js_file)
         | "/images/molly_bird.jpeg" ->
             Lwt.return (reply ~content_type:"image/jpeg" imgs.molly_img)
@@ -597,27 +587,15 @@ struct
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
-            | Ok (Some (hdr, res)) ->
-                Logs.info (fun m ->
-                    m "albatross returned: %a"
-                      (Vmm_commands.pp_wire ~verbose:true)
-                      (hdr, res));
-                reply_json (Albatross_json.res res))
+            | Ok (Some (hdr, res)) -> reply_json (Albatross_json.res res))
         | path
           when String.(
                  length path >= 19 && sub path 0 19 = "/unikernel/console/") ->
             let unikernel_name = String.sub path 20 (String.length path - 20) in
-            (Albatross.query albatross
-               (`Console_cmd (`Console_subscribe (`Count 10)))
-               ~name:unikernel_name
-             >|= function
-             | Error () -> ()
-             | Ok None -> ()
-             | Ok (Some (hdr, res)) ->
-                 Logs.info (fun m ->
-                     m "albatross returned: %a"
-                       (Vmm_commands.pp_wire ~verbose:true)
-                       (hdr, res)))
+            ( Albatross.query albatross
+                (`Console_cmd (`Console_subscribe (`Count 10)))
+                ~name:unikernel_name
+            >|= fun _ -> () )
             >>= fun () ->
             let data =
               Option.value ~default:[]
@@ -684,10 +662,6 @@ struct
                                 Logs.warn (fun m -> m "got none");
                                 reply "got none"
                             | Ok (Some (hdr, res)) ->
-                                Logs.info (fun m ->
-                                    m "albatross returned: %a"
-                                      (Vmm_commands.pp_wire ~verbose:true)
-                                      (hdr, res));
                                 reply_json (Albatross_json.res res))
                         | Error (`Msg msg) ->
                             Logs.warn (fun m -> m "couldn't decode data %s" msg);

@@ -144,12 +144,16 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     | Error (`Msg msg) ->
         Logs.err (fun m -> m "error %s while decoding data" msg);
         Error ()
-    | Ok (hdr, _) as w ->
+    | Ok (hdr, res) as w ->
         if not Vmm_commands.(is_current hdr.version) then
           Logs.warn (fun m ->
               m "version mismatch, received %a current %a"
                 Vmm_commands.pp_version hdr.Vmm_commands.version
                 Vmm_commands.pp_version Vmm_commands.current);
+        Logs.debug (fun m ->
+            m "albatross returned: %a"
+              (Vmm_commands.pp_wire ~verbose:true)
+              (hdr, res));
         w
 
   let decode_reply data =
