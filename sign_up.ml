@@ -128,7 +128,6 @@ let register_page ~icon () =
                                          ];
                                      ]
                                    ();
-                                 p ~a:[ a_id "email-alert" ] [];
                                ];
                              div
                                [
@@ -247,20 +246,17 @@ let register_page ~icon () =
                \                    const name = \
                 document.getElementById('name').value\n\
                \                    const email = \
-                document.getElementById('email').value.toLowerCase()\n\
+                document.getElementById('email').value\n\
                \                    const password = \
                 document.getElementById('password').value\n\
                \                    let form_alert = \
                 document.getElementById('form-alert')\n\
                \                    let name_alert = \
                 document.getElementById('name-alert')\n\
-               \                    let email_alert = \
-                document.getElementById('email-alert')\n\
                \                    let password_alert = \
                 document.getElementById('password-alert')\n\n\
                \                    form_alert.classList.add('hidden')\n\
                \                    name_alert.classList.add('hidden')\n\
-               \                    email_alert.classList.add('hidden')\n\
                \                    password_alert.classList.add('hidden')\n\n\
                \                   if (!name || !email || !password) {\n\
                \                        form_alert.classList.remove('hidden')\n\
@@ -278,16 +274,6 @@ let register_page ~icon () =
                 at least 4 characters.'\n\
                \                        return;\n\
                \                    }\n\n\
-               \                    const emailPattern = \
-                /^[a-zA-Z0-9.$_!]+@[a-zA-Z0-9]+\\.[a-z]{2,3}$/;\n\
-               \                    if (!emailPattern.test(email)) {\n\
-               \                        email_alert.classList.remove('hidden')\n\
-               \                        \
-                email_alert.classList.add('text-secondary-500', 'block')\n\
-               \                        email_alert.textContent = 'Please \
-                enter a valid email address.'\n\
-               \                        return;\n\
-               \                   }\n\n\
                \                    if (password.length < 8) {\n\
                \                        \
                 password_alert.classList.remove('hidden')\n\
