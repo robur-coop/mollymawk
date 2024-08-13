@@ -33,7 +33,12 @@ let unikernel_index_layout unikernels =
                    td
                      [
                        a
-                         ~a:[ a_href "/unikernel/[uuid]" ]
+                         ~a:
+                           [
+                             a_href
+                               ("/unikernel/info/"
+                               ^ Vmm_core.Name.to_string name);
+                           ]
                          [ button [ txt "View" ] ];
                      ];
                  ])
