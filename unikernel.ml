@@ -748,7 +748,7 @@ struct
             let users = User_model.create_user_session_map t.users in
             let middlewares =
               [
-                Middleware.email_verified_middleware now users;
+                (* Middleware.email_verified_middleware now u:sers;*)
                 Middleware.auth_middleware now users;
               ]
             in
@@ -757,7 +757,7 @@ struct
                 Lwt.return
                   (reply ~content_type:"text/html"
                      (Dashboard.dashboard_layout
-                        ~content:(Tyxml_html.txt "This is the dashboard ui")
+                        ~content:(Unikernel_index.unikernel_index_layout ())
                         ~icon:"/images/robur.png" ())))
               reqd
         | "/users" ->
