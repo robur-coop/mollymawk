@@ -171,6 +171,10 @@ let user_to_json (u : user) : Yojson.Basic.t =
       ("cookies", `List (List.map cookie_to_json u.cookies));
       ("created_at", `String (Utils.TimeHelper.string_of_ptime u.created_at));
       ("updated_at", `String (Utils.TimeHelper.string_of_ptime u.updated_at));
+      ( "email_verification_uuid",
+        match u.email_verification_uuid with
+        | None -> `Null
+        | Some s -> `String (Uuidm.to_string s) );
     ]
 
 let user_of_json = function
