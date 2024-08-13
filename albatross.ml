@@ -33,15 +33,24 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     | Some now, Some exp -> (now, exp)
 
   let gen_cert t ?domain cmd name =
+    let ( let* ) = Result.bind in
     let key_type = `ED25519 in
     let open X509 in
-    let intermediate_key, cert, certs =
+    let* intermediate_key, cert, certs =
       match domain with
-      | None -> (t.key, t.cert, [])
+      | None -> Ok (t.key, t.cert, [])
       | Some domain -> (
-          let policy =
-            let path = Result.get_ok (Vmm_core.Name.path_of_string domain) in
-            List.assoc_opt (Vmm_core.Name.create_of_path path) t.policies
+          let* policy =
+            match Vmm_core.Name.path_of_string domain with
+            | Error (`Msg msg) ->
+                Logs.err (fun m ->
+                    m "invalid domain %s is not a path: %s" domain msg);
+                Error ()
+            | Ok path ->
+                Ok
+                  (List.assoc_opt
+                     (Vmm_core.Name.create_of_path path)
+                     t.policies)
           in
           let intermediate_key = Private_key.generate key_type in
           let v =
@@ -81,8 +90,8 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
           with
           | Error (`Msg msg) ->
               Logs.err (fun m ->
-                  m "failed to construct signing request: %s" msg);
-              invalid_arg "unclear how to proceed"
+                  m "failed to construct CA signing request: %s" msg);
+              Error ()
           | Ok csr -> (
               let valid_from, valid_until = timestamps 300 in
               let extensions =
@@ -96,10 +105,10 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
               with
               | Error e ->
                   Logs.err (fun m ->
-                      m "failed to sign CSR: %a"
+                      m "failed to sign CA CSR: %a"
                         X509.Validation.pp_signature_error e);
-                  invalid_arg "unsure how to proceed"
-              | Ok mycert -> (intermediate_key, mycert, [ mycert ])))
+                  Error ()
+              | Ok mycert -> Ok (intermediate_key, mycert, [ mycert ])))
     in
     let tmpkey = Private_key.generate key_type in
     let extensions =
@@ -229,54 +238,45 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
         TLS.close flow >|= fun () ->
         Logs.err (fun m -> m "received error while reading: %a" TLS.pp_error e)
 
-  let query t ?domain ?(name = ".") cmd =
+  let raw_query t ?(name = ".") certificates cmd =
     let open Lwt.Infix in
-    match cmd with
-    | `Console_cmd (`Console_subscribe _) when Set.mem name t.console_readers ->
-        Lwt.return (Ok None)
-    | _ -> (
-        S.TCP.create_connection (S.tcp t.stack) t.remote >>= function
+    S.TCP.create_connection (S.tcp t.stack) t.remote >>= function
+    | Error e ->
+        Logs.err (fun m ->
+            m "error connecting to albatross: %a" S.TCP.pp_error e);
+        Lwt.return (Error ())
+    | Ok flow -> (
+        let tls_config =
+          let authenticator =
+            X509.Authenticator.chain_of_trust
+              ~time:(fun () -> Some (Ptime.v (P.now_d_ps ())))
+              [ t.cert ]
+          in
+          Tls.Config.client ~authenticator ~certificates ()
+        in
+        TLS.client_of_flow tls_config flow >>= function
         | Error e ->
             Logs.err (fun m ->
-                m "error connecting to albatross: %a" S.TCP.pp_error e);
-            Lwt.return (Error ())
-        | Ok flow -> (
-            match gen_cert t ?domain cmd name with
-            | Error () -> S.TCP.close flow >|= fun () -> Error ()
-            | Ok certificates -> (
-                let tls_config =
-                  let authenticator =
-                    X509.Authenticator.chain_of_trust
-                      ~time:(fun () -> Some (Ptime.v (P.now_d_ps ())))
-                      [ t.cert ]
-                  in
-                  Tls.Config.client ~authenticator ~certificates ()
-                in
-                TLS.client_of_flow tls_config flow >>= function
-                | Error e ->
-                    Logs.err (fun m ->
-                        m "error establishing TLS handshake: %a"
-                          TLS.pp_write_error e);
-                    S.TCP.close flow >|= fun () -> Error ()
-                | Ok tls_flow -> (
-                    TLS.read tls_flow >>= fun r ->
-                    match r with
-                    | Ok (`Data d) ->
-                        (match snd (Vmm_commands.endpoint cmd) with
-                        | `End -> TLS.close tls_flow
-                        | `Read ->
-                            t.console_readers <- Set.add name t.console_readers;
-                            Lwt.async (fun () ->
-                                continue_reading t name tls_flow);
-                            Lwt.return_unit)
-                        >|= fun () ->
-                        Result.map (fun reply -> Some reply) (decode_reply d)
-                    | Ok `Eof -> TLS.close tls_flow >|= fun () -> Ok None
-                    | Error e ->
-                        TLS.close tls_flow >|= fun () ->
-                        Logs.err (fun m ->
-                            m "received error while reading: %a" TLS.pp_error e);
-                        Error ()))))
+                m "error establishing TLS handshake: %a" TLS.pp_write_error e);
+            S.TCP.close flow >|= fun () -> Error ()
+        | Ok tls_flow -> (
+            TLS.read tls_flow >>= fun r ->
+            match r with
+            | Ok (`Data d) ->
+                (match snd (Vmm_commands.endpoint cmd) with
+                | `End -> TLS.close tls_flow
+                | `Read ->
+                    t.console_readers <- Set.add name t.console_readers;
+                    Lwt.async (fun () -> continue_reading t name tls_flow);
+                    Lwt.return_unit)
+                >|= fun () ->
+                Result.map (fun reply -> Some reply) (decode_reply d)
+            | Ok `Eof -> TLS.close tls_flow >|= fun () -> Ok None
+            | Error e ->
+                TLS.close tls_flow >|= fun () ->
+                Logs.err (fun m ->
+                    m "received error while reading: %a" TLS.pp_error e);
+                Error ()))
 
   let init stack server ?(port = 1025) cert key =
     let open Lwt.Infix in
@@ -291,9 +291,22 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
         console_output = Map.empty;
       }
     in
-    query t (`Policy_cmd `Policy_info) >|= function
-    | Ok (Some (_hdr, `Success (`Policies ps))) ->
-        t.policies <- ps;
-        t
-    | _ -> t
+    let cmd = `Policy_cmd `Policy_info in
+    match gen_cert t cmd "." with
+    | Error () -> Lwt.return t
+    | Ok certificates -> (
+        raw_query t certificates cmd >|= function
+        | Ok (Some (_hdr, `Success (`Policies ps))) ->
+            t.policies <- ps;
+            t
+        | _ -> t)
+
+  let query t ~domain ?(name = ".") cmd =
+    match cmd with
+    | `Console_cmd (`Console_subscribe _) when Set.mem name t.console_readers ->
+        Lwt.return (Ok None)
+    | _ -> (
+        match gen_cert t ~domain cmd name with
+        | Error () -> Lwt.return (Error ())
+        | Ok certificates -> raw_query t ~name certificates cmd)
 end

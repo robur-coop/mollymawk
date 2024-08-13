@@ -170,7 +170,9 @@ struct
               (reply ~content_type:"text/html"
                  (Index.index_page ~icon:"/images/robur.png"))
         | "/unikernel-info" -> (
-            Albatross.query albatross (`Unikernel_cmd `Unikernel_info)
+            (* TODO: middleware, extract domain from middleware *)
+            Albatross.query albatross ~domain:"robur"
+              (`Unikernel_cmd `Unikernel_info)
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
@@ -582,8 +584,9 @@ struct
                  length path >= 20 && sub path 0 20 = "/unikernel/shutdown/")
           -> (
             let unikernel_name = String.sub path 20 (String.length path - 20) in
-            Albatross.query albatross (`Unikernel_cmd `Unikernel_destroy)
-              ~name:unikernel_name
+            (* TODO: middleware, extract domain from middleware *)
+            Albatross.query albatross ~domain:"robur"
+              (`Unikernel_cmd `Unikernel_destroy) ~name:unikernel_name
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
@@ -592,7 +595,8 @@ struct
           when String.(
                  length path >= 19 && sub path 0 19 = "/unikernel/console/") ->
             let unikernel_name = String.sub path 19 (String.length path - 19) in
-            ( Albatross.query albatross
+            (* TODO: middleware, extract domain from middleware *)
+            ( Albatross.query ~domain:"robur" albatross
                 (`Console_cmd (`Console_subscribe (`Count 10)))
                 ~name:unikernel_name
             >|= fun _ -> () )
@@ -651,7 +655,8 @@ struct
                             let config =
                               { cfg with image = Cstruct.of_string binary }
                             in
-                            Albatross.query albatross ~name
+                            (* TODO: middleware, extract domain from middleware *)
+                            Albatross.query albatross ~domain:"robur" ~name
                               (`Unikernel_cmd (`Unikernel_create config))
                             >|= function
                             | Error () ->
