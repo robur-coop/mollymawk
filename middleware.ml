@@ -73,7 +73,7 @@ let user_from_auth_cookie cookie users =
       Logs.err (fun m -> m "Error: %s" s);
       Error (`Msg s)
 
-let auth_middleware now users handler reqd =
+let user_of_cookie users now reqd =
   match has_session_cookie reqd with
   | Some auth_cookie -> (
       match user_from_auth_cookie auth_cookie users with
@@ -81,45 +81,39 @@ let auth_middleware now users handler reqd =
           match User_model.user_auth_cookie_from_user user with
           | Some cookie -> (
               match User_model.is_valid_cookie cookie now with
-              | true -> handler reqd
+              | true -> Ok user
               | false ->
                   Logs.err (fun m ->
                       m
                         "auth-middleware: Session value doesn't match user \
-                         session %s\n"
+                         session %s"
                         auth_cookie);
-                  redirect_to_login reqd ())
+                  Error (`Msg "User not found"))
           | None ->
               Logs.err (fun m ->
-                  m "auth-middleware: User doesn't have a session cookie.\n");
-              redirect_to_login reqd ())
+                  m "auth-middleware: User doesn't have a session cookie.");
+              Error (`Msg "User not found"))
       | Error (`Msg s) ->
           Logs.err (fun m ->
-              m "auth-middleware: Failed to find user with key %s: %s\n"
+              m "auth-middleware: Failed to find user with key %s: %s"
                 auth_cookie s);
-          redirect_to_register reqd ())
+          Error (`Msg "User not found"))
   | None ->
       Logs.err (fun m ->
           m "auth-middleware: No molly-session in cookie header.");
-      redirect_to_login reqd ()
+      Error (`Msg "User not found")
+
+let auth_middleware now users handler reqd =
+  match user_of_cookie users now reqd with
+  | Ok user -> handler reqd
+  | Error (`Msg msg) ->
+      Logs.err (fun m ->
+          m "auth-middleware: No molly-session in cookie header.");
+      redirect_to_login ~msg reqd ()
 
 let email_verified_middleware now users handler reqd =
-  match has_session_cookie reqd with
-  | Some cookie -> (
-      match user_from_auth_cookie cookie users with
-      | Ok user -> (
-          match User_model.user_auth_cookie_from_user user with
-          | Some cookie -> (
-              match
-                User_model.(
-                  is_valid_cookie cookie now && is_email_verified user)
-              with
-              | true -> handler reqd
-              | false -> redirect_to_verify_email reqd ())
-          | None -> redirect_to_login reqd ())
-      | Error (`Msg s) ->
-          Logs.err (fun m ->
-              m "auth-middleware: Failed to find user with key %s : %s\n" cookie
-                s);
-          redirect_to_register reqd ())
-  | None -> redirect_to_login reqd ()
+  match user_of_cookie users now reqd with
+  | Ok user ->
+      if User_model.is_email_verified user then handler reqd
+      else redirect_to_verify_email reqd ()
+  | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
