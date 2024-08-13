@@ -287,15 +287,16 @@ let generate_cookie ~name ~uuid ?(expires_in = 3600) ~created_at () =
   }
 
 let create_user_session_map (users : user list) : (string * user) list =
-  List.map
-    (fun user ->
-      let cookie =
-        List.find
-          (fun (cookie : cookie) -> String.equal cookie.name "molly_session")
-          user.cookies
-      in
-      (cookie.value, user))
-    users
+  List.flatten
+    (List.map
+       (fun user ->
+         let session_cookies =
+           List.filter
+             (fun (cookie : cookie) -> String.equal cookie.name "molly_session")
+             user.cookies
+         in
+         List.map (fun c -> (c.value, user)) session_cookies)
+       users)
 
 let create_user_uuid_map (users : user list) : (string * user) list =
   List.map (fun user -> (user.uuid, user)) users
@@ -342,12 +343,6 @@ let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
     email_verification_uuid =
       Option.value ~default:user.email_verification_uuid email_verification_uuid;
   }
-
-let update_cookies (cookies : cookie list) (cookie : cookie) : cookie list =
-  List.map
-    (fun (c : cookie) ->
-      match c.name = cookie.name with true -> cookie | false -> c)
-    cookies
 
 let is_valid_cookie (cookie : cookie) now =
   Utils.TimeHelper.diff_in_seconds cookie.created_at now < cookie.expires_in
@@ -402,7 +397,7 @@ let login_user ~email ~password users now =
             generate_cookie ~name:"molly_session" ~expires_in:week ~uuid:u.uuid
               ~created_at:now ()
           in
-          let cookies = update_cookies u.cookies new_session in
+          let cookies = new_session :: u.cookies in
           let updated_user = update_user u ~cookies () in
           Ok updated_user
       | false -> Error (`Msg "Invalid email or password."))
