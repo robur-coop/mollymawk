@@ -32,9 +32,76 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     | None, _ | _, None -> invalid_arg "span too big - reached end of ptime"
     | Some now, Some exp -> (now, exp)
 
-  let gen_cert cert key ?bits ?(key_type = `ED25519) cmd name =
+  let gen_cert t ?domain cmd name =
+    let key_type = `ED25519 in
     let open X509 in
-    let tmpkey = Private_key.generate ?bits key_type in
+    let intermediate_key, cert, certs =
+      match domain with
+      | None -> (t.key, t.cert, [])
+      | Some domain -> (
+          let policy =
+            let path = Result.get_ok (Vmm_core.Name.path_of_string domain) in
+            List.assoc_opt (Vmm_core.Name.create_of_path path) t.policies
+          in
+          let intermediate_key = Private_key.generate key_type in
+          let v =
+            Option.map
+              (fun p -> Vmm_asn.to_cert_extension (`Policy_cmd (`Policy_add p)))
+              policy
+          in
+          let exts =
+            let ku =
+              [
+                `Key_cert_sign;
+                `CRL_sign;
+                `Digital_signature;
+                `Content_commitment;
+              ]
+            in
+            let extensions =
+              match v with
+              | None -> Extension.empty
+              | Some p ->
+                  Extension.singleton (Unsupported Vmm_asn.oid) (false, p)
+            in
+            Extension.(
+              add Basic_constraints
+                (true, (true, None))
+                (add Key_usage (true, ku) extensions))
+          in
+          match
+            let name =
+              [
+                Distinguished_name.(
+                  Relative_distinguished_name.singleton (CN domain));
+              ]
+            in
+            let extensions = Signing_request.Ext.(singleton Extensions exts) in
+            Signing_request.create name ~extensions intermediate_key
+          with
+          | Error (`Msg msg) ->
+              Logs.err (fun m ->
+                  m "failed to construct signing request: %s" msg);
+              invalid_arg "unclear how to proceed"
+          | Ok csr -> (
+              let valid_from, valid_until = timestamps 300 in
+              let extensions =
+                let capub = X509.Private_key.public t.key in
+                key_ids exts Signing_request.((info csr).public_key) capub
+              in
+              let issuer = Certificate.subject t.cert in
+              match
+                Signing_request.sign csr ~valid_from ~valid_until ~extensions
+                  t.key issuer
+              with
+              | Error e ->
+                  Logs.err (fun m ->
+                      m "failed to sign CSR: %a"
+                        X509.Validation.pp_signature_error e);
+                  invalid_arg "unsure how to proceed"
+              | Ok mycert -> (intermediate_key, mycert, [ mycert ])))
+    in
+    let tmpkey = Private_key.generate key_type in
     let extensions =
       let v = Vmm_asn.to_cert_extension cmd in
       Extension.(
@@ -58,19 +125,19 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     | Ok csr -> (
         let valid_from, valid_until = timestamps 300 in
         let extensions =
-          let capub = X509.Private_key.public key in
+          let capub = X509.Private_key.public intermediate_key in
           key_ids extensions Signing_request.((info csr).public_key) capub
         in
         let issuer = Certificate.subject cert in
         match
-          Signing_request.sign csr ~valid_from ~valid_until ~extensions key
-            issuer
+          Signing_request.sign csr ~valid_from ~valid_until ~extensions
+            intermediate_key issuer
         with
         | Error e ->
             Logs.err (fun m ->
                 m "failed to sign CSR: %a" X509.Validation.pp_signature_error e);
             Error ()
-        | Ok mycert -> Ok (`Single ([ mycert; cert ], tmpkey)))
+        | Ok mycert -> Ok (`Single (mycert :: certs, tmpkey)))
 
   let decode data =
     match Vmm_asn.wire_of_cstruct data with
@@ -158,7 +225,7 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
         TLS.close flow >|= fun () ->
         Logs.err (fun m -> m "received error while reading: %a" TLS.pp_error e)
 
-  let query t ?domain:_ ?(name = ".") cmd =
+  let query t ?domain ?(name = ".") cmd =
     let open Lwt.Infix in
     match cmd with
     | `Console_cmd (`Console_subscribe _) when Set.mem name t.console_readers ->
@@ -170,7 +237,7 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
                 m "error connecting to albatross: %a" S.TCP.pp_error e);
             Lwt.return (Error ())
         | Ok flow -> (
-            match gen_cert t.cert t.key cmd name with
+            match gen_cert t ?domain cmd name with
             | Error () -> S.TCP.close flow >|= fun () -> Error ()
             | Ok certificates -> (
                 let tls_config =

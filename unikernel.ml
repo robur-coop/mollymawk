@@ -183,9 +183,10 @@ struct
         | path
           when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
           -> (
-            let unikernel_name = String.sub path 17 (String.length path - 17) in
+            (* TODO: middleware, extract domain from middleware *)
+            let unikernel_name = String.sub path 16 (String.length path - 16) in
             Albatross.query albatross (`Unikernel_cmd `Unikernel_info)
-              ~name:unikernel_name
+              ~domain:"robur" ~name:unikernel_name
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"

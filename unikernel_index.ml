@@ -19,9 +19,12 @@ let unikernel_index_layout unikernels =
                ])
           (List.map
              (fun (name, unikernel) ->
+               let name =
+                 Option.value ~default:"no name" (Vmm_core.Name.name name)
+               in
                tr
                  [
-                   td [ txt (Vmm_core.Name.to_string name) ];
+                   td [ txt name ];
                    td
                      [
                        txt
@@ -33,12 +36,7 @@ let unikernel_index_layout unikernels =
                    td
                      [
                        a
-                         ~a:
-                           [
-                             a_href
-                               ("/unikernel/info/"
-                               ^ Vmm_core.Name.to_string name);
-                           ]
+                         ~a:[ a_href ("/unikernel/info/" ^ name) ]
                          [ button [ txt "View" ] ];
                      ];
                  ])
