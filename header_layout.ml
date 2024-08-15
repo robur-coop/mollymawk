@@ -13,6 +13,7 @@ let header ?(page_title = "Mollymawk") ~icon () =
               a_content "width=device-width, initial-scale=1.0";
             ]
           ();
+        script ~a:[ a_src "/main.js" ] (txt "");
         link ~rel:[ `Stylesheet ]
           ~href:"https://unpkg.com/aos@2.3.1/dist/aos.css" ();
         link ~rel:[ `Stylesheet ] ~href:"style.css" ();
