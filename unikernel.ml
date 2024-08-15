@@ -657,7 +657,9 @@ struct
     | Ok data ->
         let store = ref data in
         let c = (snd data).Storage.configuration in
-        Albatross.init stack c.Configuration.server_ip ~port:c.server_port c.certificate c.private_key >>= fun albatross ->
+        Albatross.init stack c.Configuration.server_ip ~port:c.server_port
+          c.certificate c.private_key
+        >>= fun albatross ->
         let port = 8080 in
         Logs.info (fun m ->
             m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"

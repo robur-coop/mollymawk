@@ -82,13 +82,7 @@ let of_json = function
                   else Ok ()
                 in
                 let* server_ip = Ipaddr.of_string server_ip in
-                Ok
-                  {
-                    certificate;
-                    private_key;
-                    server_ip;
-                    server_port;
-                  }
+                Ok { certificate; private_key; server_ip; server_port }
             | _ ->
                 Error
                   (`Msg
