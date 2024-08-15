@@ -188,7 +188,7 @@ let unikernel_index_layout unikernels =
                                        txt
                                          (string_of_int unikernel.memory ^ " MB");
                                      ];
-                                     td
+                                   td
                                      ~a:
                                        [
                                          a_class
@@ -200,7 +200,9 @@ let unikernel_index_layout unikernels =
                                        ]
                                      [
                                        txt
-                                         (Utils.TimeHelper.string_of_ptime unikernel.started ^ " ago");
+                                         (Utils.TimeHelper.string_of_ptime
+                                            unikernel.started
+                                         ^ " ago");
                                      ];
                                    td
                                      ~a:
