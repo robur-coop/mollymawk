@@ -48,6 +48,16 @@ module TimeHelper = struct
         | Error _ -> Error (`Msg "invalid date string"))
     | `Null -> Ok None
     | _ -> Error (`Msg "invalid json for Ptime.t option")
+
+  let time_ago t1 t2 =
+    let diff = diff_in_seconds t1 t2 in
+    if diff < 60 then Printf.sprintf "%d s ago" diff
+    else if diff < 3600 then Printf.sprintf "%d m ago" (diff / 60)
+    else if diff < 86400 then Printf.sprintf "%d h ago" (diff / 3600)
+    else if diff < 604800 then Printf.sprintf "%d d ago" (diff / 86400)
+    else if diff < 2592000 then Printf.sprintf "%d w ago" (diff / 604800)
+    else if diff < 31536000 then Printf.sprintf "%d mo ago" (diff / 2419200)
+    else Printf.sprintf "%d y ago" (diff / 31536000)
 end
 
 module Email = struct

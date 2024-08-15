@@ -48,17 +48,15 @@ struct
     >|= fun cert ->
       err_to_exit pp_msg
         (X509.Certificate.decode_pem_multiple (Cstruct.of_string cert)) )
-    >>= fun certs ->
-    ( KV.get data (Mirage_kv.Key.v "server.pem") >|= err_to_exit KV.pp_error
-    >|= fun server ->
-      err_to_exit pp_msg
-        (X509.Certificate.decode_pem (Cstruct.of_string server)) )
-    >|= fun server ->
-    let cert, certs =
+    >|= fun certs ->
+    let cert =
       match certs with
-      | hd :: tl -> (hd, tl)
+      | hd :: [] -> hd
       | [] ->
           Logs.err (fun m -> m "no certificate found");
+          exit Mirage_runtime.argument_error
+      | _ ->
+          Logs.err (fun m -> m "multiple certificates found");
           exit Mirage_runtime.argument_error
     in
     if
@@ -69,7 +67,7 @@ struct
     then (
       Logs.err (fun m -> m "certificate and private key do not match");
       exit Mirage_runtime.argument_error);
-    (key, cert, certs, server)
+    (key, cert)
 
   let js_contents assets =
     KV_ASSETS.get assets (Mirage_kv.Key.v "main.js") >|= function
@@ -98,98 +96,7 @@ struct
     | Ok html -> html
 
   module Store = Storage.Make (BLOCK)
-  module TLS = Tls_mirage.Make (S.TCP)
-
-  let key_ids exts pub issuer =
-    let open X509 in
-    let auth = (Some (Public_key.id issuer), General_name.empty, None) in
-    Extension.(
-      add Subject_key_id
-        (false, Public_key.id pub)
-        (add Authority_key_id (false, auth) exts))
-
-  let timestamps validity =
-    let now = Ptime.v (P.now_d_ps ()) in
-    match
-      (* subtracting some seconds here to not require perfectly synchronised
-         clocks on client and server *)
-      ( Ptime.sub_span now (Ptime.Span.of_int_s (validity / 2)),
-        Ptime.add_span now (Ptime.Span.of_int_s validity) )
-    with
-    | None, _ | _, None -> invalid_arg "span too big - reached end of ptime"
-    | Some now, Some exp -> (now, exp)
-
-  let gen_cert cert ?(certs = []) key ?bits ?(key_type = `ED25519) cmd name =
-    let open X509 in
-    let tmpkey = Private_key.generate ?bits key_type in
-    let extensions =
-      let v = Vmm_asn.to_cert_extension cmd in
-      Extension.(
-        add Key_usage
-          (true, [ `Digital_signature; `Key_encipherment ])
-          (add Basic_constraints
-             (true, (false, None))
-             (add Ext_key_usage (true, [ `Client_auth ])
-                (singleton (Unsupported Vmm_asn.oid) (false, v)))))
-    in
-    match
-      let name =
-        [ Distinguished_name.(Relative_distinguished_name.singleton (CN name)) ]
-      in
-      let extensions = Signing_request.Ext.(singleton Extensions extensions) in
-      Signing_request.create name ~extensions tmpkey
-    with
-    | Error (`Msg msg) ->
-        Logs.err (fun m -> m "failed to construct signing request: %s" msg);
-        Error ()
-    | Ok csr -> (
-        let valid_from, valid_until = timestamps 300 in
-        let extensions =
-          let capub = X509.Private_key.public key in
-          key_ids extensions Signing_request.((info csr).public_key) capub
-        in
-        let issuer = Certificate.subject cert in
-        match
-          Signing_request.sign csr ~valid_from ~valid_until ~extensions key
-            issuer
-        with
-        | Error e ->
-            Logs.err (fun m ->
-                m "failed to sign CSR: %a" X509.Validation.pp_signature_error e);
-            Error ()
-        | Ok mycert -> Ok (`Single (mycert :: cert :: certs, tmpkey)))
-
-  let decode data =
-    match Vmm_asn.wire_of_cstruct data with
-    | Error (`Msg msg) ->
-        Logs.err (fun m -> m "error %s while decoding data" msg);
-        Error ()
-    | Ok (hdr, _) as w ->
-        if not Vmm_commands.(is_current hdr.version) then
-          Logs.warn (fun m ->
-              m "version mismatch, received %a current %a"
-                Vmm_commands.pp_version hdr.Vmm_commands.version
-                Vmm_commands.pp_version Vmm_commands.current);
-        w
-
-  let decode_reply data =
-    if Cstruct.length data >= 4 then
-      let len = Int32.to_int (Cstruct.BE.get_uint32 data 0) in
-      if Cstruct.length data >= 4 + len then (
-        if Cstruct.length data > 4 + len then
-          Logs.warn (fun m ->
-              m "received %d trailing bytes" (Cstruct.length data - len - 4));
-        decode (Cstruct.sub data 4 len))
-      else (
-        Logs.err (fun m ->
-            m "buffer too short (%d bytes), need %d + 4 bytes"
-              (Cstruct.length data) len);
-        Error ())
-    else (
-      Logs.err (fun m ->
-          m "buffer too short (%d bytes), need at least 4 bytes"
-            (Cstruct.length data));
-      Error ())
+  module Map = Map.Make (String)
 
   let decode_request_body reqd =
     let request_body = Httpaf.Reqd.request_body reqd in
@@ -208,115 +115,7 @@ struct
       ~on_eof:(on_eof f_init);
     finished >>= fun data -> data
 
-  let split_many data =
-    let rec split acc data =
-      if Cstruct.length data >= 4 then
-        let len = Int32.to_int (Cstruct.BE.get_uint32 data 0) in
-        if Cstruct.length data >= 4 + len then
-          split (Cstruct.sub data 4 len :: acc) (Cstruct.shift data (len + 4))
-        else (
-          Logs.warn (fun m ->
-              m "buffer too small: %u bytes, requires %u bytes"
-                (Cstruct.length data - 4)
-                len);
-          acc)
-      else if Cstruct.length data = 0 then acc
-      else (
-        Logs.warn (fun m ->
-            m "buffer too small: %u bytes leftover" (Cstruct.length data));
-        acc)
-    in
-    split [] data |> List.rev
-
-  module Map = Map.Make (String)
-
-  let console_output : Yojson.Basic.t list Map.t ref = ref Map.empty
-
-  module Set = Set.Make (String)
-
-  let active_console_readers = ref Set.empty
-
-  let rec continue_reading name flow =
-    TLS.read flow >>= function
-    | Ok (`Data d) ->
-        let bufs = split_many d in
-        List.iter
-          (fun d ->
-            match decode d with
-            | Error () -> ()
-            | Ok (_, `Data (`Console_data (ts, data))) ->
-                let d = Albatross_json.console_data_to_json (ts, data) in
-                console_output :=
-                  Map.update name
-                    (function
-                      | None -> Some [ d ]
-                      | Some xs ->
-                          let xs =
-                            if List.length xs > 20 then List.tl xs else xs
-                          in
-                          Some (xs @ [ d ]))
-                    !console_output
-            | _ ->
-                Logs.warn (fun m ->
-                    m "unexpected reply, expected console output"))
-          bufs;
-        continue_reading name flow
-    | Ok `Eof ->
-        active_console_readers := Set.remove name !active_console_readers;
-        TLS.close flow
-    | Error e ->
-        active_console_readers := Set.remove name !active_console_readers;
-        TLS.close flow >|= fun () ->
-        Logs.err (fun m -> m "received error while reading: %a" TLS.pp_error e)
-
-  let query_albatross stack (key, cert, certs, server_cert) remote ?domain:_
-      ?(name = ".") cmd =
-    match cmd with
-    | `Console_cmd (`Console_subscribe _)
-      when Set.mem name !active_console_readers ->
-        Lwt.return (Ok None)
-    | _ -> (
-        S.TCP.create_connection (S.tcp stack) remote >>= function
-        | Error e ->
-            Logs.err (fun m ->
-                m "error connecting to albatross: %a" S.TCP.pp_error e);
-            Lwt.return (Error ())
-        | Ok flow -> (
-            match gen_cert cert ~certs key cmd name with
-            | Error () -> S.TCP.close flow >|= fun () -> Error ()
-            | Ok certificates -> (
-                let tls_config =
-                  let authenticator =
-                    X509.Authenticator.chain_of_trust
-                      ~time:(fun () -> Some (Ptime.v (P.now_d_ps ())))
-                      [ server_cert ]
-                  in
-                  Tls.Config.client ~authenticator ~certificates ()
-                in
-                TLS.client_of_flow tls_config flow >>= function
-                | Error e ->
-                    Logs.err (fun m ->
-                        m "error establishing TLS handshake: %a"
-                          TLS.pp_write_error e);
-                    S.TCP.close flow >|= fun () -> Error ()
-                | Ok tls_flow -> (
-                    TLS.read tls_flow >>= fun r ->
-                    match r with
-                    | Ok (`Data d) ->
-                        (match snd (Vmm_commands.endpoint cmd) with
-                        | `End -> TLS.close tls_flow
-                        | `Read ->
-                            active_console_readers :=
-                              Set.add name !active_console_readers;
-                            Lwt.async (fun () -> continue_reading name tls_flow);
-                            Lwt.return_unit)
-                        >|= fun () -> Ok (Some d)
-                    | Ok `Eof -> TLS.close tls_flow >|= fun () -> Ok None
-                    | Error e ->
-                        TLS.close tls_flow >|= fun () ->
-                        Logs.err (fun m ->
-                            m "received error while reading: %a" TLS.pp_error e);
-                        Error ()))))
+  module Albatross = Albatross.Make (P) (S)
 
   let to_map ~assoc m =
     let open Multipart_form in
@@ -341,7 +140,7 @@ struct
     in
     go (Map.empty, []) m
 
-  let request_handler stack credentials remote js_file css_file imgs html store
+  let request_handler albatross js_file css_file imgs html store
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let reply ?(content_type = "text/plain") ?(header_list = []) data =
@@ -371,41 +170,24 @@ struct
               (reply ~content_type:"text/html"
                  (Index.index_page ~icon:"/images/robur.png"))
         | "/unikernel-info" -> (
-            query_albatross stack credentials remote
-              ((* `Block_cmd `Block_info *)
-               (* `Policy_cmd `Policy_info *)
-                `Unikernel_cmd
-                `Unikernel_info)
+            (* TODO: middleware, extract domain from middleware *)
+            Albatross.query albatross ~domain:"robur"
+              (`Unikernel_cmd `Unikernel_info)
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
-            | Ok (Some data) -> (
-                match decode_reply data with
-                | Error () -> reply "couldn't decode albatross' reply"
-                | Ok (hdr, res) ->
-                    Logs.info (fun m ->
-                        m "albatross returned: %a"
-                          (Vmm_commands.pp_wire ~verbose:true)
-                          (hdr, res));
-                    reply_json (Albatross_json.res res)))
+            | Ok (Some (hdr, res)) -> reply_json (Albatross_json.res res))
         | path
           when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
           -> (
-            let unikernel_name = String.sub path 17 (String.length path - 17) in
-            query_albatross stack credentials remote
-              (`Unikernel_cmd `Unikernel_info) ~name:unikernel_name
+            (* TODO: middleware, extract domain from middleware *)
+            let unikernel_name = String.sub path 16 (String.length path - 16) in
+            Albatross.query albatross (`Unikernel_cmd `Unikernel_info)
+              ~domain:"robur" ~name:unikernel_name
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
-            | Ok (Some data) -> (
-                match decode_reply data with
-                | Error () -> reply "couldn't decode albatross' reply"
-                | Ok (hdr, res) ->
-                    Logs.info (fun m ->
-                        m "albatross returned: %a"
-                          (Vmm_commands.pp_wire ~verbose:true)
-                          (hdr, res));
-                    reply_json (Albatross_json.res res)))
+            | Ok (Some (hdr, res)) -> reply_json (Albatross_json.res res))
         | "/main.js" -> Lwt.return (reply ~content_type:"text/plain" js_file)
         | "/images/molly_bird.jpeg" ->
             Lwt.return (reply ~content_type:"image/jpeg" imgs.molly_img)
@@ -756,7 +538,7 @@ struct
               (fun _reqd ->
                 match Middleware.user_of_cookie users now reqd with
                 | Ok user ->
-                    (query_albatross stack credentials remote
+                    (Albatross.query albatross
                        ~domain:user.name (* TODO use uuid in the future *)
                        (`Unikernel_cmd `Unikernel_info)
                      >|= function
@@ -765,28 +547,21 @@ struct
                              m "error while communicating with albatross");
                          []
                      | Ok None -> []
-                     | Ok (Some data) -> (
-                         match decode_reply data with
-                         | Error () ->
-                             Logs.err (fun m ->
-                                 m "couldn't decode albatross' reply");
-                             []
-                         | Ok (hdr, `Success (`Unikernel_info unikernels)) ->
-                             unikernels
-                         | Ok reply ->
-                             Logs.err (fun m ->
-                                 m
-                                   "expected a unikernel info reply, received \
-                                    %a"
-                                   (Vmm_commands.pp_wire ~verbose:false)
-                                   reply);
-                             []))
+                     | Ok (Some (hdr, `Success (`Unikernel_info unikernels))) ->
+                         unikernels
+                     | Ok (Some reply) ->
+                         Logs.err (fun m ->
+                             m "expected a unikernel info reply, received %a"
+                               (Vmm_commands.pp_wire ~verbose:false)
+                               reply);
+                         [])
                     >>= fun unikernels ->
                     Lwt.return
                       (reply ~content_type:"text/html"
                          (Dashboard.dashboard_layout
                             ~content:
-                              (Unikernel_index.unikernel_index_layout unikernels)
+                              (Unikernel_index.unikernel_index_layout unikernels
+                                 now)
                             ~icon:"/images/robur.png" ()))
                 | Error _ ->
                     Logs.err (fun m -> m "couldn't find user of cookie");
@@ -809,43 +584,27 @@ struct
           when String.(
                  length path >= 20 && sub path 0 20 = "/unikernel/shutdown/")
           -> (
-            let unikernel_name = String.sub path 21 (String.length path - 21) in
-            query_albatross stack credentials remote
+            let unikernel_name = String.sub path 20 (String.length path - 20) in
+            (* TODO: middleware, extract domain from middleware *)
+            Albatross.query albatross ~domain:"robur"
               (`Unikernel_cmd `Unikernel_destroy) ~name:unikernel_name
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
-            | Ok (Some data) -> (
-                match decode_reply data with
-                | Error () -> reply "couldn't decode albatross' reply"
-                | Ok (hdr, res) ->
-                    Logs.info (fun m ->
-                        m "albatross returned: %a"
-                          (Vmm_commands.pp_wire ~verbose:true)
-                          (hdr, res));
-                    reply_json (Albatross_json.res res)))
+            | Ok (Some (hdr, res)) -> reply_json (Albatross_json.res res))
         | path
           when String.(
                  length path >= 19 && sub path 0 19 = "/unikernel/console/") ->
-            let unikernel_name = String.sub path 20 (String.length path - 20) in
-            (query_albatross stack credentials remote
-               (`Console_cmd (`Console_subscribe (`Count 10)))
-               ~name:unikernel_name
-             >|= function
-             | Error () -> ()
-             | Ok None -> ()
-             | Ok (Some data) -> (
-                 match decode_reply data with
-                 | Error () -> ()
-                 | Ok (hdr, res) ->
-                     Logs.info (fun m ->
-                         m "albatross returned: %a"
-                           (Vmm_commands.pp_wire ~verbose:true)
-                           (hdr, res))))
+            let unikernel_name = String.sub path 19 (String.length path - 19) in
+            (* TODO: middleware, extract domain from middleware *)
+            ( Albatross.query ~domain:"robur" albatross
+                (`Console_cmd (`Console_subscribe (`Count 10)))
+                ~name:unikernel_name
+            >|= fun _ -> () )
             >>= fun () ->
             let data =
               Option.value ~default:[]
-                (Map.find_opt unikernel_name !console_output)
+                (Map.find_opt unikernel_name albatross.Albatross.console_output)
             in
             reply_json (`List data);
             Lwt.return_unit
@@ -897,7 +656,8 @@ struct
                             let config =
                               { cfg with image = Cstruct.of_string binary }
                             in
-                            query_albatross stack credentials remote ~name
+                            (* TODO: middleware, extract domain from middleware *)
+                            Albatross.query albatross ~domain:"robur" ~name
                               (`Unikernel_cmd (`Unikernel_create config))
                             >|= function
                             | Error () ->
@@ -907,18 +667,8 @@ struct
                             | Ok None ->
                                 Logs.warn (fun m -> m "got none");
                                 reply "got none"
-                            | Ok (Some data) -> (
-                                match decode_reply data with
-                                | Error () ->
-                                    Logs.warn (fun m ->
-                                        m "couldn't decode albatross reply");
-                                    reply "couldn't decode albatross' reply"
-                                | Ok (hdr, res) ->
-                                    Logs.info (fun m ->
-                                        m "albatross returned: %a"
-                                          (Vmm_commands.pp_wire ~verbose:true)
-                                          (hdr, res));
-                                    reply_json (Albatross_json.res res)))
+                            | Ok (Some (hdr, res)) ->
+                                reply_json (Albatross_json.res res))
                         | Error (`Msg msg) ->
                             Logs.warn (fun m -> m "couldn't decode data %s" msg);
                             Lwt.return
@@ -949,20 +699,19 @@ struct
     css_contents assets >>= fun css_file ->
     images assets >>= fun imgs ->
     create_html_form assets >>= fun html ->
-    retrieve_credentials data >>= fun credentials ->
+    retrieve_credentials data >>= fun (key, cert) ->
     Store.Stored_data.connect storage >>= fun stored_data ->
     Store.read_data stored_data >>= function
     | Error (`Msg msg) -> failwith msg
     | Ok data ->
         let store = ref data in
-        let remote = (host, port) in
+        Albatross.init stack host ~port cert key >>= fun albatross ->
         let port = 8080 in
         Logs.info (fun m ->
             m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
               port);
         let request_handler _flow =
-          request_handler stack credentials remote js_file css_file imgs html
-            store
+          request_handler albatross js_file css_file imgs html store
         in
         Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
         let http = Paf.http_service ~error_handler request_handler in
