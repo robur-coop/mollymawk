@@ -1,9 +1,9 @@
 open Tyxml
 
-let unikernel_index_layout unikernels =
+let unikernel_index_layout unikernels current_time =
   Tyxml_html.(
     section
-      ~a:[ a_class [ "col-span-7 px-4 py-6 bg-gray-50 shadow-md my-6" ] ]
+      ~a:[ a_class [ "col-span-7 px-4 py-6 bg-gray-50 my-6" ] ]
       [
         div
           ~a:[ a_class [ "px-3 flex justify-between items-center" ] ]
@@ -12,13 +12,20 @@ let unikernel_index_layout unikernels =
               [
                 p
                   ~a:[ a_class [ "font-bold text-gray-700" ] ]
-                  [ txt "Unikernels" ];
+                  [
+                    txt
+                      ("Unikernels ("
+                      ^ string_of_int (List.length unikernels)
+                      ^ ")");
+                  ];
               ];
             div
               [
                 input
                   ~a:
                     [
+                      a_onkeyup "filterUnikernels()";
+                      a_placeholder "search";
                       a_id "searchQuery";
                       a_name "searchQuery";
                       a_input_type `Text;
@@ -48,6 +55,7 @@ let unikernel_index_layout unikernels =
                         table
                           ~a:
                             [
+                              a_id "unikernel-table";
                               a_class
                                 [
                                   "table-auto min-w-full divide-y \
@@ -200,9 +208,8 @@ let unikernel_index_layout unikernels =
                                        ]
                                      [
                                        txt
-                                         (Utils.TimeHelper.string_of_ptime
-                                            unikernel.started
-                                         ^ " ago");
+                                         (Utils.TimeHelper.time_ago current_time
+                                            unikernel.started);
                                      ];
                                    td
                                      ~a:
