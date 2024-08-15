@@ -1,5 +1,5 @@
 ## 20240813
-- TODO style for the dashboard (unikernel info)
+- [x] style for the dashboard (unikernel info)
 - TODO unikernel detailed information (/unikernel/info/<name>) - displayed
 - TODO shutdown and restart of a unikernel
 - TODO deploy/create a new unikernel
