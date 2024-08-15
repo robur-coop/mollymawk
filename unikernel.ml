@@ -560,7 +560,8 @@ struct
                       (reply ~content_type:"text/html"
                          (Dashboard.dashboard_layout
                             ~content:
-                              (Unikernel_index.unikernel_index_layout unikernels)
+                              (Unikernel_index.unikernel_index_layout unikernels
+                                 now)
                             ~icon:"/images/robur.png" ()))
                 | Error _ ->
                     Logs.err (fun m -> m "couldn't find user of cookie");

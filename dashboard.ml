@@ -260,7 +260,7 @@ let dashboard_layout ~icon
                          a
                            ~a:
                              [
-                               a_href "/unikernels";
+                               a_href "/dashboard";
                                a_class
                                  [
                                    "hover:bg-gray-200 hover:text-primary-400 \
