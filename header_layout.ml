@@ -16,7 +16,7 @@ let header ?(page_title = "Mollymawk") ~icon () =
         script ~a:[ a_src "/main.js" ] (txt "");
         link ~rel:[ `Stylesheet ]
           ~href:"https://unpkg.com/aos@2.3.1/dist/aos.css" ();
-        link ~rel:[ `Stylesheet ] ~href:"style.css" ();
+        link ~rel:[ `Stylesheet ] ~href:"/style.css" ();
         script ~a:[ a_src "https://kit.fontawesome.com/d1697f2fa9.js" ] (txt "");
         link ~rel:[ `Icon ] ~href:icon ();
       ])
