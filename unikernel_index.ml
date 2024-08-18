@@ -1,5 +1,3 @@
-open Tyxml
-
 let unikernel_index_layout unikernels current_time =
   Tyxml_html.(
     section
