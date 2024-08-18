@@ -10,10 +10,7 @@ let settings_layout =
               [
                 p
                   ~a:[ a_class [ "font-bold text-gray-700" ] ]
-                  [
-                    txt
-                      ("Configuration");
-                  ];
+                  [ txt "Configuration" ];
               ];
           ];
         hr ~a:[ a_class [ "border border-primary-500 my-5" ] ] ();
@@ -26,13 +23,7 @@ let settings_layout =
                 div
                   ~a:
                     [ a_class [ "p-1.5 min-w-full inline-block align-middle" ] ]
-                  [
-                    div
-                      ~a:[ a_class [ "overflow-hidden" ] ]
-                      [
-
-                      ];
-                  ];
+                  [ div ~a:[ a_class [ "overflow-hidden" ] ] [] ];
               ];
           ];
       ])
