@@ -128,7 +128,7 @@ struct
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
-            | Ok (Some (hdr, res)) -> reply_json (Albatross_json.res res))
+            | Ok (Some (_hdr, res)) -> reply_json (Albatross_json.res res))
         | path
           when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
           -> (
@@ -139,7 +139,7 @@ struct
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
-            | Ok (Some (hdr, res)) -> reply_json (Albatross_json.res res))
+            | Ok (Some (_hdr, res)) -> reply_json (Albatross_json.res res))
         | "/main.js" -> Lwt.return (reply ~content_type:"text/plain" js_file)
         | "/images/molly_bird.jpeg" ->
             Lwt.return (reply ~content_type:"image/jpeg" imgs.molly_img)
@@ -499,7 +499,7 @@ struct
                              m "error while communicating with albatross");
                          []
                      | Ok None -> []
-                     | Ok (Some (hdr, `Success (`Unikernel_info unikernels))) ->
+                     | Ok (Some (_hdr, `Success (`Unikernel_info unikernels))) ->
                          unikernels
                      | Ok (Some reply) ->
                          Logs.err (fun m ->
@@ -543,7 +543,7 @@ struct
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
-            | Ok (Some (hdr, res)) -> reply_json (Albatross_json.res res))
+            | Ok (Some (_hdr, res)) -> reply_json (Albatross_json.res res))
         | path
           when String.(
                  length path >= 19 && sub path 0 19 = "/unikernel/console/") ->
@@ -619,7 +619,7 @@ struct
                             | Ok None ->
                                 Logs.warn (fun m -> m "got none");
                                 reply "got none"
-                            | Ok (Some (hdr, res)) ->
+                            | Ok (Some (_hdr, res)) ->
                                 reply_json (Albatross_json.res res))
                         | Error (`Msg msg) ->
                             Logs.warn (fun m -> m "couldn't decode data %s" msg);
