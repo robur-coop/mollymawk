@@ -1,13 +1,14 @@
 open Tyxml
 
 let dashboard_layout ~icon
+    ?(page_title = "Dashboard | Mollymawk")
     ?(message =
       "To start deploying unikernels you'll need to add a payment method.")
     ~content () =
   let page =
     Html.(
       html
-        (Header_layout.header ~page_title:"Dashboard | Mollymawk" ~icon ())
+        (Header_layout.header ~page_title ~icon ())
         (body
            [
              section
@@ -509,11 +510,11 @@ let dashboard_layout ~icon
                                [];
                              span [ txt "Marketplace" ];
                            ];
-                           hr ~a:[ a_class [ "my-4" ] ] ();
-                           a
+                         hr ~a:[ a_class [ "my-4" ] ] ();
+                         a
                            ~a:
                              [
-                               a_href "/settings";
+                               a_href "/admin/settings";
                                a_class
                                  [
                                    "hover:bg-gray-200 hover:text-primary-400 \
