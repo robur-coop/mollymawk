@@ -56,7 +56,7 @@ let of_json = function
             match
               ( get "certificate" xs,
                 get "private_key" xs,
-                get "server_name" xs,
+                get "server_ip" xs,
                 get "server_port" xs )
             with
             | ( Some (`String cert),
