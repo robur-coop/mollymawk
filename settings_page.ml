@@ -1,4 +1,4 @@
-let settings_layout ~(configuration : Configuration.t) =
+let settings_layout (configuration : Configuration.t) =
   let ip = Ipaddr.to_string configuration.server_ip in
   let port = string_of_int configuration.server_port in
   let certificate =

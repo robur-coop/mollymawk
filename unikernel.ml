@@ -543,7 +543,7 @@ struct
                   (reply ~content_type:"text/html"
                      (Dashboard.dashboard_layout
                         ~page_title:"Settings | Mollymawk"
-                        ~content:(Settings_page.settings_layout ~configuration)
+                        ~content:(Settings_page.settings_layout configuration)
                         ~icon:"/images/robur.png" ())))
               reqd
         | "/api/admin/settings/update" -> (
