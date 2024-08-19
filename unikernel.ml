@@ -10,64 +10,16 @@ let err_to_exit pp = function
       Logs.err (fun m -> m "received error %a" pp e);
       exit Mirage_runtime.argument_error
 
-module K = struct
-  open Cmdliner
-
-  let albatross_server =
-    let doc = Arg.info ~doc:"albatross server IP" [ "albatross-server" ] in
-    Arg.(
-      value
-      & opt Mirage_runtime_network.Arg.ip_address
-          (Ipaddr.of_string_exn "192.168.1.3")
-          doc)
-
-  let port =
-    let doc = Arg.info ~doc:"server port" [ "port" ] in
-    Arg.(value & opt int 1025 doc)
-end
-
 module Main
     (R : Mirage_random.S)
     (P : Mirage_clock.PCLOCK)
     (M : Mirage_clock.MCLOCK)
     (T : Mirage_time.S)
     (S : Tcpip.Stack.V4V6)
-    (KV : Mirage_kv.RO)
     (KV_ASSETS : Mirage_kv.RO)
     (BLOCK : Mirage_block.S) =
 struct
   module Paf = Paf_mirage.Make (S.TCP)
-
-  let retrieve_credentials data =
-    ( KV.get data (Mirage_kv.Key.v "key.pem") >|= err_to_exit KV.pp_error
-    >|= fun key ->
-      err_to_exit pp_msg (X509.Private_key.decode_pem (Cstruct.of_string key))
-    )
-    >>= fun key ->
-    ( KV.get data (Mirage_kv.Key.v "cert.pem") >|= err_to_exit KV.pp_error
-    >|= fun cert ->
-      err_to_exit pp_msg
-        (X509.Certificate.decode_pem_multiple (Cstruct.of_string cert)) )
-    >|= fun certs ->
-    let cert =
-      match certs with
-      | hd :: [] -> hd
-      | [] ->
-          Logs.err (fun m -> m "no certificate found");
-          exit Mirage_runtime.argument_error
-      | _ ->
-          Logs.err (fun m -> m "multiple certificates found");
-          exit Mirage_runtime.argument_error
-    in
-    if
-      not
-        (Cstruct.equal
-           (X509.Public_key.fingerprint (X509.Certificate.public_key cert))
-           (X509.Public_key.fingerprint (X509.Private_key.public key)))
-    then (
-      Logs.err (fun m -> m "certificate and private key do not match");
-      exit Mirage_runtime.argument_error);
-    (key, cert)
 
   let js_contents assets =
     KV_ASSETS.get assets (Mirage_kv.Key.v "main.js") >|= function
@@ -140,7 +92,7 @@ struct
     in
     go (Map.empty, []) m
 
-  let request_handler albatross js_file css_file imgs html store
+  let request_handler stack albatross js_file css_file imgs html store
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let reply ?(content_type = "text/plain") ?(header_list = []) data =
@@ -171,23 +123,23 @@ struct
                  (Index.index_page ~icon:"/images/robur.png"))
         | "/unikernel-info" -> (
             (* TODO: middleware, extract domain from middleware *)
-            Albatross.query albatross ~domain:"robur"
+            Albatross.query !albatross ~domain:"robur"
               (`Unikernel_cmd `Unikernel_info)
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
-            | Ok (Some (hdr, res)) -> reply_json (Albatross_json.res res))
+            | Ok (Some (_hdr, res)) -> reply_json (Albatross_json.res res))
         | path
           when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
           -> (
             (* TODO: middleware, extract domain from middleware *)
             let unikernel_name = String.sub path 16 (String.length path - 16) in
-            Albatross.query albatross (`Unikernel_cmd `Unikernel_info)
+            Albatross.query !albatross (`Unikernel_cmd `Unikernel_info)
               ~domain:"robur" ~name:unikernel_name
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
-            | Ok (Some (hdr, res)) -> reply_json (Albatross_json.res res))
+            | Ok (Some (_hdr, res)) -> reply_json (Albatross_json.res res))
         | "/main.js" -> Lwt.return (reply ~content_type:"text/plain" js_file)
         | "/images/molly_bird.jpeg" ->
             Lwt.return (reply ~content_type:"image/jpeg" imgs.molly_img)
@@ -538,7 +490,7 @@ struct
               (fun _reqd ->
                 match Middleware.user_of_cookie users now reqd with
                 | Ok user ->
-                    (Albatross.query albatross
+                    (Albatross.query !albatross
                        ~domain:user.name (* TODO use uuid in the future *)
                        (`Unikernel_cmd `Unikernel_info)
                      >|= function
@@ -547,7 +499,8 @@ struct
                              m "error while communicating with albatross");
                          []
                      | Ok None -> []
-                     | Ok (Some (hdr, `Success (`Unikernel_info unikernels))) ->
+                     | Ok (Some (_hdr, `Success (`Unikernel_info unikernels)))
+                       ->
                          unikernels
                      | Ok (Some reply) ->
                          Logs.err (fun m ->
@@ -572,6 +525,87 @@ struct
             Lwt.return
               (reply ~content_type:"application/json"
                  (Yojson.Basic.to_string (Storage.t_to_json t)))
+        | "/admin/settings" ->
+            let now = Ptime.v (P.now_d_ps ()) in
+            let _, (t : Storage.t) = !store in
+            let users = User_model.create_user_session_map t.users in
+            let configuration = t.configuration in
+            let middlewares =
+              [
+                (* Middleware.email_verified_middleware now users;*)
+                Middleware.auth_middleware now users;
+              ]
+              (*TODO: a middleware for admins*)
+            in
+            Middleware.apply_middleware middlewares
+              (fun _reqd ->
+                Lwt.return
+                  (reply ~content_type:"text/html"
+                     (Dashboard.dashboard_layout
+                        ~page_title:"Settings | Mollymawk"
+                        ~content:(Settings_page.settings_layout configuration)
+                        ~icon:"/images/robur.png" ())))
+              reqd
+        | "/api/admin/settings/update" -> (
+            let request = Httpaf.Reqd.request reqd in
+            let now = Ptime.v (P.now_d_ps ()) in
+            match request.meth with
+            | `POST -> (
+                decode_request_body reqd >>= fun data ->
+                let json =
+                  try Ok (Yojson.Basic.from_string data)
+                  with Yojson.Json_error s -> Error (`Msg s)
+                in
+                match json with
+                | Error (`Msg s) ->
+                    Logs.warn (fun m -> m "Failed to parse JSON: %s" s);
+                    let res =
+                      "{\"status\": 403, \"success\": false, \"message\": \""
+                      ^ String.escaped s ^ "\"}"
+                    in
+                    Lwt.return (reply ~content_type:"application/json" res)
+                | Ok json -> (
+                    match Configuration.of_json_from_http json now with
+                    | Ok configuration_settings -> (
+                        Store.update_configuration !store configuration_settings
+                        >>= function
+                        | Ok store' ->
+                            store := store';
+                            Albatross.init stack
+                              configuration_settings.server_ip
+                              ~port:configuration_settings.server_port
+                              configuration_settings.certificate
+                              configuration_settings.private_key
+                            >>= fun new_albatross ->
+                            albatross := new_albatross;
+
+                            let res =
+                              "{\"status\": 200, \"success\": true, \
+                               \"message\": \" Configuration updated \
+                               successfully\"}"
+                            in
+                            Lwt.return
+                              (reply ~content_type:"application/json" res)
+                        | Error (`Msg err) ->
+                            let res =
+                              "{\"status\": 403, \"success\": false, \
+                               \"message\": \"" ^ String.escaped err ^ "\"}"
+                            in
+                            Lwt.return
+                              (reply ~content_type:"application/json" res))
+                    | Error (`Msg err) ->
+                        let res =
+                          "{\"status\": 403, \"success\": false, \"message\": \
+                           \"" ^ String.escaped err ^ "\"}"
+                        in
+                        Lwt.return (reply ~content_type:"application/json" res))
+                )
+            | _ ->
+                let res =
+                  "{\"status\": 400, \"success\": false, \"message\": \"Bad \
+                   request method\"}"
+                in
+                Lwt.return (reply ~content_type:"application/json" res))
         | "/unikernel/create" ->
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
@@ -586,25 +620,25 @@ struct
           -> (
             let unikernel_name = String.sub path 20 (String.length path - 20) in
             (* TODO: middleware, extract domain from middleware *)
-            Albatross.query albatross ~domain:"robur"
+            Albatross.query !albatross ~domain:"robur"
               (`Unikernel_cmd `Unikernel_destroy) ~name:unikernel_name
             >|= function
             | Error () -> reply "error while querying albatross"
             | Ok None -> reply "got none"
-            | Ok (Some (hdr, res)) -> reply_json (Albatross_json.res res))
+            | Ok (Some (_hdr, res)) -> reply_json (Albatross_json.res res))
         | path
           when String.(
                  length path >= 19 && sub path 0 19 = "/unikernel/console/") ->
             let unikernel_name = String.sub path 19 (String.length path - 19) in
             (* TODO: middleware, extract domain from middleware *)
-            ( Albatross.query ~domain:"robur" albatross
+            ( Albatross.query ~domain:"robur" !albatross
                 (`Console_cmd (`Console_subscribe (`Count 10)))
                 ~name:unikernel_name
             >|= fun _ -> () )
             >>= fun () ->
             let data =
               Option.value ~default:[]
-                (Map.find_opt unikernel_name albatross.Albatross.console_output)
+                (Map.find_opt unikernel_name !albatross.Albatross.console_output)
             in
             reply_json (`List data);
             Lwt.return_unit
@@ -657,7 +691,7 @@ struct
                               { cfg with image = Cstruct.of_string binary }
                             in
                             (* TODO: middleware, extract domain from middleware *)
-                            Albatross.query albatross ~domain:"robur" ~name
+                            Albatross.query !albatross ~domain:"robur" ~name
                               (`Unikernel_cmd (`Unikernel_create config))
                             >|= function
                             | Error () ->
@@ -667,7 +701,7 @@ struct
                             | Ok None ->
                                 Logs.warn (fun m -> m "got none");
                                 reply "got none"
-                            | Ok (Some (hdr, res)) ->
+                            | Ok (Some (_hdr, res)) ->
                                 reply_json (Albatross_json.res res))
                         | Error (`Msg msg) ->
                             Logs.warn (fun m -> m "couldn't decode data %s" msg);
@@ -694,24 +728,27 @@ struct
           Fmt.(option ~none:(any "unknown") Httpaf.Request.pp_hum)
           request)
 
-  let start _ _ _ _ stack data assets storage host port =
+  let start _ _ _ _ stack assets storage =
     js_contents assets >>= fun js_file ->
     css_contents assets >>= fun css_file ->
     images assets >>= fun imgs ->
     create_html_form assets >>= fun html ->
-    retrieve_credentials data >>= fun (key, cert) ->
     Store.Stored_data.connect storage >>= fun stored_data ->
     Store.read_data stored_data >>= function
     | Error (`Msg msg) -> failwith msg
     | Ok data ->
         let store = ref data in
-        Albatross.init stack host ~port cert key >>= fun albatross ->
+        let c = (snd data).Storage.configuration in
+        Albatross.init stack c.Configuration.server_ip ~port:c.server_port
+          c.certificate c.private_key
+        >>= fun albatross ->
+        let albatross = ref albatross in
         let port = 8080 in
         Logs.info (fun m ->
             m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
               port);
         let request_handler _flow =
-          request_handler albatross js_file css_file imgs html store
+          request_handler stack albatross js_file css_file imgs html store
         in
         Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
         let http = Paf.http_service ~error_handler request_handler in

@@ -1,13 +1,33 @@
 open Tyxml
 
-let dashboard_layout ~icon
-    ?(message =
-      "To start deploying unikernels you'll need to add a payment method.")
-    ~content () =
+let display_banner message =
+  if message != "" then
+    Tyxml_html.(
+      section
+        ~a:
+          [
+            a_class
+              [
+                "w-full bg-primary-200 py-4 text-center text-gray-200 border \
+                 border-primary-400 font-semibold flex justify-center px-5 \
+                 space-x-5";
+              ];
+            a_id "banner-message";
+          ]
+        [
+          p [ txt message ];
+          button
+            ~a:[ a_id "close-banner-btn"; a_onclick "closeBanner()" ]
+            [ i ~a:[ a_class [ "fa-solid fa-x text-sm" ] ] [] ];
+        ])
+  else Tyxml_html.div []
+
+let dashboard_layout ~icon ?(page_title = "Dashboard | Mollymawk")
+    ?(message = "") ~content () =
   let page =
     Html.(
       html
-        (Header_layout.header ~page_title:"Dashboard | Mollymawk" ~icon ())
+        (Header_layout.header ~page_title ~icon ())
         (body
            [
              section
@@ -190,17 +210,7 @@ let dashboard_layout ~icon
                        ];
                    ];
                ];
-             section
-               ~a:
-                 [
-                   a_class
-                     [
-                       "w-full bg-primary-200 py-4 text-center text-gray-900 \
-                        border border-primary-400 font-semibold";
-                     ];
-                   a_id "banner-message";
-                 ]
-               [ p [ txt message ] ];
+             display_banner message;
              section
                ~a:[ a_class [ "grid grid-cols-12 bg-gray-100 min-h-screen" ] ]
                [
@@ -509,98 +519,41 @@ let dashboard_layout ~icon
                                [];
                              span [ txt "Marketplace" ];
                            ];
+                         hr ~a:[ a_class [ "my-4" ] ] ();
+                         a
+                           ~a:
+                             [
+                               a_href "/admin/settings";
+                               a_class
+                                 [
+                                   "hover:bg-gray-200 hover:text-primary-400 \
+                                    font-semibold hover:font-bold \
+                                    cursor-pointer rounded p-2 w-full flex \
+                                    items-center space-x-1";
+                                 ];
+                             ]
+                           [
+                             i
+                               ~a:
+                                 [
+                                   a_class
+                                     [
+                                       "fa-solid fa-gears text-primary-500 \
+                                        text-sm";
+                                     ];
+                                 ]
+                               [];
+                             span [ txt "Settings" ];
+                           ];
                        ];
                    ];
                  section
                    ~a:
                      [
                        a_class
-                         [ "col-span-7 px-4 py-6 bg-gray-50 shadow-md my-6" ];
+                         [ "col-span-10 px-4 py-6 bg-gray-50 shadow-md my-6" ];
                      ]
                    [ content ];
-                 section
-                   ~a:[ a_class [ "col-span-3 px-4 py-6" ] ]
-                   [
-                     div
-                       ~a:
-                         [
-                           a_class
-                             [
-                               "bg-primary-200 px-4 py-5 rounded-md shadow-md \
-                                text-gray-900 text-sm";
-                             ];
-                           a_id "alert-message";
-                         ]
-                       [
-                         span
-                           ~a:[ a_class [ "font-bold" ] ]
-                           [ txt "A success alert could be here" ];
-                       ];
-                     div
-                       ~a:
-                         [
-                           a_class
-                             [
-                               "bg-secondary-200 px-4 py-5 rounded-md \
-                                shadow-md text-gray-900 text-sm";
-                             ];
-                           a_id "alert-message";
-                         ]
-                       [
-                         span
-                           ~a:[ a_class [ "font-bold" ] ]
-                           [ txt "An error alert could be here" ];
-                       ];
-                     div
-                       ~a:
-                         [
-                           a_class
-                             [
-                               "bg-gray-50 px-4 py-5 rounded-md shadow-md \
-                                text-gray-500 text-sm mt-10";
-                             ];
-                         ]
-                       [
-                         div
-                           ~a:[ a_class [ "mb-4" ] ]
-                           [
-                             span
-                               ~a:[ a_class [ "font-bold mb-4" ] ]
-                               [ txt "Credits" ];
-                             p
-                               ~a:[ a_class [ "text-3xl font-semibold" ] ]
-                               [ txt "€0.00" ];
-                           ];
-                         hr ();
-                         div
-                           ~a:[ a_class [ "mb-4" ] ]
-                           [
-                             span
-                               ~a:[ a_class [ "font-semibold mb-4 text-sm" ] ]
-                               [ txt "Current month so far" ];
-                             p
-                               ~a:
-                                 [
-                                   a_class [ "font-semibold text-primary-400" ];
-                                 ]
-                               [ txt "-" ];
-                           ];
-                         hr ();
-                         div
-                           ~a:[ a_class [ "mb-4" ] ]
-                           [
-                             span
-                               ~a:[ a_class [ "font-semibold mb-4 text-sm" ] ]
-                               [ txt "Last invoice" ];
-                             p
-                               ~a:
-                                 [
-                                   a_class [ "font-semibold text-primary-400" ];
-                                 ]
-                               [ txt "-" ];
-                           ];
-                       ];
-                   ];
                ];
              Footer_layout.footer;
            ]))

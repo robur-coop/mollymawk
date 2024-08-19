@@ -1,6 +1,5 @@
 open Mirage
 
-let data = crunch "keys"
 let assets = crunch "assets"
 
 let mollymawk =
@@ -22,15 +21,10 @@ let mollymawk =
       package "oneffs";
       package "duration";
     ]
-  and runtime_args =
-    [
-      runtime_arg ~pos:__POS__ "Unikernel.K.albatross_server";
-      runtime_arg ~pos:__POS__ "Unikernel.K.port";
-    ]
   in
-  main ~runtime_args ~packages "Unikernel.Main"
-    (random @-> pclock @-> mclock @-> time @-> stackv4v6 @-> kv_ro @-> kv_ro
-   @-> block @-> job)
+  main ~packages "Unikernel.Main"
+    (random @-> pclock @-> mclock @-> time @-> stackv4v6 @-> kv_ro @-> block
+   @-> job)
 
 let block = block_of_file "data"
 
@@ -40,5 +34,5 @@ let () =
       mollymawk $ default_random $ default_posix_clock $ default_monotonic_clock
       $ default_time
       $ generic_stackv4v6 default_network
-      $ data $ assets $ block;
+      $ assets $ block;
     ]

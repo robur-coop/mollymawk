@@ -105,7 +105,7 @@ let user_of_cookie users now reqd =
 
 let auth_middleware now users handler reqd =
   match user_of_cookie users now reqd with
-  | Ok user -> handler reqd
+  | Ok _user -> handler reqd
   | Error (`Msg msg) ->
       Logs.err (fun m ->
           m "auth-middleware: No molly-session in cookie header.");
