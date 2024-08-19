@@ -10,6 +10,15 @@ module Json = struct
 
   let get key assoc =
     Option.map snd (List.find_opt (fun (k, _) -> String.equal k key) assoc)
+
+  let mask_text text max_length =
+    let length = String.length text in
+    if length <= max_length then text
+    else
+      let prefix = String.sub text 0 max_length in
+      let num_asterisks = length - max_length in
+      let asterisks = String.make num_asterisks '*' in
+      prefix ^ asterisks
 end
 
 module TimeHelper = struct
