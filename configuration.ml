@@ -7,6 +7,8 @@ type t = {
   private_key : X509.Private_key.t;
   server_ip : Ipaddr.t;
   server_port : int;
+  version : int;
+  updated_at : Ptime.t;
 }
 
 (* this is here to avoid the need for option *)
@@ -31,6 +33,8 @@ let empty () =
     private_key = key;
     server_ip = Ipaddr.(V4 V4.any);
     server_port = 1025;
+    version = 1;
+    updated_at = Ptime.epoch;
   }
 
 let to_json t =
@@ -45,9 +49,11 @@ let to_json t =
       );
       ("server_ip", `String (Ipaddr.to_string t.server_ip));
       ("server_port", `Int t.server_port);
+      ("updated_at", `String (Utils.TimeHelper.string_of_ptime t.updated_at));
     ]
 
-let of_json = function
+let of_json json now =
+  match json with
   | `Assoc xs -> (
       match get "version" xs with
       | None -> Error (`Msg "configuration: couldn't find a version")
@@ -82,7 +88,16 @@ let of_json = function
                   else Ok ()
                 in
                 let* server_ip = Ipaddr.of_string server_ip in
-                Ok { certificate; private_key; server_ip; server_port }
+
+                Ok
+                  {
+                    certificate;
+                    private_key;
+                    server_ip;
+                    server_port;
+                    version = v;
+                    updated_at = now;
+                  }
             | _ ->
                 Error
                   (`Msg
