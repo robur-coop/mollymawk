@@ -385,12 +385,7 @@ let settings_layout (configuration : Configuration.t) =
                                            font-medium text-gray-800";
                                         ];
                                     ]
-                                  [
-                                    txt
-                                      (Utils.Json.mask_text
-                                         (String.sub certificate 10 30)
-                                         10);
-                                  ];
+                                  [ txt (String.sub certificate 10 30 ^ "...") ];
                                 td
                                   ~a:
                                     [
@@ -400,12 +395,7 @@ let settings_layout (configuration : Configuration.t) =
                                            font-medium text-gray-800";
                                         ];
                                     ]
-                                  [
-                                    txt
-                                      (Utils.Json.mask_text
-                                         (String.sub private_key 10 30)
-                                         10);
-                                  ];
+                                  [ txt (String.sub private_key 10 30 ^ "...") ];
                                 td
                                   ~a:
                                     [
