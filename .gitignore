@@ -9,6 +9,5 @@ dune.build
 dune.config
 Makefile
 mirage
-keys
 *.swp
 data

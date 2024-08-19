@@ -4,8 +4,8 @@
 - TODO shutdown and restart of a unikernel
 - TODO deploy/create a new unikernel
 
-- TODO store configuration data on block device (PR pending)
-- TODO have an HTTP endpoint for editing / uploading the configuration
+- [x] store configuration data on block device (PR pending)
+- [x] have an HTTP endpoint for editing / uploading the configuration
 
 - TODO we should remove all unauthenticated endpoints (comment out)
 
