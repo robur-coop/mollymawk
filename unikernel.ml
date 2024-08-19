@@ -565,7 +565,7 @@ struct
                     in
                     Lwt.return (reply ~content_type:"application/json" res)
                 | Ok json -> (
-                    match Configuration.of_json json now with
+                    match Configuration.of_json_from_http json now with
                     | Ok configuration_settings -> (
                         Store.update_configuration !store configuration_settings
                         >>= function
@@ -734,7 +734,7 @@ struct
     images assets >>= fun imgs ->
     create_html_form assets >>= fun html ->
     Store.Stored_data.connect storage >>= fun stored_data ->
-    Store.read_data (Ptime.v (P.now_d_ps ())) stored_data >>= function
+    Store.read_data stored_data >>= function
     | Error (`Msg msg) -> failwith msg
     | Ok data ->
         let store = ref data in
@@ -747,10 +747,6 @@ struct
         Logs.info (fun m ->
             m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
               port);
-        (* TODO we need a web thingy to edit and upload the albatross configuration:
-           ip address, port, certificate, private_key
-           and once updated, we need to (a) dump to the disk (b) update the "albatross" value (and call Albatross.init key)
-        *)
         let request_handler _flow =
           request_handler stack albatross js_file css_file imgs html store
         in

@@ -7,7 +7,6 @@ let settings_layout (configuration : Configuration.t) =
   let private_key =
     Cstruct.to_string (X509.Private_key.encode_pem configuration.private_key)
   in
-  let version = string_of_int configuration.version in
   let last_update = Utils.TimeHelper.string_of_ptime configuration.updated_at in
   Tyxml_html.(
     section
@@ -28,7 +27,7 @@ let settings_layout (configuration : Configuration.t) =
                 button
                   ~a:
                     [
-                      a_onclick "openConfigForm('','','','','')";
+                      a_onclick "openConfigForm('','','','')";
                       a_class
                         [
                           "inline-flex items-center gap-x-2 text-sm \
@@ -54,43 +53,6 @@ let settings_layout (configuration : Configuration.t) =
             ]
           [
             p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
-            div
-              ~a:[ a_class [ "bg-gray-50 px-4 pb-4 pt-5 sm:p-6 sm:pb-4 my-4" ] ]
-              [
-                div
-                  [
-                    label
-                      ~a:
-                        [
-                          a_class [ "block text-sm font-medium" ];
-                          a_label_for "version";
-                        ]
-                      [ txt "Version*" ];
-                    input
-                      ~a:
-                        [
-                          a_autocomplete `Off;
-                          a_input_type `Number;
-                          a_name "config-version";
-                          a_id "config-version";
-                          a_class
-                            [
-                              "ring-primary-100 mt-1.5 transition \
-                               appearance-none block w-full px-3 py-3 \
-                               rounded-xl shadow-sm border \
-                               hover:border-primary-200\n\
-                              \                                           \
-                               focus:border-primary-300 bg-primary-50 \
-                               bg-opacity-0 hover:bg-opacity-50 \
-                               focus:bg-opacity-50 ring-primary-200 \
-                               focus:ring-primary-200\n\
-                              \                                           \
-                               focus:ring-[1px] focus:outline-none";
-                            ];
-                        ]
-                      ();
-                  ];
-              ];
             div
               ~a:[ a_class [ "bg-gray-50 px-4 pb-4 pt-5 sm:p-6 sm:pb-4 my-4" ] ]
               [
@@ -294,17 +256,6 @@ let settings_layout (configuration : Configuration.t) =
                                                 uppercase";
                                              ];
                                          ]
-                                       [ txt "Version" ];
-                                     th
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase";
-                                             ];
-                                         ]
                                        [ txt "Certificate" ];
                                      th
                                        ~a:
@@ -375,16 +326,6 @@ let settings_layout (configuration : Configuration.t) =
                                            font-medium text-gray-800";
                                         ];
                                     ]
-                                  [ txt version ];
-                                td
-                                  ~a:
-                                    [
-                                      a_class
-                                        [
-                                          "px-6 py-4 whitespace-nowrap text-sm \
-                                           font-medium text-gray-800";
-                                        ];
-                                    ]
                                   [ txt (String.sub certificate 10 30 ^ "...") ];
                                 td
                                   ~a:
@@ -440,8 +381,7 @@ let settings_layout (configuration : Configuration.t) =
                                       ~a:
                                         [
                                           a_onclick
-                                            ("openConfigForm('" ^ version
-                                           ^ "','" ^ ip ^ "','" ^ port ^ "','"
+                                            ("openConfigForm('" ^ ip ^ "','" ^ port ^ "','"
                                            ^ String.escaped certificate ^ "','"
                                            ^ String.escaped private_key ^ "')");
                                           a_class

@@ -16,7 +16,7 @@ let t_to_json t =
       ("configuration", Configuration.to_json t.configuration);
     ]
 
-let t_of_json now json =
+let t_of_json json =
   match json with
   | `Assoc xs -> (
       let ( let* ) = Result.bind in
@@ -38,7 +38,7 @@ let t_of_json now json =
                 Ok (user :: acc))
               (Ok []) users
           in
-          let* configuration = Configuration.of_json configuration now in
+          let* configuration = Configuration.of_json configuration in
           Ok { version = v; users; configuration }
       | _ -> Error (`Msg "invalid data: no version and users field"))
   | _ -> Error (`Msg "invalid data: not an assoc")
@@ -55,7 +55,7 @@ module Make (BLOCK : Mirage_block.S) = struct
   let write_data (disk, t) =
     Stored_data.write disk (Yojson.Basic.to_string (t_to_json t))
 
-  let read_data now disk =
+  let read_data disk =
     Stored_data.read disk >|= function
     | Ok (Some s) ->
         let ( let* ) = Result.bind in
@@ -63,7 +63,7 @@ module Make (BLOCK : Mirage_block.S) = struct
           try Ok (Yojson.Basic.from_string s)
           with Yojson.Json_error msg -> Error (`Msg ("Invalid json: " ^ msg))
         in
-        let* t = t_of_json now json in
+        let* t = t_of_json json in
         Ok (disk, t)
     | Ok None ->
         Ok

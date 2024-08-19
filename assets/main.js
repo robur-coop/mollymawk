@@ -17,17 +17,15 @@ function filterUnikernels() {
 	}
 }
 
-function openConfigForm(version, ip, port, certificate, p_key) {
+function openConfigForm(ip, port, certificate, p_key) {
 	const formSection = document.getElementById("config-form");
 	const configSection = document.getElementById("config-body");
-	const versionInput = document.getElementById("config-version");
 	const ipInput = document.getElementById("server-ip");
 	const portInput = document.getElementById("server-port");
 	const certificateInput = document.getElementById("certificate");
 	const pkeyInput = document.getElementById("private-key");
 	const configBtn = document.getElementById("config-button");
 	const addConfigBtn = document.getElementById("add-config")
-	versionInput.value = version;
 	ipInput.value = ip;
 	portInput.value = port;
 	certificateInput.value = certificate;
@@ -46,7 +44,6 @@ function openConfigForm(version, ip, port, certificate, p_key) {
 
 async function saveConfig() {
 
-	const version = document.getElementById("config-version").value;
 	const ipInput = document.getElementById("server-ip").value;
 	const portInput = document.getElementById("server-port").value;
 	const certificateInput = document.getElementById("certificate").value;
@@ -66,7 +63,7 @@ async function saveConfig() {
 				headers: {
 					"Content-Type": "application/json",
 				},
-				body: JSON.stringify({ "version": Number(version), "server_ip": ipInput, "server_port": Number(portInput), "certificate": certificateInput, "private_key": pkeyInput })
+				body: JSON.stringify({ "server_ip": ipInput, "server_port": Number(portInput), "certificate": certificateInput, "private_key": pkeyInput })
 			})
 			const data = await response.json();
 			if (data.status === 200) {
