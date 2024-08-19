@@ -381,7 +381,8 @@ let settings_layout (configuration : Configuration.t) =
                                       ~a:
                                         [
                                           a_onclick
-                                            ("openConfigForm('" ^ ip ^ "','" ^ port ^ "','"
+                                            ("openConfigForm('" ^ ip ^ "','"
+                                           ^ port ^ "','"
                                            ^ String.escaped certificate ^ "','"
                                            ^ String.escaped private_key ^ "')");
                                           a_class
