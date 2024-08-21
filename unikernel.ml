@@ -521,9 +521,9 @@ struct
                     assert false)
               reqd
         | "/admin/users" ->
-let now = Ptime.v (P.now_d_ps ()) in
+            let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
-let users = User_model.create_user_session_map t.users in
+            let users = User_model.create_user_session_map t.users in
             let middlewares =
               [
                 (* Middleware.email_verified_middleware now users;*)
@@ -533,9 +533,9 @@ let users = User_model.create_user_session_map t.users in
             in
             Middleware.apply_middleware middlewares
               (fun _reqd ->
-            Lwt.return
-              (reply ~content_type:"text/html"
-                 (Dashboard.dashboard_layout ~page_title:"Users | Mollymawk"
+                Lwt.return
+                  (reply ~content_type:"text/html"
+                     (Dashboard.dashboard_layout ~page_title:"Users | Mollymawk"
                         ~content:(Users_index.users_index_layout t.users now)
                         ~icon:"/images/robur.png" ())))
               reqd
@@ -562,70 +562,71 @@ let users = User_model.create_user_session_map t.users in
               reqd
         | "/api/admin/settings/update" -> (
             let request = Httpaf.Reqd.request reqd in
-            let now = Ptime.v (P.now_d_ps ()) in
             match request.meth with
-            | `POST -> (
-              let now = Ptime.v (P.now_d_ps ()) in
-              let _, (t : Storage.t) = !store in
-              let users = User_model.create_user_session_map t.users in
-              let middlewares =
-                [
-                  (* Middleware.email_verified_middleware now users;*)
-                  Middleware.auth_middleware now users;
-                ]
-                (*TODO: a middleware for admins*)
-              in
-              Middleware.apply_middleware middlewares
-              ( fun reqd ->
-                decode_request_body reqd >>= fun data ->
-                let json =
-                  try Ok (Yojson.Basic.from_string data)
-                  with Yojson.Json_error s -> Error (`Msg s)
-                in
-                match json with
-                | Error (`Msg s) ->
-                    Logs.warn (fun m -> m "Failed to parse JSON: %s" s);
-                    let res =
-                      "{\"status\": 403, \"success\": false, \"message\": \""
-                      ^ String.escaped s ^ "\"}"
-                    in
-                    Lwt.return (reply ~content_type:"application/json" res)
-                | Ok json -> (
-                    match Configuration.of_json_from_http json now with
-                    | Ok configuration_settings -> (
-                        Store.update_configuration !store configuration_settings
-                        >>= function
-                        | Ok store' ->
-                            store := store';
-                            Albatross.init stack
-                              configuration_settings.server_ip
-                              ~port:configuration_settings.server_port
-                              configuration_settings.certificate
-                              configuration_settings.private_key
-                            >>= fun new_albatross ->
-                            albatross := new_albatross;
+            | `POST ->
+                (let now = Ptime.v (P.now_d_ps ()) in
+                 let _, (t : Storage.t) = !store in
+                 let users = User_model.create_user_session_map t.users in
+                 let middlewares =
+                   [
+                     (* Middleware.email_verified_middleware now users;*)
+                     Middleware.auth_middleware now users;
+                   ]
+                   (*TODO: a middleware for admins*)
+                 in
+                 Middleware.apply_middleware middlewares (fun reqd ->
+                     decode_request_body reqd >>= fun data ->
+                     let json =
+                       try Ok (Yojson.Basic.from_string data)
+                       with Yojson.Json_error s -> Error (`Msg s)
+                     in
+                     match json with
+                     | Error (`Msg s) ->
+                         Logs.warn (fun m -> m "Failed to parse JSON: %s" s);
+                         let res =
+                           "{\"status\": 403, \"success\": false, \"message\": \
+                            \"" ^ String.escaped s ^ "\"}"
+                         in
+                         Lwt.return (reply ~content_type:"application/json" res)
+                     | Ok json -> (
+                         match Configuration.of_json_from_http json now with
+                         | Ok configuration_settings -> (
+                             Store.update_configuration !store
+                               configuration_settings
+                             >>= function
+                             | Ok store' ->
+                                 store := store';
+                                 Albatross.init stack
+                                   configuration_settings.server_ip
+                                   ~port:configuration_settings.server_port
+                                   configuration_settings.certificate
+                                   configuration_settings.private_key
+                                 >>= fun new_albatross ->
+                                 albatross := new_albatross;
 
-                            let res =
-                              "{\"status\": 200, \"success\": true, \
-                               \"message\": \" Configuration updated \
-                               successfully\"}"
-                            in
-                            Lwt.return
-                              (reply ~content_type:"application/json" res)
-                        | Error (`Msg err) ->
-                            let res =
-                              "{\"status\": 403, \"success\": false, \
-                               \"message\": \"" ^ String.escaped err ^ "\"}"
-                            in
-                            Lwt.return
-                              (reply ~content_type:"application/json" res))
-                    | Error (`Msg err) ->
-                        let res =
-                          "{\"status\": 403, \"success\": false, \"message\": \
-                           \"" ^ String.escaped err ^ "\"}"
-                        in
-                        Lwt.return (reply ~content_type:"application/json" res))
-                )) reqd
+                                 let res =
+                                   "{\"status\": 200, \"success\": true, \
+                                    \"message\": \" Configuration updated \
+                                    successfully\"}"
+                                 in
+                                 Lwt.return
+                                   (reply ~content_type:"application/json" res)
+                             | Error (`Msg err) ->
+                                 let res =
+                                   "{\"status\": 403, \"success\": false, \
+                                    \"message\": \"" ^ String.escaped err
+                                   ^ "\"}"
+                                 in
+                                 Lwt.return
+                                   (reply ~content_type:"application/json" res))
+                         | Error (`Msg err) ->
+                             let res =
+                               "{\"status\": 403, \"success\": false, \
+                                \"message\": \"" ^ String.escaped err ^ "\"}"
+                             in
+                             Lwt.return
+                               (reply ~content_type:"application/json" res))))
+                  reqd
             | _ ->
                 let res =
                   "{\"status\": 400, \"success\": false, \"message\": \"Bad \
