@@ -520,11 +520,25 @@ struct
                     Logs.err (fun m -> m "couldn't find user of cookie");
                     assert false)
               reqd
-        | "/users" ->
+        | "/admin/users" ->
+let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
+let users = User_model.create_user_session_map t.users in
+            let middlewares =
+              [
+                (* Middleware.email_verified_middleware now users;*)
+                Middleware.auth_middleware now users;
+              ]
+              (*TODO: a middleware for admins*)
+            in
+            Middleware.apply_middleware middlewares
+              (fun _reqd ->
             Lwt.return
-              (reply ~content_type:"application/json"
-                 (Yojson.Basic.to_string (Storage.t_to_json t)))
+              (reply ~content_type:"text/html"
+                 (Dashboard.dashboard_layout ~page_title:"Users | Mollymawk"
+                        ~content:(Users_index.users_index_layout t.users now)
+                        ~icon:"/images/robur.png" ())))
+              reqd
         | "/admin/settings" ->
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
