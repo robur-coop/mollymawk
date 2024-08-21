@@ -120,7 +120,8 @@ struct
         | "/" ->
             Lwt.return
               (reply ~content_type:"text/html"
-                 (Index.index_page ~icon:"/images/robur.png"))
+                 (Guest_layout.guest_layout ~page_title:"Welcome | Mollymawk"
+                    ~content:Index_page.index_page ~icon:"/images/robur.png" ()))
         | "/unikernel-info" -> (
             (* TODO: middleware, extract domain from middleware *)
             Albatross.query !albatross ~domain:"robur"
@@ -743,7 +744,12 @@ struct
               "{\"status\": 404, \"success\": false, \"message\": \"This \
                service does not exist.\"}"
             in
-            Lwt.return (reply ~content_type:"application/json" res))
+            Lwt.return (reply ~content_type:"text/html"
+                     (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
+                        ~content:
+                          (Error_page.error_layout
+                             { error with data = error.data ^ "\n" ^ msg })
+                        ~icon:"/images/robur.png" ()))))
 
   let pp_error ppf = function
     | #Httpaf.Status.t as code -> Httpaf.Status.pp_hum ppf code
