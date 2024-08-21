@@ -1,7 +1,7 @@
 let unikernel_index_layout unikernels current_time =
   Tyxml_html.(
     section
-      ~a:[ a_class [ "col-span-7 px-4 py-6 bg-gray-50 my-6" ] ]
+      ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
       [
         div
           ~a:[ a_class [ "px-3 flex justify-between items-center" ] ]
@@ -22,7 +22,7 @@ let unikernel_index_layout unikernels current_time =
                 input
                   ~a:
                     [
-                      a_onkeyup "filterUnikernels()";
+                      a_onkeyup "filterData()";
                       a_placeholder "search";
                       a_id "searchQuery";
                       a_name "searchQuery";
@@ -53,7 +53,7 @@ let unikernel_index_layout unikernels current_time =
                         table
                           ~a:
                             [
-                              a_id "unikernel-table";
+                              a_id "data-table";
                               a_class
                                 [
                                   "table-auto min-w-full divide-y \
