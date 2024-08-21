@@ -551,6 +551,18 @@ struct
             let now = Ptime.v (P.now_d_ps ()) in
             match request.meth with
             | `POST -> (
+              let now = Ptime.v (P.now_d_ps ()) in
+              let _, (t : Storage.t) = !store in
+              let users = User_model.create_user_session_map t.users in
+              let middlewares =
+                [
+                  (* Middleware.email_verified_middleware now users;*)
+                  Middleware.auth_middleware now users;
+                ]
+                (*TODO: a middleware for admins*)
+              in
+              Middleware.apply_middleware middlewares
+              ( fun reqd ->
                 decode_request_body reqd >>= fun data ->
                 let json =
                   try Ok (Yojson.Basic.from_string data)
@@ -599,7 +611,7 @@ struct
                            \"" ^ String.escaped err ^ "\"}"
                         in
                         Lwt.return (reply ~content_type:"application/json" res))
-                )
+                )) reqd
             | _ ->
                 let res =
                   "{\"status\": 400, \"success\": false, \"message\": \"Bad \
