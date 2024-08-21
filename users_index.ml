@@ -1,4 +1,4 @@
-let unikernel_index_layout unikernels current_time =
+let users_index_layout (users : User_model.user list) current_time =
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -10,12 +10,7 @@ let unikernel_index_layout unikernels current_time =
               [
                 p
                   ~a:[ a_class [ "font-bold text-gray-700" ] ]
-                  [
-                    txt
-                      ("Unikernels ("
-                      ^ string_of_int (List.length unikernels)
-                      ^ ")");
-                  ];
+                  [ txt ("Users (" ^ string_of_int (List.length users) ^ ")") ];
               ];
             div
               [
@@ -86,29 +81,7 @@ let unikernel_index_layout unikernels current_time =
                                                 uppercase";
                                              ];
                                          ]
-                                       [ txt "Type" ];
-                                     th
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase";
-                                             ];
-                                         ]
-                                       [ txt "CPU" ];
-                                     th
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase";
-                                             ];
-                                         ]
-                                       [ txt "Memory" ];
+                                       [ txt "Email" ];
                                      th
                                        ~a:
                                          [
@@ -130,15 +103,11 @@ let unikernel_index_layout unikernels current_time =
                                                 uppercase";
                                              ];
                                          ]
-                                       [ txt "Action" ];
+                                       [ txt "Last Modified" ];
                                    ];
                                ])
                           (List.map
-                             (fun (name, unikernel) ->
-                               let name =
-                                 Option.value ~default:"no name"
-                                   (Vmm_core.Name.name name)
-                               in
+                             (fun (user : User_model.user) ->
                                tr
                                  [
                                    td
@@ -147,11 +116,11 @@ let unikernel_index_layout unikernels current_time =
                                          a_class
                                            [
                                              "px-6 py-4 whitespace-nowrap \
-                                              text-sm font-medium \
+                                              text-sm font-medium uppercase \
                                               text-gray-800";
                                            ];
                                        ]
-                                     [ txt name ];
+                                     [ txt user.name ];
                                    td
                                      ~a:
                                        [
@@ -163,36 +132,35 @@ let unikernel_index_layout unikernels current_time =
                                            ];
                                        ]
                                      [
-                                       txt
-                                         (match
-                                            unikernel.Vmm_core.Unikernel.typ
-                                          with
-                                         | `Solo5 -> "solo5");
-                                     ];
-                                   td
-                                     ~a:
-                                       [
-                                         a_class
+                                       div
+                                         ~a:
                                            [
-                                             "px-6 py-4 whitespace-nowrap \
-                                              text-sm font-medium \
-                                              text-gray-800";
-                                           ];
-                                       ]
-                                     [ txt (string_of_int unikernel.cpuid) ];
-                                   td
-                                     ~a:
-                                       [
-                                         a_class
-                                           [
-                                             "px-6 py-4 whitespace-nowrap \
-                                              text-sm font-medium \
-                                              text-gray-800";
-                                           ];
-                                       ]
-                                     [
-                                       txt
-                                         (string_of_int unikernel.memory ^ " MB");
+                                             a_class
+                                               [
+                                                 "flex-col justify-start \
+                                                  space-x-1 items-center";
+                                               ];
+                                           ]
+                                         [
+                                           p [ txt user.email ];
+                                           (match user.email_verified with
+                                           | Some _ ->
+                                               i
+                                                 ~a:
+                                                   [
+                                                     a_class
+                                                       [ "text-primary-500" ];
+                                                   ]
+                                                 [ txt "verified" ]
+                                           | None ->
+                                               i
+                                                 ~a:
+                                                   [
+                                                     a_class
+                                                       [ "text-secondary-500" ];
+                                                   ]
+                                                 [ txt "not verified" ]);
+                                         ];
                                      ];
                                    td
                                      ~a:
@@ -207,7 +175,7 @@ let unikernel_index_layout unikernels current_time =
                                      [
                                        txt
                                          (Utils.TimeHelper.time_ago current_time
-                                            unikernel.started);
+                                            user.created_at);
                                      ];
                                    td
                                      ~a:
@@ -220,29 +188,12 @@ let unikernel_index_layout unikernels current_time =
                                            ];
                                        ]
                                      [
-                                       a
-                                         ~a:
-                                           [
-                                             a_href ("/unikernel/info/" ^ name);
-                                             a_class
-                                               [
-                                                 "inline-flex items-center \
-                                                  gap-x-2 text-sm \
-                                                  font-semibold rounded-lg \
-                                                  border border-1 py-1 px-2 \
-                                                  border-primary-400 \
-                                                  text-primary-600 \
-                                                  hover:text-primary-500 \
-                                                  focus:outline-none \
-                                                  focus:text-primary-800 \
-                                                  disabled:opacity-50 \
-                                                  disabled:pointer-events-none";
-                                               ];
-                                           ]
-                                         [ txt "View" ];
+                                       txt
+                                         (Utils.TimeHelper.time_ago current_time
+                                            user.updated_at);
                                      ];
                                  ])
-                             unikernels);
+                             users);
                       ];
                   ];
               ];

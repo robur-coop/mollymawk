@@ -248,7 +248,7 @@ let login_page ~icon () =
                \                        form_alert.classList.remove('hidden')\n\
                \                        \
                 form_alert.classList.add('text-secondary-500', 'block')\n\
-               \                        form_alert.textContent = data.message\n\
+               \                        form_alert.textContent = data.data\n\
                \                      }\n\
                \                    } catch (error) {\n\
                \                          form_alert.classList.remove('hidden')\n\

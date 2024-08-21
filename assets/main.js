@@ -1,8 +1,8 @@
-function filterUnikernels() {
+function filterData() {
 	var input, filter, table, tr, td, i, txtValue;
 	input = document.getElementById("searchQuery");
 	filter = input.value.toUpperCase();
-	table = document.getElementById("unikernel-table");
+	table = document.getElementById("data-table");
 	tr = table.getElementsByTagName("tr");
 	for (i = 0; i < tr.length; i++) {
 		td = tr[i].getElementsByTagName("td")[0];

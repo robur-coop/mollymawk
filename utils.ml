@@ -78,3 +78,17 @@ module Email = struct
   let generate_verification_link uuid =
     "/auth/verify/token=" ^ Uuidm.to_string uuid
 end
+
+module Status = struct
+  type t = { code : int; title : string; data : string; success : bool }
+
+  let to_json (status : t) : string =
+    `Assoc
+      [
+        ("status", `Int status.code);
+        ("title", `String status.title);
+        ("success", `Bool status.success);
+        ("data", `String status.data);
+      ]
+    |> Yojson.Safe.to_string
+end
