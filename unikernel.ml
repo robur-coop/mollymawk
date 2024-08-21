@@ -183,12 +183,19 @@ struct
                   with Yojson.Json_error s -> Error (`Msg s)
                 in
                 match json with
-                | Error (`Msg s) ->
-                    Logs.warn (fun m -> m "Failed to parse JSON: %s" s);
-                    let res =
-                      "{\"status\": 400, \"message\": \"Bad request body\"}"
+                | Error (`Msg err) ->
+                    Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
+                    let status =
+                      {
+                        Utils.Status.code = 400;
+                        title = "Error";
+                        data = String.escaped err;
+                        success = false;
+                      }
                     in
-                    Lwt.return (reply ~content_type:"application/json" res)
+                    Lwt.return
+                      (reply ~content_type:"application/json"
+                         (Utils.Status.to_json status))
                 | Ok json -> (
                     let validate_user_input ~name ~email ~password =
                       if name = "" || email = "" || password = "" then
@@ -217,12 +224,18 @@ struct
                       |> Yojson.Basic.to_string
                     in
                     match validate_user_input ~name ~email ~password with
-                    | Error s ->
-                        let res =
-                          "{\"status\": 400, \"success\": false, \"message\": \
-                           \"" ^ s ^ "\"}"
+                    | Error err ->
+                        let status =
+                          {
+                            Utils.Status.code = 400;
+                            title = "Error";
+                            data = String.escaped err;
+                            success = false;
+                          }
                         in
-                        Lwt.return (reply ~content_type:"application/json" res)
+                        Lwt.return
+                          (reply ~content_type:"application/json"
+                             (Utils.Status.to_json status))
                     | Ok _ -> (
                         let _, (s : Storage.t) = !store in
                         let users = s.users in
@@ -231,12 +244,17 @@ struct
                         in
                         match user with
                         | Some _ ->
-                            let res =
-                              "{\"status\": 400, \"message\": \"A user with \
-                               this email already exists.\"}"
+                            let status =
+                              {
+                                Utils.Status.code = 400;
+                                title = "Error";
+                                data = "A user with this email already exist.";
+                                success = false;
+                              }
                             in
                             Lwt.return
-                              (reply ~content_type:"application/json" res)
+                              (reply ~content_type:"application/json"
+                                 (Utils.Status.to_json status))
                         | None -> (
                             let created_at = Ptime.v (P.now_d_ps ()) in
                             let user =
@@ -246,12 +264,15 @@ struct
                             Store.add_user !store user >>= function
                             | Ok store' ->
                                 store := store';
-                                let res =
-                                  "{\"status\": 200, \"success\": true, \
-                                   \"message\": {\"user\": "
-                                  ^ Yojson.Basic.to_string
-                                      (User_model.user_to_json user)
-                                  ^ "}}"
+                                let status =
+                                  {
+                                    Utils.Status.code = 200;
+                                    title = "Success";
+                                    data =
+                                      Yojson.Basic.to_string
+                                        (User_model.user_to_json user);
+                                    success = true;
+                                  }
                                 in
                                 let cookie =
                                   List.find
@@ -271,22 +292,32 @@ struct
                                 in
                                 Lwt.return
                                   (reply ~header_list
-                                     ~content_type:"application/json" res)
-                            | Error (`Msg _msg) ->
-                                let res =
-                                  "{\"status\": 400, \"success\": false, \
-                                   \"message\": \"Something went wrong. Wait a \
-                                   few seconds and try again.\"}"
+                                     ~content_type:"application/json"
+                                     (Utils.Status.to_json status))
+                            | Error (`Msg err) ->
+                                let status =
+                                  {
+                                    Utils.Status.code = 400;
+                                    title = "Error";
+                                    data = String.escaped err;
+                                    success = false;
+                                  }
                                 in
                                 Lwt.return
-                                  (reply ~content_type:"application/json" res)))
-                    ))
+                                  (reply ~content_type:"application/json"
+                                     (Utils.Status.to_json status))))))
             | _ ->
-                let res =
-                  "{\"status\": 400, \"success\": false, \"message\": \"Bad \
-                   request method\"}"
+                let status =
+                  {
+                    Utils.Status.code = 400;
+                    title = "Error";
+                    data = "Bad HTTP request method";
+                    success = false;
+                  }
                 in
-                Lwt.return (reply ~content_type:"application/json" res))
+                Lwt.return
+                  (reply ~content_type:"application/json"
+                     (Utils.Status.to_json status)))
         | "/api/login" -> (
             let request = Httpaf.Reqd.request reqd in
             match request.meth with
@@ -297,12 +328,19 @@ struct
                   with Yojson.Json_error s -> Error (`Msg s)
                 in
                 match json with
-                | Error (`Msg s) ->
-                    Logs.warn (fun m -> m "Failed to parse JSON: %s" s);
-                    let res =
-                      "{\"status\": 400, \"message\": \"Bad request body\"}"
+                | Error (`Msg err) ->
+                    Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
+                    let status =
+                      {
+                        Utils.Status.code = 400;
+                        title = "Error";
+                        data = String.escaped err;
+                        success = false;
+                      }
                     in
-                    Lwt.return (reply ~content_type:"application/json" res)
+                    Lwt.return
+                      (reply ~content_type:"application/json"
+                         (Utils.Status.to_json status))
                 | Ok json -> (
                     let validate_user_input ~email ~password =
                       if email = "" || password = "" then
@@ -324,12 +362,18 @@ struct
                       |> Yojson.Basic.to_string
                     in
                     match validate_user_input ~email ~password with
-                    | Error s ->
-                        let res =
-                          "{\"status\": 400, \"success\": false, \"message\": \
-                           \"" ^ s ^ "\"}"
+                    | Error err ->
+                        let status =
+                          {
+                            Utils.Status.code = 400;
+                            title = "Error";
+                            data = String.escaped err;
+                            success = false;
+                          }
                         in
-                        Lwt.return (reply ~content_type:"application/json" res)
+                        Lwt.return
+                          (reply ~content_type:"application/json"
+                             (Utils.Status.to_json status))
                     | Ok _ -> (
                         let now = Ptime.v (P.now_d_ps ()) in
                         let _, (t : Storage.t) = !store in
@@ -338,22 +382,31 @@ struct
                           User_model.login_user ~email ~password users now
                         in
                         match login with
-                        | Error (`Msg s) ->
-                            let res =
-                              "{\"status\": 404, \"message\": \"" ^ s ^ "\"}"
+                        | Error (`Msg err) ->
+                            let status =
+                              {
+                                Utils.Status.code = 404;
+                                title = "Error";
+                                data = String.escaped err;
+                                success = false;
+                              }
                             in
                             Lwt.return
-                              (reply ~content_type:"application/json" res)
+                              (reply ~content_type:"application/json"
+                                 (Utils.Status.to_json status))
                         | Ok user -> (
                             Store.update_user !store user >>= function
                             | Ok store' -> (
                                 store := store';
-                                let res =
-                                  "{\"status\": 200, \"success\": true, \
-                                   \"message\": {\"user\": "
-                                  ^ Yojson.Basic.to_string
-                                      (User_model.user_to_json user)
-                                  ^ "}}"
+                                let status =
+                                  {
+                                    Utils.Status.code = 200;
+                                    title = "Success";
+                                    data =
+                                      Yojson.Basic.to_string
+                                        (User_model.user_to_json user);
+                                    success = true;
+                                  }
                                 in
                                 let cookie =
                                   List.find_opt
@@ -375,31 +428,46 @@ struct
                                     in
                                     Lwt.return
                                       (reply ~header_list
-                                         ~content_type:"application/json" res)
+                                         ~content_type:"application/json"
+                                         (Utils.Status.to_json status))
                                 | None ->
-                                    let res =
-                                      "{\"status\": 400, \"success\": false, \
-                                       \"message\": \"Something went wrong. \
-                                       Wait a few seconds and try again.\"}"
+                                    let status =
+                                      {
+                                        Utils.Status.code = 404;
+                                        title = "Error";
+                                        data =
+                                          "Something went wrong. Wait a few \
+                                           seconds and try again.";
+                                        success = false;
+                                      }
                                     in
                                     Lwt.return
                                       (reply ~content_type:"application/json"
-                                         res))
-                            | Error (`Msg _msg) ->
-                                let res =
-                                  "{\"status\": 400, \"success\": false, \
-                                   \"message\": \"Something went wrong. Wait a \
-                                   few seconds and try again.\"}"
+                                         (Utils.Status.to_json status)))
+                            | Error (`Msg msg) ->
+                                let status =
+                                  {
+                                    Utils.Status.code = 500;
+                                    title = "Error";
+                                    data = String.escaped msg;
+                                    success = false;
+                                  }
                                 in
                                 Lwt.return
-                                  (reply ~content_type:"application/json" res)))
-                    ))
+                                  (reply ~content_type:"application/json"
+                                     (Utils.Status.to_json status))))))
             | _ ->
-                let res =
-                  "{\"status\": 400, \"success\": false, \"message\": \"Bad \
-                   request method\"}"
+                let status =
+                  {
+                    Utils.Status.code = 400;
+                    title = "Bad request";
+                    data = "Bad HTTP request method.";
+                    success = false;
+                  }
                 in
-                Lwt.return (reply ~content_type:"application/json" res))
+                Lwt.return
+                  (reply ~content_type:"application/json"
+                     (Utils.Status.to_json status)))
         | "/verify-email" -> (
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
@@ -431,13 +499,18 @@ struct
                                  (Verify_email.verify_page ~user
                                     ~icon:"/images/robur.png" ())))
                           reqd
-                    | Error (`Msg _msg) ->
-                        let res =
-                          "{\"status\": 400, \"success\": false, \"message\": \
-                           \"Something went wrong. Wait a few seconds and try \
-                           again.\"}"
+                    | Error (`Msg msg) ->
+                        let status =
+                          {
+                            Utils.Status.code = 500;
+                            title = "Error";
+                            data = String.escaped msg;
+                            success = false;
+                          }
                         in
-                        Lwt.return (reply ~content_type:"application/json" res))
+                        Lwt.return
+                          (reply ~content_type:"application/json"
+                             (Utils.Status.to_json status)))
                 | Error (`Msg s) ->
                     Logs.err (fun m -> m "Error: verify email endpoint %s" s);
                     Middleware.redirect_to_register reqd ())
@@ -463,20 +536,31 @@ struct
                     | Ok store' ->
                         store := store';
                         Middleware.redirect_to_dashboard reqd ()
-                    | Error (`Msg _msg) ->
-                        let res =
-                          "{\"status\": 400, \"success\": false, \"message\": \
-                           \"Something went wrong. Wait a few seconds and try \
-                           again.\"}"
+                    | Error (`Msg msg) ->
+                        let status =
+                          {
+                            Utils.Status.code = 500;
+                            title = "Error";
+                            data = String.escaped msg;
+                            success = false;
+                          }
                         in
-                        Lwt.return (reply ~content_type:"application/json" res))
+                        Lwt.return
+                          (reply ~content_type:"application/json"
+                             (Utils.Status.to_json status)))
                 | Error (`Msg s) -> Middleware.redirect_to_login reqd ~msg:s ())
             | _ ->
-                let res =
-                  "{\"status\": 400, \"success\": false, \"message\": \"Bad \
-                   request method\"}"
+                let status =
+                  {
+                    Utils.Status.code = 400;
+                    title = "Error";
+                    data = "Bad HTTP request method.";
+                    success = false;
+                  }
                 in
-                Lwt.return (reply ~content_type:"application/json" res))
+                Lwt.return
+                  (reply ~content_type:"application/json"
+                     (Utils.Status.to_json status)))
         | "/dashboard" ->
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
@@ -582,13 +666,19 @@ struct
                        with Yojson.Json_error s -> Error (`Msg s)
                      in
                      match json with
-                     | Error (`Msg s) ->
-                         Logs.warn (fun m -> m "Failed to parse JSON: %s" s);
-                         let res =
-                           "{\"status\": 403, \"success\": false, \"message\": \
-                            \"" ^ String.escaped s ^ "\"}"
+                     | Error (`Msg err) ->
+                         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
+                         let status =
+                           {
+                             Utils.Status.code = 400;
+                             title = "Error";
+                             data = String.escaped err;
+                             success = false;
+                           }
                          in
-                         Lwt.return (reply ~content_type:"application/json" res)
+                         Lwt.return
+                           (reply ~content_type:"application/json"
+                              (Utils.Status.to_json status))
                      | Ok json -> (
                          match Configuration.of_json_from_http json now with
                          | Ok configuration_settings -> (
@@ -604,36 +694,56 @@ struct
                                    configuration_settings.private_key
                                  >>= fun new_albatross ->
                                  albatross := new_albatross;
-
-                                 let res =
-                                   "{\"status\": 200, \"success\": true, \
-                                    \"message\": \" Configuration updated \
-                                    successfully\"}"
+                                 let status =
+                                   {
+                                     Utils.Status.code = 200;
+                                     title = "Success";
+                                     data = "Configuration updated successfully";
+                                     success = true;
+                                   }
                                  in
                                  Lwt.return
-                                   (reply ~content_type:"application/json" res)
+                                   (reply ~content_type:"application/json"
+                                      (Utils.Status.to_json status))
                              | Error (`Msg err) ->
-                                 let res =
-                                   "{\"status\": 403, \"success\": false, \
-                                    \"message\": \"" ^ String.escaped err
-                                   ^ "\"}"
+                                 let status =
+                                   {
+                                     Utils.Status.code = 500;
+                                     title = "Error";
+                                     data = String.escaped err;
+                                     success = false;
+                                   }
                                  in
+
                                  Lwt.return
-                                   (reply ~content_type:"application/json" res))
+                                   (reply ~content_type:"application/json"
+                                      (Utils.Status.to_json status)))
                          | Error (`Msg err) ->
-                             let res =
-                               "{\"status\": 403, \"success\": false, \
-                                \"message\": \"" ^ String.escaped err ^ "\"}"
+                             let status =
+                               {
+                                 Utils.Status.code = 500;
+                                 title = "Error";
+                                 data = String.escaped err;
+                                 success = false;
+                               }
                              in
+
                              Lwt.return
-                               (reply ~content_type:"application/json" res))))
+                               (reply ~content_type:"application/json"
+                                  (Utils.Status.to_json status)))))
                   reqd
             | _ ->
-                let res =
-                  "{\"status\": 400, \"success\": false, \"message\": \"Bad \
-                   request method\"}"
+                let status =
+                  {
+                    Utils.Status.code = 400;
+                    title = "Error";
+                    data = "Bad request HTTP method";
+                    success = false;
+                  }
                 in
-                Lwt.return (reply ~content_type:"application/json" res))
+                Lwt.return
+                  (reply ~content_type:"application/json"
+                     (Utils.Status.to_json status)))
         | "/unikernel/create" ->
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
@@ -739,12 +849,28 @@ struct
                     | _ ->
                         Logs.warn (fun m -> m "couldn't find fields");
                         Lwt.return (reply "couldn't find fields"))))
-        | _ ->
-            let res =
-              "{\"status\": 404, \"success\": false, \"message\": \"This \
-               service does not exist.\"}"
+        | _ -> (
+            let now = Ptime.v (P.now_d_ps ()) in
+            let _, (t : Storage.t) = !store in
+            let users = User_model.create_user_session_map t.users in
+            let error =
+              {
+                Utils.Status.code = 404;
+                title = "Page not found";
+                success = false;
+                data = "This page cannot be found.";
+              }
             in
-            Lwt.return (reply ~content_type:"text/html"
+            match Middleware.user_of_cookie users now reqd with
+            | Ok _ ->
+                Lwt.return
+                  (reply ~content_type:"text/html"
+                     (Dashboard.dashboard_layout ~page_title:"404 | Mollymawk"
+                        ~content:(Error_page.error_layout error)
+                        ~icon:"/images/robur.png" ()))
+            | Error (`Msg msg) ->
+                Lwt.return
+                  (reply ~content_type:"text/html"
                      (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
                         ~content:
                           (Error_page.error_layout
