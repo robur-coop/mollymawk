@@ -131,14 +131,37 @@ let users_index_layout (users : User_model.user list) current_time =
                                               text-gray-800";
                                            ];
                                        ]
-                                     [ div ~a:[a_class ["flex-col justify-start space-x-1 items-center"]] [
-                                      p [txt user.email];
-                                      (match user.email_verified with
-                                      | Some _ ->
-                                        i ~a:[a_class ["text-primary-500"]] [txt "verified"]
-                                      | None ->
-                                        i ~a:[a_class ["text-secondary-500"]] [txt "not verified"])
-                                     ] ];
+                                     [
+                                       div
+                                         ~a:
+                                           [
+                                             a_class
+                                               [
+                                                 "flex-col justify-start \
+                                                  space-x-1 items-center";
+                                               ];
+                                           ]
+                                         [
+                                           p [ txt user.email ];
+                                           (match user.email_verified with
+                                           | Some _ ->
+                                               i
+                                                 ~a:
+                                                   [
+                                                     a_class
+                                                       [ "text-primary-500" ];
+                                                   ]
+                                                 [ txt "verified" ]
+                                           | None ->
+                                               i
+                                                 ~a:
+                                                   [
+                                                     a_class
+                                                       [ "text-secondary-500" ];
+                                                   ]
+                                                 [ txt "not verified" ]);
+                                         ];
+                                     ];
                                    td
                                      ~a:
                                        [
