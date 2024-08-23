@@ -88,19 +88,7 @@ let dashboard_layout ~icon ?(page_title = "Dashboard | Mollymawk")
                                         cursor-pointer hover:text-primary-500";
                                      ];
                                  ]
-                               [
-                                 i
-                                   ~a:
-                                     [
-                                       a_class
-                                         [
-                                           "fa-solid fa-grip text-primary-500 \
-                                            text-sm";
-                                         ];
-                                     ]
-                                   [];
-                                 span [ txt "Dashboard" ];
-                               ];
+                               [ span [ txt "Dashboard" ] ];
                              div
                                ~a:
                                  [
@@ -122,19 +110,7 @@ let dashboard_layout ~icon ?(page_title = "Dashboard | Mollymawk")
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [
-                                     i
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "fa-solid fa-leaf \
-                                                text-primary-500 text-sm";
-                                             ];
-                                         ]
-                                       [];
-                                     span [ txt "Documentation" ];
-                                   ];
+                                   [ span [ txt "Documentation" ] ];
                                ];
                              div
                                ~a:
@@ -157,19 +133,7 @@ let dashboard_layout ~icon ?(page_title = "Dashboard | Mollymawk")
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [
-                                     i
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "fa-solid fa-leaf \
-                                                text-primary-500 text-sm";
-                                             ];
-                                         ]
-                                       [];
-                                     span [ txt "MirageOS" ];
-                                   ];
+                                   [ span [ txt "MirageOS" ] ];
                                ];
                              div
                                ~a:
@@ -192,19 +156,7 @@ let dashboard_layout ~icon ?(page_title = "Dashboard | Mollymawk")
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [
-                                     i
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "fa-solid fa-user \
-                                                text-primary-500 text-sm";
-                                             ];
-                                         ]
-                                       [];
-                                     span [ txt "Account" ];
-                                   ];
+                                   [ span [ txt "Account" ] ];
                                ];
                            ];
                        ];

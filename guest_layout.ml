@@ -70,19 +70,7 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [
-                                     i
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "fa-solid fa-leaf \
-                                                text-primary-500 text-sm";
-                                             ];
-                                         ]
-                                       [];
-                                     span [ txt "Documentation" ];
-                                   ];
+                                   [ span [ txt "Documentation" ] ];
                                ];
                              div
                                ~a:
@@ -105,19 +93,7 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [
-                                     i
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "fa-solid fa-leaf \
-                                                text-primary-500 text-sm";
-                                             ];
-                                         ]
-                                       [];
-                                     span [ txt "MirageOS" ];
-                                   ];
+                                   [ span [ txt "MirageOS" ] ];
                                ];
                              div
                                ~a:
@@ -140,19 +116,7 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [
-                                     i
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "fa-solid fa-leaf \
-                                                text-primary-500 text-sm";
-                                             ];
-                                         ]
-                                       [];
-                                     span [ txt "Robur" ];
-                                   ];
+                                   [ span [ txt "Robur" ] ];
                                ];
                              div
                                ~a:
@@ -175,19 +139,7 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [
-                                     i
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "fa-solid fa-leaf \
-                                                text-primary-500 text-sm";
-                                             ];
-                                         ]
-                                       [];
-                                     span [ txt "Pricing" ];
-                                   ];
+                                   [ span [ txt "Pricing" ] ];
                                ];
                            ];
                          div
