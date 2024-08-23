@@ -1,3 +1,7 @@
+document.addEventListener('DOMContentLoaded', function () {
+    AOS.init();
+});
+
 function filterData() {
 	var input, filter, table, tr, td, i, txtValue;
 	input = document.getElementById("searchQuery");
