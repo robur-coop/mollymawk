@@ -79,7 +79,7 @@ let footer =
                            text-white mb-3";
                         ];
                     ]
-                  [ txt "Contact" ];
+                  [ txt "Resources" ];
                 dd
                   ~a:[ a_class [ "font-medium flex flex-col items-start" ] ]
                   [

@@ -6,6 +6,7 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
       html
         (Header_layout.header ~page_title ~icon ())
         (body
+           ~a:[ a_class [ "bg-primary-50" ] ]
            [
              section
                [
@@ -69,19 +70,7 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [
-                                     i
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "fa-solid fa-leaf \
-                                                text-primary-500 text-sm";
-                                             ];
-                                         ]
-                                       [];
-                                     span [ txt "Documentation" ];
-                                   ];
+                                   [ span [ txt "Documentation" ] ];
                                ];
                              div
                                ~a:
@@ -104,19 +93,7 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [
-                                     i
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "fa-solid fa-leaf \
-                                                text-primary-500 text-sm";
-                                             ];
-                                         ]
-                                       [];
-                                     span [ txt "MirageOS" ];
-                                   ];
+                                   [ span [ txt "MirageOS" ] ];
                                ];
                              div
                                ~a:
@@ -139,19 +116,7 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [
-                                     i
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "fa-solid fa-leaf \
-                                                text-primary-500 text-sm";
-                                             ];
-                                         ]
-                                       [];
-                                     span [ txt "Robur" ];
-                                   ];
+                                   [ span [ txt "Robur" ] ];
                                ];
                              div
                                ~a:
@@ -174,19 +139,7 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [
-                                     i
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "fa-solid fa-leaf \
-                                                text-primary-500 text-sm";
-                                             ];
-                                         ]
-                                       [];
-                                     span [ txt "Pricing" ];
-                                   ];
+                                   [ span [ txt "Pricing" ] ];
                                ];
                            ];
                          div
@@ -220,7 +173,8 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
                                      [
                                        "flex space-x-1 items-center \
                                         cursor-pointer hover:text-primary-50 \
-                                        bg-primary-500 px-3 py-2 rounded-xl";
+                                        bg-primary-500 px-3 py-2 rounded-xl \
+                                        hover:bg-primary-800";
                                      ];
                                  ]
                                [ txt "Get Started" ];
@@ -228,12 +182,7 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
                        ];
                    ];
                ];
-             section
-               ~a:
-                 [
-                   a_class [ "col-span-10 px-4 py-6 bg-gray-50 shadow-md my-6" ];
-                 ]
-               [ content ];
+             section ~a:[ a_class [ "col-span-10 px-4 py-6 my-6" ] ] [ content ];
              Footer_layout.footer;
            ]))
   in

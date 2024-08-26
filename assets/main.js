@@ -1,3 +1,7 @@
+document.addEventListener('DOMContentLoaded', function () {
+    AOS.init();
+});
+
 function filterData() {
 	var input, filter, table, tr, td, i, txtValue;
 	input = document.getElementById("searchQuery");
@@ -67,16 +71,16 @@ async function saveConfig() {
 			})
 			const data = await response.json();
 			if (data.status === 200) {
-				formAlert.classList.remove("hidden");
+				formAlert.classList.remove("hidden", "text-secondary-500");
 				formAlert.classList.add("text-primary-500");
 				formAlert.textContent = "Succesfully updated";
 				setTimeout(function() {
 					window.location.reload();
 				}, 2000);
 			} else {
-				formAlert.classList.remove("hidden");
+				formAlert.classList.remove("hidden", "text-primary-500");
 				formAlert.classList.add("text-secondary-500");
-				formAlert.textContent = data.message
+				formAlert.textContent = data.data
 			}
 		} catch (error) {
 			formAlert.classList.remove("hidden");

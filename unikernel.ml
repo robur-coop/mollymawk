@@ -1,6 +1,12 @@
 open Lwt.Infix
 
-type images = { molly_img : string; robur_img : string }
+type images = {
+  molly_img : string;
+  robur_img : string;
+  albatross_img : string;
+  mirage_img : string;
+  dashboard_img : string;
+}
 
 let pp_msg ppf (`Msg msg) = Fmt.pf ppf "%s" msg
 
@@ -39,8 +45,15 @@ struct
   let images assets =
     let molly_img = read_image assets "molly_bird.jpeg" in
     let robur_img = read_image assets "robur.png" in
-    Lwt.both molly_img robur_img >|= fun (molly, robur) ->
-    { molly_img = molly; robur_img = robur }
+    let albatross_img = read_image assets "albatross_1.png" in
+    let mirage_img = read_image assets "mirage_os_1.png" in
+    let dashboard_img = read_image assets "dashboard_1.png" in
+
+    Lwt.all [ molly_img; robur_img; albatross_img; mirage_img; dashboard_img ]
+    >|= function
+    | [ molly_img; robur_img; albatross_img; mirage_img; dashboard_img ] ->
+        { molly_img; robur_img; albatross_img; mirage_img; dashboard_img }
+    | _ -> failwith "Unexpected number of images"
 
   let create_html_form assets =
     KV_ASSETS.get assets (Mirage_kv.Key.v "create_unikernel.html") >|= function
@@ -120,7 +133,8 @@ struct
         | "/" ->
             Lwt.return
               (reply ~content_type:"text/html"
-                 (Guest_layout.guest_layout ~page_title:"Welcome | Mollymawk"
+                 (Guest_layout.guest_layout
+                    ~page_title:"Deploy unikernels with ease | Mollymawk"
                     ~content:Index_page.index_page ~icon:"/images/robur.png" ()))
         | "/unikernel-info" -> (
             (* TODO: middleware, extract domain from middleware *)
@@ -144,6 +158,12 @@ struct
         | "/main.js" -> Lwt.return (reply ~content_type:"text/plain" js_file)
         | "/images/molly_bird.jpeg" ->
             Lwt.return (reply ~content_type:"image/jpeg" imgs.molly_img)
+        | "/images/albatross_1.png" ->
+            Lwt.return (reply ~content_type:"image/png" imgs.albatross_img)
+        | "/images/dashboard_1.png" ->
+            Lwt.return (reply ~content_type:"image/png" imgs.dashboard_img)
+        | "/images/mirage_os_1.png" ->
+            Lwt.return (reply ~content_type:"image/png" imgs.mirage_img)
         | "/images/robur.png" ->
             Lwt.return (reply ~content_type:"image/png" imgs.robur_img)
         | "/style.css" -> Lwt.return (reply ~content_type:"text/css" css_file)
