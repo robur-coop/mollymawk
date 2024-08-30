@@ -861,7 +861,7 @@ struct
                     match Middleware.user_of_cookie users now reqd with
                     | Ok user -> (
                         let unikernel_name =
-                          String.sub path 20 (String.length path - 20)
+                          String.sub path 19 (String.length path - 19)
                         in
                         Albatross.query !albatross ~domain:user.name
                           (`Unikernel_cmd `Unikernel_destroy)
