@@ -99,12 +99,15 @@ function closeBanner() {
 
 function postAlert(bg_color, content) {
 	const alertContainer = document.getElementById("alert-container");
-	alertContainer.classList.add("block")
+	alertContainer.classList.remove("hidden")
+	alertContainer.classList.add("block", `${bg_color}`, "text-white", "transition", "ease-in-out", "delay-150", "duration-300")
 	const alert = document.createElement("div");
 	alert.className = `text-white transition ease-in-out delay-150 duration-300 ${bg_color}`;
 	alert.textContent = content;
 	alertContainer.appendChild(alert);
 	setTimeout(() => {
+		alertContainer.classList.remove("block", `${bg_color}`)
+		alertContainer.classList.add("hidden")
 		alertContainer.removeChild(alert);
 	}, 1600);
 }
