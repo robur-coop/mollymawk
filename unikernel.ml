@@ -872,13 +872,23 @@ struct
                                 Utils.Status.code = 200;
                                 title = "Success";
                                 data = "Got none";
-                                success = false;
+                                success = true;
                               }
                             in
                             reply ~content_type:"application/json"
                               (Utils.Status.to_json status)
                         | Ok (Some (_hdr, res)) ->
-                            reply_json (Albatross_json.res res))
+                            let status =
+                              {
+                                Utils.Status.code = 200;
+                                title = "Success";
+                                data =
+                                  Yojson.Safe.to_string (Albatross_json.res res);
+                                success = true;
+                              }
+                            in
+                            reply ~content_type:"application/json"
+                              (Utils.Status.to_json status))
                     | Error _ ->
                         Logs.err (fun m -> m "couldn't find user of cookie");
                         assert false)
@@ -951,7 +961,7 @@ struct
                         Logs.warn (fun m -> m "couldn't content-type: %s" msg);
                         let status =
                           {
-                            Utils.Status.code = 403;
+                            Utils.Status.code = 400;
                             title = "Error";
                             data = "Couldn't content-type: " ^ msg;
                             success = false;
@@ -966,7 +976,7 @@ struct
                             Logs.warn (fun m -> m "couldn't multipart: %s" msg);
                             let status =
                               {
-                                Utils.Status.code = 403;
+                                Utils.Status.code = 400;
                                 title = "Error";
                                 data = "Couldn't multipart: " ^ msg;
                                 success = false;
@@ -1043,7 +1053,7 @@ struct
                                         m "couldn't decode data %s" msg);
                                     let status =
                                       {
-                                        Utils.Status.code = 403;
+                                        Utils.Status.code = 400;
                                         title = "Error";
                                         data = msg;
                                         success = false;

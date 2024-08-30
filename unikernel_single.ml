@@ -1,5 +1,5 @@
 let unikernel_single_layout unikernel now =
-  let name, data = unikernel in
+  let u_name, data = unikernel in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-10 p-4 bg-gray-50 my-1" ] ]
@@ -15,14 +15,24 @@ let unikernel_single_layout unikernel now =
                   [
                     div
                       [
-                        h2 [ txt (Vmm_core.Name.to_string name) ];
-                        p
+                        div
+                          ~a:[ a_class [ "flex space-x-2 items-end" ] ]
                           [
-                            txt
-                              (Utils.TimeHelper.time_ago now
-                                 data.Vmm_core.Unikernel.started);
+                            h2
+                              ~a:[ a_class [ "text-xl font-bold uppercase" ] ]
+                              [ txt (Vmm_core.Name.to_string u_name) ];
+                            p
+                              ~a:[ a_class [ "text-sm" ] ]
+                              [
+                                txt
+                                  ("created "
+                                  ^ Utils.TimeHelper.time_ago now
+                                      data.Vmm_core.Unikernel.started);
+                              ];
                           ];
-                        p [ txt (Cstruct.to_string data.digest) ];
+                        p
+                          ~a:[ a_class [ "text-sm" ] ]
+                          [ txt (Cstruct.to_hex_string data.digest) ];
                       ];
                     div
                       [
@@ -31,7 +41,7 @@ let unikernel_single_layout unikernel now =
                             [
                               a_onclick
                                 ("destroyUnikernel('"
-                                ^ Vmm_core.Name.to_string name
+                                ^ Vmm_core.Name.to_string u_name
                                 ^ "')");
                               a_class
                                 [
@@ -65,7 +75,7 @@ let unikernel_single_layout unikernel now =
                             p ~a:[ a_class [ "text-md" ] ] [ txt "CPU" ];
                           ];
                         p
-                          ~a:[ a_class [ "text-md" ] ]
+                          ~a:[ a_class [ "text-3xl text-right" ] ]
                           [ txt (string_of_int data.cpuid) ];
                       ];
                     div
@@ -87,8 +97,8 @@ let unikernel_single_layout unikernel now =
                             p ~a:[ a_class [ "text-md" ] ] [ txt "Memory" ];
                           ];
                         p
-                          ~a:[ a_class [ "text-md" ] ]
-                          [ txt (string_of_int data.memory) ];
+                          ~a:[ a_class [ "text-3xl text-right" ] ]
+                          [ txt (string_of_int data.memory ^ "MB") ];
                       ];
                     div
                       ~a:[ a_class [ "p-4 rounded border border-primary-700" ] ]
@@ -109,7 +119,7 @@ let unikernel_single_layout unikernel now =
                             p ~a:[ a_class [ "text-md" ] ] [ txt "Type" ];
                           ];
                         p
-                          ~a:[ a_class [ "text-md" ] ]
+                          ~a:[ a_class [ "text-3xl text-right" ] ]
                           [ txt (match data.typ with `Solo5 -> "Solo5") ];
                       ];
                   ];
@@ -131,20 +141,13 @@ let unikernel_single_layout unikernel now =
                             p
                               ~a:[ a_class [ "text-xl font-semibold" ] ]
                               [ txt "Arguments" ];
-                          ];
-                        div
-                          ~a:[ a_class [ "my-4" ] ]
-                          [
-                            p
-                              ~a:[ a_class [ "text-xl font-semibold" ] ]
-                              [ txt "Block Devices" ];
                             table
                               ~a:
                                 [
                                   a_class
                                     [
-                                      "items-center bg-transparent w-full \
-                                       border-collapse";
+                                      "table-auto min-w-full divide-y \
+                                       divide-gray-200";
                                     ];
                                 ]
                               ~thead:
@@ -157,10 +160,91 @@ let unikernel_single_layout unikernel now =
                                              [
                                                a_class
                                                  [
-                                                   "border-t-0 px-6 \
-                                                    align-middle border-l-0 \
-                                                    border-r-0 text-md \
-                                                    whitespace-nowrap p-4";
+                                                   "px-6 py-2 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase";
+                                                 ];
+                                             ]
+                                           [ txt "Key" ];
+                                         th
+                                           ~a:
+                                             [
+                                               a_class
+                                                 [
+                                                   "px-6 py-2 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase";
+                                                 ];
+                                             ]
+                                           [ txt "Value" ];
+                                       ];
+                                   ])
+                              (List.map
+                                 (fun arg ->
+                                   match String.split_on_char '=' arg with
+                                   | [ key; value ] ->
+                                       tr
+                                         [
+                                           td
+                                             ~a:
+                                               [
+                                                 a_class
+                                                   [
+                                                     "px-6 py-1 \
+                                                      whitespace-nowrap \
+                                                      text-sm font-medium \
+                                                      text-gray-800";
+                                                   ];
+                                               ]
+                                             [
+                                               txt
+                                                 (String.sub key 2
+                                                    (String.length key - 2));
+                                             ];
+                                           td
+                                             ~a:
+                                               [
+                                                 a_class
+                                                   [
+                                                     "px-6 py-1 \
+                                                      whitespace-normal \
+                                                      text-sm font-medium \
+                                                      text-gray-800";
+                                                   ];
+                                               ]
+                                             [ txt value ];
+                                         ]
+                                   | _ -> tr [])
+                                 (Option.value data.argv ~default:[]));
+                          ];
+                        div
+                          ~a:[ a_class [ "my-4" ] ]
+                          [
+                            p
+                              ~a:[ a_class [ "text-xl font-semibold" ] ]
+                              [ txt "Block Devices" ];
+                            table
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "table-auto min-w-full divide-y \
+                                       divide-gray-200";
+                                    ];
+                                ]
+                              ~thead:
+                                (thead
+                                   [
+                                     tr
+                                       [
+                                         th
+                                           ~a:
+                                             [
+                                               a_class
+                                                 [
+                                                   "px-6 py-2 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase";
                                                  ];
                                              ]
                                            [ txt "Host device" ];
@@ -169,10 +253,9 @@ let unikernel_single_layout unikernel now =
                                              [
                                                a_class
                                                  [
-                                                   "border-t-0 px-6 \
-                                                    align-middle border-l-0 \
-                                                    border-r-0 text-md \
-                                                    whitespace-nowrap p-4";
+                                                   "px-6 py-2 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase";
                                                  ];
                                              ]
                                            [ txt "Name" ];
@@ -181,10 +264,9 @@ let unikernel_single_layout unikernel now =
                                              [
                                                a_class
                                                  [
-                                                   "border-t-0 px-6 \
-                                                    align-middle border-l-0 \
-                                                    border-r-0 text-md \
-                                                    whitespace-nowrap p-4";
+                                                   "px-6 py-2 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase";
                                                  ];
                                              ]
                                            [ txt "Sector size" ];
@@ -195,19 +277,43 @@ let unikernel_single_layout unikernel now =
                                    tr
                                      [
                                        td
-                                         ~a:[ a_class [ "text-center" ] ]
+                                         ~a:
+                                           [
+                                             a_class
+                                               [
+                                                 "px-6 py-1 whitespace-nowrap \
+                                                  text-sm font-medium \
+                                                  text-gray-800";
+                                               ];
+                                           ]
                                          [ txt name ];
                                        td
-                                         ~a:[ a_class [ "text-center" ] ]
+                                         ~a:
+                                           [
+                                             a_class
+                                               [
+                                                 "px-6 py-1 whitespace-nowrap \
+                                                  text-sm font-medium \
+                                                  text-gray-800";
+                                               ];
+                                           ]
                                          [
                                            txt (Option.value device ~default:"");
                                          ];
                                        td
-                                         ~a:[ a_class [ "text-center" ] ]
+                                         ~a:
+                                           [
+                                             a_class
+                                               [
+                                                 "px-6 py-1 whitespace-nowrap \
+                                                  text-sm font-medium \
+                                                  text-gray-800";
+                                               ];
+                                           ]
                                          [
                                            txt
                                              (string_of_int
-                                                (Option.value size ~default:0)
+                                                (Option.value size ~default:(-1))
                                              ^ "MB");
                                          ];
                                      ])
@@ -224,8 +330,8 @@ let unikernel_single_layout unikernel now =
                                 [
                                   a_class
                                     [
-                                      "items-center bg-transparent w-full \
-                                       border-collapse";
+                                      "table-auto min-w-full divide-y \
+                                       divide-gray-200";
                                     ];
                                 ]
                               ~thead:
@@ -238,10 +344,9 @@ let unikernel_single_layout unikernel now =
                                              [
                                                a_class
                                                  [
-                                                   "border-t-0 px-6 \
-                                                    align-middle border-l-0 \
-                                                    border-r-0 text-md \
-                                                    whitespace-nowrap p-4";
+                                                   "px-6 py-2 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase";
                                                  ];
                                              ]
                                            [ txt "Host device" ];
@@ -250,10 +355,9 @@ let unikernel_single_layout unikernel now =
                                              [
                                                a_class
                                                  [
-                                                   "border-t-0 px-6 \
-                                                    align-middle border-l-0 \
-                                                    border-r-0 text-md \
-                                                    whitespace-nowrap p-4";
+                                                   "px-6 py-2 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase";
                                                  ];
                                              ]
                                            [ txt "Name" ];
@@ -262,13 +366,12 @@ let unikernel_single_layout unikernel now =
                                              [
                                                a_class
                                                  [
-                                                   "border-t-0 px-6 \
-                                                    align-middle border-l-0 \
-                                                    border-r-0 text-md \
-                                                    whitespace-nowrap p-4";
+                                                   "px-6 py-2 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase";
                                                  ];
                                              ]
-                                           [ txt "Sector size" ];
+                                           [ txt "MAC Address" ];
                                        ];
                                    ])
                               (List.map
@@ -276,22 +379,48 @@ let unikernel_single_layout unikernel now =
                                    tr
                                      [
                                        td
-                                         ~a:[ a_class [ "text-center" ] ]
+                                         ~a:
+                                           [
+                                             a_class
+                                               [
+                                                 "px-6 py-1 whitespace-nowrap \
+                                                  text-sm font-medium \
+                                                  text-gray-800";
+                                               ];
+                                           ]
                                          [ txt name ];
                                        td
-                                         ~a:[ a_class [ "text-center" ] ]
+                                         ~a:
+                                           [
+                                             a_class
+                                               [
+                                                 "px-6 py-1 whitespace-nowrap \
+                                                  text-sm font-medium \
+                                                  text-gray-800";
+                                               ];
+                                           ]
                                          [
-                                           txt (Option.value device ~default:"");
+                                           txt
+                                             (Option.value device ~default:name);
                                          ];
                                        td
-                                         ~a:[ a_class [ "text-center" ] ]
+                                         ~a:
+                                           [
+                                             a_class
+                                               [
+                                                 "px-6 py-1 whitespace-nowrap \
+                                                  text-sm font-medium \
+                                                  text-gray-800";
+                                               ];
+                                           ]
                                          [
                                            txt
                                              (Macaddr.to_string
                                                 (Option.value mac
                                                    ~default:
-                                                     (Macaddr.of_string_exn
-                                                        "00-00-00-00-00-00")));
+                                                     (Vmm_core.Name.mac u_name
+                                                        (Option.value device
+                                                           ~default:name))));
                                          ];
                                      ])
                                  data.bridges);
