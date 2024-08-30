@@ -847,7 +847,7 @@ struct
               reqd
         | path
           when String.(
-                 length path >= 20 && sub path 0 20 = "/unikernel/destroy/")
+                 length path >= 19 && sub path 0 19 = "/unikernel/destroy/")
           -> (
             let request = Httpaf.Reqd.request reqd in
             match request.meth with
