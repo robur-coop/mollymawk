@@ -25,7 +25,7 @@ let unikernel_create_layout =
                     [
                       a_input_type `Text;
                       a_name "name";
-                      a_required () ;
+                      a_required ();
                       a_id "unikernel-name";
                       a_class
                         [
@@ -51,7 +51,7 @@ let unikernel_create_layout =
                   ~a:
                     [
                       a_rows 4;
-                      a_required () ;
+                      a_required ();
                       a_name "arguments";
                       a_id "unikernel-arguments";
                       a_class
@@ -79,7 +79,7 @@ let unikernel_create_layout =
                     [
                       a_input_type `File;
                       a_name "binary";
-                      a_required () ;
+                      a_required ();
                       a_id "unikernel-binary";
                       a_class
                         [
