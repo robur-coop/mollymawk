@@ -948,7 +948,7 @@ struct
                     in
                     match ct with
                     | Error (`Msg msg) ->
-                        Logs.warn (fun m -> m "couldn't content-type: %s" msg);
+                        Logs.warn (fun m -> m "couldn't content-type: %S" msg);
                         let status =
                           {
                             Utils.Status.code = 403;
