@@ -154,7 +154,6 @@ struct
                      Middleware.auth_middleware now users;
                    ]
                  in
-                 (* TODO: middleware, extract domain from middleware *)
                  Middleware.apply_middleware middlewares (fun _reqd ->
                      match Middleware.user_of_cookie users now reqd with
                      | Ok user ->
