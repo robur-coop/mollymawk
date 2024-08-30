@@ -99,6 +99,7 @@ function closeBanner() {
 
 function postAlert(bg_color, content) {
 	const alertContainer = document.getElementById("alert-container");
+	alertContainer.classList.add("block")
 	const alert = document.createElement("div");
 	alert.className = `text-white transition ease-in-out delay-150 duration-300 ${bg_color}`;
 	alert.textContent = content;
