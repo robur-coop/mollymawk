@@ -182,8 +182,14 @@ async function destroyUnikernel(name) {
 	}
 }
 
-function getConsoleOutput() {
-	const unikernel_name = document.getElementById("unikernel-name").textContent.trim();
+function getUnikernelName(url) {
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split('/');
+    return pathParts[pathParts.length - 1];
+}
+
+async function getConsoleOutput() {
+	let unikernel_name = getUnikernelName(window.location.href);
 	if (unikernel_name) {
 		const consoleDiv = document.getElementById("console-container");
 		try {
@@ -191,9 +197,9 @@ function getConsoleOutput() {
 				method: 'GET',
 				mode: "no-cors"
 			});
-			const data = response.json();
+			const data = await response.json();
 
-			if (response.status === 200 && data.success) {
+			if (response.status === 200) {
 				let output = "";
 				data.forEach(item => {
 					output += `${item.timestamp} - ${item.line} \n`;
