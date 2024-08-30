@@ -188,30 +188,30 @@ function getUnikernelName(url) {
     return pathParts[pathParts.length - 1];
 }
 
+var consoleArea = document.createElement("textarea");
 async function getConsoleOutput() {
 	let unikernel_name = getUnikernelName(window.location.href);
 	if (unikernel_name) {
 		const consoleDiv = document.getElementById("console-container");
-		try {
-			const response = fetch(`/unikernel/console/${unikernel_name}`, {
-				method: 'GET',
-				mode: "no-cors"
-			});
-			const data = await response.json();
+		fetch("/unikernel/console/"+unikernel_name, {
+			method: "get",
+		  })
+			.then((response) => response.json())
+			.then((responseText) => {
+			  let data= ""
+			  responseText.forEach(item => {
+				data += `${item.timestamp} - ${item.line} \n`
+			  })
+			  consoleArea.textContent = ""
+			  consoleArea.textContent = data
+			})
+			.catch((error) => {
+			  postAlert("bg-secondary-300", `${unikernel_name} ${error}`)
+			})
+			.finally(() => {
 
-			if (response.status === 200) {
-				let output = "";
-				data.forEach(item => {
-					output += `${item.timestamp} - ${item.line} \n`;
-				});
-				consoleDiv.textContent = output;
-				console.log("Response:", data);
-			} else {
-				postAlert("bg-secondary-300", data.data);
-			}
-		} catch (error) {
-			postAlert("bg-secondary-300", error.message);
-		}
+			});
+			consoleDiv.appendChild(consoleArea)
 	}
 }
 
