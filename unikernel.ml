@@ -848,7 +848,6 @@ struct
                         let unikernel_name =
                           String.sub path 20 (String.length path - 20)
                         in
-                        (* TODO: middleware, extract domain from middleware *)
                         Albatross.query !albatross ~domain:user.name
                           (`Unikernel_cmd `Unikernel_destroy)
                           ~name:unikernel_name
