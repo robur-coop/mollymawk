@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', function () {
-    AOS.init();
+	AOS.init();
 });
 
 function filterData() {
@@ -74,7 +74,8 @@ async function saveConfig() {
 				formAlert.classList.remove("hidden", "text-secondary-500");
 				formAlert.classList.add("text-primary-500");
 				formAlert.textContent = "Succesfully updated";
-				setTimeout(function() {
+				postAlert("bg-primary-300", data.data);
+				setTimeout(function () {
 					window.location.reload();
 				}, 2000);
 			} else {
@@ -94,4 +95,62 @@ async function saveConfig() {
 function closeBanner() {
 	var banner = document.getElementById("banner-message");
 	banner.style.display = "none";
+}
+
+function postAlert(bg_color, content) {
+	const alertContainer = document.getElementById("alert-container");
+	const alert = document.createElement("div");
+	alert.className = `text-white transition ease-in-out delay-150 duration-300 ${bg_color}`;
+	alert.textContent = content;
+	alertContainer.appendChild(alert);
+	setTimeout(() => {
+		alertContainer.removeChild(alert);
+	}, 1600);
+}
+
+async function deployUnikernel() {
+	const name = document.getElementById("unikernel-name").value.trim();
+	const arguments = document.getElementById("unikernel-arguments").value.trim();
+	const binary = document.getElementById("unikernel-binary").files[0];
+	const formAlert = document.getElementById("form-alert");
+	if (!name || !binary) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Please fill in the required data"
+	} else {
+		let formData = new FormData();
+		formData.append("name", name.value);
+		formData.append("binary", binary)
+		formData.append("arguments", arguments)
+		try {
+			const response = await fetch("/unikernel/create", {
+				method: 'POST',
+				mode: "no-cors",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: formData
+			})
+			const data = await response.json();
+			if (data.status === 200) {
+				formAlert.classList.remove("hidden", "text-secondary-500");
+				formAlert.classList.add("text-primary-500");
+				formAlert.textContent = "Succesfully updated";
+				postAlert("bg-primary-300", data.data);
+				setTimeout(function () {
+					window.location.href = "/dashboard";
+				}, 2000);
+			} else {
+				postAlert("bg-secondary-300", data.data);
+				formAlert.classList.remove("hidden", "text-primary-500");
+				formAlert.classList.add("text-secondary-500");
+				formAlert.textContent = data.data
+			}
+		} catch (error) {
+			postAlert("bg-secondary-300", error);
+			formAlert.classList.remove("hidden");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = error
+		}
+	}
 }

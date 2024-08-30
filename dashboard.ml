@@ -169,12 +169,14 @@ let dashboard_layout ~icon ?(page_title = "Dashboard | Mollymawk")
                  section
                    ~a:[ a_class [ "col-span-2 px-4 py-6 w-full mx-auto" ] ]
                    [
+                    div ~a:[a_id "alert-container"; a_class ["absolute top-1/4 rounded-md right-4 z-50 w-fit space-y-2 p-4 shadow border text-wrap"]] [];
                      div
                        ~a:[ a_class [ "w-full my-2" ] ]
                        [
                          a
                            ~a:
                              [
+                               a_href "/unikernel/deploy";
                                a_class
                                  [
                                    "cursor-pointer bg-primary-500 \

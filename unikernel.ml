@@ -55,11 +55,6 @@ struct
         { molly_img; robur_img; albatross_img; mirage_img; dashboard_img }
     | _ -> failwith "Unexpected number of images"
 
-  let create_html_form assets =
-    KV_ASSETS.get assets (Mirage_kv.Key.v "create_unikernel.html") >|= function
-    | Error _e -> invalid_arg "Form could not be loaded"
-    | Ok html -> html
-
   module Store = Storage.Make (BLOCK)
   module Map = Map.Make (String)
 
@@ -105,7 +100,7 @@ struct
     in
     go (Map.empty, []) m
 
-  let request_handler stack albatross js_file css_file imgs html store
+  let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let reply ?(content_type = "text/plain") ?(header_list = []) data =
@@ -764,13 +759,19 @@ struct
                 Lwt.return
                   (reply ~content_type:"application/json"
                      (Utils.Status.to_json status)))
-        | "/unikernel/create" ->
+        | "/unikernel/deploy" ->
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
             let users = User_model.create_user_session_map t.users in
             let middlewares = [ Middleware.auth_middleware now users ] in
             Middleware.apply_middleware middlewares
-              (fun _reqd -> Lwt.return (reply ~content_type:"text/html" html))
+              (fun _reqd ->
+                Lwt.return
+                  (reply ~content_type:"text/html"
+                     (Dashboard.dashboard_layout
+                        ~page_title:"Deploy a Unikernel | Mollymawk"
+                        ~content:Unikernel_create.unikernel_create_layout
+                        ~icon:"/images/robur.png" ())))
               reqd
         | path
           when String.(
@@ -800,7 +801,7 @@ struct
             in
             reply_json (`List data);
             Lwt.return_unit
-        | "/unikernel/deploy" -> (
+        | "/unikernel/create" -> (
             let response_body = Httpaf.Reqd.request_body reqd in
             let finished, notify_finished = Lwt.wait () in
             let wakeup v = Lwt.wakeup_later notify_finished v in
@@ -855,17 +856,54 @@ struct
                             | Error () ->
                                 Logs.warn (fun m ->
                                     m "error querying albatross");
-                                reply "error while querying albatross"
+                                let status =
+                                  {
+                                    Utils.Status.code = 500;
+                                    title = "Error";
+                                    data = "Error while querying Albatross.";
+                                    success = false;
+                                  }
+                                in
+                                reply ~content_type:"application/json"
+                                  (Utils.Status.to_json status)
                             | Ok None ->
                                 Logs.warn (fun m -> m "got none");
-                                reply "got none"
+                                let status =
+                                  {
+                                    Utils.Status.code = 200;
+                                    title = "Success";
+                                    data = "Got none";
+                                    success = true;
+                                  }
+                                in
+                                reply ~content_type:"application/json"
+                                  (Utils.Status.to_json status)
                             | Ok (Some (_hdr, res)) ->
-                                reply_json (Albatross_json.res res))
+                                let status =
+                                  {
+                                    Utils.Status.code = 200;
+                                    title = "Success";
+                                    data =
+                                      Yojson.Safe.to_string
+                                        (Albatross_json.res res);
+                                    success = true;
+                                  }
+                                in
+                                reply ~content_type:"application/json"
+                                  (Utils.Status.to_json status))
                         | Error (`Msg msg) ->
                             Logs.warn (fun m -> m "couldn't decode data %s" msg);
+                            let status =
+                              {
+                                Utils.Status.code = 403;
+                                title = "Error";
+                                data = msg;
+                                success = false;
+                              }
+                            in
                             Lwt.return
-                              (reply ("couldn't decode data (of_json): " ^ msg))
-                        )
+                              (reply ~content_type:"application/json"
+                                 (Utils.Status.to_json status)))
                     | _ ->
                         Logs.warn (fun m -> m "couldn't find fields");
                         Lwt.return (reply "couldn't find fields"))))
@@ -911,7 +949,6 @@ struct
     js_contents assets >>= fun js_file ->
     css_contents assets >>= fun css_file ->
     images assets >>= fun imgs ->
-    create_html_form assets >>= fun html ->
     Store.Stored_data.connect storage >>= fun stored_data ->
     Store.read_data stored_data >>= function
     | Error (`Msg msg) -> failwith msg
@@ -927,7 +964,7 @@ struct
             m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
               port);
         let request_handler _flow =
-          request_handler stack albatross js_file css_file imgs html store
+          request_handler stack albatross js_file css_file imgs store
         in
         Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
         let http = Paf.http_service ~error_handler request_handler in
