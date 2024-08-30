@@ -19,7 +19,11 @@ let unikernel_single_layout unikernel now =
                           ~a:[ a_class [ "flex space-x-2 items-end" ] ]
                           [
                             h2
-                              ~a:[ a_class [ "text-xl font-bold uppercase" ] ]
+                              ~a:
+                                [
+                                  a_id "unikernel-name";
+                                  a_class [ "text-xl font-bold uppercase" ];
+                                ]
                               [ txt (Vmm_core.Name.to_string u_name) ];
                             p
                               ~a:[ a_class [ "text-sm" ] ]
@@ -440,6 +444,14 @@ let unikernel_single_layout unikernel now =
                                    (fun code -> p [ txt (string_of_int code) ])
                                    (Vmm_core.IS.elements codes); *));
                           ];
+                      ];
+                    div
+                      ~a:[ a_class [ "text-left p-4 overflow-hidden" ] ]
+                      [
+                        p
+                          ~a:[ a_class [ "text-xl font-semibold" ] ]
+                          [ txt "Console Output" ];
+                        div ~a:[ a_id "console-container" ] [];
                       ];
                   ];
               ];

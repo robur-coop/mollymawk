@@ -1,5 +1,8 @@
 document.addEventListener('DOMContentLoaded', function () {
 	AOS.init();
+	if (window.location.pathname.startsWith("/unikernel/info")) {
+		setInterval(getConsoleOutput, 300);
+	}
 });
 
 function filterData() {
@@ -178,3 +181,31 @@ async function destroyUnikernel(name) {
 		postAlert("bg-secondary-300", error);
 	}
 }
+
+function getConsoleOutput() {
+	const unikernel_name = document.getElementById("unikernel-name").textContent.trim();
+	if (unikernel_name) {
+		const consoleDiv = document.getElementById("console-container");
+		try {
+			const response = fetch(`/unikernel/console/${unikernel_name}`, {
+				method: 'GET',
+				mode: "no-cors"
+			});
+			const data = response.json();
+
+			if (response.status === 200 && data.success) {
+				let output = "";
+				data.forEach(item => {
+					output += `${item.timestamp} - ${item.line} \n`;
+				});
+				consoleDiv.textContent = output;
+				console.log("Response:", data);
+			} else {
+				postAlert("bg-secondary-300", data.data);
+			}
+		} catch (error) {
+			postAlert("bg-secondary-300", error.message);
+		}
+	}
+}
+
