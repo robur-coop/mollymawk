@@ -154,7 +154,6 @@ struct
                      Middleware.auth_middleware now users;
                    ]
                  in
-                 (* TODO: middleware, extract domain from middleware *)
                  Middleware.apply_middleware middlewares (fun _reqd ->
                      match Middleware.user_of_cookie users now reqd with
                      | Ok user ->
@@ -848,7 +847,6 @@ struct
                         let unikernel_name =
                           String.sub path 20 (String.length path - 20)
                         in
-                        (* TODO: middleware, extract domain from middleware *)
                         Albatross.query !albatross ~domain:user.name
                           (`Unikernel_cmd `Unikernel_destroy)
                           ~name:unikernel_name
@@ -958,7 +956,7 @@ struct
                     in
                     match ct with
                     | Error (`Msg msg) ->
-                        Logs.warn (fun m -> m "couldn't content-type: %s" msg);
+                        Logs.warn (fun m -> m "couldn't content-type: %S" msg);
                         let status =
                           {
                             Utils.Status.code = 400;
