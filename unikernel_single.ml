@@ -1,4 +1,5 @@
-let unikernel_single_layout unikernel =
+let unikernel_single_layout unikernel now =
+  let name, data = unikernel in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-10 p-4 bg-gray-50 my-1" ] ]
@@ -14,20 +15,24 @@ let unikernel_single_layout unikernel =
                   [
                     div
                       [
-                        h2 [ txt "ExampleUnikernel" ];
+                        h2 [ txt (Vmm_core.Name.to_string name) ];
                         p
                           [
                             txt
-                              (Cstruct.to_string
-                                 unikernel.Vmm_core.Unikernel.digest);
+                              (Utils.TimeHelper.time_ago now
+                                 data.Vmm_core.Unikernel.started);
                           ];
+                        p [ txt (Cstruct.to_string data.digest) ];
                       ];
                     div
                       [
                         button
                           ~a:
                             [
-                              a_onclick "destroyUnikernel()";
+                              a_onclick
+                                ("destroyUnikernel('"
+                                ^ Vmm_core.Name.to_string name
+                                ^ "')");
                               a_class
                                 [
                                   "my-3 py-2 px-3 rounded bg-secondary-500 \
@@ -61,7 +66,7 @@ let unikernel_single_layout unikernel =
                           ];
                         p
                           ~a:[ a_class [ "text-md" ] ]
-                          [ txt (string_of_int unikernel.cpuid) ];
+                          [ txt (string_of_int data.cpuid) ];
                       ];
                     div
                       ~a:[ a_class [ "p-4 rounded border border-primary-700" ] ]
@@ -83,7 +88,7 @@ let unikernel_single_layout unikernel =
                           ];
                         p
                           ~a:[ a_class [ "text-md" ] ]
-                          [ txt (string_of_int unikernel.memory) ];
+                          [ txt (string_of_int data.memory) ];
                       ];
                     div
                       ~a:[ a_class [ "p-4 rounded border border-primary-700" ] ]
@@ -105,7 +110,7 @@ let unikernel_single_layout unikernel =
                           ];
                         p
                           ~a:[ a_class [ "text-md" ] ]
-                          [ txt (match unikernel.typ with `Solo5 -> "Solo5") ];
+                          [ txt (match data.typ with `Solo5 -> "Solo5") ];
                       ];
                   ];
                 div
@@ -206,7 +211,7 @@ let unikernel_single_layout unikernel =
                                              ^ "MB");
                                          ];
                                      ])
-                                 unikernel.block_devices);
+                                 data.block_devices);
                           ];
                         div
                           ~a:[ a_class [ "my-4" ] ]
@@ -289,7 +294,7 @@ let unikernel_single_layout unikernel =
                                                         "00-00-00-00-00-00")));
                                          ];
                                      ])
-                                 unikernel.bridges);
+                                 data.bridges);
                           ];
                         div
                           ~a:[ a_class [ "my-4" ] ]
@@ -297,14 +302,14 @@ let unikernel_single_layout unikernel =
                             p
                               ~a:[ a_class [ "text-xl font-semibold" ] ]
                               [ txt "Fail Behaviour" ];
-                            (match unikernel.fail_behaviour with
+                            (match data.fail_behaviour with
                             | `Quit -> p [ txt "Quit" ]
                             | `Restart None -> p [ txt "Restart" ]
                             | `Restart (Some _codes) ->
-                              p [txt ""]
+                                p [ txt "" ]
                                 (* List.map
-                                  (fun code -> p [ txt (string_of_int code) ])
-                                  (Vmm_core.IS.elements codes); *) )
+                                   (fun code -> p [ txt (string_of_int code) ])
+                                   (Vmm_core.IS.elements codes); *));
                           ];
                       ];
                   ];

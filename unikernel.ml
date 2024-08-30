@@ -142,14 +142,71 @@ struct
         | path
           when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
           -> (
+let request = Httpaf.Reqd.request reqd in
+            match request.meth with
+            | `GET ->
+                (let now = Ptime.v (P.now_d_ps ()) in
+                 let _, (t : Storage.t) = !store in
+                 let users = User_model.create_user_session_map t.users in
+                 let middlewares =
+                   [
+                     (* Middleware.email_verified_middleware now u:sers;*)
+                     Middleware.auth_middleware now users;
+                   ]
+                 in
             (* TODO: middleware, extract domain from middleware *)
-            let unikernel_name = String.sub path 16 (String.length path - 16) in
-            Albatross.query !albatross (`Unikernel_cmd `Unikernel_info)
-              ~domain:"robur" ~name:unikernel_name
+Middleware.apply_middleware middlewares (fun _reqd ->
+                     match Middleware.user_of_cookie users now reqd with
+                     | Ok user ->
+            let unikernel_name =
+String.sub path 16 (String.length path - 16)
+in
+(            Albatross.query !albatross
+(`Unikernel_cmd `Unikernel_info)
+              ~domain:user.name (* TODO use uuid in the future *)
+~name:unikernel_name
             >|= function
-            | Error () -> reply "error while querying albatross"
-            | Ok None -> reply "got none"
-            | Ok (Some (_hdr, res)) -> reply_json (Albatross_json.res res))
+            | Error () ->
+                              Logs.err (fun m ->
+                                  m "error while communicating with albatross");
+                              []
+                          | Ok None -> []
+                          | Ok
+                              (Some
+                                (_hdr, `Success (`Unikernel_info unikernel))) ->
+                              unikernel
+                          | Ok (Some reply) ->
+                              Logs.err (fun m ->
+                                  m
+                                    "expected a unikernel info reply, received \
+                                     %a"
+                                    (Vmm_commands.pp_wire ~verbose:false)
+                                    reply);
+                              [])
+                         >>= fun unikernels ->
+                         Lwt.return
+                           (reply ~content_type:"text/html"
+                              (Dashboard.dashboard_layout
+                                 ~content:
+                                   (Unikernel_single.unikernel_single_layout
+                                      (List.hd unikernels) now)
+                                 ~icon:"/images/robur.png" ()))
+                     | Error _ ->
+                         Logs.err (fun m -> m "couldn't find user of cookie");
+                         assert false))
+                  reqd
+            | _ ->
+                let status =
+                  {
+                    Utils.Status.code = 400;
+                    title = "Error";
+                    data = "Bad request HTTP method";
+                    success = false;
+                  }
+                in
+                Lwt.return
+                  (reply ~content_type:"application/json"
+                     (Utils.Status.to_json status)))
         | "/main.js" -> Lwt.return (reply ~content_type:"text/plain" js_file)
         | "/images/molly_bird.jpeg" ->
             Lwt.return (reply ~content_type:"image/jpeg" imgs.molly_img)
