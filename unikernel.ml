@@ -142,7 +142,7 @@ struct
         | path
           when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
           -> (
-let request = Httpaf.Reqd.request reqd in
+            let request = Httpaf.Reqd.request reqd in
             match request.meth with
             | `GET ->
                 (let now = Ptime.v (P.now_d_ps ()) in
@@ -154,19 +154,19 @@ let request = Httpaf.Reqd.request reqd in
                      Middleware.auth_middleware now users;
                    ]
                  in
-            (* TODO: middleware, extract domain from middleware *)
-Middleware.apply_middleware middlewares (fun _reqd ->
+                 (* TODO: middleware, extract domain from middleware *)
+                 Middleware.apply_middleware middlewares (fun _reqd ->
                      match Middleware.user_of_cookie users now reqd with
                      | Ok user ->
-            let unikernel_name =
-String.sub path 16 (String.length path - 16)
-in
-(            Albatross.query !albatross
-(`Unikernel_cmd `Unikernel_info)
-              ~domain:user.name (* TODO use uuid in the future *)
-~name:unikernel_name
-            >|= function
-            | Error () ->
+                         let unikernel_name =
+                           String.sub path 16 (String.length path - 16)
+                         in
+                         (Albatross.query !albatross
+                            (`Unikernel_cmd `Unikernel_info)
+                            ~domain:user.name (* TODO use uuid in the future *)
+                            ~name:unikernel_name
+                          >|= function
+                          | Error () ->
                               Logs.err (fun m ->
                                   m "error while communicating with albatross");
                               []
@@ -832,7 +832,7 @@ in
               reqd
         | path
           when String.(
-                 length path >= 20 && sub path 0 20 = "/unikernel/shutdown/")
+                 length path >= 20 && sub path 0 20 = "/unikernel/destroy/")
           -> (
             let unikernel_name = String.sub path 20 (String.length path - 20) in
             (* TODO: middleware, extract domain from middleware *)
@@ -859,111 +859,172 @@ in
             reply_json (`List data);
             Lwt.return_unit
         | "/unikernel/create" -> (
-            let response_body = Httpaf.Reqd.request_body reqd in
-            let finished, notify_finished = Lwt.wait () in
-            let wakeup v = Lwt.wakeup_later notify_finished v in
-            let on_eof data () = wakeup data in
-            let f acc s = acc ^ s in
-            let rec on_read on_eof acc bs ~off ~len =
-              let str = Bigstringaf.substring ~off ~len bs in
-              let acc = acc >>= fun acc -> Lwt.return (f acc str) in
-              Httpaf.Body.schedule_read response_body
-                ~on_read:(on_read on_eof acc) ~on_eof:(on_eof acc)
-            in
-            let f_init = Lwt.return "" in
-            Httpaf.Body.schedule_read response_body
-              ~on_read:(on_read on_eof f_init) ~on_eof:(on_eof f_init);
-            finished >>= fun data ->
-            data >>= fun data ->
-            let content_type =
-              Httpaf.(
-                Headers.get_exn (Reqd.request reqd).Request.headers
-                  "content-type")
-            in
-            let ct =
-              Multipart_form.Content_type.of_string (content_type ^ "\r\n")
-            in
-            match ct with
-            | Error (`Msg msg) ->
-                Logs.warn (fun m -> m "couldn't content-type: %s" msg);
-                Lwt.return (reply "couldn't content-type")
-            | Ok ct -> (
-                match Multipart_form.of_string_to_list data ct with
-                | Error (`Msg msg) ->
-                    Logs.warn (fun m -> m "couldn't multipart: %s" msg);
-                    Lwt.return (reply ("couldn't multipart: " ^ msg))
-                | Ok (m, assoc) -> (
-                    let m, _r = to_map ~assoc m in
-                    match
-                      ( Map.find_opt "arguments" m,
-                        Map.find_opt "name" m,
-                        Map.find_opt "binary" m )
-                    with
-                    | Some (_, args), Some (_, name), Some (_, binary) -> (
-                        Logs.info (fun m -> m "args %s" args);
-                        match Albatross_json.config_of_json args with
-                        | Ok cfg -> (
-                            let config =
-                              { cfg with image = Cstruct.of_string binary }
-                            in
-                            (* TODO: middleware, extract domain from middleware *)
-                            Albatross.query !albatross ~domain:"robur" ~name
-                              (`Unikernel_cmd (`Unikernel_create config))
-                            >|= function
-                            | Error () ->
-                                Logs.warn (fun m ->
-                                    m "error querying albatross");
-                                let status =
-                                  {
-                                    Utils.Status.code = 500;
-                                    title = "Error";
-                                    data = "Error while querying Albatross.";
-                                    success = false;
-                                  }
-                                in
-                                reply ~content_type:"application/json"
-                                  (Utils.Status.to_json status)
-                            | Ok None ->
-                                Logs.warn (fun m -> m "got none");
-                                let status =
-                                  {
-                                    Utils.Status.code = 200;
-                                    title = "Success";
-                                    data = "Got none";
-                                    success = true;
-                                  }
-                                in
-                                reply ~content_type:"application/json"
-                                  (Utils.Status.to_json status)
-                            | Ok (Some (_hdr, res)) ->
-                                let status =
-                                  {
-                                    Utils.Status.code = 200;
-                                    title = "Success";
-                                    data =
-                                      Yojson.Safe.to_string
-                                        (Albatross_json.res res);
-                                    success = true;
-                                  }
-                                in
-                                reply ~content_type:"application/json"
-                                  (Utils.Status.to_json status))
+            let request = Httpaf.Reqd.request reqd in
+            match request.meth with
+            | `POST ->
+                let now = Ptime.v (P.now_d_ps ()) in
+                let _, (t : Storage.t) = !store in
+                let users = User_model.create_user_session_map t.users in
+                let middlewares = [ Middleware.auth_middleware now users ] in
+                Middleware.apply_middleware middlewares
+                  (fun _reqd ->
+                    let response_body = Httpaf.Reqd.request_body reqd in
+                    let finished, notify_finished = Lwt.wait () in
+                    let wakeup v = Lwt.wakeup_later notify_finished v in
+                    let on_eof data () = wakeup data in
+                    let f acc s = acc ^ s in
+                    let rec on_read on_eof acc bs ~off ~len =
+                      let str = Bigstringaf.substring ~off ~len bs in
+                      let acc = acc >>= fun acc -> Lwt.return (f acc str) in
+                      Httpaf.Body.schedule_read response_body
+                        ~on_read:(on_read on_eof acc) ~on_eof:(on_eof acc)
+                    in
+                    let f_init = Lwt.return "" in
+                    Httpaf.Body.schedule_read response_body
+                      ~on_read:(on_read on_eof f_init) ~on_eof:(on_eof f_init);
+                    finished >>= fun data ->
+                    data >>= fun data ->
+                    let content_type =
+                      Httpaf.(
+                        Headers.get_exn (Reqd.request reqd).Request.headers
+                          "content-type")
+                    in
+                    let ct =
+                      Multipart_form.Content_type.of_string
+                        (content_type ^ "\r\n")
+                    in
+                    match ct with
+                    | Error (`Msg msg) ->
+                        Logs.warn (fun m -> m "couldn't content-type: %s" msg);
+                        let status =
+                          {
+                            Utils.Status.code = 403;
+                            title = "Error";
+                            data = "Couldn't content-type: " ^ msg;
+                            success = false;
+                          }
+                        in
+                        Lwt.return
+                          (reply ~content_type:"application/json"
+                             (Utils.Status.to_json status))
+                    | Ok ct -> (
+                        match Multipart_form.of_string_to_list data ct with
                         | Error (`Msg msg) ->
-                            Logs.warn (fun m -> m "couldn't decode data %s" msg);
+                            Logs.warn (fun m -> m "couldn't multipart: %s" msg);
                             let status =
                               {
                                 Utils.Status.code = 403;
                                 title = "Error";
-                                data = msg;
+                                data = "Couldn't multipart: " ^ msg;
                                 success = false;
                               }
                             in
                             Lwt.return
                               (reply ~content_type:"application/json"
-                                 (Utils.Status.to_json status)))
-                    | _ ->
-                        Logs.warn (fun m -> m "couldn't find fields");
-                        Lwt.return (reply "couldn't find fields"))))
+                                 (Utils.Status.to_json status))
+                        | Ok (m, assoc) -> (
+                            let m, _r = to_map ~assoc m in
+                            match
+                              ( Map.find_opt "arguments" m,
+                                Map.find_opt "name" m,
+                                Map.find_opt "binary" m )
+                            with
+                            | Some (_, args), Some (_, name), Some (_, binary)
+                              -> (
+                                Logs.info (fun m -> m "args %s" args);
+                                match Albatross_json.config_of_json args with
+                                | Ok cfg -> (
+                                    let config =
+                                      {
+                                        cfg with
+                                        image = Cstruct.of_string binary;
+                                      }
+                                    in
+                                    (* TODO: middleware, extract domain from middleware *)
+                                    Albatross.query !albatross ~domain:"robur"
+                                      ~name
+                                      (`Unikernel_cmd
+                                        (`Unikernel_create config))
+                                    >|= function
+                                    | Error () ->
+                                        Logs.warn (fun m ->
+                                            m "error querying albatross");
+                                        let status =
+                                          {
+                                            Utils.Status.code = 500;
+                                            title = "Error";
+                                            data =
+                                              "Error while querying Albatross.";
+                                            success = false;
+                                          }
+                                        in
+                                        reply ~content_type:"application/json"
+                                          (Utils.Status.to_json status)
+                                    | Ok None ->
+                                        Logs.warn (fun m -> m "got none");
+                                        let status =
+                                          {
+                                            Utils.Status.code = 200;
+                                            title = "Success";
+                                            data = "Got none";
+                                            success = true;
+                                          }
+                                        in
+                                        reply ~content_type:"application/json"
+                                          (Utils.Status.to_json status)
+                                    | Ok (Some (_hdr, res)) ->
+                                        let status =
+                                          {
+                                            Utils.Status.code = 200;
+                                            title = "Success";
+                                            data =
+                                              Yojson.Safe.to_string
+                                                (Albatross_json.res res);
+                                            success = true;
+                                          }
+                                        in
+                                        reply ~content_type:"application/json"
+                                          (Utils.Status.to_json status))
+                                | Error (`Msg msg) ->
+                                    Logs.warn (fun m ->
+                                        m "couldn't decode data %s" msg);
+                                    let status =
+                                      {
+                                        Utils.Status.code = 403;
+                                        title = "Error";
+                                        data = msg;
+                                        success = false;
+                                      }
+                                    in
+                                    Lwt.return
+                                      (reply ~content_type:"application/json"
+                                         (Utils.Status.to_json status)))
+                            | _ ->
+                                Logs.warn (fun m -> m "couldn't find fields");
+                                let status =
+                                  {
+                                    Utils.Status.code = 403;
+                                    title = "Error";
+                                    data = "Couldn't find fields";
+                                    success = false;
+                                  }
+                                in
+                                Lwt.return
+                                  (reply ~content_type:"application/json"
+                                     (Utils.Status.to_json status)))))
+                  reqd
+            | _ ->
+                let status =
+                  {
+                    Utils.Status.code = 400;
+                    title = "Error";
+                    data = "Bad request HTTP method";
+                    success = false;
+                  }
+                in
+                Lwt.return
+                  (reply ~content_type:"application/json"
+                     (Utils.Status.to_json status)))
         | _ -> (
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
