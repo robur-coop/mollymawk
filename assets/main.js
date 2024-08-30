@@ -154,3 +154,23 @@ async function deployUnikernel() {
 		}
 	}
 }
+
+async function destroyUnikernel(name) {
+	try {
+		const response = await fetch(`/unikernel/destroy/${name}`, {
+			method: 'GET',
+			mode: "no-cors"
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			postAlert("bg-primary-300", `Successful: ${data.data}`);
+			setTimeout(function () {
+				window.location.href = "/dashboard";
+			}, 2000);
+		} else {
+			postAlert("bg-secondary-300", data.data);
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+	}
+}
