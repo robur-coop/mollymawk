@@ -834,14 +834,67 @@ struct
           when String.(
                  length path >= 20 && sub path 0 20 = "/unikernel/destroy/")
           -> (
-            let unikernel_name = String.sub path 20 (String.length path - 20) in
-            (* TODO: middleware, extract domain from middleware *)
-            Albatross.query !albatross ~domain:"robur"
-              (`Unikernel_cmd `Unikernel_destroy) ~name:unikernel_name
-            >|= function
-            | Error () -> reply "error while querying albatross"
-            | Ok None -> reply "got none"
-            | Ok (Some (_hdr, res)) -> reply_json (Albatross_json.res res))
+            let request = Httpaf.Reqd.request reqd in
+            match request.meth with
+            | `GET ->
+                let now = Ptime.v (P.now_d_ps ()) in
+                let _, (t : Storage.t) = !store in
+                let users = User_model.create_user_session_map t.users in
+                let middlewares = [ Middleware.auth_middleware now users ] in
+                Middleware.apply_middleware middlewares
+                  (fun _reqd ->
+                    match Middleware.user_of_cookie users now reqd with
+                    | Ok user -> (
+                        let unikernel_name =
+                          String.sub path 20 (String.length path - 20)
+                        in
+                        (* TODO: middleware, extract domain from middleware *)
+                        Albatross.query !albatross ~domain:user.name
+                          (`Unikernel_cmd `Unikernel_destroy)
+                          ~name:unikernel_name
+                        >|= function
+                        | Error () ->
+                            Logs.err (fun m -> m "Error querying albatross");
+                            let status =
+                              {
+                                Utils.Status.code = 400;
+                                title = "Error";
+                                data = "Error querying albatross";
+                                success = false;
+                              }
+                            in
+                            reply ~content_type:"application/json"
+                              (Utils.Status.to_json status)
+                        | Ok None ->
+                            Logs.err (fun m -> m "got none");
+                            let status =
+                              {
+                                Utils.Status.code = 200;
+                                title = "Success";
+                                data = "Got none";
+                                success = false;
+                              }
+                            in
+                            reply ~content_type:"application/json"
+                              (Utils.Status.to_json status)
+                        | Ok (Some (_hdr, res)) ->
+                            reply_json (Albatross_json.res res))
+                    | Error _ ->
+                        Logs.err (fun m -> m "couldn't find user of cookie");
+                        assert false)
+                  reqd
+            | _ ->
+                let status =
+                  {
+                    Utils.Status.code = 400;
+                    title = "Error";
+                    data = "Bad request HTTP method";
+                    success = false;
+                  }
+                in
+                Lwt.return
+                  (reply ~content_type:"application/json"
+                     (Utils.Status.to_json status)))
         | path
           when String.(
                  length path >= 19 && sub path 0 19 = "/unikernel/console/") ->
