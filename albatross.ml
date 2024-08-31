@@ -1,7 +1,15 @@
 module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
   module TLS = Tls_mirage.Make (S.TCP)
-  module Set = Set.Make (String)
-  module Map = Map.Make (String)
+
+  module Name = struct
+    type t = Vmm_core.Name.t
+
+    let compare a b =
+      String.compare (Vmm_core.Name.to_string a) (Vmm_core.Name.to_string b)
+  end
+
+  module Set = Set.Make (Name)
+  module Map = Map.Make (Name)
 
   type t = {
     stack : S.t;
@@ -172,7 +180,8 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
             match decode d with
             | Error s ->
                 Logs.err (fun m ->
-                    m "albatross stop reading console %s: error %s" name s)
+                    m "albatross stop reading console %a: error %s"
+                      Vmm_core.Name.pp name s)
             | Ok (_, `Data (`Console_data (ts, data))) ->
                 let d = Albatross_json.console_data_to_json (ts, data) in
                 t.console_output <-
@@ -194,25 +203,26 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
         continue_reading t name flow
     | Ok `Eof ->
         Logs.info (fun m ->
-            m "albatross received eof while reading console %s" name);
+            m "albatross received eof while reading console %a" Vmm_core.Name.pp
+              name);
         t.console_readers <- Set.remove name t.console_readers;
         TLS.close flow
     | Error e ->
         Logs.err (fun m ->
-            m "albatross received error while reading console %s: %a" name
-              TLS.pp_error e);
+            m "albatross received error while reading console %a: %a"
+              Vmm_core.Name.pp name TLS.pp_error e);
         t.console_readers <- Set.remove name t.console_readers;
         TLS.close flow
 
-  let raw_query t ?(name = ".") certificates cmd =
+  let raw_query t ?(name = Vmm_core.Name.root) certificates cmd =
     let open Lwt.Infix in
     S.TCP.create_connection (S.tcp t.stack) t.remote >>= function
     | Error e ->
         Lwt.return
           (Error
-             (Fmt.str "albatross connection failure %a while quering %s %a: %a"
+             (Fmt.str "albatross connection failure %a while quering %a %a: %a"
                 Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                t.remote name
+                t.remote Vmm_core.Name.pp name
                 (Vmm_commands.pp ~verbose:false)
                 cmd S.TCP.pp_error e))
     | Ok flow -> (
@@ -229,9 +239,9 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
             S.TCP.close flow >|= fun () ->
             Error
               (Fmt.str
-                 "albatross establishing TLS to %a while querying %s %a: %a"
+                 "albatross establishing TLS to %a while querying %a %a: %a"
                  Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                 t.remote name
+                 t.remote Vmm_core.Name.pp name
                  (Vmm_commands.pp ~verbose:false)
                  cmd TLS.pp_write_error e)
         | Ok tls_flow -> (
@@ -248,19 +258,19 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
             | Ok `Eof ->
                 TLS.close tls_flow >|= fun () ->
                 Error
-                  (Fmt.str "eof from albatross %a querying %s %a"
+                  (Fmt.str "eof from albatross %a querying %a %a"
                      Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                     t.remote name
+                     t.remote Vmm_core.Name.pp name
                      (Vmm_commands.pp ~verbose:false)
                      cmd)
             | Error e ->
                 TLS.close tls_flow >|= fun () ->
                 Error
                   (Fmt.str
-                     "albatross received error reading from %a querying %s %a: \
+                     "albatross received error reading from %a querying %a %a: \
                       %a"
                      Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                     t.remote name
+                     t.remote Vmm_core.Name.pp name
                      (Vmm_commands.pp ~verbose:false)
                      cmd TLS.pp_error e)))
 
@@ -296,16 +306,21 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
             t)
 
   let query t ~domain ?(name = ".") cmd =
-    match cmd with
-    | `Console_cmd (`Console_subscribe _) when Set.mem name t.console_readers
-      -> (
-        match Vmm_core.Name.of_string name with
-        | Error (`Msg msg) -> Lwt.return (Error msg)
-        | Ok name ->
-            let hdr = Vmm_commands.{ version = current; sequence = 0L; name } in
-            Lwt.return (Ok (hdr, `Success `Empty)))
-    | _ -> (
-        match gen_cert t ~domain cmd name with
-        | Error str -> Lwt.return (Error str)
-        | Ok certificates -> raw_query t ~name certificates cmd)
+    match
+      Result.bind (Vmm_core.Name.path_of_string domain) (fun domain ->
+          Vmm_core.Name.create domain name)
+    with
+    | Error (`Msg msg) -> Lwt.return (Error msg)
+    | Ok vmm_name -> (
+        match cmd with
+        | `Console_cmd (`Console_subscribe _)
+          when Set.mem vmm_name t.console_readers ->
+            let hdr =
+              Vmm_commands.{ version = current; sequence = 0L; name = vmm_name }
+            in
+            Lwt.return (Ok (hdr, `Success `Empty))
+        | _ -> (
+            match gen_cert t ~domain cmd name with
+            | Error str -> Lwt.return (Error str)
+            | Ok certificates -> raw_query t ~name:vmm_name certificates cmd))
 end

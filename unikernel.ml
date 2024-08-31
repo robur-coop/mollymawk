@@ -334,7 +334,7 @@ struct
             | Error (`Msg err) ->
                 let status =
                   {
-                    Utils.Status.code = 404;
+                    Utils.Status.code = 400;
                     title = "Error";
                     data = String.escaped err;
                     success = false;
@@ -381,7 +381,7 @@ struct
                     | None ->
                         let status =
                           {
-                            Utils.Status.code = 404;
+                            Utils.Status.code = 400;
                             title = "Error";
                             data =
                               "Something went wrong. Wait a few seconds and \
@@ -667,7 +667,7 @@ struct
     else
       let error =
         {
-          Utils.Status.code = 404;
+          Utils.Status.code = 400;
           title = "An error occured";
           success = false;
           data = "Error while fetching unikernel.";
@@ -844,7 +844,7 @@ struct
                 Logs.warn (fun m -> m "couldn't find fields");
                 let status =
                   {
-                    Utils.Status.code = 403;
+                    Utils.Status.code = 400;
                     title = "Error";
                     data = "Couldn't find fields";
                     success = false;
@@ -856,17 +856,47 @@ struct
 
   let unikernel_console albatross name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
-    ( Albatross.query ~domain:user.name albatross ~name
-        (`Console_cmd (`Console_subscribe (`Count 10)))
-    >|= fun _ -> () )
-    >>= fun () ->
-    let data =
-      Option.value ~default:[]
-        (Map.find_opt name albatross.Albatross.console_output)
-    in
-    Lwt.return
-      (reply reqd ~content_type:"application/json"
-         (Yojson.Basic.to_string (`List data)))
+    Albatross.query ~domain:user.name albatross ~name
+      (`Console_cmd (`Console_subscribe (`Count 10)))
+    >>= function
+    | Error msg ->
+        Logs.warn (fun m -> m "error querying albatross: %s" msg);
+        let status =
+          {
+            Utils.Status.code = 500;
+            title = "Error";
+            data = "Error while querying Albatross.";
+            success = false;
+          }
+        in
+        Lwt.return
+          (reply reqd ~content_type:"application/json"
+             (Utils.Status.to_json status))
+    | Ok _ -> (
+        match
+          Result.bind (Vmm_core.Name.path_of_string user.name) (fun domain ->
+              Vmm_core.Name.create domain name)
+        with
+        | Ok name ->
+            let data =
+              Option.value ~default:[]
+                (Albatross.Map.find_opt name albatross.Albatross.console_output)
+            in
+            Lwt.return
+              (reply reqd ~content_type:"application/json"
+                 (Yojson.Basic.to_string (`List data)))
+        | Error (`Msg msg) ->
+            let status =
+              {
+                Utils.Status.code = 500;
+                title = "Error";
+                data = "Couldn't find create name " ^ String.escaped msg;
+                success = false;
+              }
+            in
+            Lwt.return
+              (reply reqd ~content_type:"application/json"
+                 (Utils.Status.to_json status)))
 
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
