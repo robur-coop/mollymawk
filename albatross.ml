@@ -1,7 +1,15 @@
 module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
   module TLS = Tls_mirage.Make (S.TCP)
-  module Set = Set.Make (String)
-  module Map = Map.Make (String)
+
+  module Name = struct
+    type t = Vmm_core.Name.t
+
+    let compare a b =
+      String.compare (Vmm_core.Name.to_string a) (Vmm_core.Name.to_string b)
+  end
+
+  module Set = Set.Make (Name)
+  module Map = Map.Make (Name)
 
   type t = {
     stack : S.t;
@@ -32,131 +40,90 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     | None, _ | _, None -> invalid_arg "span too big - reached end of ptime"
     | Some now, Some exp -> (now, exp)
 
+  let key_cert ?(key_type = `ED25519) ~is_ca ?cmd key name issuer =
+    let open X509 in
+    let exts =
+      let ext =
+        Option.map Vmm_asn.to_cert_extension cmd
+        |> Option.fold ~none:Extension.empty ~some:(fun p ->
+               Extension.singleton (Unsupported Vmm_asn.oid) (false, p))
+      in
+      let ku, bc =
+        if is_ca then
+          ( [ `Key_cert_sign; `Digital_signature; `Content_commitment ],
+            (true, None) )
+        else ([ `Digital_signature; `Key_encipherment ], (false, None))
+      in
+      Extension.(
+        add Basic_constraints (true, bc) (add Key_usage (true, ku) ext))
+    in
+    let tmp_key = Private_key.generate key_type in
+    match
+      let name =
+        [ Distinguished_name.(Relative_distinguished_name.singleton (CN name)) ]
+      in
+      let extensions = Signing_request.Ext.(singleton Extensions exts) in
+      Signing_request.create name ~extensions tmp_key
+    with
+    | Error (`Msg msg) ->
+        Error
+          (Fmt.str "albatross: failed to create %ssigning request: %s"
+             (if is_ca then "CA " else "")
+             msg)
+    | Ok csr -> (
+        let valid_from, valid_until = timestamps 300 in
+        let extensions =
+          let pub = X509.Private_key.public key in
+          key_ids exts Signing_request.((info csr).public_key) pub
+        in
+        match
+          Signing_request.sign csr ~valid_from ~valid_until ~extensions key
+            issuer
+        with
+        | Error e ->
+            Error
+              (Fmt.str "albatross: failed to sign %ssigning request: %a"
+                 (if is_ca then "CA " else "")
+                 X509.Validation.pp_signature_error e)
+        | Ok mycert -> Ok (tmp_key, mycert))
+
   let gen_cert t ?domain cmd name =
     let ( let* ) = Result.bind in
-    let key_type = `ED25519 in
-    let open X509 in
-    let* intermediate_key, cert, certs =
+    let* ikey, cert, certs =
       match domain with
       | None -> Ok (t.key, t.cert, [])
-      | Some domain -> (
+      | Some domain ->
           let* policy =
             match Vmm_core.Name.path_of_string domain with
             | Error (`Msg msg) ->
-                Logs.err (fun m ->
-                    m "invalid domain %s is not a path: %s" domain msg);
-                Error ()
+                Error
+                  (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
             | Ok path ->
                 Ok
                   (List.assoc_opt
                      (Vmm_core.Name.create_of_path path)
                      t.policies)
           in
-          let intermediate_key = Private_key.generate key_type in
-          let v =
-            Option.map
-              (fun p -> Vmm_asn.to_cert_extension (`Policy_cmd (`Policy_add p)))
-              policy
+          let cmd = Option.map (fun p -> `Policy_cmd (`Policy_add p)) policy in
+          let* key, cert =
+            key_cert ~is_ca:true ?cmd t.key domain
+              (X509.Certificate.subject t.cert)
           in
-          let exts =
-            let ku =
-              [
-                `Key_cert_sign;
-                `CRL_sign;
-                `Digital_signature;
-                `Content_commitment;
-              ]
-            in
-            let extensions =
-              match v with
-              | None -> Extension.empty
-              | Some p ->
-                  Extension.singleton (Unsupported Vmm_asn.oid) (false, p)
-            in
-            Extension.(
-              add Basic_constraints
-                (true, (true, None))
-                (add Key_usage (true, ku) extensions))
-          in
-          match
-            let name =
-              [
-                Distinguished_name.(
-                  Relative_distinguished_name.singleton (CN domain));
-              ]
-            in
-            let extensions = Signing_request.Ext.(singleton Extensions exts) in
-            Signing_request.create name ~extensions intermediate_key
-          with
-          | Error (`Msg msg) ->
-              Logs.err (fun m ->
-                  m "failed to construct CA signing request: %s" msg);
-              Error ()
-          | Ok csr -> (
-              let valid_from, valid_until = timestamps 300 in
-              let extensions =
-                let capub = X509.Private_key.public t.key in
-                key_ids exts Signing_request.((info csr).public_key) capub
-              in
-              let issuer = Certificate.subject t.cert in
-              match
-                Signing_request.sign csr ~valid_from ~valid_until ~extensions
-                  t.key issuer
-              with
-              | Error e ->
-                  Logs.err (fun m ->
-                      m "failed to sign CA CSR: %a"
-                        X509.Validation.pp_signature_error e);
-                  Error ()
-              | Ok mycert -> Ok (intermediate_key, mycert, [ mycert ])))
+          Ok (key, cert, [ cert ])
     in
-    let tmpkey = Private_key.generate key_type in
-    let extensions =
-      let v = Vmm_asn.to_cert_extension cmd in
-      Extension.(
-        add Key_usage
-          (true, [ `Digital_signature; `Key_encipherment ])
-          (add Basic_constraints
-             (true, (false, None))
-             (add Ext_key_usage (true, [ `Client_auth ])
-                (singleton (Unsupported Vmm_asn.oid) (false, v)))))
+    let* key, cert =
+      key_cert ~is_ca:false ~cmd ikey name (X509.Certificate.subject cert)
     in
-    match
-      let name =
-        [ Distinguished_name.(Relative_distinguished_name.singleton (CN name)) ]
-      in
-      let extensions = Signing_request.Ext.(singleton Extensions extensions) in
-      Signing_request.create name ~extensions tmpkey
-    with
-    | Error (`Msg msg) ->
-        Logs.err (fun m -> m "failed to construct signing request: %s" msg);
-        Error ()
-    | Ok csr -> (
-        let valid_from, valid_until = timestamps 300 in
-        let extensions =
-          let capub = X509.Private_key.public intermediate_key in
-          key_ids extensions Signing_request.((info csr).public_key) capub
-        in
-        let issuer = Certificate.subject cert in
-        match
-          Signing_request.sign csr ~valid_from ~valid_until ~extensions
-            intermediate_key issuer
-        with
-        | Error e ->
-            Logs.err (fun m ->
-                m "failed to sign CSR: %a" X509.Validation.pp_signature_error e);
-            Error ()
-        | Ok mycert -> Ok (`Single (mycert :: certs, tmpkey)))
+    Ok (`Single (cert :: certs, key))
 
   let decode data =
     match Vmm_asn.wire_of_cstruct data with
     | Error (`Msg msg) ->
-        Logs.err (fun m -> m "error %s while decoding data" msg);
-        Error ()
+        Error (Fmt.str "albatross: failed to decode data %s" msg)
     | Ok (hdr, res) as w ->
         if not Vmm_commands.(is_current hdr.version) then
           Logs.warn (fun m ->
-              m "version mismatch, received %a current %a"
+              m "albatross version mismatch, received %a current %a"
                 Vmm_commands.pp_version hdr.Vmm_commands.version
                 Vmm_commands.pp_version Vmm_commands.current);
         Logs.debug (fun m ->
@@ -173,16 +140,14 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
           Logs.warn (fun m ->
               m "received %d trailing bytes" (Cstruct.length data - len - 4));
         decode (Cstruct.sub data 4 len))
-      else (
-        Logs.err (fun m ->
-            m "buffer too short (%d bytes), need %d + 4 bytes"
-              (Cstruct.length data) len);
-        Error ())
-    else (
-      Logs.err (fun m ->
-          m "buffer too short (%d bytes), need at least 4 bytes"
-            (Cstruct.length data));
-      Error ())
+      else
+        Error
+          (Fmt.str "albatross short reply: received %u bytes, expected %u bytes"
+             (Cstruct.length data) (len + 4))
+    else
+      Error
+        (Fmt.str "albatross short buffer (%u bytes), need at least 4 bytes"
+           (Cstruct.length data))
 
   let split_many data =
     let rec split acc data =
@@ -192,14 +157,15 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
           split (Cstruct.sub data 4 len :: acc) (Cstruct.shift data (len + 4))
         else (
           Logs.warn (fun m ->
-              m "buffer too small: %u bytes, requires %u bytes"
+              m "albatross buffer too small: %u bytes, requires %u bytes"
                 (Cstruct.length data - 4)
                 len);
           acc)
       else if Cstruct.length data = 0 then acc
       else (
         Logs.warn (fun m ->
-            m "buffer too small: %u bytes leftover" (Cstruct.length data));
+            m "albatross buffer too small: %u bytes leftover"
+              (Cstruct.length data));
         acc)
     in
     split [] data |> List.rev
@@ -212,7 +178,10 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
         List.iter
           (fun d ->
             match decode d with
-            | Error () -> ()
+            | Error s ->
+                Logs.err (fun m ->
+                    m "albatross stop reading console %a: error %s"
+                      Vmm_core.Name.pp name s)
             | Ok (_, `Data (`Console_data (ts, data))) ->
                 let d = Albatross_json.console_data_to_json (ts, data) in
                 t.console_output <-
@@ -225,26 +194,37 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
                           in
                           Some (xs @ [ d ]))
                     t.console_output
-            | _ ->
+            | Ok w ->
                 Logs.warn (fun m ->
-                    m "unexpected reply, expected console output"))
+                    m "albatross unexpected reply, need console output, got %a"
+                      (Vmm_commands.pp_wire ~verbose:false)
+                      w))
           bufs;
         continue_reading t name flow
     | Ok `Eof ->
+        Logs.info (fun m ->
+            m "albatross received eof while reading console %a" Vmm_core.Name.pp
+              name);
         t.console_readers <- Set.remove name t.console_readers;
         TLS.close flow
     | Error e ->
+        Logs.err (fun m ->
+            m "albatross received error while reading console %a: %a"
+              Vmm_core.Name.pp name TLS.pp_error e);
         t.console_readers <- Set.remove name t.console_readers;
-        TLS.close flow >|= fun () ->
-        Logs.err (fun m -> m "received error while reading: %a" TLS.pp_error e)
+        TLS.close flow
 
-  let raw_query t ?(name = ".") certificates cmd =
+  let raw_query t ?(name = Vmm_core.Name.root) certificates cmd =
     let open Lwt.Infix in
     S.TCP.create_connection (S.tcp t.stack) t.remote >>= function
     | Error e ->
-        Logs.err (fun m ->
-            m "error connecting to albatross: %a" S.TCP.pp_error e);
-        Lwt.return (Error ())
+        Lwt.return
+          (Error
+             (Fmt.str "albatross connection failure %a while quering %a %a: %a"
+                Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                t.remote Vmm_core.Name.pp name
+                (Vmm_commands.pp ~verbose:false)
+                cmd S.TCP.pp_error e))
     | Ok flow -> (
         let tls_config =
           let authenticator =
@@ -256,9 +236,14 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
         in
         TLS.client_of_flow tls_config flow >>= function
         | Error e ->
-            Logs.err (fun m ->
-                m "error establishing TLS handshake: %a" TLS.pp_write_error e);
-            S.TCP.close flow >|= fun () -> Error ()
+            S.TCP.close flow >|= fun () ->
+            Error
+              (Fmt.str
+                 "albatross establishing TLS to %a while querying %a %a: %a"
+                 Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                 t.remote Vmm_core.Name.pp name
+                 (Vmm_commands.pp ~verbose:false)
+                 cmd TLS.pp_write_error e)
         | Ok tls_flow -> (
             TLS.read tls_flow >>= fun r ->
             match r with
@@ -269,14 +254,25 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
                     t.console_readers <- Set.add name t.console_readers;
                     Lwt.async (fun () -> continue_reading t name tls_flow);
                     Lwt.return_unit)
-                >|= fun () ->
-                Result.map (fun reply -> Some reply) (decode_reply d)
-            | Ok `Eof -> TLS.close tls_flow >|= fun () -> Ok None
+                >|= fun () -> decode_reply d
+            | Ok `Eof ->
+                TLS.close tls_flow >|= fun () ->
+                Error
+                  (Fmt.str "eof from albatross %a querying %a %a"
+                     Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                     t.remote Vmm_core.Name.pp name
+                     (Vmm_commands.pp ~verbose:false)
+                     cmd)
             | Error e ->
                 TLS.close tls_flow >|= fun () ->
-                Logs.err (fun m ->
-                    m "received error while reading: %a" TLS.pp_error e);
-                Error ()))
+                Error
+                  (Fmt.str
+                     "albatross received error reading from %a querying %a %a: \
+                      %a"
+                     Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                     t.remote Vmm_core.Name.pp name
+                     (Vmm_commands.pp ~verbose:false)
+                     cmd TLS.pp_error e)))
 
   let init stack server ?(port = 1025) cert key =
     let open Lwt.Infix in
@@ -293,20 +289,38 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     in
     let cmd = `Policy_cmd `Policy_info in
     match gen_cert t cmd "." with
-    | Error () -> Lwt.return t
+    | Error s -> invalid_arg s
     | Ok certificates -> (
         raw_query t certificates cmd >|= function
-        | Ok (Some (_hdr, `Success (`Policies ps))) ->
+        | Ok (_hdr, `Success (`Policies ps)) ->
             t.policies <- ps;
             t
-        | _ -> t)
+        | Ok w ->
+            Logs.err (fun m ->
+                m "albatross expected success policies, got reply %a"
+                  (Vmm_commands.pp_wire ~verbose:false)
+                  w);
+            t
+        | Error str ->
+            Logs.err (fun m -> m "albatross: error querying policies: %s" str);
+            t)
 
   let query t ~domain ?(name = ".") cmd =
-    match cmd with
-    | `Console_cmd (`Console_subscribe _) when Set.mem name t.console_readers ->
-        Lwt.return (Ok None)
-    | _ -> (
-        match gen_cert t ~domain cmd name with
-        | Error () -> Lwt.return (Error ())
-        | Ok certificates -> raw_query t ~name certificates cmd)
+    match
+      Result.bind (Vmm_core.Name.path_of_string domain) (fun domain ->
+          Vmm_core.Name.create domain name)
+    with
+    | Error (`Msg msg) -> Lwt.return (Error msg)
+    | Ok vmm_name -> (
+        match cmd with
+        | `Console_cmd (`Console_subscribe _)
+          when Set.mem vmm_name t.console_readers ->
+            let hdr =
+              Vmm_commands.{ version = current; sequence = 0L; name = vmm_name }
+            in
+            Lwt.return (Ok (hdr, `Success `Empty))
+        | _ -> (
+            match gen_cert t ~domain cmd name with
+            | Error str -> Lwt.return (Error str)
+            | Ok certificates -> raw_query t ~name:vmm_name certificates cmd))
 end
