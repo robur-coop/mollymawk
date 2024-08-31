@@ -5,6 +5,12 @@ document.addEventListener('DOMContentLoaded', function () {
 	}
 });
 
+function getUnikernelName(url) {
+	const urlObj = new URL(url);
+	const pathParts = urlObj.pathname.split('/');
+	return pathParts[pathParts.length - 1];
+}
+
 function filterData() {
 	var input, filter, table, tr, td, i, txtValue;
 	input = document.getElementById("searchQuery");
@@ -135,9 +141,6 @@ async function deployUnikernel() {
 		try {
 			const response = await fetch("/unikernel/create", {
 				method: 'POST',
-				headers: {
-					"Content-Type": "application/json",
-				},
 				body: formData
 			})
 			const data = await response.json();
@@ -186,11 +189,7 @@ async function destroyUnikernel(name) {
 	}
 }
 
-function getUnikernelName(url) {
-	const urlObj = new URL(url);
-	const pathParts = urlObj.pathname.split('/');
-	return pathParts[pathParts.length - 1];
-}
+
 
 var consoleArea = document.createElement("div");
 async function getConsoleOutput() {

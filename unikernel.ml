@@ -690,7 +690,7 @@ struct
           {
             Utils.Status.code = 400;
             title = "Error";
-            data = "Error querying albatross";
+            data = "Error querying albatross: " ^ msg;
             success = false;
           }
         in
