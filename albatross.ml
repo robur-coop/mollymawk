@@ -244,9 +244,15 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
                     t.console_readers <- Set.add name t.console_readers;
                     Lwt.async (fun () -> continue_reading t name tls_flow);
                     Lwt.return_unit)
-                >|= fun () ->
-                Result.map (fun reply -> Some reply) (decode_reply d)
-            | Ok `Eof -> TLS.close tls_flow >|= fun () -> Ok None
+                >|= fun () -> decode_reply d
+            | Ok `Eof ->
+                TLS.close tls_flow >|= fun () ->
+                Error
+                  (Fmt.str "eof from albatross %a querying %s %a"
+                     Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                     t.remote name
+                     (Vmm_commands.pp ~verbose:false)
+                     cmd)
             | Error e ->
                 TLS.close tls_flow >|= fun () ->
                 Error
@@ -276,24 +282,28 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     | Error s -> invalid_arg s
     | Ok certificates -> (
         raw_query t certificates cmd >|= function
-        | Ok (Some (_hdr, `Success (`Policies ps))) ->
+        | Ok (_hdr, `Success (`Policies ps)) ->
             t.policies <- ps;
             t
-        | Ok (Some w) ->
+        | Ok w ->
             Logs.err (fun m ->
                 m "albatross expected success policies, got reply %a"
                   (Vmm_commands.pp_wire ~verbose:false)
                   w);
             t
-        | Ok None -> t
         | Error str ->
             Logs.err (fun m -> m "albatross: error querying policies: %s" str);
             t)
 
   let query t ~domain ?(name = ".") cmd =
     match cmd with
-    | `Console_cmd (`Console_subscribe _) when Set.mem name t.console_readers ->
-        Lwt.return (Ok None)
+    | `Console_cmd (`Console_subscribe _) when Set.mem name t.console_readers
+      -> (
+        match Vmm_core.Name.of_string name with
+        | Error (`Msg msg) -> Lwt.return (Error msg)
+        | Ok name ->
+            let hdr = Vmm_commands.{ version = current; sequence = 0L; name } in
+            Lwt.return (Ok (hdr, `Success `Empty)))
     | _ -> (
         match gen_cert t ~domain cmd name with
         | Error str -> Lwt.return (Error str)

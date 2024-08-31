@@ -168,8 +168,7 @@ struct
                   in
                   reply ~content_type:"application/json"
                     (Utils.Status.to_json status)
-              | Ok None -> reply "got none"
-              | Ok (Some (_hdr, res)) -> (
+              | Ok (_hdr, res) -> (
                   match Albatross_json.res res with
                   | Ok res ->
                       let status =
@@ -213,10 +212,9 @@ struct
                        Logs.err (fun m ->
                            m "error while communicating with albatross: %s" msg);
                        []
-                   | Ok None -> []
-                   | Ok (Some (_hdr, `Success (`Unikernel_info unikernel))) ->
+                   | Ok (_hdr, `Success (`Unikernel_info unikernel)) ->
                        unikernel
-                   | Ok (Some reply) ->
+                   | Ok reply ->
                        Logs.err (fun m ->
                            m "expected a unikernel info reply, received %a"
                              (Vmm_commands.pp_wire ~verbose:false)
@@ -708,10 +706,8 @@ struct
                    Logs.err (fun m ->
                        m "error while communicating with albatross: %s" msg);
                    []
-               | Ok None -> []
-               | Ok (Some (_hdr, `Success (`Unikernel_info unikernels))) ->
-                   unikernels
-               | Ok (Some reply) ->
+               | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
+               | Ok reply ->
                    Logs.err (fun m ->
                        m "expected a unikernel info reply, received %a"
                          (Vmm_commands.pp_wire ~verbose:false)
@@ -814,7 +810,6 @@ struct
                                   success = false;
                                 }
                               in
-
                               Lwt.return
                                 (reply ~content_type:"application/json"
                                    (Utils.Status.to_json status)))
@@ -827,7 +822,6 @@ struct
                               success = false;
                             }
                           in
-
                           Lwt.return
                             (reply ~content_type:"application/json"
                                (Utils.Status.to_json status)))
@@ -882,19 +876,7 @@ struct
                       in
                       reply ~content_type:"application/json"
                         (Utils.Status.to_json status)
-                  | Ok None ->
-                      Logs.err (fun m -> m "got none");
-                      let status =
-                        {
-                          Utils.Status.code = 200;
-                          title = "Success";
-                          data = "Got none";
-                          success = true;
-                        }
-                      in
-                      reply ~content_type:"application/json"
-                        (Utils.Status.to_json status)
-                  | Ok (Some (_hdr, res)) -> (
+                  | Ok (_hdr, res) -> (
                       match Albatross_json.res res with
                       | Ok res ->
                           let status =
@@ -1063,19 +1045,7 @@ struct
                                       in
                                       reply ~content_type:"application/json"
                                         (Utils.Status.to_json status)
-                                  | Ok None ->
-                                      Logs.warn (fun m -> m "got none");
-                                      let status =
-                                        {
-                                          Utils.Status.code = 200;
-                                          title = "Success";
-                                          data = "Got none";
-                                          success = true;
-                                        }
-                                      in
-                                      reply ~content_type:"application/json"
-                                        (Utils.Status.to_json status)
-                                  | Ok (Some (_hdr, res)) -> (
+                                  | Ok (_hdr, res) -> (
                                       match Albatross_json.res res with
                                       | Ok res ->
                                           let status =
