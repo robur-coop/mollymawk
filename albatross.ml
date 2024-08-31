@@ -32,14 +32,59 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     | None, _ | _, None -> invalid_arg "span too big - reached end of ptime"
     | Some now, Some exp -> (now, exp)
 
+  let key_cert ?(key_type = `ED25519) ~is_ca ?cmd key name issuer =
+    let open X509 in
+    let exts =
+      let ext =
+        Option.map Vmm_asn.to_cert_extension cmd
+        |> Option.fold ~none:Extension.empty ~some:(fun p ->
+               Extension.singleton (Unsupported Vmm_asn.oid) (false, p))
+      in
+      let ku, bc =
+        if is_ca then
+          ( [ `Key_cert_sign; `Digital_signature; `Content_commitment ],
+            (true, None) )
+        else ([ `Digital_signature; `Key_encipherment ], (false, None))
+      in
+      Extension.(
+        add Basic_constraints (true, bc) (add Key_usage (true, ku) ext))
+    in
+    let tmp_key = Private_key.generate key_type in
+    match
+      let name =
+        [ Distinguished_name.(Relative_distinguished_name.singleton (CN name)) ]
+      in
+      let extensions = Signing_request.Ext.(singleton Extensions exts) in
+      Signing_request.create name ~extensions tmp_key
+    with
+    | Error (`Msg msg) ->
+        Error
+          (Fmt.str "albatross: failed to create %ssigning request: %s"
+             (if is_ca then "CA " else "")
+             msg)
+    | Ok csr -> (
+        let valid_from, valid_until = timestamps 300 in
+        let extensions =
+          let pub = X509.Private_key.public key in
+          key_ids exts Signing_request.((info csr).public_key) pub
+        in
+        match
+          Signing_request.sign csr ~valid_from ~valid_until ~extensions key
+            issuer
+        with
+        | Error e ->
+            Error
+              (Fmt.str "albatross: failed to sign %ssigning request: %a"
+                 (if is_ca then "CA " else "")
+                 X509.Validation.pp_signature_error e)
+        | Ok mycert -> Ok (tmp_key, mycert))
+
   let gen_cert t ?domain cmd name =
     let ( let* ) = Result.bind in
-    let key_type = `ED25519 in
-    let open X509 in
-    let* intermediate_key, cert, certs =
+    let* ikey, cert, certs =
       match domain with
       | None -> Ok (t.key, t.cert, [])
-      | Some domain -> (
+      | Some domain ->
           let* policy =
             match Vmm_core.Name.path_of_string domain with
             | Error (`Msg msg) ->
@@ -51,99 +96,17 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
                      (Vmm_core.Name.create_of_path path)
                      t.policies)
           in
-          let intermediate_key = Private_key.generate key_type in
-          let v =
-            Option.map
-              (fun p -> Vmm_asn.to_cert_extension (`Policy_cmd (`Policy_add p)))
-              policy
+          let cmd = Option.map (fun p -> `Policy_cmd (`Policy_add p)) policy in
+          let* key, cert =
+            key_cert ~is_ca:true ?cmd t.key domain
+              (X509.Certificate.subject t.cert)
           in
-          let exts =
-            let ku =
-              [
-                `Key_cert_sign;
-                `CRL_sign;
-                `Digital_signature;
-                `Content_commitment;
-              ]
-            in
-            let extensions =
-              match v with
-              | None -> Extension.empty
-              | Some p ->
-                  Extension.singleton (Unsupported Vmm_asn.oid) (false, p)
-            in
-            Extension.(
-              add Basic_constraints
-                (true, (true, None))
-                (add Key_usage (true, ku) extensions))
-          in
-          match
-            let name =
-              [
-                Distinguished_name.(
-                  Relative_distinguished_name.singleton (CN domain));
-              ]
-            in
-            let extensions = Signing_request.Ext.(singleton Extensions exts) in
-            Signing_request.create name ~extensions intermediate_key
-          with
-          | Error (`Msg msg) ->
-              Error
-                (Fmt.str "albatross: failed to create CA signing request: %s"
-                   msg)
-          | Ok csr -> (
-              let valid_from, valid_until = timestamps 300 in
-              let extensions =
-                let capub = X509.Private_key.public t.key in
-                key_ids exts Signing_request.((info csr).public_key) capub
-              in
-              let issuer = Certificate.subject t.cert in
-              match
-                Signing_request.sign csr ~valid_from ~valid_until ~extensions
-                  t.key issuer
-              with
-              | Error e ->
-                  Error
-                    (Fmt.str "albatross: failed to sign CA signing request: %a"
-                       X509.Validation.pp_signature_error e)
-              | Ok mycert -> Ok (intermediate_key, mycert, [ mycert ])))
+          Ok (key, cert, [ cert ])
     in
-    let tmpkey = Private_key.generate key_type in
-    let extensions =
-      let v = Vmm_asn.to_cert_extension cmd in
-      Extension.(
-        add Key_usage
-          (true, [ `Digital_signature; `Key_encipherment ])
-          (add Basic_constraints
-             (true, (false, None))
-             (add Ext_key_usage (true, [ `Client_auth ])
-                (singleton (Unsupported Vmm_asn.oid) (false, v)))))
+    let* key, cert =
+      key_cert ~is_ca:false ~cmd ikey name (X509.Certificate.subject cert)
     in
-    match
-      let name =
-        [ Distinguished_name.(Relative_distinguished_name.singleton (CN name)) ]
-      in
-      let extensions = Signing_request.Ext.(singleton Extensions extensions) in
-      Signing_request.create name ~extensions tmpkey
-    with
-    | Error (`Msg msg) ->
-        Error (Fmt.str "albatross: failed to create signing request: %s" msg)
-    | Ok csr -> (
-        let valid_from, valid_until = timestamps 300 in
-        let extensions =
-          let capub = X509.Private_key.public intermediate_key in
-          key_ids extensions Signing_request.((info csr).public_key) capub
-        in
-        let issuer = Certificate.subject cert in
-        match
-          Signing_request.sign csr ~valid_from ~valid_until ~extensions
-            intermediate_key issuer
-        with
-        | Error e ->
-            Error
-              (Fmt.str "albatross: failed to sign signing request %a"
-                 X509.Validation.pp_signature_error e)
-        | Ok mycert -> Ok (`Single (mycert :: certs, tmpkey)))
+    Ok (`Single (cert :: certs, key))
 
   let decode data =
     match Vmm_asn.wire_of_cstruct data with
