@@ -136,9 +136,42 @@ struct
             Albatross.query !albatross ~domain:"robur"
               (`Unikernel_cmd `Unikernel_info)
             >|= function
-            | Error () -> reply "error while querying albatross"
+            | Error () ->
+                let status =
+                  {
+                    Utils.Status.code = 500;
+                    title = "Error";
+                    data = "Error while querying albatross";
+                    success = false;
+                  }
+                in
+                reply ~content_type:"application/json"
+                  (Utils.Status.to_json status)
             | Ok None -> reply "got none"
-            | Ok (Some (_hdr, res)) -> reply_json (Albatross_json.res res))
+            | Ok (Some (_hdr, res)) -> (
+                match Albatross_json.res res with
+                | Ok res ->
+                    let status =
+                      {
+                        Utils.Status.code = 200;
+                        title = "Success";
+                        data = Yojson.Safe.to_string res;
+                        success = true;
+                      }
+                    in
+                    reply ~content_type:"application/json"
+                      (Utils.Status.to_json status)
+                | Error (`String res) ->
+                    let status =
+                      {
+                        Utils.Status.code = 400;
+                        title = "Error";
+                        data = Yojson.Safe.to_string (`String res);
+                        success = false;
+                      }
+                    in
+                    reply ~content_type:"application/json"
+                      (Utils.Status.to_json status)))
         | path
           when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
           -> (
@@ -891,18 +924,30 @@ struct
                             in
                             reply ~content_type:"application/json"
                               (Utils.Status.to_json status)
-                        | Ok (Some (_hdr, res)) ->
-                            let status =
-                              {
-                                Utils.Status.code = 200;
-                                title = "Success";
-                                data =
-                                  Yojson.Safe.to_string (Albatross_json.res res);
-                                success = true;
-                              }
-                            in
-                            reply ~content_type:"application/json"
-                              (Utils.Status.to_json status))
+                        | Ok (Some (_hdr, res)) -> (
+                            match Albatross_json.res res with
+                            | Ok res ->
+                                let status =
+                                  {
+                                    Utils.Status.code = 200;
+                                    title = "Success";
+                                    data = Yojson.Safe.to_string res;
+                                    success = true;
+                                  }
+                                in
+                                reply ~content_type:"application/json"
+                                  (Utils.Status.to_json status)
+                            | Error (`String res) ->
+                                let status =
+                                  {
+                                    Utils.Status.code = 400;
+                                    title = "Error";
+                                    data = Yojson.Safe.to_string (`String res);
+                                    success = false;
+                                  }
+                                in
+                                reply ~content_type:"application/json"
+                                  (Utils.Status.to_json status)))
                     | Error _ ->
                         Logs.err (fun m -> m "couldn't find user of cookie");
                         assert false)
@@ -1089,20 +1134,38 @@ struct
                                             reply
                                               ~content_type:"application/json"
                                               (Utils.Status.to_json status)
-                                        | Ok (Some (_hdr, res)) ->
-                                            let status =
-                                              {
-                                                Utils.Status.code = 200;
-                                                title = "Success";
-                                                data =
-                                                  Yojson.Safe.to_string
-                                                    (Albatross_json.res res);
-                                                success = true;
-                                              }
-                                            in
-                                            reply
-                                              ~content_type:"application/json"
-                                              (Utils.Status.to_json status))
+                                        | Ok (Some (_hdr, res)) -> (
+                                            match Albatross_json.res res with
+                                            | Ok res ->
+                                                let status =
+                                                  {
+                                                    Utils.Status.code = 200;
+                                                    title = "Success";
+                                                    data =
+                                                      Yojson.Safe.to_string res;
+                                                    success = true;
+                                                  }
+                                                in
+                                                reply
+                                                  ~content_type:
+                                                    "application/json"
+                                                  (Utils.Status.to_json status)
+                                            | Error (`String res) ->
+                                                let status =
+                                                  {
+                                                    Utils.Status.code = 400;
+                                                    title = "Error";
+                                                    data =
+                                                      Yojson.Safe.to_string
+                                                        (`String res);
+                                                    success = false;
+                                                  }
+                                                in
+                                                reply
+                                                  ~content_type:
+                                                    "application/json"
+                                                  (Utils.Status.to_json status))
+                                        )
                                     | Error (`Msg msg) ->
                                         Logs.warn (fun m ->
                                             m "couldn't decode data %s" msg);

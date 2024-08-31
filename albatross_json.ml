@@ -105,12 +105,12 @@ let console_data_to_json (ts, data) =
     [ ("timestamp", `String (Ptime.to_rfc3339 ts)); ("line", `String data) ]
 
 let res = function
-  | `Command _ -> `String "command not supported"
-  | `Success s -> success s
-  | `Failure f -> `String ("failure: " ^ f)
-  | `Data (`Console_data (ts, data)) -> console_data_to_json (ts, data)
-  | `Data (`Utc_console_data (ts, data)) -> console_data_to_json (ts, data)
-  | `Data (`Stats_data _) -> `String "stats not supported"
+  | `Command _ -> Error (`String "command not supported")
+  | `Success s -> Ok (success s)
+  | `Failure f -> Error (`String ("failure: " ^ f))
+  | `Data (`Console_data (ts, data)) -> Ok (console_data_to_json (ts, data))
+  | `Data (`Utc_console_data (ts, data)) -> Ok (console_data_to_json (ts, data))
+  | `Data (`Stats_data _) -> Error (`String "stats not supported")
 
 let fail_behaviour_of_json js =
   let ( let* ) = Result.bind in

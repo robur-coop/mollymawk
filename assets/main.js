@@ -116,6 +116,7 @@ function postAlert(bg_color, content) {
 }
 
 async function deployUnikernel() {
+	const deployButton = document.getElementById("deploy-button");
 	const name = document.getElementById("unikernel-name").value.trim();
 	const arguments = document.getElementById("unikernel-arguments").value.trim();
 	const binary = document.getElementById("unikernel-binary").files[0];
@@ -124,22 +125,23 @@ async function deployUnikernel() {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = "Please fill in the required data"
+		buttonLoading(deployButton, false, "Deploy")
 	} else {
+		buttonLoading(deployButton, true, "Deploying...")
 		let formData = new FormData();
-		formData.append("name", name.value);
+		formData.append("name", name);
 		formData.append("binary", binary)
 		formData.append("arguments", arguments)
 		try {
 			const response = await fetch("/unikernel/create", {
 				method: 'POST',
-				mode: "no-cors",
 				headers: {
 					"Content-Type": "application/json",
 				},
 				body: formData
 			})
 			const data = await response.json();
-			if (data.status === 200) {
+			if (data.status === 200 && data.success) {
 				formAlert.classList.remove("hidden", "text-secondary-500");
 				formAlert.classList.add("text-primary-500");
 				formAlert.textContent = "Succesfully updated";
@@ -152,12 +154,14 @@ async function deployUnikernel() {
 				formAlert.classList.remove("hidden", "text-primary-500");
 				formAlert.classList.add("text-secondary-500");
 				formAlert.textContent = data.data
+				buttonLoading(deployButton, false, "Deploy")
 			}
 		} catch (error) {
 			postAlert("bg-secondary-300", error);
 			formAlert.classList.remove("hidden");
 			formAlert.classList.add("text-secondary-500");
 			formAlert.textContent = error
+			buttonLoading(deployButton, false, "Deploy")
 		}
 	}
 }
@@ -183,9 +187,9 @@ async function destroyUnikernel(name) {
 }
 
 function getUnikernelName(url) {
-    const urlObj = new URL(url);
-    const pathParts = urlObj.pathname.split('/');
-    return pathParts[pathParts.length - 1];
+	const urlObj = new URL(url);
+	const pathParts = urlObj.pathname.split('/');
+	return pathParts[pathParts.length - 1];
 }
 
 var consoleArea = document.createElement("textarea");
@@ -193,25 +197,40 @@ async function getConsoleOutput() {
 	let unikernel_name = getUnikernelName(window.location.href);
 	if (unikernel_name) {
 		const consoleDiv = document.getElementById("console-container");
-		fetch("/unikernel/console/"+unikernel_name, {
+		fetch("/unikernel/console/" + unikernel_name, {
 			method: "get",
-		  })
+		})
 			.then((response) => response.json())
 			.then((responseText) => {
-			  let data= ""
-			  responseText.forEach(item => {
-				data += `${item.timestamp} - ${item.line} \n`
-			  })
-			  consoleArea.textContent = ""
-			  consoleArea.textContent = data
+				let data = ""
+				responseText.forEach(item => {
+					data += `${item.timestamp} - ${item.line} \n`
+				})
+				consoleArea.textContent = ""
+				consoleArea.textContent = data
 			})
 			.catch((error) => {
-			  postAlert("bg-secondary-300", `${unikernel_name} ${error}`)
+				postAlert("bg-secondary-300", `${unikernel_name} ${error}`)
 			})
 			.finally(() => {
 
 			});
-			consoleDiv.appendChild(consoleArea)
+		consoleDiv.appendChild(consoleArea)
 	}
 }
+
+function buttonLoading(btn, load, text) {
+	if (load) {
+		btn.disabled = true;
+		btn.classList.remove("bg-primary-500", "text-gray-50");
+		btn.classList.add("bg-primary-50", "text-primary-950");
+		btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-2"></i> ${text}`;
+	} else {
+		btn.disabled = false;
+		btn.classList.remove("bg-primary-50", "text-primary-950");
+		btn.classList.add("bg-primary-500", "text-gray-50");
+		btn.innerHTML = text;
+	}
+}
+
 
