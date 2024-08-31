@@ -1,5 +1,8 @@
 document.addEventListener('DOMContentLoaded', function () {
-    AOS.init();
+	AOS.init();
+	if (window.location.pathname.startsWith("/unikernel/info")) {
+		setInterval(getConsoleOutput, 300);
+	}
 });
 
 function filterData() {
@@ -74,7 +77,8 @@ async function saveConfig() {
 				formAlert.classList.remove("hidden", "text-secondary-500");
 				formAlert.classList.add("text-primary-500");
 				formAlert.textContent = "Succesfully updated";
-				setTimeout(function() {
+				postAlert("bg-primary-300", data.data);
+				setTimeout(function () {
 					window.location.reload();
 				}, 2000);
 			} else {
@@ -95,3 +99,138 @@ function closeBanner() {
 	var banner = document.getElementById("banner-message");
 	banner.style.display = "none";
 }
+
+function postAlert(bg_color, content) {
+	const alertContainer = document.getElementById("alert-container");
+	alertContainer.classList.remove("hidden")
+	alertContainer.classList.add("block", `${bg_color}`, "text-white", "transition", "ease-in-out", "delay-150", "duration-300")
+	const alert = document.createElement("div");
+	alert.className = `text-white transition ease-in-out delay-150 duration-300 ${bg_color}`;
+	alert.textContent = content;
+	alertContainer.appendChild(alert);
+	setTimeout(() => {
+		alertContainer.classList.remove("block", `${bg_color}`)
+		alertContainer.classList.add("hidden")
+		alertContainer.removeChild(alert);
+	}, 1600);
+}
+
+async function deployUnikernel() {
+	const deployButton = document.getElementById("deploy-button");
+	const name = document.getElementById("unikernel-name").value.trim();
+	const arguments = document.getElementById("unikernel-arguments").value.trim();
+	const binary = document.getElementById("unikernel-binary").files[0];
+	const formAlert = document.getElementById("form-alert");
+	if (!name || !binary) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Please fill in the required data"
+		buttonLoading(deployButton, false, "Deploy")
+	} else {
+		buttonLoading(deployButton, true, "Deploying...")
+		let formData = new FormData();
+		formData.append("name", name);
+		formData.append("binary", binary)
+		formData.append("arguments", arguments)
+		try {
+			const response = await fetch("/unikernel/create", {
+				method: 'POST',
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: formData
+			})
+			const data = await response.json();
+			if (data.status === 200 && data.success) {
+				formAlert.classList.remove("hidden", "text-secondary-500");
+				formAlert.classList.add("text-primary-500");
+				formAlert.textContent = "Succesfully updated";
+				postAlert("bg-primary-300", data.data);
+				setTimeout(function () {
+					window.location.href = "/dashboard";
+				}, 2000);
+			} else {
+				postAlert("bg-secondary-300", data.data);
+				formAlert.classList.remove("hidden", "text-primary-500");
+				formAlert.classList.add("text-secondary-500");
+				formAlert.textContent = data.data
+				buttonLoading(deployButton, false, "Deploy")
+			}
+		} catch (error) {
+			postAlert("bg-secondary-300", error);
+			formAlert.classList.remove("hidden");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = error
+			buttonLoading(deployButton, false, "Deploy")
+		}
+	}
+}
+
+async function destroyUnikernel(name) {
+	try {
+		const response = await fetch(`/unikernel/destroy/${name}`, {
+			method: 'GET',
+			mode: "no-cors"
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			postAlert("bg-primary-300", `Successful: ${data.data}`);
+			setTimeout(function () {
+				window.location.href = "/dashboard";
+			}, 2000);
+		} else {
+			postAlert("bg-secondary-300", data.data);
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+	}
+}
+
+function getUnikernelName(url) {
+	const urlObj = new URL(url);
+	const pathParts = urlObj.pathname.split('/');
+	return pathParts[pathParts.length - 1];
+}
+
+var consoleArea = document.createElement("textarea");
+async function getConsoleOutput() {
+	let unikernel_name = getUnikernelName(window.location.href);
+	if (unikernel_name) {
+		const consoleDiv = document.getElementById("console-container");
+		fetch("/unikernel/console/" + unikernel_name, {
+			method: "get",
+		})
+			.then((response) => response.json())
+			.then((responseText) => {
+				let data = ""
+				responseText.forEach(item => {
+					data += `${item.timestamp} - ${item.line} \n`
+				})
+				consoleArea.textContent = ""
+				consoleArea.textContent = data
+			})
+			.catch((error) => {
+				postAlert("bg-secondary-300", `${unikernel_name} ${error}`)
+			})
+			.finally(() => {
+
+			});
+		consoleDiv.appendChild(consoleArea)
+	}
+}
+
+function buttonLoading(btn, load, text) {
+	if (load) {
+		btn.disabled = true;
+		btn.classList.remove("bg-primary-500", "text-gray-50");
+		btn.classList.add("bg-primary-50", "text-primary-950");
+		btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-2"></i> ${text}`;
+	} else {
+		btn.disabled = false;
+		btn.classList.remove("bg-primary-50", "text-primary-950");
+		btn.classList.add("bg-primary-500", "text-gray-50");
+		btn.innerHTML = text;
+	}
+}
+
+

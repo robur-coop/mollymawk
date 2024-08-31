@@ -1,11 +1,11 @@
 ## 20240813
 - [x] style for the dashboard (unikernel info)
-- TODO unikernel detailed information (/unikernel/info/<name>) - displayed
-- TODO shutdown and restart of a unikernel
-- TODO deploy/create a new unikernel
-
+- [x] unikernel detailed information (/unikernel/info/<name>) - displayed
+- [x] destroy of a unikernel
+- [x] deploy/create a new unikernels
 - [x] store configuration data on block device (PR pending)
 - [x] have an HTTP endpoint for editing / uploading the configuration
+- TODO Shutdown and restart a unikernel
 
 - TODO we should remove all unauthenticated endpoints (comment out)
 
@@ -26,4 +26,4 @@
 - TODO email verification (sending emails)
 
 - TODO deploy unikernels via GitHub action (Bearer token etc.)
-- TODO REST API - rely on bearer tokens
+- TODO REST API - rely on bearer tokenss
