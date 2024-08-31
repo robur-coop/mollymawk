@@ -5,6 +5,12 @@ document.addEventListener('DOMContentLoaded', function () {
 	}
 });
 
+function getUnikernelName(url) {
+	const urlObj = new URL(url);
+	const pathParts = urlObj.pathname.split('/');
+	return pathParts[pathParts.length - 1];
+}
+
 function filterData() {
 	var input, filter, table, tr, td, i, txtValue;
 	input = document.getElementById("searchQuery");
@@ -135,9 +141,6 @@ async function deployUnikernel() {
 		try {
 			const response = await fetch("/unikernel/create", {
 				method: 'POST',
-				headers: {
-					"Content-Type": "application/json",
-				},
 				body: formData
 			})
 			const data = await response.json();
@@ -145,7 +148,7 @@ async function deployUnikernel() {
 				formAlert.classList.remove("hidden", "text-secondary-500");
 				formAlert.classList.add("text-primary-500");
 				formAlert.textContent = "Succesfully updated";
-				postAlert("bg-primary-300", data.data);
+				postAlert("bg-primary-300", `${name} has been deployed succesfully.`);
 				setTimeout(function () {
 					window.location.href = "/dashboard";
 				}, 2000);
@@ -179,18 +182,14 @@ async function destroyUnikernel(name) {
 				window.location.href = "/dashboard";
 			}, 2000);
 		} else {
-			postAlert("bg-secondary-300", data.data);
+			postAlert("bg-secondary-300", `${name} has been destroyed succesfully.`);
 		}
 	} catch (error) {
 		postAlert("bg-secondary-300", error);
 	}
 }
 
-function getUnikernelName(url) {
-	const urlObj = new URL(url);
-	const pathParts = urlObj.pathname.split('/');
-	return pathParts[pathParts.length - 1];
-}
+
 
 var consoleArea = document.createElement("div");
 async function getConsoleOutput() {

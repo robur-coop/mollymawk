@@ -45,7 +45,8 @@ let unikernel_single_layout unikernel now =
                             [
                               a_onclick
                                 ("destroyUnikernel('"
-                                ^ Vmm_core.Name.to_string u_name
+                                ^ Option.value ~default:""
+                                    (Vmm_core.Name.name u_name)
                                 ^ "')");
                               a_class
                                 [
