@@ -115,7 +115,7 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     | Ok (hdr, res) as w ->
         if not Vmm_commands.(is_current hdr.version) then
           Logs.warn (fun m ->
-              m "version mismatch, received %a current %a"
+              m "albatross version mismatch, received %a current %a"
                 Vmm_commands.pp_version hdr.Vmm_commands.version
                 Vmm_commands.pp_version Vmm_commands.current);
         Logs.debug (fun m ->
@@ -134,11 +134,11 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
         decode (Cstruct.sub data 4 len))
       else
         Error
-          (Fmt.str "reply too short: received %u bytes, expected %u bytes"
+          (Fmt.str "albatross short reply: received %u bytes, expected %u bytes"
              (Cstruct.length data) (len + 4))
     else
       Error
-        (Fmt.str "buffer too short (%u bytes), need at least 4 bytes"
+        (Fmt.str "albatross short buffer (%u bytes), need at least 4 bytes"
            (Cstruct.length data))
 
   let split_many data =
@@ -149,14 +149,15 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
           split (Cstruct.sub data 4 len :: acc) (Cstruct.shift data (len + 4))
         else (
           Logs.warn (fun m ->
-              m "buffer too small: %u bytes, requires %u bytes"
+              m "albatross buffer too small: %u bytes, requires %u bytes"
                 (Cstruct.length data - 4)
                 len);
           acc)
       else if Cstruct.length data = 0 then acc
       else (
         Logs.warn (fun m ->
-            m "buffer too small: %u bytes leftover" (Cstruct.length data));
+            m "albatross buffer too small: %u bytes leftover"
+              (Cstruct.length data));
         acc)
     in
     split [] data |> List.rev
@@ -184,19 +185,21 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
                           in
                           Some (xs @ [ d ]))
                     t.console_output
-            | _ ->
+            | Ok w ->
                 Logs.warn (fun m ->
-                    m "unexpected reply, expected console output"))
+                    m "albatross unexpected reply, need console output, got %a"
+                      (Vmm_commands.pp_wire ~verbose:false)
+                      w))
           bufs;
         continue_reading t name flow
     | Ok `Eof ->
         Logs.info (fun m ->
-            m "received eof from albatross while reading console %s" name);
+            m "albatross received eof while reading console %s" name);
         t.console_readers <- Set.remove name t.console_readers;
         TLS.close flow
     | Error e ->
         Logs.err (fun m ->
-            m "received error from albatross while reading console %s: %a" name
+            m "albatross received error while reading console %s: %a" name
               TLS.pp_error e);
         t.console_readers <- Set.remove name t.console_readers;
         TLS.close flow
@@ -207,9 +210,11 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     | Error e ->
         Lwt.return
           (Error
-             (Fmt.str "albatross connection failure %a: %a"
+             (Fmt.str "albatross connection failure %a while quering %s %a: %a"
                 Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                t.remote S.TCP.pp_error e))
+                t.remote name
+                (Vmm_commands.pp ~verbose:false)
+                cmd S.TCP.pp_error e))
     | Ok flow -> (
         let tls_config =
           let authenticator =
@@ -223,9 +228,12 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
         | Error e ->
             S.TCP.close flow >|= fun () ->
             Error
-              (Fmt.str "error establishing TLS handshake %a: %a"
+              (Fmt.str
+                 "albatross establishing TLS to %a while querying %s %a: %a"
                  Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                 t.remote TLS.pp_write_error e)
+                 t.remote name
+                 (Vmm_commands.pp ~verbose:false)
+                 cmd TLS.pp_write_error e)
         | Ok tls_flow -> (
             TLS.read tls_flow >>= fun r ->
             match r with
@@ -242,9 +250,13 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
             | Error e ->
                 TLS.close tls_flow >|= fun () ->
                 Error
-                  (Fmt.str "received error while reading %a: %a"
+                  (Fmt.str
+                     "albatross received error reading from %a querying %s %a: \
+                      %a"
                      Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                     t.remote TLS.pp_error e)))
+                     t.remote name
+                     (Vmm_commands.pp ~verbose:false)
+                     cmd TLS.pp_error e)))
 
   let init stack server ?(port = 1025) cert key =
     let open Lwt.Infix in
@@ -269,11 +281,13 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
             t
         | Ok (Some w) ->
             Logs.err (fun m ->
-                m "unexpected reply %a" (Vmm_commands.pp_wire ~verbose:false) w);
+                m "albatross expected success policies, got reply %a"
+                  (Vmm_commands.pp_wire ~verbose:false)
+                  w);
             t
         | Ok None -> t
         | Error str ->
-            Logs.err (fun m -> m "couldn't query policies: %s" str);
+            Logs.err (fun m -> m "albatross: error querying policies: %s" str);
             t)
 
   let query t ~domain ?(name = ".") cmd =
