@@ -43,9 +43,8 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
           let* policy =
             match Vmm_core.Name.path_of_string domain with
             | Error (`Msg msg) ->
-                Logs.err (fun m ->
-                    m "invalid domain %s is not a path: %s" domain msg);
-                Error ()
+                Error
+                  (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
             | Ok path ->
                 Ok
                   (List.assoc_opt
@@ -89,9 +88,9 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
             Signing_request.create name ~extensions intermediate_key
           with
           | Error (`Msg msg) ->
-              Logs.err (fun m ->
-                  m "failed to construct CA signing request: %s" msg);
-              Error ()
+              Error
+                (Fmt.str "albatross: failed to create CA signing request: %s"
+                   msg)
           | Ok csr -> (
               let valid_from, valid_until = timestamps 300 in
               let extensions =
@@ -104,10 +103,9 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
                   t.key issuer
               with
               | Error e ->
-                  Logs.err (fun m ->
-                      m "failed to sign CA CSR: %a"
-                        X509.Validation.pp_signature_error e);
-                  Error ()
+                  Error
+                    (Fmt.str "albatross: failed to sign CA signing request: %a"
+                       X509.Validation.pp_signature_error e)
               | Ok mycert -> Ok (intermediate_key, mycert, [ mycert ])))
     in
     let tmpkey = Private_key.generate key_type in
@@ -129,8 +127,7 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
       Signing_request.create name ~extensions tmpkey
     with
     | Error (`Msg msg) ->
-        Logs.err (fun m -> m "failed to construct signing request: %s" msg);
-        Error ()
+        Error (Fmt.str "albatross: failed to create signing request: %s" msg)
     | Ok csr -> (
         let valid_from, valid_until = timestamps 300 in
         let extensions =
@@ -143,16 +140,15 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
             intermediate_key issuer
         with
         | Error e ->
-            Logs.err (fun m ->
-                m "failed to sign CSR: %a" X509.Validation.pp_signature_error e);
-            Error ()
+            Error
+              (Fmt.str "albatross: failed to sign signing request %a"
+                 X509.Validation.pp_signature_error e)
         | Ok mycert -> Ok (`Single (mycert :: certs, tmpkey)))
 
   let decode data =
     match Vmm_asn.wire_of_cstruct data with
     | Error (`Msg msg) ->
-        Logs.err (fun m -> m "error %s while decoding data" msg);
-        Error ()
+        Error (Fmt.str "albatross: failed to decode data %s" msg)
     | Ok (hdr, res) as w ->
         if not Vmm_commands.(is_current hdr.version) then
           Logs.warn (fun m ->
@@ -173,16 +169,14 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
           Logs.warn (fun m ->
               m "received %d trailing bytes" (Cstruct.length data - len - 4));
         decode (Cstruct.sub data 4 len))
-      else (
-        Logs.err (fun m ->
-            m "buffer too short (%d bytes), need %d + 4 bytes"
-              (Cstruct.length data) len);
-        Error ())
-    else (
-      Logs.err (fun m ->
-          m "buffer too short (%d bytes), need at least 4 bytes"
-            (Cstruct.length data));
-      Error ())
+      else
+        Error
+          (Fmt.str "reply too short: received %u bytes, expected %u bytes"
+             (Cstruct.length data) (len + 4))
+    else
+      Error
+        (Fmt.str "buffer too short (%u bytes), need at least 4 bytes"
+           (Cstruct.length data))
 
   let split_many data =
     let rec split acc data =
@@ -212,7 +206,9 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
         List.iter
           (fun d ->
             match decode d with
-            | Error () -> ()
+            | Error s ->
+                Logs.err (fun m ->
+                    m "albatross stop reading console %s: error %s" name s)
             | Ok (_, `Data (`Console_data (ts, data))) ->
                 let d = Albatross_json.console_data_to_json (ts, data) in
                 t.console_output <-
@@ -231,20 +227,26 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
           bufs;
         continue_reading t name flow
     | Ok `Eof ->
+        Logs.info (fun m ->
+            m "received eof from albatross while reading console %s" name);
         t.console_readers <- Set.remove name t.console_readers;
         TLS.close flow
     | Error e ->
+        Logs.err (fun m ->
+            m "received error from albatross while reading console %s: %a" name
+              TLS.pp_error e);
         t.console_readers <- Set.remove name t.console_readers;
-        TLS.close flow >|= fun () ->
-        Logs.err (fun m -> m "received error while reading: %a" TLS.pp_error e)
+        TLS.close flow
 
   let raw_query t ?(name = ".") certificates cmd =
     let open Lwt.Infix in
     S.TCP.create_connection (S.tcp t.stack) t.remote >>= function
     | Error e ->
-        Logs.err (fun m ->
-            m "error connecting to albatross: %a" S.TCP.pp_error e);
-        Lwt.return (Error ())
+        Lwt.return
+          (Error
+             (Fmt.str "albatross connection failure %a: %a"
+                Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                t.remote S.TCP.pp_error e))
     | Ok flow -> (
         let tls_config =
           let authenticator =
@@ -256,9 +258,11 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
         in
         TLS.client_of_flow tls_config flow >>= function
         | Error e ->
-            Logs.err (fun m ->
-                m "error establishing TLS handshake: %a" TLS.pp_write_error e);
-            S.TCP.close flow >|= fun () -> Error ()
+            S.TCP.close flow >|= fun () ->
+            Error
+              (Fmt.str "error establishing TLS handshake %a: %a"
+                 Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                 t.remote TLS.pp_write_error e)
         | Ok tls_flow -> (
             TLS.read tls_flow >>= fun r ->
             match r with
@@ -274,9 +278,10 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
             | Ok `Eof -> TLS.close tls_flow >|= fun () -> Ok None
             | Error e ->
                 TLS.close tls_flow >|= fun () ->
-                Logs.err (fun m ->
-                    m "received error while reading: %a" TLS.pp_error e);
-                Error ()))
+                Error
+                  (Fmt.str "received error while reading %a: %a"
+                     Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                     t.remote TLS.pp_error e)))
 
   let init stack server ?(port = 1025) cert key =
     let open Lwt.Infix in
@@ -293,13 +298,20 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     in
     let cmd = `Policy_cmd `Policy_info in
     match gen_cert t cmd "." with
-    | Error () -> Lwt.return t
+    | Error s -> invalid_arg s
     | Ok certificates -> (
         raw_query t certificates cmd >|= function
         | Ok (Some (_hdr, `Success (`Policies ps))) ->
             t.policies <- ps;
             t
-        | _ -> t)
+        | Ok (Some w) ->
+            Logs.err (fun m ->
+                m "unexpected reply %a" (Vmm_commands.pp_wire ~verbose:false) w);
+            t
+        | Ok None -> t
+        | Error str ->
+            Logs.err (fun m -> m "couldn't query policies: %s" str);
+            t)
 
   let query t ~domain ?(name = ".") cmd =
     match cmd with
@@ -307,6 +319,6 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
         Lwt.return (Ok None)
     | _ -> (
         match gen_cert t ~domain cmd name with
-        | Error () -> Lwt.return (Error ())
+        | Error str -> Lwt.return (Error str)
         | Ok certificates -> raw_query t ~name certificates cmd)
 end

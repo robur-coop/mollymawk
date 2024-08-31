@@ -136,12 +136,14 @@ struct
             Albatross.query !albatross ~domain:"robur"
               (`Unikernel_cmd `Unikernel_info)
             >|= function
-            | Error () ->
+            | Error msg ->
                 let status =
                   {
                     Utils.Status.code = 500;
                     title = "Error";
-                    data = "Error while querying albatross";
+                    data =
+                      Yojson.Safe.to_string
+                        (`String ("Error while querying albatross: " ^ msg));
                     success = false;
                   }
                 in
@@ -198,9 +200,12 @@ struct
                             ~domain:user.name (* TODO use uuid in the future *)
                             ~name:unikernel_name
                           >|= function
-                          | Error () ->
+                          | Error msg ->
                               Logs.err (fun m ->
-                                  m "error while communicating with albatross");
+                                  m
+                                    "error while communicating with albatross: \
+                                     %s"
+                                    msg);
                               []
                           | Ok None -> []
                           | Ok
@@ -699,9 +704,10 @@ struct
                        ~domain:user.name (* TODO use uuid in the future *)
                        (`Unikernel_cmd `Unikernel_info)
                      >|= function
-                     | Error () ->
+                     | Error msg ->
                          Logs.err (fun m ->
-                             m "error while communicating with albatross");
+                             m "error while communicating with albatross: %s"
+                               msg);
                          []
                      | Ok None -> []
                      | Ok (Some (_hdr, `Success (`Unikernel_info unikernels)))
@@ -900,8 +906,9 @@ struct
                           (`Unikernel_cmd `Unikernel_destroy)
                           ~name:unikernel_name
                         >|= function
-                        | Error () ->
-                            Logs.err (fun m -> m "Error querying albatross");
+                        | Error msg ->
+                            Logs.err (fun m ->
+                                m "Error querying albatross: %s" msg);
                             let status =
                               {
                                 Utils.Status.code = 400;
@@ -1105,9 +1112,10 @@ struct
                                           (`Unikernel_cmd
                                             (`Unikernel_create config))
                                         >|= function
-                                        | Error () ->
+                                        | Error msg ->
                                             Logs.warn (fun m ->
-                                                m "error querying albatross");
+                                                m "error querying albatross: %s"
+                                                  msg);
                                             let status =
                                               {
                                                 Utils.Status.code = 500;
