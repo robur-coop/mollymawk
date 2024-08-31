@@ -192,30 +192,30 @@ function getUnikernelName(url) {
 	return pathParts[pathParts.length - 1];
 }
 
-var consoleArea = document.createElement("textarea");
+var consoleArea = document.createElement("div");
 async function getConsoleOutput() {
 	let unikernel_name = getUnikernelName(window.location.href);
+	consoleArea.classList.add("w-full", "bg-transparent", "border-0", "h-screen", "overflow-hidden");
 	if (unikernel_name) {
 		const consoleDiv = document.getElementById("console-container");
-		fetch("/unikernel/console/" + unikernel_name, {
-			method: "get",
-		})
-			.then((response) => response.json())
-			.then((responseText) => {
-				let data = ""
-				responseText.forEach(item => {
-					data += `${item.timestamp} - ${item.line} \n`
-				})
-				consoleArea.textContent = ""
-				consoleArea.textContent = data
-			})
-			.catch((error) => {
-				postAlert("bg-secondary-300", `${unikernel_name} ${error}`)
-			})
-			.finally(() => {
-
+		try {
+			const response = await fetch("/unikernel/console/" + unikernel_name, {
+				method: "GET",
 			});
-		consoleDiv.appendChild(consoleArea)
+			const responseText = await response.json();
+
+			if (responseText.status === 200 && responseText.success) {
+				consoleArea.classList.remove("text-secondary-500")
+				consoleArea.innerHTML += `${responseText.data}<br>`;
+			} else {
+				consoleArea.classList.add("text-secondary-500")
+				consoleArea.innerHTML += `Error: ${responseText.data}<br>`;
+			}
+		} catch (error) {
+			consoleArea.classList.add("text-secondary-500")
+			consoleArea.innerHTML += `Error: ${unikernel_name} ${error}<br>`;
+		}
+		consoleDiv.appendChild(consoleArea);
 	}
 }
 
