@@ -865,7 +865,7 @@ struct
           {
             Utils.Status.code = 500;
             title = "Error";
-data = "Error while querying Albatross:  " ^ msg;
+            data = "Error while querying Albatross:  " ^ msg;
             success = false;
           }
         in
