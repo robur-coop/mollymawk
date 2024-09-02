@@ -203,16 +203,25 @@ async function getConsoleOutput() {
 			});
 			const responseText = await response.json();
 
-			if (responseText.status === 200 && responseText.success) {
-				consoleArea.classList.remove("text-secondary-500")
-				consoleArea.innerHTML += `${responseText.data}<br>`;
+			if (response.status === 200) {
+				consoleArea.classList.remove("text-secondary-500");
+				consoleArea.innerHTML = "";
+				responseText.forEach(log => {
+					const timeElement = document.createElement("p");
+					timeElement.classList.add("text-gray-600", "font-mono", "text-sm");
+					const lineElement = document.createElement("p");
+					lineElement.classList.add("text-white", "font-mono", "text-sm");
+					lineElement.textContent = log.line;
+					consoleArea.appendChild(timeElement);
+					consoleArea.appendChild(lineElement);
+				});
 			} else {
-				consoleArea.classList.add("text-secondary-500")
-				consoleArea.innerHTML += `Error: ${responseText.data}<br>`;
+				consoleArea.classList.add("text-secondary-500");
+				consoleArea.innerHTML = `Error: ${responseText.data}<br>`;
 			}
 		} catch (error) {
-			consoleArea.classList.add("text-secondary-500")
-			consoleArea.innerHTML += `Error: ${unikernel_name} ${error}<br>`;
+			consoleArea.classList.add("text-secondary-500");
+			consoleArea.innerHTML = `Error: ${unikernel_name} ${error}<br>`;
 		}
 		consoleDiv.appendChild(consoleArea);
 	}
