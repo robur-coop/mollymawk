@@ -104,9 +104,23 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
                      (Vmm_core.Name.create_of_path path)
                      t.policies)
           in
-          let cmd = Option.map (fun p -> `Policy_cmd (`Policy_add p)) policy in
+          let policy =
+            Option.value
+              ~default:
+                Vmm_core.(
+                  Policy.
+                    {
+                      vms = 0;
+                      cpuids = IS.empty;
+                      memory = 0;
+                      block = None;
+                      bridges = String_set.empty;
+                    })
+              policy
+          in
+          let cmd = `Policy_cmd (`Policy_add policy) in
           let* key, cert =
-            key_cert ~is_ca:true ?cmd t.key domain
+            key_cert ~is_ca:true ~cmd t.key domain
               (X509.Certificate.subject t.cert)
           in
           Ok (key, cert, [ cert ])

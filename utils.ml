@@ -92,3 +92,25 @@ module Status = struct
       ]
     |> Yojson.Safe.to_string
 end
+
+let display_banner = function
+  | Some message ->
+      Tyxml_html.(
+        section
+          ~a:
+            [
+              a_class
+                [
+                  "w-full bg-primary-200 py-4 text-center text-gray-200 border \
+                   border-primary-400 font-semibold flex justify-center px-5 \
+                   space-x-5";
+                ];
+              a_id "banner-message";
+            ]
+          [
+            p [ txt message ];
+            button
+              ~a:[ a_id "close-banner-btn"; a_onclick "closeBanner()" ]
+              [ i ~a:[ a_class [ "fa-solid fa-x text-sm" ] ] [] ];
+          ])
+  | None -> Tyxml_html.div []

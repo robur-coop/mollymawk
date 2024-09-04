@@ -104,6 +104,17 @@ let users_index_layout (users : User_model.user list) current_time =
                                              ];
                                          ]
                                        [ txt "Last Modified" ];
+                                     th
+                                       ~a:
+                                         [
+                                           a_class
+                                             [
+                                               "px-6 py-3 text-start text-xs \
+                                                font-bold text-primary-600 \
+                                                uppercase";
+                                             ];
+                                         ]
+                                       [ txt "Action" ];
                                    ];
                                ])
                           (List.map
@@ -120,7 +131,43 @@ let users_index_layout (users : User_model.user list) current_time =
                                               text-gray-800";
                                            ];
                                        ]
-                                     [ txt user.name ];
+                                     [
+                                       div
+                                         ~a:
+                                           [
+                                             a_class
+                                               [
+                                                 "flex justify-start space-x-1 \
+                                                  items-center";
+                                               ];
+                                           ]
+                                         [
+                                           p [ txt user.name ];
+                                           (match user.active with
+                                           | true ->
+                                               i
+                                                 ~a:
+                                                   [
+                                                     a_class
+                                                       [
+                                                         "text-primary-500 \
+                                                          fa-solid fa-check";
+                                                       ];
+                                                   ]
+                                                 []
+                                           | false ->
+                                               i
+                                                 ~a:
+                                                   [
+                                                     a_class
+                                                       [
+                                                         "text-secondary-500 \
+                                                          fa-solid fa-x";
+                                                       ];
+                                                   ]
+                                                 []);
+                                         ];
+                                     ];
                                    td
                                      ~a:
                                        [
@@ -191,6 +238,52 @@ let users_index_layout (users : User_model.user list) current_time =
                                        txt
                                          (Utils.TimeHelper.time_ago current_time
                                             user.updated_at);
+                                     ];
+                                   td
+                                     ~a:
+                                       [
+                                         a_class
+                                           [
+                                             "px-6 py-4 whitespace-nowrap \
+                                              text-sm font-medium \
+                                              text-gray-800";
+                                           ];
+                                       ]
+                                     [
+                                       (if user.active then
+                                          button
+                                            ~a:
+                                              [
+                                                a_onclick
+                                                  ("toggleUserStatus('"
+                                                 ^ user.uuid ^ "')");
+                                                a_class
+                                                  [
+                                                    "px-3 py-2 rounded \
+                                                     bg-secondary-500 \
+                                                     text-secondary-50 \
+                                                     hover:bg-secondary-700 \
+                                                     font-semibold";
+                                                  ];
+                                              ]
+                                            [ txt "Deactivate" ]
+                                        else
+                                          button
+                                            ~a:
+                                              [
+                                                a_onclick
+                                                  ("toggleUserStatus('"
+                                                 ^ user.uuid ^ "')");
+                                                a_class
+                                                  [
+                                                    "px-3 py-2 rounded \
+                                                     bg-primary-500 \
+                                                     text-primary-50 \
+                                                     hover:bg-primary-700 \
+                                                     font-semibold";
+                                                  ];
+                                              ]
+                                            [ txt "Activate" ]);
                                      ];
                                  ])
                              users);

@@ -27,6 +27,7 @@ type user = {
   created_at : Ptime.t;
   updated_at : Ptime.t;
   email_verification_uuid : Uuidm.t option;
+  active : bool;
 }
 
 let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
@@ -175,9 +176,10 @@ let user_to_json (u : user) : Yojson.Basic.t =
         match u.email_verification_uuid with
         | None -> `Null
         | Some s -> `String (Uuidm.to_string s) );
+      ("active", `Bool u.active);
     ]
 
-let user_of_json = function
+let user_v1_of_json = function
   | `Assoc xs -> (
       let ( let* ) = Result.bind in
       match
@@ -253,6 +255,90 @@ let user_of_json = function
               created_at = Option.get created_at;
               updated_at = Option.get updated_at;
               email_verification_uuid;
+              active = true;
+            }
+      | _ -> Error (`Msg "invalid json for user"))
+  | _ -> Error (`Msg "invalid json for user")
+
+let user_of_json = function
+  | `Assoc xs -> (
+      let ( let* ) = Result.bind in
+      match
+        ( get "name" xs,
+          get "email" xs,
+          get "email_verified" xs,
+          get "password" xs,
+          get "uuid" xs,
+          get "tokens" xs,
+          get "cookies" xs,
+          get "created_at" xs,
+          get "updated_at" xs,
+          get "email_verification_uuid" xs,
+          get "active" xs )
+      with
+      | ( Some (`String name),
+          Some (`String email),
+          Some email_verified,
+          Some (`String password),
+          Some (`String uuid),
+          Some (`List tokens),
+          Some (`List cookies),
+          Some (`String updated_at_str),
+          Some (`String created_at_str),
+          Some email_verification_uuid,
+          Some (`Bool active) ) ->
+          let created_at =
+            match Utils.TimeHelper.ptime_of_string created_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let updated_at =
+            match Utils.TimeHelper.ptime_of_string updated_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let* email_verified = Utils.TimeHelper.ptime_of_json email_verified in
+          let* tokens =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* token = token_of_json js in
+                Ok (token :: acc))
+              (Ok []) tokens
+          in
+          let* cookies =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* cookie = cookie_of_json js in
+                Ok (cookie :: acc))
+              (Ok []) cookies
+          in
+          let* email_verification_uuid =
+            match email_verification_uuid with
+            | `Null -> Ok None
+            | `String s ->
+                let* uuid =
+                  Option.to_result
+                    ~none:(`Msg "invalid UUID for email verification UUID")
+                    (Uuidm.of_string s)
+                in
+                Ok (Some uuid)
+            | _ -> Error (`Msg "invalid json data for email verification UUID")
+          in
+          Ok
+            {
+              name;
+              email;
+              email_verified;
+              password;
+              uuid;
+              tokens;
+              cookies;
+              created_at = Option.get created_at;
+              updated_at = Option.get updated_at;
+              email_verification_uuid;
+              active;
             }
       | _ -> Error (`Msg "invalid json for user"))
   | _ -> Error (`Msg "invalid json for user")
@@ -305,7 +391,7 @@ let find_user_by_key (uuid : string) (user_map : (string * user) list) :
     user option =
   List.assoc_opt uuid user_map
 
-let create_user ~name ~email ~password ~created_at =
+let create_user ~name ~email ~password ~created_at ~active =
   let uuid = Uuidm.to_string (generate_uuid ()) in
   let password = hash_password password uuid in
   let auth_token = generate_token ~created_at () in
@@ -324,13 +410,14 @@ let create_user ~name ~email ~password ~created_at =
     created_at;
     updated_at = created_at;
     email_verification_uuid = None;
+    active;
   }
 
 let check_if_user_exists email users =
   List.find_opt (fun user -> user.email = Utils.Json.clean_string email) users
 
 let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
-    ?updated_at ?email_verification_uuid () =
+    ?updated_at ?email_verification_uuid ?active () =
   {
     user with
     name = Option.value ~default:user.name name;
@@ -342,6 +429,7 @@ let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
     updated_at = Option.value ~default:user.updated_at updated_at;
     email_verification_uuid =
       Option.value ~default:user.email_verification_uuid email_verification_uuid;
+    active = Option.value ~default:user.active active;
   }
 
 let is_valid_cookie (cookie : cookie) now =
@@ -390,15 +478,19 @@ let login_user ~email ~password users now =
   match user with
   | None -> Error (`Msg "This account does not exist.")
   | Some u -> (
-      let pass = hash_password password u.uuid in
-      match String.equal u.password pass with
-      | true ->
-          let new_session =
-            generate_cookie ~name:"molly_session" ~expires_in:week ~uuid:u.uuid
-              ~created_at:now ()
-          in
-          let cookies = new_session :: u.cookies in
-          let updated_user = update_user u ~cookies () in
-          Ok updated_user
-      | false -> Error (`Msg "Invalid email or password."))
+      if not u.active then
+        (* TODO move to a middleware, provide instructions how to reactive an account *)
+        Error (`Msg "This account is not active")
+      else
+        let pass = hash_password password u.uuid in
+        match String.equal u.password pass with
+        | true ->
+            let new_session =
+              generate_cookie ~name:"molly_session" ~expires_in:week
+                ~uuid:u.uuid ~created_at:now ()
+            in
+            let cookies = new_session :: u.cookies in
+            let updated_user = update_user u ~cookies () in
+            Ok updated_user
+        | false -> Error (`Msg "Invalid email or password."))
 (* Invalid email or password is a trick error message to at least prevent malicious users from guessing login details :).*)
