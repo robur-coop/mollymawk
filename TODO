@@ -5,20 +5,18 @@
 - [x] deploy/create a new unikernels
 - [x] store configuration data on block device (PR pending)
 - [x] have an HTTP endpoint for editing / uploading the configuration
-- TODO Shutdown and restart a unikernel
-
-- TODO we should remove all unauthenticated endpoints (comment out)
+- [x] we should remove all unauthenticated endpoints (comment out)
+- [x] sign_in/sign_up should be available
 
 --> deploy mollymawk for real for robur
 
 - TODO: sometimes we end up in a spinning wheel (not getting a reply from mollymawk) when a bad cookie was transmitted to the server
 - TODO: have an error page (error code, error message)
-
-- TODO sign_in/sign_up should be available
-
 - TODO maybe merge sign_in and sign_up into a single page with two buttons "log in" / "create account"
 
-- TODO console output (maybe websockets?)
+- [x] console output (maybe websockets?)
+- TODO improve console output using websockets
+- TODO Shutdown and restart a unikernel
 - TODO unikernel update (from builds.robur.coop)
 - TODO monitoring (CPU usage, memory usage, network usage)
 - TODO policy management
