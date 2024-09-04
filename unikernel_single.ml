@@ -439,11 +439,14 @@ let unikernel_single_layout unikernel now =
                             (match data.fail_behaviour with
                             | `Quit -> p [ txt "Quit" ]
                             | `Restart None -> p [ txt "Restart" ]
-                            | `Restart (Some _codes) ->
-                                p [ txt "" ]
-                                (* List.map
-                                   (fun code -> p [ txt (string_of_int code) ])
-                                   (Vmm_core.IS.elements codes); *));
+                            | `Restart (Some codes) ->
+                                p
+                                  [
+                                    txt
+                                      (String.concat ", "
+                                         (List.map string_of_int
+                                            (Vmm_core.IS.elements codes)));
+                                  ]);
                           ];
                       ];
                     div
