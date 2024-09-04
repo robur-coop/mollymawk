@@ -233,7 +233,9 @@ struct
             | None -> (
                 let created_at = Ptime.v (P.now_d_ps ()) in
                 let user =
+                  let active = if List.length users = 0 then true else false in
                   User_model.create_user ~name ~email ~password ~created_at
+                    ~active
                 in
                 Store.add_user !store user >>= function
                 | Ok store' ->
@@ -476,6 +478,124 @@ struct
                (Utils.Status.to_json status))
     | Error (`Msg s) -> Middleware.redirect_to_login reqd ~msg:s ()
 
+  let toggle_user store reqd user =
+    decode_request_body reqd >>= fun data ->
+    let json =
+      try Ok (Yojson.Basic.from_string data)
+      with Yojson.Json_error s -> Error (`Msg s)
+    in
+    match json with
+    | Error (`Msg err) ->
+        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
+        let status =
+          {
+            Utils.Status.code = 400;
+            title = "Error";
+            data = String.escaped err;
+            success = false;
+          }
+        in
+        Lwt.return
+          (reply reqd ~content_type:"application/json"
+             (Utils.Status.to_json status))
+    | Ok (`Assoc json) -> (
+        match Utils.Json.get "uuid" json with
+        | Some (`String uuid) -> (
+            let users =
+              User_model.create_user_uuid_map (snd !store).Storage.users
+            in
+            match List.assoc_opt uuid users with
+            | None ->
+                let status =
+                  {
+                    Utils.Status.code = 400;
+                    title = "Error";
+                    data = "Account not found";
+                    success = false;
+                  }
+                in
+                Lwt.return
+                  (reply reqd ~content_type:"application/json"
+                     (Utils.Status.to_json status))
+            | Some user -> (
+                let is_last_active_user =
+                  user.active
+                  && List.length
+                       (List.filter
+                          (fun u -> u.User_model.active)
+                          (snd !store).Storage.users)
+                     <= 1
+                in
+                if is_last_active_user then
+                  let status =
+                    {
+                      Utils.Status.code = 400;
+                      title = "Error";
+                      data = "Refusing to deactivate last active user";
+                      success = false;
+                    }
+                  in
+                  Lwt.return
+                    (reply reqd ~content_type:"application/json"
+                       (Utils.Status.to_json status))
+                else
+                  let user =
+                    User_model.update_user user ~active:(not user.active)
+                      ~updated_at:(Ptime.v (P.now_d_ps ()))
+                      ()
+                  in
+                  Store.update_user !store user >>= function
+                  | Ok store' ->
+                      store := store';
+                      let status =
+                        {
+                          Utils.Status.code = 200;
+                          title = "OK";
+                          data = "Updated user successfully";
+                          success = true;
+                        }
+                      in
+                      Lwt.return
+                        (reply reqd ~content_type:"application/json"
+                           (Utils.Status.to_json status))
+                  | Error (`Msg msg) ->
+                      let status =
+                        {
+                          Utils.Status.code = 500;
+                          title = "Error";
+                          data = String.escaped msg;
+                          success = false;
+                        }
+                      in
+                      Lwt.return
+                        (reply reqd ~content_type:"application/json"
+                           (Utils.Status.to_json status))))
+        | _ ->
+            Logs.warn (fun m -> m "Failed to parse JSON - no UUID found");
+            let status =
+              {
+                Utils.Status.code = 400;
+                title = "Error";
+                data = "Couldn't find a UUID in the json.";
+                success = false;
+              }
+            in
+            Lwt.return
+              (reply reqd ~content_type:"application/json"
+                 (Utils.Status.to_json status)))
+    | Ok _ ->
+        let status =
+          {
+            Utils.Status.code = 400;
+            title = "Error";
+            data = "Provided JSON is not a dictionary";
+            success = false;
+          }
+        in
+        Lwt.return
+          (reply reqd ~content_type:"application/json"
+             (Utils.Status.to_json status))
+
   let dashboard albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
     (Albatross.query albatross ~domain:user.name
@@ -495,25 +615,25 @@ struct
     >>= fun unikernels ->
     Lwt.return
       (reply reqd ~content_type:"text/html"
-         (Dashboard.dashboard_layout
+         (Dashboard.dashboard_layout user
             ~content:
               (Unikernel_index.unikernel_index_layout unikernels
                  (Ptime.v (P.now_d_ps ())))
             ~icon:"/images/robur.png" ()))
 
-  let users store reqd _user =
+  let users store reqd user =
     Lwt.return
       (reply reqd ~content_type:"text/html"
-         (Dashboard.dashboard_layout ~page_title:"Users | Mollymawk"
+         (Dashboard.dashboard_layout user ~page_title:"Users | Mollymawk"
             ~content:
               (Users_index.users_index_layout (snd store).Storage.users
                  (Ptime.v (P.now_d_ps ())))
             ~icon:"/images/robur.png" ()))
 
-  let settings store reqd _user =
+  let settings store reqd user =
     Lwt.return
       (reply reqd ~content_type:"text/html"
-         (Dashboard.dashboard_layout ~page_title:"Settings | Mollymawk"
+         (Dashboard.dashboard_layout user ~page_title:"Settings | Mollymawk"
             ~content:
               (Settings_page.settings_layout (snd store).Storage.configuration)
             ~icon:"/images/robur.png" ()))
@@ -589,10 +709,10 @@ struct
               (reply reqd ~content_type:"application/json"
                  (Utils.Status.to_json status)))
 
-  let deploy_form reqd _user =
+  let deploy_form reqd user =
     Lwt.return
       (reply reqd ~content_type:"text/html"
-         (Dashboard.dashboard_layout
+         (Dashboard.dashboard_layout user
             ~page_title:"Deploy a Unikernel | Mollymawk"
             ~content:Unikernel_create.unikernel_create_layout
             ~icon:"/images/robur.png" ()))
@@ -659,7 +779,7 @@ struct
     if List.length unikernels > 0 then
       Lwt.return
         (reply reqd ~content_type:"text/html"
-           (Dashboard.dashboard_layout
+           (Dashboard.dashboard_layout user
               ~content:
                 (Unikernel_single.unikernel_single_layout (List.hd unikernels)
                    (Ptime.v (P.now_d_ps ())))
@@ -675,7 +795,7 @@ struct
       in
       Lwt.return
         (reply reqd ~content_type:"text/html"
-           (Dashboard.dashboard_layout ~page_title:"404 | Mollymawk"
+           (Dashboard.dashboard_layout user ~page_title:"404 | Mollymawk"
               ~content:(Error_page.error_layout error)
               ~icon:"/images/robur.png" ()))
 
@@ -984,6 +1104,10 @@ struct
                 (* TODO: a middleware for admins *)
                 authenticate !store reqd
                   (update_settings stack store albatross reqd))
+        | "/api/admin/user/status/toggle" ->
+            check_meth `POST (fun () ->
+                (* TODO: a middleware for admins *)
+                authenticate !store reqd (toggle_user store reqd))
         | "/unikernel-info" ->
             check_meth `GET (fun () ->
                 authenticate !store reqd (unikernel_info !albatross reqd))

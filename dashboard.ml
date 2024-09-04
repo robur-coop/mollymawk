@@ -1,29 +1,7 @@
 open Tyxml
 
-let display_banner message =
-  if message != "" then
-    Tyxml_html.(
-      section
-        ~a:
-          [
-            a_class
-              [
-                "w-full bg-primary-200 py-4 text-center text-gray-200 border \
-                 border-primary-400 font-semibold flex justify-center px-5 \
-                 space-x-5";
-              ];
-            a_id "banner-message";
-          ]
-        [
-          p [ txt message ];
-          button
-            ~a:[ a_id "close-banner-btn"; a_onclick "closeBanner()" ]
-            [ i ~a:[ a_class [ "fa-solid fa-x text-sm" ] ] [] ];
-        ])
-  else Tyxml_html.div []
-
-let dashboard_layout ~icon ?(page_title = "Dashboard | Mollymawk")
-    ?(message = "") ~content () =
+let dashboard_layout (user : User_model.user) ~icon
+    ?(page_title = "Dashboard | Mollymawk") ?message ~content () =
   let page =
     Html.(
       html
@@ -152,17 +130,17 @@ let dashboard_layout ~icon ?(page_title = "Dashboard | Mollymawk")
                                        a_class
                                          [
                                            "flex space-x-1 items-center \
-                                            cursor-pointer \
+                                            cursor-pointer uppercase \
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [ span [ txt "Account" ] ];
+                                   [ span [ txt user.name ] ];
                                ];
                            ];
                        ];
                    ];
                ];
-             display_banner message;
+             Utils.display_banner message;
              section
                ~a:[ a_class [ "grid grid-cols-12 bg-gray-100 min-h-screen" ] ]
                [

@@ -41,6 +41,18 @@ let register_page ~icon () =
                      div
                        ~a:[ a_class [ "w-full max-w-lg mt-16 pb-16 mx-auto" ] ]
                        [
+                         div
+                           ~a:
+                             [
+                               a_id "alert-container";
+                               a_class
+                                 [
+                                   "absolute top-1/4 rounded-md right-4 z-50 \
+                                    w-fit space-y-2 p-4 shadow border \
+                                    text-wrap hidden";
+                                 ];
+                             ]
+                           [];
                          h1
                            ~a:
                              [
@@ -296,21 +308,22 @@ let register_page ~icon () =
                \                        })\n\
                \                        const data = await response.json();\n\
                \                        if (data.status === 200) {\n\
-               \                          window.location.replace('/dashboard')\n\
+               \                           postAlert('bg-primary-300', \
+                'Account created. Waiting for activation by an administrator.')\n\
+               \                          setTimeout(function () \
+                {window.location.replace('/dashboard')}, 3000);\n\
                \                        } else {\n\
                \                            \
                 form_alert.classList.remove('hidden')\n\
                \                            \
                 form_alert.classList.add('text-secondary-500', 'block')\n\
                \                            form_alert.textContent = data.data\n\
-               \                            console.log(data);\n\
                \                        }\n\
                \                    } catch (error) {\n\
                \                        form_alert.classList.remove('hidden')\n\
                \                        \
                 form_alert.classList.add('text-secondary-500', 'block')\n\
                \                        form_alert.textContent = error\n\
-               \                        return;\n\
                \                    }\n\
                \                })\n\
                \            </script>";

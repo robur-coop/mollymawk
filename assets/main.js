@@ -241,4 +241,20 @@ function buttonLoading(btn, load, text) {
 	}
 }
 
-
+async function toggleUserStatus(uuid) {
+   try {
+	   const response = await fetch("/api/admin/user/status/toggle", {
+              method: 'POST',
+	      body: JSON.stringify({"uuid":uuid})
+	   })
+	   const data = await response.json();
+	   if(data.status === 200) {
+		postAlert("bg-primary-300", data.data);
+		setTimeout(function () { window.location.reload()}, 1000);
+	   } else {
+		postAlert("bg-secondary-300", data.data);
+	   }
+   } catch (error) {
+	postAlert("bg-secondary-300", error);
+   }
+}
