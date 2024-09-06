@@ -461,57 +461,64 @@ let dashboard_layout (user : User_model.user) ~icon
                                [];
                              span [ txt "Marketplace" ];
                            ];
-                         hr ~a:[ a_class [ "my-4" ] ] ();
-                         a
-                           ~a:
-                             [
-                               a_href "/admin/users";
-                               a_class
-                                 [
-                                   "hover:bg-gray-200 hover:text-primary-400 \
-                                    font-semibold hover:font-bold \
-                                    cursor-pointer rounded p-2 w-full flex \
-                                    items-center space-x-1";
-                                 ];
-                             ]
-                           [
-                             i
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "fa-solid fa-users text-primary-500 \
-                                        text-sm";
-                                     ];
-                                 ]
-                               [];
-                             span [ txt "Users" ];
-                           ];
-                         a
-                           ~a:
-                             [
-                               a_href "/admin/settings";
-                               a_class
-                                 [
-                                   "hover:bg-gray-200 hover:text-primary-400 \
-                                    font-semibold hover:font-bold \
-                                    cursor-pointer rounded p-2 w-full flex \
-                                    items-center space-x-1";
-                                 ];
-                             ]
-                           [
-                             i
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "fa-solid fa-gears text-primary-500 \
-                                        text-sm";
-                                     ];
-                                 ]
-                               [];
-                             span [ txt "Settings" ];
-                           ];
+                         (if user.super_user then
+                            div
+                              [
+                                hr ~a:[ a_class [ "my-4" ] ] ();
+                                a
+                                  ~a:
+                                    [
+                                      a_href "/admin/users";
+                                      a_class
+                                        [
+                                          "hover:bg-gray-200 \
+                                           hover:text-primary-400 \
+                                           font-semibold hover:font-bold \
+                                           cursor-pointer rounded p-2 w-full \
+                                           flex items-center space-x-1";
+                                        ];
+                                    ]
+                                  [
+                                    i
+                                      ~a:
+                                        [
+                                          a_class
+                                            [
+                                              "fa-solid fa-users \
+                                               text-primary-500 text-sm";
+                                            ];
+                                        ]
+                                      [];
+                                    span [ txt "Users" ];
+                                  ];
+                                a
+                                  ~a:
+                                    [
+                                      a_href "/admin/settings";
+                                      a_class
+                                        [
+                                          "hover:bg-gray-200 \
+                                           hover:text-primary-400 \
+                                           font-semibold hover:font-bold \
+                                           cursor-pointer rounded p-2 w-full \
+                                           flex items-center space-x-1";
+                                        ];
+                                    ]
+                                  [
+                                    i
+                                      ~a:
+                                        [
+                                          a_class
+                                            [
+                                              "fa-solid fa-gears \
+                                               text-primary-500 text-sm";
+                                            ];
+                                        ]
+                                      [];
+                                    span [ txt "Settings" ];
+                                  ];
+                              ]
+                          else div []);
                        ];
                    ];
                  section
