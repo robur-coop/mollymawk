@@ -1,3 +1,4 @@
+(* mirage >= 4.6.0 & < 4.7.0 *)
 open Mirage
 
 let assets = crunch "assets"
@@ -8,7 +9,7 @@ let mollymawk =
       package "logs";
       package "x509";
       package "tls-mirage";
-      package ~min:"2.1.0" "albatross";
+      package ~min:"2.1.0" ~max:"2.2.0" "albatross";
       package "yojson";
       package "uri";
       package "tyxml";
