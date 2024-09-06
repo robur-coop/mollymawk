@@ -46,12 +46,12 @@ let redirect_to_register reqd ?(msg = "") () =
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
-let redirect_to_error ~title ~data user code api_meth reqd () =
+let redirect_to_error ~title ~data status user code api_meth reqd () =
   let error = { Utils.Status.code; title; success = false; data } in
   let data =
     if api_meth then Utils.Status.to_json error
     else
-      Dashboard.dashboard_layout user ~page_title:"Unauthorized | Mollymawk"
+      Dashboard.dashboard_layout user ~page_title:(title ^ " | Mollymawk")
         ~content:(Error_page.error_layout error)
         ~icon:"/images/robur.png" ()
   in
@@ -63,7 +63,7 @@ let redirect_to_error ~title ~data user code api_meth reqd () =
            ("content-type", if api_meth then "application/json" else "text/html");
          ]
      in
-     let resp = Httpaf.Response.create ~headers `Unauthorized in
+     let resp = Httpaf.Response.create ~headers status in
      Httpaf.Reqd.respond_with_string reqd resp data)
 
 let redirect_to_verify_email reqd ?(msg = "") () =
@@ -145,5 +145,5 @@ let is_user_admin_middleware api_meth now users handler reqd =
         redirect_to_error ~title:"Unauthorized"
           ~data:
             "You don't have the necessary permissions to access this service."
-          user 401 api_meth reqd ()
+          `Unauthorized user 401 api_meth reqd ()
   | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
