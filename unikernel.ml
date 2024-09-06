@@ -100,14 +100,18 @@ struct
     in
     go (Map.empty, []) m
 
-  let authenticate ?(email_verified = true) store reqd f =
+  let authenticate ?(email_verified = true) ?(check_admin = false)
+      ?(api_meth = false) store reqd f =
     let now = Ptime.v (P.now_d_ps ()) in
     let _, (t : Storage.t) = store in
     let users = User_model.create_user_session_map t.users in
     let middlewares =
-      (if email_verified && false (* TODO *) then
-         [ Middleware.email_verified_middleware now users ]
+      (if check_admin then
+         [ Middleware.is_user_admin_middleware api_meth now users ]
        else [])
+      @ (if email_verified && false (* TODO *) then
+           [ Middleware.email_verified_middleware now users ]
+         else [])
       @ [ Middleware.auth_middleware now users ]
     in
     Middleware.apply_middleware middlewares
@@ -233,9 +237,12 @@ struct
             | None -> (
                 let created_at = Ptime.v (P.now_d_ps ()) in
                 let user =
-                  let active = if List.length users = 0 then true else false in
+                  let active, super_user =
+                    if List.length users = 0 then (true, true)
+                    else (false, false)
+                  in
                   User_model.create_user ~name ~email ~password ~created_at
-                    ~active
+                    ~active ~super_user
                 in
                 Store.add_user !store user >>= function
                 | Ok store' ->
@@ -478,7 +485,7 @@ struct
                (Utils.Status.to_json status))
     | Error (`Msg s) -> Middleware.redirect_to_login reqd ~msg:s ()
 
-  let toggle_user store reqd user =
+  let toggle_user store reqd _user =
     decode_request_body reqd >>= fun data ->
     let json =
       try Ok (Yojson.Basic.from_string data)
@@ -1093,24 +1100,23 @@ struct
                 authenticate !store reqd (dashboard !albatross reqd))
         | "/admin/users" ->
             check_meth `GET (fun () ->
-                (* TODO: a middleware for admins *)
-                authenticate !store reqd (users !store reqd))
+                authenticate ~check_admin:true !store reqd (users !store reqd))
         | "/admin/settings" ->
             check_meth `GET (fun () ->
-                (* TODO: a middleware for admins *)
-                authenticate !store reqd (settings !store reqd))
+                authenticate ~check_admin:true !store reqd
+                  (settings !store reqd))
         | "/api/admin/settings/update" ->
             check_meth `POST (fun () ->
-                (* TODO: a middleware for admins *)
-                authenticate !store reqd
+                authenticate ~check_admin:true ~api_meth:true !store reqd
                   (update_settings stack store albatross reqd))
         | "/api/admin/user/status/toggle" ->
             check_meth `POST (fun () ->
-                (* TODO: a middleware for admins *)
-                authenticate !store reqd (toggle_user store reqd))
-        | "/unikernel-info" ->
+                authenticate ~check_admin:true ~api_meth:true !store reqd
+                  (toggle_user store reqd))
+        | "/api/admin/unikernels" ->
             check_meth `GET (fun () ->
-                authenticate !store reqd (unikernel_info !albatross reqd))
+                authenticate ~check_admin:true ~api_meth:true !store reqd
+                  (unikernel_info !albatross reqd))
         | path
           when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
           ->
