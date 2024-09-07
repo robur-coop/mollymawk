@@ -142,43 +142,42 @@ let users_index_layout (users : User_model.user list) current_time =
                                                ];
                                            ]
                                          [
-                                           p [ txt user.name ];
-                                           (if user.super_user then
-                                              i
-                                                ~a:
-                                                  [
-                                                    a_class
-                                                      [
-                                                        "text-primary-800 \
-                                                         fa-solid \
-                                                         fa-check-double";
-                                                      ];
-                                                  ]
-                                                []
-                                            else
-                                              match user.active with
-                                              | true ->
+                                           div
+                                             [
+                                               p [ txt user.name ];
+                                               (if user.super_user then
                                                   i
                                                     ~a:
                                                       [
                                                         a_class
-                                                          [
-                                                            "text-primary-500 \
-                                                             fa-solid fa-check";
-                                                          ];
+                                                          [ "txt-primary-500" ];
                                                       ]
-                                                    []
-                                              | false ->
-                                                  i
-                                                    ~a:
-                                                      [
-                                                        a_class
-                                                          [
-                                                            "text-secondary-500 \
-                                                             fa-solid fa-x";
-                                                          ];
-                                                      ]
-                                                    []);
+                                                    [ txt "administrator" ]
+                                                else p []);
+                                             ];
+                                           (match user.active with
+                                           | true ->
+                                               i
+                                                 ~a:
+                                                   [
+                                                     a_class
+                                                       [
+                                                         "text-primary-500 \
+                                                          fa-solid fa-check";
+                                                       ];
+                                                   ]
+                                                 []
+                                           | false ->
+                                               i
+                                                 ~a:
+                                                   [
+                                                     a_class
+                                                       [
+                                                         "text-secondary-500 \
+                                                          fa-solid fa-x";
+                                                       ];
+                                                   ]
+                                                 []);
                                          ];
                                      ];
                                    td
