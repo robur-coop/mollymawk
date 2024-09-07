@@ -123,7 +123,8 @@ struct
             assert false)
       reqd
 
-  let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status =
+  let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status
+      =
     let h =
       Httpaf.Headers.of_list
         [
@@ -142,12 +143,14 @@ struct
         | Ok "" ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Sign_up.register_page ~icon:"/images/robur.png" ()) `OK)
+                 (Sign_up.register_page ~icon:"/images/robur.png" ())
+                 `OK)
         | _ -> Middleware.redirect_to_dashboard reqd ())
     | None ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Sign_up.register_page ~icon:"/images/robur.png" ()) `OK)
+             (Sign_up.register_page ~icon:"/images/robur.png" ())
+             `OK)
 
   let sign_in reqd =
     match Middleware.has_session_cookie reqd with
@@ -156,12 +159,14 @@ struct
         | Ok "" ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Sign_in.login_page ~icon:"/images/robur.png" ()) `OK)
+                 (Sign_in.login_page ~icon:"/images/robur.png" ())
+                 `OK)
         | _ -> Middleware.redirect_to_dashboard reqd ())
     | None ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Sign_in.login_page ~icon:"/images/robur.png" ()) `OK)
+             (Sign_in.login_page ~icon:"/images/robur.png" ())
+             `OK)
 
   let register store reqd =
     decode_request_body reqd >>= fun data ->
@@ -182,7 +187,8 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status) `Bad_request)
+             (Utils.Status.to_json status)
+             `Bad_request)
     | Ok json -> (
         let validate_user_input ~name ~email ~password =
           if name = "" || email = "" || password = "" then
@@ -216,7 +222,8 @@ struct
             in
             Lwt.return
               (reply reqd ~content_type:"application/json"
-                 (Utils.Status.to_json status) `Bad_request)
+                 (Utils.Status.to_json status)
+                 `Bad_request)
         | Ok _ -> (
             let _, (s : Storage.t) = !store in
             let users = s.users in
@@ -233,7 +240,8 @@ struct
                 in
                 Lwt.return
                   (reply reqd ~content_type:"application/json"
-                     (Utils.Status.to_json status) `Bad_request)
+                     (Utils.Status.to_json status)
+                     `Bad_request)
             | None -> (
                 let created_at = Ptime.v (P.now_d_ps ()) in
                 let user =
@@ -272,7 +280,8 @@ struct
                     in
                     Lwt.return
                       (reply reqd ~header_list ~content_type:"application/json"
-                         (Utils.Status.to_json status) `OK)
+                         (Utils.Status.to_json status)
+                         `OK)
                 | Error (`Msg err) ->
                     let status =
                       {
@@ -284,7 +293,8 @@ struct
                     in
                     Lwt.return
                       (reply reqd ~content_type:"application/json"
-                         (Utils.Status.to_json status) `Bad_request))))
+                         (Utils.Status.to_json status)
+                         `Bad_request))))
 
   let login store reqd =
     decode_request_body reqd >>= fun data ->
@@ -305,7 +315,8 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status) `Bad_request)
+             (Utils.Status.to_json status)
+             `Bad_request)
     | Ok json -> (
         let validate_user_input ~email ~password =
           if email = "" || password = "" then Error "All fields must be filled."
@@ -333,7 +344,8 @@ struct
             in
             Lwt.return
               (reply reqd ~content_type:"application/json"
-                 (Utils.Status.to_json status) `Bad_request)
+                 (Utils.Status.to_json status)
+                 `Bad_request)
         | Ok _ -> (
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
@@ -351,7 +363,8 @@ struct
                 in
                 Lwt.return
                   (reply reqd ~content_type:"application/json"
-                     (Utils.Status.to_json status) `Bad_request)
+                     (Utils.Status.to_json status)
+                     `Bad_request)
             | Ok user -> (
                 Store.update_user !store user >>= function
                 | Ok store' -> (
@@ -386,7 +399,8 @@ struct
                         Lwt.return
                           (reply reqd ~header_list
                              ~content_type:"application/json"
-                             (Utils.Status.to_json status) `OK)
+                             (Utils.Status.to_json status)
+                             `OK)
                     | None ->
                         let status =
                           {
@@ -400,7 +414,8 @@ struct
                         in
                         Lwt.return
                           (reply reqd ~content_type:"application/json"
-                             (Utils.Status.to_json status) `Bad_request))
+                             (Utils.Status.to_json status)
+                             `Bad_request))
                 | Error (`Msg msg) ->
                     let status =
                       {
@@ -412,7 +427,8 @@ struct
                     in
                     Lwt.return
                       (reply reqd ~content_type:"application/json"
-                         (Utils.Status.to_json status) `Bad_request))))
+                         (Utils.Status.to_json status)
+                         `Bad_request))))
 
   let verify_email store reqd user =
     let email_verification_uuid = User_model.generate_uuid () in
@@ -430,7 +446,8 @@ struct
         Logs.info (fun m -> m "Verification link is: %s" verification_link);
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Verify_email.verify_page ~user ~icon:"/images/robur.png" ()) `OK)
+             (Verify_email.verify_page ~user ~icon:"/images/robur.png" ())
+             `OK)
     | Error (`Msg msg) ->
         let status =
           {
@@ -442,7 +459,8 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status) `Internal_server_error)
+             (Utils.Status.to_json status)
+             `Internal_server_error)
 
   let verify_email_token store reqd verification_token (user : User_model.user)
       =
@@ -470,7 +488,8 @@ struct
               in
               Lwt.return
                 (reply reqd ~content_type:"application/json"
-                   (Utils.Status.to_json status) `Internal_server_error)
+                   (Utils.Status.to_json status)
+                   `Internal_server_error)
         else
           let status =
             {
@@ -482,7 +501,8 @@ struct
           in
           Lwt.return
             (reply reqd ~content_type:"application/json"
-               (Utils.Status.to_json status) `Bad_request)
+               (Utils.Status.to_json status)
+               `Bad_request)
     | Error (`Msg s) -> Middleware.redirect_to_login reqd ~msg:s ()
 
   let toggle_user store reqd _user =
@@ -504,7 +524,8 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status) `Bad_request)
+             (Utils.Status.to_json status)
+             `Bad_request)
     | Ok (`Assoc json) -> (
         match Utils.Json.get "uuid" json with
         | Some (`String uuid) -> (
@@ -523,7 +544,8 @@ struct
                 in
                 Lwt.return
                   (reply reqd ~content_type:"application/json"
-                     (Utils.Status.to_json status) `Not_found)
+                     (Utils.Status.to_json status)
+                     `Not_found)
             | Some user -> (
                 let is_last_active_user =
                   user.active
@@ -544,7 +566,8 @@ struct
                   in
                   Lwt.return
                     (reply reqd ~content_type:"application/json"
-                       (Utils.Status.to_json status) `Forbidden)
+                       (Utils.Status.to_json status)
+                       `Forbidden)
                 else
                   let user =
                     User_model.update_user user ~active:(not user.active)
@@ -564,7 +587,8 @@ struct
                       in
                       Lwt.return
                         (reply reqd ~content_type:"application/json"
-                           (Utils.Status.to_json status) `OK)
+                           (Utils.Status.to_json status)
+                           `OK)
                   | Error (`Msg msg) ->
                       let status =
                         {
@@ -576,7 +600,8 @@ struct
                       in
                       Lwt.return
                         (reply reqd ~content_type:"application/json"
-                           (Utils.Status.to_json status) `Internal_server_error)))
+                           (Utils.Status.to_json status)
+                           `Internal_server_error)))
         | _ ->
             Logs.warn (fun m -> m "Failed to parse JSON - no UUID found");
             let status =
@@ -589,7 +614,8 @@ struct
             in
             Lwt.return
               (reply reqd ~content_type:"application/json"
-                 (Utils.Status.to_json status) `Not_found))
+                 (Utils.Status.to_json status)
+                 `Not_found))
     | Ok _ ->
         let status =
           {
@@ -601,7 +627,8 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status) `Bad_request)
+             (Utils.Status.to_json status)
+             `Bad_request)
 
   let dashboard albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
@@ -626,7 +653,8 @@ struct
             ~content:
               (Unikernel_index.unikernel_index_layout unikernels
                  (Ptime.v (P.now_d_ps ())))
-            ~icon:"/images/robur.png" ()) `OK)
+            ~icon:"/images/robur.png" ())
+         `OK)
 
   let users store reqd user =
     Lwt.return
@@ -635,7 +663,8 @@ struct
             ~content:
               (Users_index.users_index_layout (snd store).Storage.users
                  (Ptime.v (P.now_d_ps ())))
-            ~icon:"/images/robur.png" ()) `OK)
+            ~icon:"/images/robur.png" ())
+         `OK)
 
   let settings store reqd user =
     Lwt.return
@@ -643,7 +672,8 @@ struct
          (Dashboard.dashboard_layout user ~page_title:"Settings | Mollymawk"
             ~content:
               (Settings_page.settings_layout (snd store).Storage.configuration)
-            ~icon:"/images/robur.png" ()) `OK)
+            ~icon:"/images/robur.png" ())
+         `OK)
 
   let update_settings stack store albatross reqd _user =
     decode_request_body reqd >>= fun data ->
@@ -664,7 +694,8 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status) `Bad_request)
+             (Utils.Status.to_json status)
+             `Bad_request)
     | Ok json -> (
         match
           Configuration.of_json_from_http json (Ptime.v (P.now_d_ps ()))
@@ -690,7 +721,8 @@ struct
                 in
                 Lwt.return
                   (reply reqd ~content_type:"application/json"
-                     (Utils.Status.to_json status) `OK)
+                     (Utils.Status.to_json status)
+                     `OK)
             | Error (`Msg err) ->
                 let status =
                   {
@@ -702,7 +734,8 @@ struct
                 in
                 Lwt.return
                   (reply reqd ~content_type:"application/json"
-                     (Utils.Status.to_json status) `Internal_server_error))
+                     (Utils.Status.to_json status)
+                     `Internal_server_error))
         | Error (`Msg err) ->
             let status =
               {
@@ -714,7 +747,8 @@ struct
             in
             Lwt.return
               (reply reqd ~content_type:"application/json"
-                 (Utils.Status.to_json status) `Internal_server_error))
+                 (Utils.Status.to_json status)
+                 `Internal_server_error))
 
   let deploy_form reqd user =
     Lwt.return
@@ -722,7 +756,8 @@ struct
          (Dashboard.dashboard_layout user
             ~page_title:"Deploy a Unikernel | Mollymawk"
             ~content:Unikernel_create.unikernel_create_layout
-            ~icon:"/images/robur.png" ()) `OK)
+            ~icon:"/images/robur.png" ())
+         `OK)
 
   let unikernel_info albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
@@ -740,7 +775,8 @@ struct
           }
         in
         reply reqd ~content_type:"application/json"
-          (Utils.Status.to_json status) `Internal_server_error
+          (Utils.Status.to_json status)
+          `Internal_server_error
     | Ok (_hdr, res) -> (
         match Albatross_json.res res with
         | Ok res ->
@@ -753,7 +789,8 @@ struct
               }
             in
             reply reqd ~content_type:"application/json"
-              (Utils.Status.to_json status) `OK
+              (Utils.Status.to_json status)
+              `OK
         | Error (`String res) ->
             let status =
               {
@@ -764,7 +801,8 @@ struct
               }
             in
             reply reqd ~content_type:"application/json"
-              (Utils.Status.to_json status) `Internal_server_error)
+              (Utils.Status.to_json status)
+              `Internal_server_error)
 
   let unikernel_info_one albatross name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
@@ -790,7 +828,8 @@ struct
               ~content:
                 (Unikernel_single.unikernel_single_layout (List.hd unikernels)
                    (Ptime.v (P.now_d_ps ())))
-              ~icon:"/images/robur.png" ()) `OK)
+              ~icon:"/images/robur.png" ())
+           `OK)
     else
       let error =
         {
@@ -802,9 +841,11 @@ struct
       in
       Lwt.return
         (reply reqd ~content_type:"text/html"
-           (Dashboard.dashboard_layout user ~page_title:"An Error Occured | Mollymawk"
+           (Dashboard.dashboard_layout user
+              ~page_title:"An Error Occured | Mollymawk"
               ~content:(Error_page.error_layout error)
-              ~icon:"/images/robur.png" ()) `Internal_server_error)
+              ~icon:"/images/robur.png" ())
+           `Internal_server_error)
 
   let unikernel_destroy albatross name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
@@ -822,7 +863,8 @@ struct
           }
         in
         reply reqd ~content_type:"application/json"
-          (Utils.Status.to_json status) `Internal_server_error
+          (Utils.Status.to_json status)
+          `Internal_server_error
     | Ok (_hdr, res) -> (
         match Albatross_json.res res with
         | Ok res ->
@@ -835,7 +877,8 @@ struct
               }
             in
             reply reqd ~content_type:"application/json"
-              (Utils.Status.to_json status) `OK
+              (Utils.Status.to_json status)
+              `OK
         | Error (`String res) ->
             let status =
               {
@@ -846,7 +889,8 @@ struct
               }
             in
             reply reqd ~content_type:"application/json"
-              (Utils.Status.to_json status) `Internal_server_error)
+              (Utils.Status.to_json status)
+              `Internal_server_error)
 
   let unikernel_create albatross reqd (user : User_model.user) =
     let response_body = Httpaf.Reqd.request_body reqd in
@@ -883,7 +927,8 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status) `Bad_request)
+             (Utils.Status.to_json status)
+             `Bad_request)
     | Ok ct -> (
         match Multipart_form.of_string_to_list data ct with
         | Error (`Msg msg) ->
@@ -898,7 +943,8 @@ struct
             in
             Lwt.return
               (reply reqd ~content_type:"application/json"
-                 (Utils.Status.to_json status) `Bad_request)
+                 (Utils.Status.to_json status)
+                 `Bad_request)
         | Ok (m, assoc) -> (
             let m, _r = to_map ~assoc m in
             match
@@ -929,7 +975,8 @@ struct
                           }
                         in
                         reply reqd ~content_type:"application/json"
-                          (Utils.Status.to_json status) `Internal_server_error
+                          (Utils.Status.to_json status)
+                          `Internal_server_error
                     | Ok (_hdr, res) -> (
                         match Albatross_json.res res with
                         | Ok res ->
@@ -942,7 +989,8 @@ struct
                               }
                             in
                             reply reqd ~content_type:"application/json"
-                              (Utils.Status.to_json status) `OK
+                              (Utils.Status.to_json status)
+                              `OK
                         | Error (`String res) ->
                             let status =
                               {
@@ -953,7 +1001,8 @@ struct
                               }
                             in
                             reply reqd ~content_type:"application/json"
-                              (Utils.Status.to_json status) `Internal_server_error))
+                              (Utils.Status.to_json status)
+                              `Internal_server_error))
                 | Error (`Msg msg) ->
                     Logs.warn (fun m -> m "couldn't decode data %s" msg);
                     let status =
@@ -966,7 +1015,8 @@ struct
                     in
                     Lwt.return
                       (reply reqd ~content_type:"application/json"
-                         (Utils.Status.to_json status) `Internal_server_error))
+                         (Utils.Status.to_json status)
+                         `Internal_server_error))
             | _ ->
                 Logs.warn (fun m -> m "couldn't find fields");
                 let status =
@@ -979,7 +1029,8 @@ struct
                 in
                 Lwt.return
                   (reply reqd ~content_type:"application/json"
-                     (Utils.Status.to_json status) `Bad_request)))
+                     (Utils.Status.to_json status)
+                     `Bad_request)))
 
   let unikernel_console albatross name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
@@ -998,7 +1049,8 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status) `Internal_server_error)
+             (Utils.Status.to_json status)
+             `Internal_server_error)
     | Ok _ -> (
         match
           Result.bind (Vmm_core.Name.path_of_string user.name) (fun domain ->
@@ -1011,7 +1063,8 @@ struct
             in
             Lwt.return
               (reply reqd ~content_type:"application/json"
-                 (Yojson.Basic.to_string (`List data)) `OK)
+                 (Yojson.Basic.to_string (`List data))
+                 `OK)
         | Error (`Msg msg) ->
             let status =
               {
@@ -1023,7 +1076,8 @@ struct
             in
             Lwt.return
               (reply reqd ~content_type:"application/json"
-                 (Utils.Status.to_json status) `Internal_server_error))
+                 (Utils.Status.to_json status)
+                 `Internal_server_error))
 
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
@@ -1039,7 +1093,8 @@ struct
           in
           Lwt.return
             (reply reqd ~content_type:"application/json"
-               (Utils.Status.to_json status) `Bad_request)
+               (Utils.Status.to_json status)
+               `Bad_request)
         in
         let req = Httpaf.Reqd.request reqd in
         let path =
@@ -1054,10 +1109,12 @@ struct
                      (Guest_layout.guest_layout
                         ~page_title:"Deploy unikernels with ease | Mollymawk"
                         ~content:Index_page.index_page ~icon:"/images/robur.png"
-                        ()) `OK))
+                        ())
+                     `OK))
         | "/main.js" ->
             check_meth `GET (fun () ->
-                Lwt.return (reply reqd ~content_type:"text/plain" js_file `OK))
+                Lwt.return
+                  (reply reqd ~content_type:"text/javascript" js_file `OK))
         | "/images/molly_bird.jpeg" ->
             check_meth `GET (fun () ->
                 Lwt.return
@@ -1076,7 +1133,8 @@ struct
                   (reply reqd ~content_type:"image/png" imgs.mirage_img `OK))
         | "/images/robur.png" ->
             check_meth `GET (fun () ->
-                Lwt.return (reply reqd ~content_type:"image/png" imgs.robur_img `OK))
+                Lwt.return
+                  (reply reqd ~content_type:"image/png" imgs.robur_img `OK))
         | "/style.css" ->
             check_meth `GET (fun () ->
                 Lwt.return (reply reqd ~content_type:"text/css" css_file `OK))
@@ -1163,7 +1221,8 @@ struct
               (reply reqd ~content_type:"text/html"
                  (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
                     ~content:(Error_page.error_layout error)
-                    ~icon:"/images/robur.png" ()) `Not_found))
+                    ~icon:"/images/robur.png" ())
+                 `Not_found))
 
   let pp_error ppf = function
     | #Httpaf.Status.t as code -> Httpaf.Status.pp_hum ppf code
