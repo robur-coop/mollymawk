@@ -1171,9 +1171,9 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true !store reqd
                   (toggle_user store reqd))
-        | "/api/admin/unikernels" ->
+        | "/api/unikernels" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true ~api_meth:true !store reqd
+                authenticate ~api_meth:true !store reqd
                   (unikernel_info !albatross reqd))
         | path
           when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
