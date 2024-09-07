@@ -133,51 +133,55 @@ let users_index_layout (users : User_model.user list) current_time =
                                        ]
                                      [
                                        div
-                                         ~a:
-                                           [
-                                             a_class
-                                               [
-                                                 "flex justify-start space-x-1 \
-                                                  items-center";
-                                               ];
-                                           ]
                                          [
                                            div
+                                             ~a:
+                                               [
+                                                 a_class
+                                                   [
+                                                     "flex justify-start \
+                                                      space-x-1 items-center";
+                                                   ];
+                                               ]
                                              [
                                                p [ txt user.name ];
-                                               (if user.super_user then
-                                                  i
-                                                    ~a:
-                                                      [
-                                                        a_class
-                                                          [ "txt-primary-500" ];
-                                                      ]
-                                                    [ txt "administrator" ]
-                                                else p []);
+                                               (match user.active with
+                                               | true ->
+                                                   i
+                                                     ~a:
+                                                       [
+                                                         a_class
+                                                           [
+                                                             "text-primary-500 \
+                                                              fa-solid \
+                                                              fa-check";
+                                                           ];
+                                                       ]
+                                                     []
+                                               | false ->
+                                                   i
+                                                     ~a:
+                                                       [
+                                                         a_class
+                                                           [
+                                                             "text-secondary-500 \
+                                                              fa-solid fa-x";
+                                                           ];
+                                                       ]
+                                                     []);
                                              ];
-                                           (match user.active with
-                                           | true ->
-                                               i
-                                                 ~a:
-                                                   [
-                                                     a_class
-                                                       [
-                                                         "text-primary-500 \
-                                                          fa-solid fa-check";
-                                                       ];
-                                                   ]
-                                                 []
-                                           | false ->
-                                               i
-                                                 ~a:
-                                                   [
-                                                     a_class
-                                                       [
-                                                         "text-secondary-500 \
-                                                          fa-solid fa-x";
-                                                       ];
-                                                   ]
-                                                 []);
+                                           (if user.super_user then
+                                              i
+                                                ~a:
+                                                  [
+                                                    a_class
+                                                      [
+                                                        "text-primary-500 \
+                                                         lowercase text-sm";
+                                                      ];
+                                                  ]
+                                                [ txt "admin" ]
+                                            else p []);
                                          ];
                                      ];
                                    td
