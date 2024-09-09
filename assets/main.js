@@ -241,20 +241,30 @@ function buttonLoading(btn, load, text) {
 	}
 }
 
-async function toggleUserStatus(uuid) {
-   try {
-	   const response = await fetch("/api/admin/user/status/toggle", {
-              method: 'POST',
-	      body: JSON.stringify({"uuid":uuid})
-	   })
-	   const data = await response.json();
-	   if(data.status === 200) {
+async function toggleUserStatus(uuid, endpoint) {
+	try {
+	  const response = await fetch(endpoint, {
+		method: 'POST',
+		body: JSON.stringify({ uuid: uuid }),
+		headers: { 'Content-Type': 'application/json' }
+	  });
+
+	  const data = await response.json();
+	  if (response.status === 200) {
 		postAlert("bg-primary-300", data.data);
-		setTimeout(function () { window.location.reload()}, 1000);
-	   } else {
+		setTimeout(() => window.location.reload(), 1000);
+	  } else {
 		postAlert("bg-secondary-300", data.data);
-	   }
-   } catch (error) {
-	postAlert("bg-secondary-300", error);
-   }
-}
+	  }
+	} catch (error) {
+	  postAlert("bg-secondary-300", error);
+	}
+  }
+
+  async function toggleUserActiveStatus(uuid) {
+	await toggleUserStatus(uuid, "/api/admin/user/activate/toggle");
+  }
+
+  async function toggleUserAdminStatus(uuid) {
+	await toggleUserStatus(uuid, "/api/admin/user/admin/toggle");
+  }

@@ -71,7 +71,8 @@ let user_single_layout (user : User_model.user) unikernels current_time =
                    button
                      ~a:
                        [
-                         a_onclick ("toggleUserStatus('" ^ user.uuid ^ "')");
+                         a_onclick
+                           ("toggleUserActiveStatus('" ^ user.uuid ^ "')");
                          a_class
                            [
                              "px-3 py-2 rounded bg-secondary-500 \
@@ -84,7 +85,7 @@ let user_single_layout (user : User_model.user) unikernels current_time =
                    button
                      ~a:
                        [
-                         a_onclick ("toggleUserStatus('" ^ user.uuid ^ "')");
+                         a_onclick ("toggleUserAdminStatus('" ^ user.uuid ^ "')");
                          a_class
                            [
                              "px-3 py-2 rounded bg-primary-500 text-primary-50 \

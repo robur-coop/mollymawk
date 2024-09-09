@@ -136,6 +136,13 @@ struct
     let resp = Httpaf.Response.create ~headers status in
     Httpaf.Reqd.respond_with_string reqd resp data
 
+  let http_response reqd ~status_code ~title ~data ~success http_status =
+    let status = { Utils.Status.code = status_code; title; data; success } in
+    Lwt.return
+      (reply reqd ~content_type:"application/json"
+         (Utils.Status.to_json status)
+         http_status)
+
   let sign_up reqd =
     match Middleware.has_session_cookie reqd with
     | Some cookie -> (
@@ -505,7 +512,8 @@ struct
                `Bad_request)
     | Error (`Msg s) -> Middleware.redirect_to_login reqd ~msg:s ()
 
-  let toggle_user store reqd _user =
+  let toggle_account_attribute store reqd ~key update_fn error_on_last
+      ~error_message =
     decode_request_body reqd >>= fun data ->
     let json =
       try Ok (Yojson.Basic.from_string data)
@@ -513,19 +521,9 @@ struct
     in
     match json with
     | Error (`Msg err) ->
-        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
-        let status =
-          {
-            Utils.Status.code = 400;
-            title = "Error";
-            data = String.escaped err;
-            success = false;
-          }
-        in
-        Lwt.return
-          (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status)
-             `Bad_request)
+        Logs.warn (fun m -> m "Failed to parse JSON: %s - %s" key err);
+        http_response reqd ~status_code:400 ~title:"Error" ~data:err
+          ~success:false `Bad_request
     | Ok (`Assoc json) -> (
         match Utils.Json.get "uuid" json with
         | Some (`String uuid) -> (
@@ -534,101 +532,66 @@ struct
             in
             match List.assoc_opt uuid users with
             | None ->
-                let status =
-                  {
-                    Utils.Status.code = 404;
-                    title = "Error";
-                    data = "Account not found";
-                    success = false;
-                  }
-                in
-                Lwt.return
-                  (reply reqd ~content_type:"application/json"
-                     (Utils.Status.to_json status)
-                     `Not_found)
+                Logs.warn (fun m -> m "%s : Account not found" key);
+                http_response reqd ~status_code:404 ~title:"Error"
+                  ~data:"Account not found" ~success:false `Not_found
             | Some user -> (
-                let is_last_active_user =
-                  user.active
-                  && List.length
-                       (List.filter
-                          (fun u -> u.User_model.active)
-                          (snd !store).Storage.users)
-                     <= 1
-                in
-                if is_last_active_user then
-                  let status =
-                    {
-                      Utils.Status.code = 403;
-                      title = "Error";
-                      data = "Refusing to deactivate last active user";
-                      success = false;
-                    }
-                  in
-                  Lwt.return
-                    (reply reqd ~content_type:"application/json"
-                       (Utils.Status.to_json status)
-                       `Forbidden)
+                if error_on_last user then (
+                  Logs.warn (fun m ->
+                      m "%s : Can't perform action on last user" key);
+                  http_response reqd ~status_code:403 ~title:"Error"
+                    ~data:error_message ~success:false `Forbidden)
                 else
-                  let user =
-                    User_model.update_user user ~active:(not user.active)
-                      ~updated_at:(Ptime.v (P.now_d_ps ()))
-                      ()
-                  in
-                  Store.update_user !store user >>= function
+                  let updated_user = update_fn user in
+                  Store.update_user !store updated_user >>= function
                   | Ok store' ->
                       store := store';
-                      let status =
-                        {
-                          Utils.Status.code = 200;
-                          title = "OK";
-                          data = "Updated user successfully";
-                          success = true;
-                        }
-                      in
-                      Lwt.return
-                        (reply reqd ~content_type:"application/json"
-                           (Utils.Status.to_json status)
-                           `OK)
+                      http_response reqd ~status_code:200 ~title:"OK"
+                        ~data:"Updated user successfully" ~success:true `OK
                   | Error (`Msg msg) ->
-                      let status =
-                        {
-                          Utils.Status.code = 500;
-                          title = "Error";
-                          data = String.escaped msg;
-                          success = false;
-                        }
-                      in
-                      Lwt.return
-                        (reply reqd ~content_type:"application/json"
-                           (Utils.Status.to_json status)
-                           `Internal_server_error)))
+                      Logs.warn (fun m ->
+                          m "%s : Storage error with %s" key msg);
+                      http_response reqd ~status_code:500 ~title:"Error"
+                        ~data:msg ~success:false `Internal_server_error))
         | _ ->
-            Logs.warn (fun m -> m "Failed to parse JSON - no UUID found");
-            let status =
-              {
-                Utils.Status.code = 404;
-                title = "Error";
-                data = "Couldn't find a UUID in the json.";
-                success = false;
-              }
-            in
-            Lwt.return
-              (reply reqd ~content_type:"application/json"
-                 (Utils.Status.to_json status)
-                 `Not_found))
+            Logs.warn (fun m ->
+                m "%s: Failed to parse JSON - no UUID found" key);
+            http_response reqd ~status_code:404 ~title:"Error"
+              ~data:"Couldn't find a UUID in the JSON." ~success:false
+              `Not_found)
     | Ok _ ->
-        let status =
-          {
-            Utils.Status.code = 400;
-            title = "Error";
-            data = "Provided JSON is not a dictionary";
-            success = false;
-          }
-        in
-        Lwt.return
-          (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status)
-             `Bad_request)
+        http_response reqd ~status_code:400 ~title:"Error"
+          ~data:"Provided JSON is not a dictionary" ~success:false `Bad_request
+
+  let toggle_account_activation store reqd _user =
+    toggle_account_attribute store reqd ~key:"active"
+      (fun user ->
+        User_model.update_user user ~active:(not user.active)
+          ~updated_at:(Ptime.v (P.now_d_ps ()))
+          ())
+      (fun user ->
+        user.active
+        && List.length
+             (List.filter
+                (fun u -> u.User_model.active)
+                (snd !store).Storage.users)
+           <= 1)
+      ~error_message:"Refusing to deactivate last active user"
+
+  let toggle_admin_activation store reqd _user =
+    toggle_account_attribute store reqd ~key:"super_user"
+      (fun user ->
+        User_model.update_user user ~super_user:(not user.super_user)
+          ~updated_at:(Ptime.v (P.now_d_ps ()))
+          ())
+      (fun user ->
+        user.super_user
+        && List.length
+             (List.filter
+                (fun u -> u.User_model.super_user)
+                (snd !store).Storage.users)
+           <= 1)
+      ~error_message:"Refusing to remove last administrator"
 
   let dashboard albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
@@ -1217,10 +1180,14 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true !store reqd
                   (update_settings stack store albatross reqd))
-        | "/api/admin/user/status/toggle" ->
+        | "/api/admin/user/activate/toggle" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true !store reqd
-                  (toggle_user store reqd))
+                  (toggle_account_activation store reqd))
+        | "/api/admin/user/admin/toggle" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_admin:true ~api_meth:true !store reqd
+                  (toggle_admin_activation store reqd))
         | "/api/unikernels" ->
             check_meth `GET (fun () ->
                 authenticate ~api_meth:true !store reqd
