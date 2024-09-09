@@ -266,40 +266,21 @@ let users_index_layout (users : User_model.user list) current_time =
                                            ];
                                        ]
                                      [
-                                       (if user.active then
-                                          button
-                                            ~a:
-                                              [
-                                                a_onclick
-                                                  ("toggleUserStatus('"
-                                                 ^ user.uuid ^ "')");
-                                                a_class
-                                                  [
-                                                    "px-3 py-2 rounded \
-                                                     bg-secondary-500 \
-                                                     text-secondary-50 \
-                                                     hover:bg-secondary-700 \
-                                                     font-semibold";
-                                                  ];
-                                              ]
-                                            [ txt "Deactivate" ]
-                                        else
-                                          button
-                                            ~a:
-                                              [
-                                                a_onclick
-                                                  ("toggleUserStatus('"
-                                                 ^ user.uuid ^ "')");
-                                                a_class
-                                                  [
-                                                    "px-3 py-2 rounded \
-                                                     bg-primary-500 \
-                                                     text-primary-50 \
-                                                     hover:bg-primary-700 \
-                                                     font-semibold";
-                                                  ];
-                                              ]
-                                            [ txt "Activate" ]);
+                                       a
+                                         ~a:
+                                           [
+                                             a_href
+                                               ("/admin/user/" ^ user.uuid ^ "");
+                                             a_class
+                                               [
+                                                 "border border-primary-500 \
+                                                  hover:bg-primary-700 px-2 \
+                                                  py-1 text-primary-800 \
+                                                  hover:text-primary-50 \
+                                                  rounded";
+                                               ];
+                                           ]
+                                         [ txt "View" ];
                                      ];
                                  ])
                              users);

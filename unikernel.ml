@@ -1079,6 +1079,50 @@ struct
                  (Utils.Status.to_json status)
                  `Internal_server_error))
 
+  let view_user albatross store uuid reqd (user : User_model.user) =
+    let users = User_model.create_user_uuid_map (snd store).Storage.users in
+    match User_model.find_user_by_key uuid users with
+    | Some u ->
+        (Albatross.query albatross ~domain:u.name
+           (`Unikernel_cmd `Unikernel_info)
+         >|= function
+         | Error msg ->
+             Logs.err (fun m ->
+                 m "error while communicating with albatross: %s" msg);
+             []
+         | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
+         | Ok reply ->
+             Logs.err (fun m ->
+                 m "expected a unikernel info reply, received %a"
+                   (Vmm_commands.pp_wire ~verbose:false)
+                   reply);
+             [])
+        >>= fun unikernels ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout user
+                ~page_title:(u.name ^ " | Mollymawk")
+                ~content:
+                  (User_single.user_single_layout u unikernels
+                     (Ptime.v (P.now_d_ps ())))
+                ~icon:"/images/robur.png" ())
+             `OK)
+    | None ->
+        let status =
+          {
+            Utils.Status.code = 404;
+            title = "Error";
+            data = "Couldn't find account with uuid: " ^ uuid;
+            success = false;
+          }
+        in
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
+                ~content:(Error_page.error_layout status)
+                ~icon:"/images/robur.png" ())
+             `Not_found)
+
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
@@ -1159,6 +1203,12 @@ struct
         | "/admin/users" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true !store reqd (users !store reqd))
+        | path when String.(length path >= 12 && sub path 0 12 = "/admin/user/")
+          ->
+            check_meth `GET (fun () ->
+                let uuid = String.sub path 12 (String.length path - 12) in
+                authenticate ~check_admin:true !store reqd
+                  (view_user !albatross !store uuid reqd))
         | "/admin/settings" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true !store reqd
