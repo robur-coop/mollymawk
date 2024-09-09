@@ -136,10 +136,11 @@ struct
     let resp = Httpaf.Response.create ~headers status in
     Httpaf.Reqd.respond_with_string reqd resp data
 
-  let http_response reqd ~status_code ~title ~data ~success http_status =
+  let http_response reqd ?(header_list = []) ~status_code ~title ~data ~success
+      http_status =
     let status = { Utils.Status.code = status_code; title; data; success } in
     Lwt.return
-      (reply reqd ~content_type:"application/json"
+      (reply reqd ~content_type:"application/json" ~header_list
          (Utils.Status.to_json status)
          http_status)
 
@@ -184,18 +185,8 @@ struct
     match json with
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
-        let status =
-          {
-            Utils.Status.code = 400;
-            title = "Error";
-            data = String.escaped err;
-            success = false;
-          }
-        in
-        Lwt.return
-          (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status)
-             `Bad_request)
+        http_response reqd ~status_code:400 ~title:"Error"
+          ~data:(String.escaped err) ~success:false `Bad_request
     | Ok json -> (
         let validate_user_input ~name ~email ~password =
           if name = "" || email = "" || password = "" then
@@ -219,36 +210,17 @@ struct
         in
         match validate_user_input ~name ~email ~password with
         | Error err ->
-            let status =
-              {
-                Utils.Status.code = 400;
-                title = "Error";
-                data = String.escaped err;
-                success = false;
-              }
-            in
-            Lwt.return
-              (reply reqd ~content_type:"application/json"
-                 (Utils.Status.to_json status)
-                 `Bad_request)
+            http_response reqd ~status_code:400 ~title:"Error"
+              ~data:(String.escaped err) ~success:false `Bad_request
         | Ok _ -> (
             let _, (s : Storage.t) = !store in
             let users = s.users in
             let user = User_model.check_if_user_exists email users in
             match user with
             | Some _ ->
-                let status =
-                  {
-                    Utils.Status.code = 400;
-                    title = "Error";
-                    data = "A user with this email already exist.";
-                    success = false;
-                  }
-                in
-                Lwt.return
-                  (reply reqd ~content_type:"application/json"
-                     (Utils.Status.to_json status)
-                     `Bad_request)
+                http_response reqd ~status_code:400 ~title:"Error"
+                  ~data:"A user with this email already exist." ~success:false
+                  `Bad_request
             | None -> (
                 let created_at = Ptime.v (P.now_d_ps ()) in
                 let user =
@@ -262,15 +234,6 @@ struct
                 Store.add_user !store user >>= function
                 | Ok store' ->
                     store := store';
-                    let status =
-                      {
-                        Utils.Status.code = 200;
-                        title = "Success";
-                        data =
-                          Yojson.Basic.to_string (User_model.user_to_json user);
-                        success = true;
-                      }
-                    in
                     let cookie =
                       List.find
                         (fun (c : User_model.cookie) ->
@@ -285,23 +248,14 @@ struct
                         ("Set-Cookie", cookie_value); ("location", "/dashboard");
                       ]
                     in
-                    Lwt.return
-                      (reply reqd ~header_list ~content_type:"application/json"
-                         (Utils.Status.to_json status)
-                         `OK)
+                    http_response reqd ~header_list ~status_code:200
+                      ~title:"Success"
+                      ~data:
+                        (Yojson.Basic.to_string (User_model.user_to_json user))
+                      ~success:true `OK
                 | Error (`Msg err) ->
-                    let status =
-                      {
-                        Utils.Status.code = 400;
-                        title = "Error";
-                        data = String.escaped err;
-                        success = false;
-                      }
-                    in
-                    Lwt.return
-                      (reply reqd ~content_type:"application/json"
-                         (Utils.Status.to_json status)
-                         `Bad_request))))
+                    http_response reqd ~status_code:400 ~title:"Error"
+                      ~data:(String.escaped err) ~success:false `Bad_request)))
 
   let login store reqd =
     decode_request_body reqd >>= fun data ->
@@ -312,18 +266,8 @@ struct
     match json with
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
-        let status =
-          {
-            Utils.Status.code = 400;
-            title = "Error";
-            data = String.escaped err;
-            success = false;
-          }
-        in
-        Lwt.return
-          (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status)
-             `Bad_request)
+        http_response reqd ~status_code:400 ~title:"Error"
+          ~data:(String.escaped err) ~success:false `Bad_request
     | Ok json -> (
         let validate_user_input ~email ~password =
           if email = "" || password = "" then Error "All fields must be filled."
@@ -341,18 +285,8 @@ struct
         in
         match validate_user_input ~email ~password with
         | Error err ->
-            let status =
-              {
-                Utils.Status.code = 400;
-                title = "Error";
-                data = String.escaped err;
-                success = false;
-              }
-            in
-            Lwt.return
-              (reply reqd ~content_type:"application/json"
-                 (Utils.Status.to_json status)
-                 `Bad_request)
+            http_response reqd ~status_code:400 ~title:"Error"
+              ~data:(String.escaped err) ~success:false `Bad_request
         | Ok _ -> (
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
@@ -360,31 +294,13 @@ struct
             let login = User_model.login_user ~email ~password users now in
             match login with
             | Error (`Msg err) ->
-                let status =
-                  {
-                    Utils.Status.code = 400;
-                    title = "Error";
-                    data = String.escaped err;
-                    success = false;
-                  }
-                in
-                Lwt.return
-                  (reply reqd ~content_type:"application/json"
-                     (Utils.Status.to_json status)
-                     `Bad_request)
+                http_response reqd ~status_code:400 ~title:"Error"
+                  ~data:(String.escaped err) ~success:false `Bad_request
             | Ok user -> (
                 Store.update_user !store user >>= function
                 | Ok store' -> (
                     store := store';
-                    let status =
-                      {
-                        Utils.Status.code = 200;
-                        title = "Success";
-                        data =
-                          Yojson.Basic.to_string (User_model.user_to_json user);
-                        success = true;
-                      }
-                    in
+
                     let cookie =
                       List.find_opt
                         (fun (c : User_model.cookie) ->
@@ -403,39 +319,23 @@ struct
                             ("location", "/dashboard");
                           ]
                         in
-                        Lwt.return
-                          (reply reqd ~header_list
-                             ~content_type:"application/json"
-                             (Utils.Status.to_json status)
-                             `OK)
+
+                        http_response reqd ~header_list ~status_code:200
+                          ~title:"Success"
+                          ~data:
+                            (Yojson.Basic.to_string
+                               (User_model.user_to_json user))
+                          ~success:true `OK
                     | None ->
-                        let status =
-                          {
-                            Utils.Status.code = 400;
-                            title = "Error";
-                            data =
-                              "Something went wrong. Wait a few seconds and \
-                               try again.";
-                            success = false;
-                          }
-                        in
-                        Lwt.return
-                          (reply reqd ~content_type:"application/json"
-                             (Utils.Status.to_json status)
-                             `Bad_request))
-                | Error (`Msg msg) ->
-                    let status =
-                      {
-                        Utils.Status.code = 500;
-                        title = "Error";
-                        data = String.escaped msg;
-                        success = false;
-                      }
-                    in
-                    Lwt.return
-                      (reply reqd ~content_type:"application/json"
-                         (Utils.Status.to_json status)
-                         `Bad_request))))
+                        http_response reqd ~status_code:500 ~title:"Error"
+                          ~data:
+                            "Something went wrong. Wait a few seconds and try \
+                             again."
+                          ~success:false `Internal_server_error)
+                | Error (`Msg err) ->
+                    http_response reqd ~status_code:500 ~title:"Error"
+                      ~data:(String.escaped err) ~success:false
+                      `Internal_server_error)))
 
   let verify_email store reqd user =
     let email_verification_uuid = User_model.generate_uuid () in
@@ -455,19 +355,9 @@ struct
           (reply reqd ~content_type:"text/html"
              (Verify_email.verify_page ~user ~icon:"/images/robur.png" ())
              `OK)
-    | Error (`Msg msg) ->
-        let status =
-          {
-            Utils.Status.code = 500;
-            title = "Error";
-            data = String.escaped msg;
-            success = false;
-          }
-        in
-        Lwt.return
-          (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status)
-             `Internal_server_error)
+    | Error (`Msg err) ->
+        http_response reqd ~status_code:500 ~title:"Error"
+          ~data:(String.escaped err) ~success:false `Internal_server_error
 
   let verify_email_token store reqd verification_token (user : User_model.user)
       =
@@ -485,31 +375,12 @@ struct
               store := store';
               Middleware.redirect_to_dashboard reqd ()
           | Error (`Msg msg) ->
-              let status =
-                {
-                  Utils.Status.code = 500;
-                  title = "Error";
-                  data = String.escaped msg;
-                  success = false;
-                }
-              in
-              Lwt.return
-                (reply reqd ~content_type:"application/json"
-                   (Utils.Status.to_json status)
-                   `Internal_server_error)
+              http_response reqd ~status_code:500 ~title:"Error"
+                ~data:(String.escaped msg) ~success:false `Internal_server_error
         else
-          let status =
-            {
-              Utils.Status.code = 400;
-              title = "Error";
-              data = "Logged in user is not the to-be-verified one";
-              success = false;
-            }
-          in
-          Lwt.return
-            (reply reqd ~content_type:"application/json"
-               (Utils.Status.to_json status)
-               `Bad_request)
+          http_response reqd ~status_code:400 ~title:"Error"
+            ~data:"Logged in user is not the to-be-verified one" ~success:false
+            `Bad_request
     | Error (`Msg s) -> Middleware.redirect_to_login reqd ~msg:s ()
 
   let toggle_account_attribute store reqd ~key update_fn error_on_last
@@ -564,7 +435,7 @@ struct
           ~data:"Provided JSON is not a dictionary" ~success:false `Bad_request
 
   let toggle_account_activation store reqd _user =
-    toggle_account_attribute store reqd ~key:"active"
+    toggle_account_attribute store reqd ~key:"toggle-active-account"
       (fun user ->
         User_model.update_user user ~active:(not user.active)
           ~updated_at:(Ptime.v (P.now_d_ps ()))
@@ -576,10 +447,10 @@ struct
                 (fun u -> u.User_model.active)
                 (snd !store).Storage.users)
            <= 1)
-      ~error_message:"Refusing to deactivate last active user"
+      ~error_message:"Cannot deactivate last active user"
 
   let toggle_admin_activation store reqd _user =
-    toggle_account_attribute store reqd ~key:"super_user"
+    toggle_account_attribute store reqd ~key:"toggle-admin-account"
       (fun user ->
         User_model.update_user user ~super_user:(not user.super_user)
           ~updated_at:(Ptime.v (P.now_d_ps ()))
@@ -591,7 +462,7 @@ struct
                 (fun u -> u.User_model.super_user)
                 (snd !store).Storage.users)
            <= 1)
-      ~error_message:"Refusing to remove last administrator"
+      ~error_message:"Cannot remove last administrator"
 
   let dashboard albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
@@ -647,18 +518,8 @@ struct
     match json with
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
-        let status =
-          {
-            Utils.Status.code = 400;
-            title = "Error";
-            data = String.escaped err;
-            success = false;
-          }
-        in
-        Lwt.return
-          (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status)
-             `Bad_request)
+        http_response reqd ~status_code:400 ~title:"Error"
+          ~data:(String.escaped err) ~success:false `Bad_request
     | Ok json -> (
         match
           Configuration.of_json_from_http json (Ptime.v (P.now_d_ps ()))
@@ -674,44 +535,15 @@ struct
                   configuration_settings.private_key
                 >>= fun new_albatross ->
                 albatross := new_albatross;
-                let status =
-                  {
-                    Utils.Status.code = 200;
-                    title = "Success";
-                    data = "Configuration updated successfully";
-                    success = true;
-                  }
-                in
-                Lwt.return
-                  (reply reqd ~content_type:"application/json"
-                     (Utils.Status.to_json status)
-                     `OK)
+                http_response reqd ~status_code:200 ~title:"Success"
+                  ~data:"Configuration updated successfully" ~success:true `OK
             | Error (`Msg err) ->
-                let status =
-                  {
-                    Utils.Status.code = 500;
-                    title = "Error";
-                    data = String.escaped err;
-                    success = false;
-                  }
-                in
-                Lwt.return
-                  (reply reqd ~content_type:"application/json"
-                     (Utils.Status.to_json status)
-                     `Internal_server_error))
+                http_response reqd ~status_code:500 ~title:"Error"
+                  ~data:(String.escaped err) ~success:false
+                  `Internal_server_error)
         | Error (`Msg err) ->
-            let status =
-              {
-                Utils.Status.code = 500;
-                title = "Error";
-                data = String.escaped err;
-                success = false;
-              }
-            in
-            Lwt.return
-              (reply reqd ~content_type:"application/json"
-                 (Utils.Status.to_json status)
-                 `Internal_server_error))
+            http_response reqd ~status_code:500 ~title:"Error"
+              ~data:(String.escaped err) ~success:false `Bad_request)
 
   let deploy_form reqd user =
     Lwt.return
@@ -725,47 +557,23 @@ struct
   let unikernel_info albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
     Albatross.query albatross ~domain:user.name (`Unikernel_cmd `Unikernel_info)
-    >|= function
+    >>= function
     | Error msg ->
-        let status =
-          {
-            Utils.Status.code = 500;
-            title = "Error";
-            data =
-              Yojson.Safe.to_string
-                (`String ("Error while querying albatross: " ^ msg));
-            success = false;
-          }
-        in
-        reply reqd ~content_type:"application/json"
-          (Utils.Status.to_json status)
-          `Internal_server_error
+        http_response reqd ~status_code:500 ~title:"Error"
+          ~data:
+            (Yojson.Safe.to_string
+               (`String ("Error while querying albatross: " ^ msg)))
+          ~success:false `Internal_server_error
     | Ok (_hdr, res) -> (
         match Albatross_json.res res with
         | Ok res ->
-            let status =
-              {
-                Utils.Status.code = 200;
-                title = "Success";
-                data = Yojson.Safe.to_string res;
-                success = true;
-              }
-            in
-            reply reqd ~content_type:"application/json"
-              (Utils.Status.to_json status)
-              `OK
+            http_response reqd ~status_code:200 ~title:"Success"
+              ~data:(Yojson.Safe.to_string res)
+              ~success:true `OK
         | Error (`String res) ->
-            let status =
-              {
-                Utils.Status.code = 500;
-                title = "Error";
-                data = Yojson.Safe.to_string (`String res);
-                success = false;
-              }
-            in
-            reply reqd ~content_type:"application/json"
-              (Utils.Status.to_json status)
-              `Internal_server_error)
+            http_response reqd ~status_code:500 ~title:"Error"
+              ~data:(Yojson.Safe.to_string (`String res))
+              ~success:false `Internal_server_error)
 
   let unikernel_info_one albatross name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
@@ -814,46 +622,22 @@ struct
     (* TODO use uuid in the future *)
     Albatross.query albatross ~domain:user.name ~name
       (`Unikernel_cmd `Unikernel_destroy)
-    >|= function
+    >>= function
     | Error msg ->
         Logs.err (fun m -> m "Error querying albatross: %s" msg);
-        let status =
-          {
-            Utils.Status.code = 500;
-            title = "Error";
-            data = "Error querying albatross: " ^ msg;
-            success = false;
-          }
-        in
-        reply reqd ~content_type:"application/json"
-          (Utils.Status.to_json status)
-          `Internal_server_error
+        http_response reqd ~status_code:500 ~title:"Error"
+          ~data:("Error querying albatross: " ^ msg)
+          ~success:false `Internal_server_error
     | Ok (_hdr, res) -> (
         match Albatross_json.res res with
         | Ok res ->
-            let status =
-              {
-                Utils.Status.code = 200;
-                title = "Success";
-                data = Yojson.Safe.to_string res;
-                success = true;
-              }
-            in
-            reply reqd ~content_type:"application/json"
-              (Utils.Status.to_json status)
-              `OK
+            http_response reqd ~status_code:200 ~title:"Success"
+              ~data:(Yojson.Safe.to_string res)
+              ~success:true `OK
         | Error (`String res) ->
-            let status =
-              {
-                Utils.Status.code = 500;
-                title = "Error";
-                data = Yojson.Safe.to_string (`String res);
-                success = false;
-              }
-            in
-            reply reqd ~content_type:"application/json"
-              (Utils.Status.to_json status)
-              `Internal_server_error)
+            http_response reqd ~status_code:500 ~title:"Error"
+              ~data:(Yojson.Safe.to_string (`String res))
+              ~success:false `Internal_server_error)
 
   let unikernel_create albatross reqd (user : User_model.user) =
     let response_body = Httpaf.Reqd.request_body reqd in
@@ -880,34 +664,16 @@ struct
     match ct with
     | Error (`Msg msg) ->
         Logs.warn (fun m -> m "couldn't content-type: %S" msg);
-        let status =
-          {
-            Utils.Status.code = 400;
-            title = "Error";
-            data = "Couldn't content-type: " ^ msg;
-            success = false;
-          }
-        in
-        Lwt.return
-          (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status)
-             `Bad_request)
+        http_response reqd ~status_code:400 ~title:"Error"
+          ~data:("Couldn't content-type: " ^ msg)
+          ~success:false `Bad_request
     | Ok ct -> (
         match Multipart_form.of_string_to_list data ct with
         | Error (`Msg msg) ->
             Logs.warn (fun m -> m "couldn't multipart: %s" msg);
-            let status =
-              {
-                Utils.Status.code = 400;
-                title = "Error";
-                data = "Couldn't multipart: " ^ msg;
-                success = false;
-              }
-            in
-            Lwt.return
-              (reply reqd ~content_type:"application/json"
-                 (Utils.Status.to_json status)
-                 `Bad_request)
+            http_response reqd ~status_code:400 ~title:"Error"
+              ~data:("Couldn't multipart: " ^ msg)
+              ~success:false `Bad_request
         | Ok (m, assoc) -> (
             let m, _r = to_map ~assoc m in
             match
@@ -925,95 +691,44 @@ struct
                     (* TODO use uuid in the future *)
                     Albatross.query albatross ~domain:user.name ~name
                       (`Unikernel_cmd (`Unikernel_create config))
-                    >|= function
-                    | Error msg ->
+                    >>= function
+                    | Error err ->
                         Logs.warn (fun m ->
-                            m "error querying albatross: %s" msg);
-                        let status =
-                          {
-                            Utils.Status.code = 500;
-                            title = "Error";
-                            data = "Error while querying Albatross.";
-                            success = false;
-                          }
-                        in
-                        reply reqd ~content_type:"application/json"
-                          (Utils.Status.to_json status)
-                          `Internal_server_error
+                            m "Error querying albatross: %s" err);
+
+                        http_response reqd ~status_code:500 ~title:"Error"
+                          ~data:("Error while querying Albatross: " ^ err)
+                          ~success:false `Internal_server_error
                     | Ok (_hdr, res) -> (
                         match Albatross_json.res res with
                         | Ok res ->
-                            let status =
-                              {
-                                Utils.Status.code = 200;
-                                title = "Success";
-                                data = Yojson.Safe.to_string res;
-                                success = true;
-                              }
-                            in
-                            reply reqd ~content_type:"application/json"
-                              (Utils.Status.to_json status)
-                              `OK
+                            http_response reqd ~status_code:200 ~title:"Success"
+                              ~data:(Yojson.Safe.to_string res)
+                              ~success:true `OK
                         | Error (`String res) ->
-                            let status =
-                              {
-                                Utils.Status.code = 500;
-                                title = "Error";
-                                data = Yojson.Safe.to_string (`String res);
-                                success = false;
-                              }
-                            in
-                            reply reqd ~content_type:"application/json"
-                              (Utils.Status.to_json status)
-                              `Internal_server_error))
-                | Error (`Msg msg) ->
-                    Logs.warn (fun m -> m "couldn't decode data %s" msg);
-                    let status =
-                      {
-                        Utils.Status.code = 500;
-                        title = "Error";
-                        data = msg;
-                        success = false;
-                      }
-                    in
-                    Lwt.return
-                      (reply reqd ~content_type:"application/json"
-                         (Utils.Status.to_json status)
-                         `Internal_server_error))
+                            http_response reqd ~status_code:500 ~title:"Error"
+                              ~data:(Yojson.Safe.to_string (`String res))
+                              ~success:false `Internal_server_error))
+                | Error (`Msg err) ->
+                    Logs.warn (fun m -> m "couldn't decode data %s" err);
+
+                    http_response reqd ~status_code:500 ~title:"Error" ~data:err
+                      ~success:false `Internal_server_error)
             | _ ->
                 Logs.warn (fun m -> m "couldn't find fields");
-                let status =
-                  {
-                    Utils.Status.code = 400;
-                    title = "Error";
-                    data = "Couldn't find fields";
-                    success = false;
-                  }
-                in
-                Lwt.return
-                  (reply reqd ~content_type:"application/json"
-                     (Utils.Status.to_json status)
-                     `Bad_request)))
+                http_response reqd ~status_code:400 ~title:"Error"
+                  ~data:"Couldn't find fields" ~success:false `Bad_request))
 
   let unikernel_console albatross name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
     Albatross.query ~domain:user.name albatross ~name
       (`Console_cmd (`Console_subscribe (`Count 10)))
     >>= function
-    | Error msg ->
-        Logs.warn (fun m -> m "error querying albatross: %s" msg);
-        let status =
-          {
-            Utils.Status.code = 500;
-            title = "Error";
-            data = "Error while querying Albatross:  " ^ msg;
-            success = false;
-          }
-        in
-        Lwt.return
-          (reply reqd ~content_type:"application/json"
-             (Utils.Status.to_json status)
-             `Internal_server_error)
+    | Error err ->
+        Logs.warn (fun m -> m "error querying albatross: %s" err);
+        http_response reqd ~status_code:500 ~title:"Error"
+          ~data:("Error while querying Albatross:  " ^ err)
+          ~success:false `Internal_server_error
     | Ok _ -> (
         match
           Result.bind (Vmm_core.Name.path_of_string user.name) (fun domain ->
@@ -1028,19 +743,10 @@ struct
               (reply reqd ~content_type:"application/json"
                  (Yojson.Basic.to_string (`List data))
                  `OK)
-        | Error (`Msg msg) ->
-            let status =
-              {
-                Utils.Status.code = 500;
-                title = "Error";
-                data = "Couldn't find create name " ^ String.escaped msg;
-                success = false;
-              }
-            in
-            Lwt.return
-              (reply reqd ~content_type:"application/json"
-                 (Utils.Status.to_json status)
-                 `Internal_server_error))
+        | Error (`Msg err) ->
+            http_response reqd ~status_code:500 ~title:"Error"
+              ~data:("Error while querying Albatross:  " ^ err)
+              ~success:false `Internal_server_error)
 
   let view_user albatross store uuid reqd (user : User_model.user) =
     let users = User_model.create_user_uuid_map (snd store).Storage.users in
@@ -1090,19 +796,10 @@ struct
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
-          let status =
-            {
-              Utils.Status.code = 400;
-              title = "Error";
-              data = "Bad HTTP request method.";
-              success = false;
-            }
-          in
-          Lwt.return
-            (reply reqd ~content_type:"application/json"
-               (Utils.Status.to_json status)
-               `Bad_request)
+          http_response reqd ~status_code:400 ~title:"Error"
+            ~data:"Bad HTTP request method." ~success:false `Bad_request
         in
+
         let req = Httpaf.Reqd.request reqd in
         let path =
           Uri.(pct_decode (path (of_string req.Httpaf.Request.target)))
