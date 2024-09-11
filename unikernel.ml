@@ -796,7 +796,6 @@ struct
           http_response reqd ~status_code:400 ~title:"Error"
             ~data:"Bad HTTP request method." ~success:false `Bad_request
         in
-
         let req = Httpaf.Reqd.request reqd in
         let path =
           Uri.(pct_decode (path (of_string req.Httpaf.Request.target)))
