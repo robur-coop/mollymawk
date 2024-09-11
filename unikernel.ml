@@ -136,9 +136,10 @@ struct
     let resp = Httpaf.Response.create ~headers status in
     Httpaf.Reqd.respond_with_string reqd resp data
 
-  let http_response reqd ?(header_list = []) ~status_code ~title ~data ~success
-      http_status =
-    let status = { Utils.Status.code = status_code; title; data; success } in
+  let http_response reqd ?(header_list = []) ~title ~data http_status =
+    let code = Httpaf.Status.to_code http_status
+    and success = Httpaf.Status.is_successful http_status in
+    let status = { Utils.Status.code; title; data; success } in
     Lwt.return
       (reply reqd ~content_type:"application/json" ~header_list
          (Utils.Status.to_json status)
@@ -185,8 +186,8 @@ struct
     match json with
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
-        http_response reqd ~status_code:400 ~title:"Error"
-          ~data:(String.escaped err) ~success:false `Bad_request
+        http_response reqd ~title:"Error" ~data:(String.escaped err)
+          `Bad_request
     | Ok json -> (
         let validate_user_input ~name ~email ~password =
           if name = "" || email = "" || password = "" then
@@ -210,17 +211,16 @@ struct
         in
         match validate_user_input ~name ~email ~password with
         | Error err ->
-            http_response reqd ~status_code:400 ~title:"Error"
-              ~data:(String.escaped err) ~success:false `Bad_request
+            http_response reqd ~title:"Error" ~data:(String.escaped err)
+              `Bad_request
         | Ok _ -> (
             let _, (s : Storage.t) = !store in
             let users = s.users in
             let user = User_model.check_if_user_exists email users in
             match user with
             | Some _ ->
-                http_response reqd ~status_code:400 ~title:"Error"
-                  ~data:"A user with this email already exist." ~success:false
-                  `Bad_request
+                http_response reqd ~title:"Error"
+                  ~data:"A user with this email already exist." `Bad_request
             | None -> (
                 let created_at = Ptime.v (P.now_d_ps ()) in
                 let user =
@@ -248,14 +248,13 @@ struct
                         ("Set-Cookie", cookie_value); ("location", "/dashboard");
                       ]
                     in
-                    http_response reqd ~header_list ~status_code:200
-                      ~title:"Success"
+                    http_response reqd ~header_list ~title:"Success"
                       ~data:
                         (Yojson.Basic.to_string (User_model.user_to_json user))
-                      ~success:true `OK
+                      `OK
                 | Error (`Msg err) ->
-                    http_response reqd ~status_code:400 ~title:"Error"
-                      ~data:(String.escaped err) ~success:false `Bad_request)))
+                    http_response reqd ~title:"Error" ~data:(String.escaped err)
+                      `Bad_request)))
 
   let login store reqd =
     decode_request_body reqd >>= fun data ->
@@ -266,8 +265,8 @@ struct
     match json with
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
-        http_response reqd ~status_code:400 ~title:"Error"
-          ~data:(String.escaped err) ~success:false `Bad_request
+        http_response reqd ~title:"Error" ~data:(String.escaped err)
+          `Bad_request
     | Ok json -> (
         let validate_user_input ~email ~password =
           if email = "" || password = "" then Error "All fields must be filled."
@@ -285,8 +284,8 @@ struct
         in
         match validate_user_input ~email ~password with
         | Error err ->
-            http_response reqd ~status_code:400 ~title:"Error"
-              ~data:(String.escaped err) ~success:false `Bad_request
+            http_response reqd ~title:"Error" ~data:(String.escaped err)
+              `Bad_request
         | Ok _ -> (
             let now = Ptime.v (P.now_d_ps ()) in
             let _, (t : Storage.t) = !store in
@@ -294,8 +293,8 @@ struct
             let login = User_model.login_user ~email ~password users now in
             match login with
             | Error (`Msg err) ->
-                http_response reqd ~status_code:400 ~title:"Error"
-                  ~data:(String.escaped err) ~success:false `Bad_request
+                http_response reqd ~title:"Error" ~data:(String.escaped err)
+                  `Bad_request
             | Ok user -> (
                 Store.update_user !store user >>= function
                 | Ok store' -> (
@@ -318,21 +317,19 @@ struct
                             ("location", "/dashboard");
                           ]
                         in
-                        http_response reqd ~header_list ~status_code:200
-                          ~title:"Success"
+                        http_response reqd ~header_list ~title:"Success"
                           ~data:
                             (Yojson.Basic.to_string
                                (User_model.user_to_json user))
-                          ~success:true `OK
+                          `OK
                     | None ->
-                        http_response reqd ~status_code:500 ~title:"Error"
+                        http_response reqd ~title:"Error"
                           ~data:
                             "Something went wrong. Wait a few seconds and try \
                              again."
-                          ~success:false `Internal_server_error)
+                          `Internal_server_error)
                 | Error (`Msg err) ->
-                    http_response reqd ~status_code:500 ~title:"Error"
-                      ~data:(String.escaped err) ~success:false
+                    http_response reqd ~title:"Error" ~data:(String.escaped err)
                       `Internal_server_error)))
 
   let verify_email store reqd user =
@@ -354,8 +351,8 @@ struct
              (Verify_email.verify_page ~user ~icon:"/images/robur.png" ())
              `OK)
     | Error (`Msg err) ->
-        http_response reqd ~status_code:500 ~title:"Error"
-          ~data:(String.escaped err) ~success:false `Internal_server_error
+        http_response reqd ~title:"Error" ~data:(String.escaped err)
+          `Internal_server_error
 
   let verify_email_token store reqd verification_token (user : User_model.user)
       =
@@ -373,12 +370,11 @@ struct
               store := store';
               Middleware.redirect_to_dashboard reqd ()
           | Error (`Msg msg) ->
-              http_response reqd ~status_code:500 ~title:"Error"
-                ~data:(String.escaped msg) ~success:false `Internal_server_error
+              http_response reqd ~title:"Error" ~data:(String.escaped msg)
+                `Internal_server_error
         else
-          http_response reqd ~status_code:400 ~title:"Error"
-            ~data:"Logged in user is not the to-be-verified one" ~success:false
-            `Bad_request
+          http_response reqd ~title:"Error"
+            ~data:"Logged in user is not the to-be-verified one" `Bad_request
     | Error (`Msg s) -> Middleware.redirect_to_login reqd ~msg:s ()
 
   let toggle_account_attribute store reqd ~key update_fn error_on_last
@@ -391,8 +387,7 @@ struct
     match json with
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Failed to parse JSON: %s - %s" key err);
-        http_response reqd ~status_code:400 ~title:"Error" ~data:err
-          ~success:false `Bad_request
+        http_response reqd ~title:"Error" ~data:err `Bad_request
     | Ok (`Assoc json) -> (
         match Utils.Json.get "uuid" json with
         | Some (`String uuid) -> (
@@ -402,35 +397,34 @@ struct
             match List.assoc_opt uuid users with
             | None ->
                 Logs.warn (fun m -> m "%s : Account not found" key);
-                http_response reqd ~status_code:404 ~title:"Error"
-                  ~data:"Account not found" ~success:false `Not_found
+                http_response reqd ~title:"Error" ~data:"Account not found"
+                  `Not_found
             | Some user -> (
                 if error_on_last user then (
                   Logs.warn (fun m ->
                       m "%s : Can't perform action on last user" key);
-                  http_response reqd ~status_code:403 ~title:"Error"
-                    ~data:error_message ~success:false `Forbidden)
+                  http_response reqd ~title:"Error" ~data:error_message
+                    `Forbidden)
                 else
                   let updated_user = update_fn user in
                   Store.update_user !store updated_user >>= function
                   | Ok store' ->
                       store := store';
-                      http_response reqd ~status_code:200 ~title:"OK"
-                        ~data:"Updated user successfully" ~success:true `OK
+                      http_response reqd ~title:"OK"
+                        ~data:"Updated user successfully" `OK
                   | Error (`Msg msg) ->
                       Logs.warn (fun m ->
                           m "%s : Storage error with %s" key msg);
-                      http_response reqd ~status_code:500 ~title:"Error"
-                        ~data:msg ~success:false `Internal_server_error))
+                      http_response reqd ~title:"Error" ~data:msg
+                        `Internal_server_error))
         | _ ->
             Logs.warn (fun m ->
                 m "%s: Failed to parse JSON - no UUID found" key);
-            http_response reqd ~status_code:404 ~title:"Error"
-              ~data:"Couldn't find a UUID in the JSON." ~success:false
-              `Not_found)
+            http_response reqd ~title:"Error"
+              ~data:"Couldn't find a UUID in the JSON." `Not_found)
     | Ok _ ->
-        http_response reqd ~status_code:400 ~title:"Error"
-          ~data:"Provided JSON is not a dictionary" ~success:false `Bad_request
+        http_response reqd ~title:"Error"
+          ~data:"Provided JSON is not a dictionary" `Bad_request
 
   let toggle_account_activation store reqd _user =
     toggle_account_attribute store reqd ~key:"toggle-active-account"
@@ -516,8 +510,8 @@ struct
     match json with
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
-        http_response reqd ~status_code:400 ~title:"Error"
-          ~data:(String.escaped err) ~success:false `Bad_request
+        http_response reqd ~title:"Error" ~data:(String.escaped err)
+          `Bad_request
     | Ok json -> (
         match
           Configuration.of_json_from_http json (Ptime.v (P.now_d_ps ()))
@@ -533,15 +527,14 @@ struct
                   configuration_settings.private_key
                 >>= fun new_albatross ->
                 albatross := new_albatross;
-                http_response reqd ~status_code:200 ~title:"Success"
-                  ~data:"Configuration updated successfully" ~success:true `OK
+                http_response reqd ~title:"Success"
+                  ~data:"Configuration updated successfully" `OK
             | Error (`Msg err) ->
-                http_response reqd ~status_code:500 ~title:"Error"
-                  ~data:(String.escaped err) ~success:false
+                http_response reqd ~title:"Error" ~data:(String.escaped err)
                   `Internal_server_error)
         | Error (`Msg err) ->
-            http_response reqd ~status_code:500 ~title:"Error"
-              ~data:(String.escaped err) ~success:false `Bad_request)
+            http_response reqd ~title:"Error" ~data:(String.escaped err)
+              `Bad_request)
 
   let deploy_form reqd user =
     Lwt.return
@@ -557,21 +550,21 @@ struct
     Albatross.query albatross ~domain:user.name (`Unikernel_cmd `Unikernel_info)
     >>= function
     | Error msg ->
-        http_response reqd ~status_code:500 ~title:"Error"
+        http_response reqd ~title:"Error"
           ~data:
             (Yojson.Safe.to_string
                (`String ("Error while querying albatross: " ^ msg)))
-          ~success:false `Internal_server_error
+          `Internal_server_error
     | Ok (_hdr, res) -> (
         match Albatross_json.res res with
         | Ok res ->
-            http_response reqd ~status_code:200 ~title:"Success"
+            http_response reqd ~title:"Success"
               ~data:(Yojson.Safe.to_string res)
-              ~success:true `OK
+              `OK
         | Error (`String res) ->
-            http_response reqd ~status_code:500 ~title:"Error"
+            http_response reqd ~title:"Error"
               ~data:(Yojson.Safe.to_string (`String res))
-              ~success:false `Internal_server_error)
+              `Internal_server_error)
 
   let unikernel_info_one albatross name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
@@ -623,19 +616,19 @@ struct
     >>= function
     | Error msg ->
         Logs.err (fun m -> m "Error querying albatross: %s" msg);
-        http_response reqd ~status_code:500 ~title:"Error"
+        http_response reqd ~title:"Error"
           ~data:("Error querying albatross: " ^ msg)
-          ~success:false `Internal_server_error
+          `Internal_server_error
     | Ok (_hdr, res) -> (
         match Albatross_json.res res with
         | Ok res ->
-            http_response reqd ~status_code:200 ~title:"Success"
+            http_response reqd ~title:"Success"
               ~data:(Yojson.Safe.to_string res)
-              ~success:true `OK
+              `OK
         | Error (`String res) ->
-            http_response reqd ~status_code:500 ~title:"Error"
+            http_response reqd ~title:"Error"
               ~data:(Yojson.Safe.to_string (`String res))
-              ~success:false `Internal_server_error)
+              `Internal_server_error)
 
   let unikernel_create albatross reqd (user : User_model.user) =
     let response_body = Httpaf.Reqd.request_body reqd in
@@ -662,16 +655,16 @@ struct
     match ct with
     | Error (`Msg msg) ->
         Logs.warn (fun m -> m "couldn't content-type: %S" msg);
-        http_response reqd ~status_code:400 ~title:"Error"
+        http_response reqd ~title:"Error"
           ~data:("Couldn't content-type: " ^ msg)
-          ~success:false `Bad_request
+          `Bad_request
     | Ok ct -> (
         match Multipart_form.of_string_to_list data ct with
         | Error (`Msg msg) ->
             Logs.warn (fun m -> m "couldn't multipart: %s" msg);
-            http_response reqd ~status_code:400 ~title:"Error"
+            http_response reqd ~title:"Error"
               ~data:("Couldn't multipart: " ^ msg)
-              ~success:false `Bad_request
+              `Bad_request
         | Ok (m, assoc) -> (
             let m, _r = to_map ~assoc m in
             match
@@ -693,28 +686,28 @@ struct
                     | Error err ->
                         Logs.warn (fun m ->
                             m "Error querying albatross: %s" err);
-                        http_response reqd ~status_code:500 ~title:"Error"
+                        http_response reqd ~title:"Error"
                           ~data:("Error while querying Albatross: " ^ err)
-                          ~success:false `Internal_server_error
+                          `Internal_server_error
                     | Ok (_hdr, res) -> (
                         match Albatross_json.res res with
                         | Ok res ->
-                            http_response reqd ~status_code:200 ~title:"Success"
+                            http_response reqd ~title:"Success"
                               ~data:(Yojson.Safe.to_string res)
-                              ~success:true `OK
+                              `OK
                         | Error (`String res) ->
-                            http_response reqd ~status_code:500 ~title:"Error"
+                            http_response reqd ~title:"Error"
                               ~data:(Yojson.Safe.to_string (`String res))
-                              ~success:false `Internal_server_error))
+                              `Internal_server_error))
                 | Error (`Msg err) ->
                     Logs.warn (fun m -> m "couldn't decode data %s" err);
 
-                    http_response reqd ~status_code:500 ~title:"Error" ~data:err
-                      ~success:false `Internal_server_error)
+                    http_response reqd ~title:"Error" ~data:err
+                      `Internal_server_error)
             | _ ->
                 Logs.warn (fun m -> m "couldn't find fields");
-                http_response reqd ~status_code:400 ~title:"Error"
-                  ~data:"Couldn't find fields" ~success:false `Bad_request))
+                http_response reqd ~title:"Error" ~data:"Couldn't find fields"
+                  `Bad_request))
 
   let unikernel_console albatross name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
@@ -723,9 +716,9 @@ struct
     >>= function
     | Error err ->
         Logs.warn (fun m -> m "error querying albatross: %s" err);
-        http_response reqd ~status_code:500 ~title:"Error"
-          ~data:("Error while querying Albatross:  " ^ err)
-          ~success:false `Internal_server_error
+        http_response reqd ~title:"Error"
+          ~data:("Error while querying Albatross: " ^ err)
+          `Internal_server_error
     | Ok _ -> (
         match
           Result.bind (Vmm_core.Name.path_of_string user.name) (fun domain ->
@@ -741,9 +734,9 @@ struct
                  (Yojson.Basic.to_string (`List data))
                  `OK)
         | Error (`Msg err) ->
-            http_response reqd ~status_code:500 ~title:"Error"
-              ~data:("Error while querying Albatross:  " ^ err)
-              ~success:false `Internal_server_error)
+            http_response reqd ~title:"Error"
+              ~data:("Error while querying Albatross: " ^ err)
+              `Internal_server_error)
 
   let view_user albatross store uuid reqd (user : User_model.user) =
     let users = User_model.create_user_uuid_map (snd store).Storage.users in
@@ -793,8 +786,8 @@ struct
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
-          http_response reqd ~status_code:400 ~title:"Error"
-            ~data:"Bad HTTP request method." ~success:false `Bad_request
+          http_response reqd ~title:"Error" ~data:"Bad HTTP request method."
+            `Bad_request
         in
         let req = Httpaf.Reqd.request reqd in
         let path =
