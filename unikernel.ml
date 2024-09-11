@@ -318,7 +318,6 @@ struct
                             ("location", "/dashboard");
                           ]
                         in
-
                         http_response reqd ~header_list ~status_code:200
                           ~title:"Success"
                           ~data:
