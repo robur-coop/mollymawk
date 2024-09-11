@@ -300,7 +300,6 @@ struct
                 Store.update_user !store user >>= function
                 | Ok store' -> (
                     store := store';
-
                     let cookie =
                       List.find_opt
                         (fun (c : User_model.cookie) ->
