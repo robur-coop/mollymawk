@@ -693,7 +693,6 @@ struct
                     | Error err ->
                         Logs.warn (fun m ->
                             m "Error querying albatross: %s" err);
-
                         http_response reqd ~status_code:500 ~title:"Error"
                           ~data:("Error while querying Albatross: " ^ err)
                           ~success:false `Internal_server_error
