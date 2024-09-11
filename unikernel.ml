@@ -8,16 +8,8 @@ type images = {
   dashboard_img : string;
 }
 
-let pp_msg ppf (`Msg msg) = Fmt.pf ppf "%s" msg
-
-let err_to_exit pp = function
-  | Ok x -> x
-  | Error e ->
-      Logs.err (fun m -> m "received error %a" pp e);
-      exit Mirage_runtime.argument_error
-
 module Main
-    (R : Mirage_random.S)
+    (R : Mirage_crypto_rng_mirage.S)
     (P : Mirage_clock.PCLOCK)
     (M : Mirage_clock.MCLOCK)
     (T : Mirage_time.S)
@@ -48,7 +40,6 @@ struct
     let albatross_img = read_image assets "albatross_1.png" in
     let mirage_img = read_image assets "mirage_os_1.png" in
     let dashboard_img = read_image assets "dashboard_1.png" in
-
     Lwt.all [ molly_img; robur_img; albatross_img; mirage_img; dashboard_img ]
     >|= function
     | [ molly_img; robur_img; albatross_img; mirage_img; dashboard_img ] ->
@@ -676,9 +667,7 @@ struct
                 Logs.info (fun m -> m "args %s" args);
                 match Albatross_json.config_of_json args with
                 | Ok cfg -> (
-                    let config =
-                      { cfg with image = Cstruct.of_string binary }
-                    in
+                    let config = { cfg with image = binary } in
                     (* TODO use uuid in the future *)
                     Albatross.query albatross ~domain:user.name ~name
                       (`Unikernel_cmd (`Unikernel_create config))

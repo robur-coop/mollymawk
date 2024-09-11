@@ -39,12 +39,8 @@ let to_json t =
   `Assoc
     [
       ("version", `Int current_version);
-      ( "certificate",
-        `String (Cstruct.to_string (X509.Certificate.encode_pem t.certificate))
-      );
-      ( "private_key",
-        `String (Cstruct.to_string (X509.Private_key.encode_pem t.private_key))
-      );
+      ("certificate", `String (X509.Certificate.encode_pem t.certificate));
+      ("private_key", `String (X509.Private_key.encode_pem t.private_key));
       ("server_ip", `String (Ipaddr.to_string t.server_ip));
       ("server_port", `Int t.server_port);
       ("updated_at", `String (Utils.TimeHelper.string_of_ptime t.updated_at));
@@ -64,16 +60,12 @@ let of_json_from_http json now =
           Some (`String server_ip),
           Some (`Int server_port) ) ->
           let ( let* ) = Result.bind in
-          let* certificate =
-            X509.Certificate.decode_pem (Cstruct.of_string cert)
-          in
-          let* private_key =
-            X509.Private_key.decode_pem (Cstruct.of_string key)
-          in
+          let* certificate = X509.Certificate.decode_pem cert in
+          let* private_key = X509.Private_key.decode_pem key in
           let* () =
             if
               not
-                (Cstruct.equal
+                (String.equal
                    (X509.Public_key.fingerprint
                       (X509.Certificate.public_key certificate))
                    (X509.Public_key.fingerprint
@@ -118,16 +110,12 @@ let of_json json =
                 Some (`Int server_port),
                 Some (`String updated_at) ) ->
                 let ( let* ) = Result.bind in
-                let* certificate =
-                  X509.Certificate.decode_pem (Cstruct.of_string cert)
-                in
-                let* private_key =
-                  X509.Private_key.decode_pem (Cstruct.of_string key)
-                in
+                let* certificate = X509.Certificate.decode_pem cert in
+                let* private_key = X509.Private_key.decode_pem key in
                 let* () =
                   if
                     not
-                      (Cstruct.equal
+                      (String.equal
                          (X509.Public_key.fingerprint
                             (X509.Certificate.public_key certificate))
                          (X509.Public_key.fingerprint

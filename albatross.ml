@@ -131,7 +131,7 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     Ok (`Single (cert :: certs, key))
 
   let decode data =
-    match Vmm_asn.wire_of_cstruct data with
+    match Vmm_asn.wire_of_str data with
     | Error (`Msg msg) ->
         Error (Fmt.str "albatross: failed to decode data %s" msg)
     | Ok (hdr, res) as w ->
@@ -147,48 +147,49 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
         w
 
   let decode_reply data =
-    if Cstruct.length data >= 4 then
-      let len = Int32.to_int (Cstruct.BE.get_uint32 data 0) in
-      if Cstruct.length data >= 4 + len then (
-        if Cstruct.length data > 4 + len then
+    if String.length data >= 4 then
+      let len = Int32.to_int (String.get_int32_be data 0) in
+      if String.length data >= 4 + len then (
+        if String.length data > 4 + len then
           Logs.warn (fun m ->
-              m "received %d trailing bytes" (Cstruct.length data - len - 4));
-        decode (Cstruct.sub data 4 len))
+              m "received %d trailing bytes" (String.length data - len - 4));
+        decode (String.sub data 4 len))
       else
         Error
           (Fmt.str "albatross short reply: received %u bytes, expected %u bytes"
-             (Cstruct.length data) (len + 4))
+             (String.length data) (len + 4))
     else
       Error
         (Fmt.str "albatross short buffer (%u bytes), need at least 4 bytes"
-           (Cstruct.length data))
+           (String.length data))
 
   let split_many data =
-    let rec split acc data =
-      if Cstruct.length data >= 4 then
-        let len = Int32.to_int (Cstruct.BE.get_uint32 data 0) in
-        if Cstruct.length data >= 4 + len then
-          split (Cstruct.sub data 4 len :: acc) (Cstruct.shift data (len + 4))
+    let rec split acc data off =
+      if String.length data - off >= 4 then
+        let len = Int32.to_int (String.get_int32_be data off) in
+        if String.length data - off >= 4 + len then
+          split (String.sub data (4 + off) len :: acc) data (off + len + 4)
         else (
           Logs.warn (fun m ->
               m "albatross buffer too small: %u bytes, requires %u bytes"
-                (Cstruct.length data - 4)
+                (String.length data - 4 - off)
                 len);
           acc)
-      else if Cstruct.length data = 0 then acc
+      else if String.length data = off then acc
       else (
         Logs.warn (fun m ->
             m "albatross buffer too small: %u bytes leftover"
-              (Cstruct.length data));
+              (String.length data - off));
         acc)
     in
-    split [] data |> List.rev
+    split [] data 0 |> List.rev
 
   let rec continue_reading t name flow =
     let open Lwt.Infix in
     TLS.read flow >>= function
     | Ok (`Data d) ->
-        let bufs = split_many d in
+        let str = Cstruct.to_string d in
+        let bufs = split_many str in
         List.iter
           (fun d ->
             match decode d with
@@ -240,53 +241,57 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
                 (Vmm_commands.pp ~verbose:false)
                 cmd S.TCP.pp_error e))
     | Ok flow -> (
-        let tls_config =
+        match
           let authenticator =
             X509.Authenticator.chain_of_trust
               ~time:(fun () -> Some (Ptime.v (P.now_d_ps ())))
               [ t.cert ]
           in
           Tls.Config.client ~authenticator ~certificates ()
-        in
-        TLS.client_of_flow tls_config flow >>= function
-        | Error e ->
-            S.TCP.close flow >|= fun () ->
-            Error
-              (Fmt.str
-                 "albatross establishing TLS to %a while querying %a %a: %a"
-                 Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                 t.remote Vmm_core.Name.pp name
-                 (Vmm_commands.pp ~verbose:false)
-                 cmd TLS.pp_write_error e)
-        | Ok tls_flow -> (
-            TLS.read tls_flow >>= fun r ->
-            match r with
-            | Ok (`Data d) ->
-                (match snd (Vmm_commands.endpoint cmd) with
-                | `End -> TLS.close tls_flow
-                | `Read ->
-                    t.console_readers <- Set.add name t.console_readers;
-                    Lwt.async (fun () -> continue_reading t name tls_flow);
-                    Lwt.return_unit)
-                >|= fun () -> decode_reply d
-            | Ok `Eof ->
-                TLS.close tls_flow >|= fun () ->
-                Error
-                  (Fmt.str "eof from albatross %a querying %a %a"
-                     Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                     t.remote Vmm_core.Name.pp name
-                     (Vmm_commands.pp ~verbose:false)
-                     cmd)
+        with
+        | Error (`Msg msg) ->
+            Lwt.return
+              (Error (Fmt.str "albatross setting up TLS config: %s" msg))
+        | Ok tls_config -> (
+            TLS.client_of_flow tls_config flow >>= function
             | Error e ->
-                TLS.close tls_flow >|= fun () ->
+                S.TCP.close flow >|= fun () ->
                 Error
                   (Fmt.str
-                     "albatross received error reading from %a querying %a %a: \
-                      %a"
+                     "albatross establishing TLS to %a while querying %a %a: %a"
                      Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
                      t.remote Vmm_core.Name.pp name
                      (Vmm_commands.pp ~verbose:false)
-                     cmd TLS.pp_error e)))
+                     cmd TLS.pp_write_error e)
+            | Ok tls_flow -> (
+                TLS.read tls_flow >>= fun r ->
+                match r with
+                | Ok (`Data d) ->
+                    (match snd (Vmm_commands.endpoint cmd) with
+                    | `End -> TLS.close tls_flow
+                    | `Read ->
+                        t.console_readers <- Set.add name t.console_readers;
+                        Lwt.async (fun () -> continue_reading t name tls_flow);
+                        Lwt.return_unit)
+                    >|= fun () -> decode_reply (Cstruct.to_string d)
+                | Ok `Eof ->
+                    TLS.close tls_flow >|= fun () ->
+                    Error
+                      (Fmt.str "eof from albatross %a querying %a %a"
+                         Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                         t.remote Vmm_core.Name.pp name
+                         (Vmm_commands.pp ~verbose:false)
+                         cmd)
+                | Error e ->
+                    TLS.close tls_flow >|= fun () ->
+                    Error
+                      (Fmt.str
+                         "albatross received error reading from %a querying %a \
+                          %a: %a"
+                         Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                         t.remote Vmm_core.Name.pp name
+                         (Vmm_commands.pp ~verbose:false)
+                         cmd TLS.pp_error e))))
 
   let init stack server ?(port = 1025) cert key =
     let open Lwt.Infix in

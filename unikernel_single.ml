@@ -36,7 +36,7 @@ let unikernel_single_layout unikernel now =
                           ];
                         p
                           ~a:[ a_class [ "text-sm" ] ]
-                          [ txt (Cstruct.to_hex_string data.digest) ];
+                          [ txt (Ohex.encode data.digest) ];
                       ];
                     div
                       [
