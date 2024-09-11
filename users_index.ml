@@ -133,39 +133,55 @@ let users_index_layout (users : User_model.user list) current_time =
                                        ]
                                      [
                                        div
-                                         ~a:
-                                           [
-                                             a_class
-                                               [
-                                                 "flex justify-start space-x-1 \
-                                                  items-center";
-                                               ];
-                                           ]
                                          [
-                                           p [ txt user.name ];
-                                           (match user.active with
-                                           | true ->
-                                               i
-                                                 ~a:
+                                           div
+                                             ~a:
+                                               [
+                                                 a_class
                                                    [
-                                                     a_class
+                                                     "flex justify-start \
+                                                      space-x-1 items-center";
+                                                   ];
+                                               ]
+                                             [
+                                               p [ txt user.name ];
+                                               (match user.active with
+                                               | true ->
+                                                   i
+                                                     ~a:
                                                        [
-                                                         "text-primary-500 \
-                                                          fa-solid fa-check";
-                                                       ];
-                                                   ]
-                                                 []
-                                           | false ->
-                                               i
-                                                 ~a:
-                                                   [
-                                                     a_class
+                                                         a_class
+                                                           [
+                                                             "text-primary-500 \
+                                                              fa-solid \
+                                                              fa-check";
+                                                           ];
+                                                       ]
+                                                     []
+                                               | false ->
+                                                   i
+                                                     ~a:
                                                        [
-                                                         "text-secondary-500 \
-                                                          fa-solid fa-x";
-                                                       ];
-                                                   ]
-                                                 []);
+                                                         a_class
+                                                           [
+                                                             "text-secondary-500 \
+                                                              fa-solid fa-x";
+                                                           ];
+                                                       ]
+                                                     []);
+                                             ];
+                                           (if user.super_user then
+                                              i
+                                                ~a:
+                                                  [
+                                                    a_class
+                                                      [
+                                                        "text-primary-500 \
+                                                         lowercase text-sm";
+                                                      ];
+                                                  ]
+                                                [ txt "admin" ]
+                                            else p []);
                                          ];
                                      ];
                                    td
@@ -250,40 +266,21 @@ let users_index_layout (users : User_model.user list) current_time =
                                            ];
                                        ]
                                      [
-                                       (if user.active then
-                                          button
-                                            ~a:
-                                              [
-                                                a_onclick
-                                                  ("toggleUserStatus('"
-                                                 ^ user.uuid ^ "')");
-                                                a_class
-                                                  [
-                                                    "px-3 py-2 rounded \
-                                                     bg-secondary-500 \
-                                                     text-secondary-50 \
-                                                     hover:bg-secondary-700 \
-                                                     font-semibold";
-                                                  ];
-                                              ]
-                                            [ txt "Deactivate" ]
-                                        else
-                                          button
-                                            ~a:
-                                              [
-                                                a_onclick
-                                                  ("toggleUserStatus('"
-                                                 ^ user.uuid ^ "')");
-                                                a_class
-                                                  [
-                                                    "px-3 py-2 rounded \
-                                                     bg-primary-500 \
-                                                     text-primary-50 \
-                                                     hover:bg-primary-700 \
-                                                     font-semibold";
-                                                  ];
-                                              ]
-                                            [ txt "Activate" ]);
+                                       a
+                                         ~a:
+                                           [
+                                             a_href
+                                               ("/admin/user/" ^ user.uuid ^ "");
+                                             a_class
+                                               [
+                                                 "border border-primary-500 \
+                                                  hover:bg-primary-700 px-2 \
+                                                  py-1 text-primary-800 \
+                                                  hover:text-primary-50 \
+                                                  rounded";
+                                               ];
+                                           ]
+                                         [ txt "View" ];
                                      ];
                                  ])
                              users);

@@ -28,6 +28,7 @@ type user = {
   updated_at : Ptime.t;
   email_verification_uuid : Uuidm.t option;
   active : bool;
+  super_user : bool;
 }
 
 let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
@@ -256,6 +257,7 @@ let user_v1_of_json = function
               updated_at = Option.get updated_at;
               email_verification_uuid;
               active = true;
+              super_user = true;
             }
       | _ -> Error (`Msg "invalid json for user"))
   | _ -> Error (`Msg "invalid json for user")
@@ -274,7 +276,8 @@ let user_of_json = function
           get "created_at" xs,
           get "updated_at" xs,
           get "email_verification_uuid" xs,
-          get "active" xs )
+          get "active" xs,
+          get "super_user" xs )
       with
       | ( Some (`String name),
           Some (`String email),
@@ -286,7 +289,8 @@ let user_of_json = function
           Some (`String updated_at_str),
           Some (`String created_at_str),
           Some email_verification_uuid,
-          Some (`Bool active) ) ->
+          Some (`Bool active),
+          Some (`Bool super_user) ) ->
           let created_at =
             match Utils.TimeHelper.ptime_of_string created_at_str with
             | Ok ptime -> Some ptime
@@ -339,6 +343,7 @@ let user_of_json = function
               updated_at = Option.get updated_at;
               email_verification_uuid;
               active;
+              super_user;
             }
       | _ -> Error (`Msg "invalid json for user"))
   | _ -> Error (`Msg "invalid json for user")
@@ -391,7 +396,7 @@ let find_user_by_key (uuid : string) (user_map : (string * user) list) :
     user option =
   List.assoc_opt uuid user_map
 
-let create_user ~name ~email ~password ~created_at ~active =
+let create_user ~name ~email ~password ~created_at ~active ~super_user =
   let uuid = Uuidm.to_string (generate_uuid ()) in
   let password = hash_password password uuid in
   let auth_token = generate_token ~created_at () in
@@ -411,13 +416,14 @@ let create_user ~name ~email ~password ~created_at ~active =
     updated_at = created_at;
     email_verification_uuid = None;
     active;
+    super_user;
   }
 
 let check_if_user_exists email users =
   List.find_opt (fun user -> user.email = Utils.Json.clean_string email) users
 
 let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
-    ?updated_at ?email_verification_uuid ?active () =
+    ?updated_at ?email_verification_uuid ?active ?super_user () =
   {
     user with
     name = Option.value ~default:user.name name;
@@ -430,6 +436,7 @@ let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
     email_verification_uuid =
       Option.value ~default:user.email_verification_uuid email_verification_uuid;
     active = Option.value ~default:user.active active;
+    super_user = Option.value ~default:user.super_user super_user;
   }
 
 let is_valid_cookie (cookie : cookie) now =

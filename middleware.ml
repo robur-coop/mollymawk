@@ -46,6 +46,26 @@ let redirect_to_register reqd ?(msg = "") () =
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
+let redirect_to_error ~title ~data status user code api_meth reqd () =
+  let error = { Utils.Status.code; title; success = false; data } in
+  let data =
+    if api_meth then Utils.Status.to_json error
+    else
+      Dashboard.dashboard_layout user ~page_title:(title ^ " | Mollymawk")
+        ~content:(Error_page.error_layout error)
+        ~icon:"/images/robur.png" ()
+  in
+  Lwt.return
+    (let headers =
+       Httpaf.Headers.of_list
+         [
+           ("content-length", string_of_int (String.length data));
+           ("content-type", if api_meth then "application/json" else "text/html");
+         ]
+     in
+     let resp = Httpaf.Response.create ~headers status in
+     Httpaf.Reqd.respond_with_string reqd resp data)
+
 let redirect_to_verify_email reqd ?(msg = "") () =
   let headers = Httpaf.Headers.of_list [ ("location", "/verify-email") ] in
   let response = Httpaf.Response.create ~headers `Found in
@@ -108,14 +128,22 @@ let auth_middleware now users handler reqd =
   | Ok user ->
       if user.User_model.active then handler reqd
       else redirect_to_login ~msg:"User account is deactivated." reqd ()
-  | Error (`Msg msg) ->
-      Logs.err (fun m ->
-          m "auth-middleware: No molly-session in cookie header.");
-      redirect_to_login ~msg reqd ()
+  | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
 
 let email_verified_middleware now users handler reqd =
   match user_of_cookie users now reqd with
   | Ok user ->
       if User_model.is_email_verified user then handler reqd
       else redirect_to_verify_email reqd ()
+  | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
+
+let is_user_admin_middleware api_meth now users handler reqd =
+  match user_of_cookie users now reqd with
+  | Ok user ->
+      if user.User_model.super_user && user.active then handler reqd
+      else
+        redirect_to_error ~title:"Unauthorized"
+          ~data:
+            "You don't have the necessary permissions to access this service."
+          `Unauthorized user 401 api_meth reqd ()
   | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
