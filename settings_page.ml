@@ -1,12 +1,8 @@
 let settings_layout (configuration : Configuration.t) =
   let ip = Ipaddr.to_string configuration.server_ip in
   let port = string_of_int configuration.server_port in
-  let certificate =
-    Cstruct.to_string (X509.Certificate.encode_pem configuration.certificate)
-  in
-  let private_key =
-    Cstruct.to_string (X509.Private_key.encode_pem configuration.private_key)
-  in
+  let certificate = X509.Certificate.encode_pem configuration.certificate in
+  let private_key = X509.Private_key.encode_pem configuration.private_key in
   let last_update = Utils.TimeHelper.string_of_ptime configuration.updated_at in
   Tyxml_html.(
     section

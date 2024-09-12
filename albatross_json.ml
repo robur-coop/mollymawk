@@ -44,7 +44,7 @@ let unikernel_info (unikernel_name, info) =
     `List (List.map bridge bs)
   and argv args =
     `List (List.map (fun a -> `String a) (Option.value ~default:[] args))
-  and digest d = `String (Cstruct.to_hex_string d) in
+  and digest d = `String (Ohex.encode d) in
   `Assoc
     [
       ("name", `String (Vmm_core.Name.to_string unikernel_name));
@@ -242,7 +242,7 @@ let config_of_json str =
     {
       Vmm_core.Unikernel.typ = `Solo5;
       compressed = false;
-      image = Cstruct.empty;
+      image = "";
       fail_behaviour;
       cpuid;
       memory;

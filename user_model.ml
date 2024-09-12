@@ -350,13 +350,13 @@ let user_of_json = function
 
 let hash_password password uuid =
   let hash =
-    Mirage_crypto.Hash.SHA256.digest (Cstruct.of_string (uuid ^ "-" ^ password))
+    Digestif.SHA256.(to_raw_string (digestv_string [ uuid; "-"; password ]))
   in
-  Base64.encode_string (Cstruct.to_string hash)
+  Base64.encode_string hash
 
 let generate_uuid () =
   let data = Rng.generate 16 in
-  Uuidm.v4 (Cstruct.to_bytes data)
+  Uuidm.v4 (Bytes.unsafe_of_string data)
 
 let generate_token ?(expires_in = 3600) ~created_at () =
   let token = generate_uuid () in

@@ -1,4 +1,4 @@
-(* mirage >= 4.6.0 & < 4.7.0 *)
+(* mirage >= 4.7.0 & < 4.8.0 *)
 open Mirage
 
 let assets = crunch "assets"
@@ -9,7 +9,7 @@ let mollymawk =
       package "logs";
       package "x509";
       package "tls-mirage";
-      package ~min:"2.1.0" ~max:"2.2.0" "albatross";
+      package ~min:"2.2.0" "albatross";
       package "yojson";
       package "uri";
       package "tyxml";
@@ -21,6 +21,7 @@ let mollymawk =
       package "paf" ~sublibs:[ "mirage" ] ~min:"0.5.0";
       package "oneffs";
       package "duration";
+      package ~min:"0.2.0" "ohex";
     ]
   in
   main ~packages "Unikernel.Main"
