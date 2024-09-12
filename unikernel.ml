@@ -207,12 +207,16 @@ struct
         | Ok _ -> (
             let _, (s : Storage.t) = !store in
             let users = s.users in
-            let user = User_model.check_if_user_exists email users in
-            match user with
-            | Some _ ->
+            let existing_email = User_model.check_if_email_exists email users in
+            let existing_name = User_model.check_if_name_exists name users in
+            match (existing_name, existing_email) with
+            | Some _, None ->
+                http_response reqd ~title:"Error"
+                  ~data:"A user with this name already exist." `Bad_request
+            | None, Some _ ->
                 http_response reqd ~title:"Error"
                   ~data:"A user with this email already exist." `Bad_request
-            | None -> (
+            | None, None -> (
                 let created_at = Ptime.v (P.now_d_ps ()) in
                 let user =
                   let active, super_user =
@@ -245,7 +249,11 @@ struct
                       `OK
                 | Error (`Msg err) ->
                     http_response reqd ~title:"Error" ~data:(String.escaped err)
-                      `Bad_request)))
+                      `Bad_request)
+            | _ ->
+                http_response reqd ~title:"Error"
+                  ~data:"A user with this name or email already exist."
+                  `Bad_request))
 
   let login store reqd =
     decode_request_body reqd >>= fun data ->

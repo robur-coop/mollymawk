@@ -419,8 +419,15 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user =
     super_user;
   }
 
-let check_if_user_exists email users =
-  List.find_opt (fun user -> user.email = Utils.Json.clean_string email) users
+let check_if_email_exists email users =
+  List.find_opt
+    (fun user -> String.equal user.email (Utils.Json.clean_string email))
+    users
+
+let check_if_name_exists name users =
+  List.find_opt
+    (fun user -> String.equal user.name (Utils.Json.clean_string name))
+    users
 
 let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
     ?updated_at ?email_verification_uuid ?active ?super_user () =
@@ -481,7 +488,7 @@ let user_auth_cookie_from_user (user : user) =
     user.cookies
 
 let login_user ~email ~password users now =
-  let user = check_if_user_exists email users in
+  let user = check_if_email_exists email users in
   match user with
   | None -> Error (`Msg "This account does not exist.")
   | Some u -> (
