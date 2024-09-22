@@ -771,7 +771,7 @@ struct
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Dashboard.dashboard_layout user
-                ~page_title:((String.capitalize_ascii u.name) ^ " | Mollymawk")
+                ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
                 ~content:
                   (User_single.user_single_layout u unikernels policies
                      (Ptime.v (P.now_d_ps ())))
