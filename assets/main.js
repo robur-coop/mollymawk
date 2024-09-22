@@ -3,6 +3,29 @@ document.addEventListener('DOMContentLoaded', function () {
 	if (window.location.pathname.startsWith("/unikernel/info")) {
 		setInterval(getConsoleOutput, 300);
 	}
+	if (window.location.pathname.startsWith("/admin/user/")) {
+		const tabs = document.querySelectorAll(".tab-link");
+		const tabPanes = document.querySelectorAll(".tab-pane");
+
+		tabs.forEach((tab) => {
+			tab.addEventListener("click", function (event) {
+				event.preventDefault();
+
+				// Remove active class from all tabs
+				tabs.forEach((t) => t.classList.remove("active"));
+
+				// Hide all tab content
+				tabPanes.forEach((pane) => pane.classList.add("hidden"));
+
+				// Add active class to the clicked tab
+				tab.classList.add("active");
+
+				// Show the corresponding tab content
+				const target = document.querySelector(tab.getAttribute("href"));
+				target.classList.remove("hidden");
+			});
+		});
+	}
 });
 
 function getUnikernelName(url) {
@@ -243,28 +266,28 @@ function buttonLoading(btn, load, text) {
 
 async function toggleUserStatus(uuid, endpoint) {
 	try {
-	  const response = await fetch(endpoint, {
-		method: 'POST',
-		body: JSON.stringify({ uuid: uuid }),
-		headers: { 'Content-Type': 'application/json' }
-	  });
+		const response = await fetch(endpoint, {
+			method: 'POST',
+			body: JSON.stringify({ uuid: uuid }),
+			headers: { 'Content-Type': 'application/json' }
+		});
 
-	  const data = await response.json();
-	  if (response.status === 200) {
-		postAlert("bg-primary-300", data.data);
-		setTimeout(() => window.location.reload(), 1000);
-	  } else {
-		postAlert("bg-secondary-300", data.data);
-	  }
+		const data = await response.json();
+		if (response.status === 200) {
+			postAlert("bg-primary-300", data.data);
+			setTimeout(() => window.location.reload(), 1000);
+		} else {
+			postAlert("bg-secondary-300", data.data);
+		}
 	} catch (error) {
-	  postAlert("bg-secondary-300", error);
+		postAlert("bg-secondary-300", error);
 	}
-  }
+}
 
-  async function toggleUserActiveStatus(uuid) {
+async function toggleUserActiveStatus(uuid) {
 	await toggleUserStatus(uuid, "/api/admin/user/activate/toggle");
-  }
+}
 
-  async function toggleUserAdminStatus(uuid) {
+async function toggleUserAdminStatus(uuid) {
 	await toggleUserStatus(uuid, "/api/admin/user/admin/toggle");
-  }
+}
