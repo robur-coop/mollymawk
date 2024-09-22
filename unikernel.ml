@@ -754,12 +754,26 @@ struct
                    reply);
              [])
         >>= fun unikernels ->
+        (Albatross.query albatross ~domain:u.name (`Policy_cmd `Policy_info)
+         >|= function
+         | Error msg ->
+             Logs.err (fun m ->
+                 m "error while communicating with albatross: %s" msg);
+             []
+         | Ok (_hdr, `Success (`Policies policies)) -> policies
+         | Ok reply ->
+             Logs.err (fun m ->
+                 m "expected a policy info reply, received %a"
+                   (Vmm_commands.pp_wire ~verbose:false)
+                   reply);
+             [])
+        >>= fun policies ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Dashboard.dashboard_layout user
-                ~page_title:(u.name ^ " | Mollymawk")
+                ~page_title:((String.capitalize_ascii u.name) ^ " | Mollymawk")
                 ~content:
-                  (User_single.user_single_layout u unikernels
+                  (User_single.user_single_layout u unikernels policies
                      (Ptime.v (P.now_d_ps ())))
                 ~icon:"/images/robur.png" ())
              `OK)
