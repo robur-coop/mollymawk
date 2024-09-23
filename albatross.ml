@@ -224,7 +224,7 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     continue_reading name tls_flow >|= fun output ->
     Result.map (fun r -> (r, output)) (decode_reply d)
 
-  let raw_query t ?(name = Vmm_core.Name.root) ?console_mbox certificates cmd f
+  let raw_query t ?(name = Vmm_core.Name.root) certificates cmd f
       =
     let open Lwt.Infix in
     S.TCP.create_connection (S.tcp t.stack) t.remote >>= function
