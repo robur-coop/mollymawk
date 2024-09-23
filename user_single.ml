@@ -1,5 +1,4 @@
-let user_single_layout (user : User_model.user) unikernels policies current_time
-    =
+let user_single_layout (user : User_model.user) unikernels policy current_time =
   Tyxml_html.(
     section
       ~a:[ a_class [ "p-4 bg-gray-50 my-1" ] ]
@@ -239,175 +238,183 @@ let user_single_layout (user : User_model.user) unikernels policies current_time
             section
               ~a:[ a_id "settings"; a_class [ "my-5 tab-pane hidden" ] ]
               [
-                table
-                  ~a:
-                    [
-                      a_class
-                        [ "table-auto min-w-full divide-y divide-gray-200" ];
-                    ]
-                  ~thead:
-                    (thead
-                       [
-                         tr
+                (match policy with
+                | None -> h2 [ txt "No policy" ]
+                | Some policy ->
+                    table
+                      ~a:
+                        [
+                          a_class
+                            [ "table-auto min-w-full divide-y divide-gray-200" ];
+                        ]
+                      ~thead:
+                        (thead
                            [
-                             th
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "px-6 py-2 text-start text-xs font-bold \
-                                        text-primary-600 uppercase";
-                                     ];
-                                 ]
-                               [ txt "Allowed VMs" ];
-                             th
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "px-6 py-2 text-start text-xs font-bold \
-                                        text-primary-600 uppercase";
-                                     ];
-                                 ]
-                               [ txt "Allowed Memory" ];
-                             th
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "px-6 py-2 text-start text-xs font-bold \
-                                        text-primary-600 uppercase";
-                                     ];
-                                 ]
-                               [ txt "Allowed Storage" ];
-                             th
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "px-6 py-2 text-start text-xs font-bold \
-                                        text-primary-600 uppercase";
-                                     ];
-                                 ]
-                               [ txt "CPU IDs" ];
-                             th
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "px-6 py-2 text-start text-xs font-bold \
-                                        text-primary-600 uppercase";
-                                     ];
-                                 ]
-                               [ txt "Network Bridges" ];
-                             th
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "px-6 py-2 text-start text-xs font-bold \
-                                        text-primary-600 uppercase";
-                                     ];
-                                 ]
-                               [ txt "Action" ];
-                           ];
-                       ])
-                  (List.map
-                     (fun (_hd, policy) ->
-                       tr
-                         [
-                           td
-                             ~a:
+                             tr
                                [
-                                 a_class
-                                   [
-                                     "px-6 py-1 whitespace-nowrap text-sm \
-                                      font-medium text-gray-800";
-                                   ];
-                               ]
-                             [ txt (string_of_int policy.Vmm_core.Policy.vms) ];
-                           td
-                             ~a:
-                               [
-                                 a_class
-                                   [
-                                     "px-6 py-1 whitespace-normal text-sm \
-                                      font-medium text-gray-800";
-                                   ];
-                               ]
-                             [ txt (string_of_int policy.memory ^ " MB") ];
-                           td
-                             ~a:
-                               [
-                                 a_class
-                                   [
-                                     "px-6 py-1 whitespace-normal text-sm \
-                                      font-medium text-gray-800";
-                                   ];
-                               ]
-                             [
-                               txt
-                                 (string_of_int
-                                    (Option.value policy.block ~default:0)
-                                 ^ " MB");
-                             ];
-                           td
-                             ~a:
-                               [
-                                 a_class
-                                   [
-                                     "px-6 py-1 whitespace-normal text-sm \
-                                      font-medium text-gray-800";
-                                   ];
-                               ]
-                             [
-                               txt
-                                 (String.concat ", "
-                                    (List.map string_of_int
-                                       (Vmm_core.IS.elements policy.cpuids)));
-                             ];
-                           td
-                             ~a:
-                               [
-                                 a_class
-                                   [
-                                     "px-6 py-1 whitespace-normal text-sm \
-                                      font-medium text-gray-800";
-                                   ];
-                               ]
-                             [
-                               txt
-                                 (String.concat ", "
-                                    (List.map string_of_uri
-                                       (Vmm_core.String_set.elements
-                                          policy.bridges)));
-                             ];
-                           td
-                             ~a:
-                               [
-                                 a_class
-                                   [
-                                     "px-6 py-4 whitespace-nowrap text-sm \
-                                      font-medium text-gray-800";
-                                   ];
-                               ]
-                             [
-                               a
-                                 ~a:
-                                   [
-                                     a_href "";
-                                     a_class
-                                       [
-                                         "border border-primary-500 \
-                                          hover:bg-primary-700 px-2 py-1 \
-                                          text-primary-800 \
-                                          hover:text-primary-50 rounded";
-                                       ];
-                                   ]
-                                 [ txt "Edit" ];
-                             ];
-                         ])
-                     policies);
+                                 th
+                                   ~a:
+                                     [
+                                       a_class
+                                         [
+                                           "px-6 py-2 text-start text-xs \
+                                            font-bold text-primary-600 \
+                                            uppercase";
+                                         ];
+                                     ]
+                                   [ txt "Allowed VMs" ];
+                                 th
+                                   ~a:
+                                     [
+                                       a_class
+                                         [
+                                           "px-6 py-2 text-start text-xs \
+                                            font-bold text-primary-600 \
+                                            uppercase";
+                                         ];
+                                     ]
+                                   [ txt "Allowed Memory" ];
+                                 th
+                                   ~a:
+                                     [
+                                       a_class
+                                         [
+                                           "px-6 py-2 text-start text-xs \
+                                            font-bold text-primary-600 \
+                                            uppercase";
+                                         ];
+                                     ]
+                                   [ txt "Allowed Storage" ];
+                                 th
+                                   ~a:
+                                     [
+                                       a_class
+                                         [
+                                           "px-6 py-2 text-start text-xs \
+                                            font-bold text-primary-600 \
+                                            uppercase";
+                                         ];
+                                     ]
+                                   [ txt "CPU IDs" ];
+                                 th
+                                   ~a:
+                                     [
+                                       a_class
+                                         [
+                                           "px-6 py-2 text-start text-xs \
+                                            font-bold text-primary-600 \
+                                            uppercase";
+                                         ];
+                                     ]
+                                   [ txt "Network Bridges" ];
+                                 th
+                                   ~a:
+                                     [
+                                       a_class
+                                         [
+                                           "px-6 py-2 text-start text-xs \
+                                            font-bold text-primary-600 \
+                                            uppercase";
+                                         ];
+                                     ]
+                                   [ txt "Action" ];
+                               ];
+                           ])
+                      [
+                        tr
+                          [
+                            td
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "px-6 py-1 whitespace-nowrap text-sm \
+                                       font-medium text-gray-800";
+                                    ];
+                                ]
+                              [ txt (string_of_int policy.Vmm_core.Policy.vms) ];
+                            td
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "px-6 py-1 whitespace-normal text-sm \
+                                       font-medium text-gray-800";
+                                    ];
+                                ]
+                              [ txt (string_of_int policy.memory ^ " MB") ];
+                            td
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "px-6 py-1 whitespace-normal text-sm \
+                                       font-medium text-gray-800";
+                                    ];
+                                ]
+                              [
+                                txt
+                                  (string_of_int
+                                     (Option.value policy.block ~default:0)
+                                  ^ " MB");
+                              ];
+                            td
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "px-6 py-1 whitespace-normal text-sm \
+                                       font-medium text-gray-800";
+                                    ];
+                                ]
+                              [
+                                txt
+                                  (String.concat ", "
+                                     (List.map string_of_int
+                                        (Vmm_core.IS.elements policy.cpuids)));
+                              ];
+                            td
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "px-6 py-1 whitespace-normal text-sm \
+                                       font-medium text-gray-800";
+                                    ];
+                                ]
+                              [
+                                txt
+                                  (String.concat ", "
+                                     (List.map string_of_uri
+                                        (Vmm_core.String_set.elements
+                                           policy.bridges)));
+                              ];
+                            td
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "px-6 py-4 whitespace-nowrap text-sm \
+                                       font-medium text-gray-800";
+                                    ];
+                                ]
+                              [
+                                a
+                                  ~a:
+                                    [
+                                      a_href "";
+                                      a_class
+                                        [
+                                          "border border-primary-500 \
+                                           hover:bg-primary-700 px-2 py-1 \
+                                           text-primary-800 \
+                                           hover:text-primary-50 rounded";
+                                        ];
+                                    ]
+                                  [ txt "Edit" ];
+                              ];
+                          ];
+                      ]);
               ];
           ];
       ])

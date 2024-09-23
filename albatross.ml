@@ -21,6 +21,13 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     mutable console_output : Yojson.Basic.t list Map.t;
   }
 
+  let policy t domain =
+    match Vmm_core.Name.path_of_string domain with
+    | Error (`Msg msg) ->
+        Error (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
+    | Ok path ->
+        Ok (List.assoc_opt (Vmm_core.Name.create_of_path path) t.policies)
+
   let key_ids exts pub issuer =
     let open X509 in
     let auth = (Some (Public_key.id issuer), General_name.empty, None) in
@@ -93,17 +100,7 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
       match domain with
       | None -> Ok (t.key, t.cert, [])
       | Some domain ->
-          let* policy =
-            match Vmm_core.Name.path_of_string domain with
-            | Error (`Msg msg) ->
-                Error
-                  (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
-            | Ok path ->
-                Ok
-                  (List.assoc_opt
-                     (Vmm_core.Name.create_of_path path)
-                     t.policies)
-          in
+          let* policy = policy t domain in
           let policy =
             Option.value
               ~default:
