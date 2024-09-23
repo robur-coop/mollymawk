@@ -262,6 +262,90 @@ let user_v1_of_json = function
       | _ -> Error (`Msg "invalid json for user"))
   | _ -> Error (`Msg "invalid json for user")
 
+let user_v2_of_json = function
+  | `Assoc xs -> (
+      let ( let* ) = Result.bind in
+      match
+        ( get "name" xs,
+          get "email" xs,
+          get "email_verified" xs,
+          get "password" xs,
+          get "uuid" xs,
+          get "tokens" xs,
+          get "cookies" xs,
+          get "created_at" xs,
+          get "updated_at" xs,
+          get "email_verification_uuid" xs,
+          get "active" xs )
+      with
+      | ( Some (`String name),
+          Some (`String email),
+          Some email_verified,
+          Some (`String password),
+          Some (`String uuid),
+          Some (`List tokens),
+          Some (`List cookies),
+          Some (`String updated_at_str),
+          Some (`String created_at_str),
+          Some email_verification_uuid,
+          Some (`Bool active) ) ->
+          let created_at =
+            match Utils.TimeHelper.ptime_of_string created_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let updated_at =
+            match Utils.TimeHelper.ptime_of_string updated_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let* email_verified = Utils.TimeHelper.ptime_of_json email_verified in
+          let* tokens =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* token = token_of_json js in
+                Ok (token :: acc))
+              (Ok []) tokens
+          in
+          let* cookies =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* cookie = cookie_of_json js in
+                Ok (cookie :: acc))
+              (Ok []) cookies
+          in
+          let* email_verification_uuid =
+            match email_verification_uuid with
+            | `Null -> Ok None
+            | `String s ->
+                let* uuid =
+                  Option.to_result
+                    ~none:(`Msg "invalid UUID for email verification UUID")
+                    (Uuidm.of_string s)
+                in
+                Ok (Some uuid)
+            | _ -> Error (`Msg "invalid json data for email verification UUID")
+          in
+          Ok
+            {
+              name;
+              email;
+              email_verified;
+              password;
+              uuid;
+              tokens;
+              cookies;
+              created_at = Option.get created_at;
+              updated_at = Option.get updated_at;
+              email_verification_uuid;
+              active;
+              super_user = true;
+            }
+      | _ -> Error (`Msg "invalid json for user"))
+  | _ -> Error (`Msg "invalid json for user")
+
 let user_of_json = function
   | `Assoc xs -> (
       let ( let* ) = Result.bind in
