@@ -170,56 +170,25 @@ let unikernel_single_layout unikernel now console_output =
                                                     text-primary-600 uppercase";
                                                  ];
                                              ]
-                                           [ txt "Key" ];
-                                         th
-                                           ~a:
-                                             [
-                                               a_class
-                                                 [
-                                                   "px-6 py-2 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase";
-                                                 ];
-                                             ]
-                                           [ txt "Value" ];
+                                           [ txt "Argument" ];
                                        ];
                                    ])
                               (List.map
                                  (fun arg ->
-                                   match String.split_on_char '=' arg with
-                                   | [ key; value ] ->
-                                       tr
-                                         [
-                                           td
-                                             ~a:
+                                   tr
+                                     [
+                                       td
+                                         ~a:
+                                           [
+                                             a_class
                                                [
-                                                 a_class
-                                                   [
-                                                     "px-6 py-1 \
-                                                      whitespace-nowrap \
-                                                      text-sm font-medium \
-                                                      text-gray-800";
-                                                   ];
-                                               ]
-                                             [
-                                               txt
-                                                 (String.sub key 2
-                                                    (String.length key - 2));
-                                             ];
-                                           td
-                                             ~a:
-                                               [
-                                                 a_class
-                                                   [
-                                                     "px-6 py-1 \
-                                                      whitespace-normal \
-                                                      text-sm font-medium \
-                                                      text-gray-800";
-                                                   ];
-                                               ]
-                                             [ txt value ];
-                                         ]
-                                   | _ -> tr [])
+                                                 "px-6 py-1 whitespace-nowrap \
+                                                  text-sm font-medium \
+                                                  text-gray-800";
+                                               ];
+                                           ]
+                                         [ txt arg ];
+                                     ])
                                  (Option.value data.argv ~default:[]));
                           ];
                         div
