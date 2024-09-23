@@ -2,7 +2,13 @@ open Utils.Json
 
 type t = { users : User_model.user list; configuration : Configuration.t }
 
-let current_version = 3
+let current_version = 4
+(* version history:
+   1 was initial (fields until email_verification_uuid)
+   2 added active
+   3 added super_user (but did not serialise it)
+   4 properly serialised super_user
+*)
 
 let t_to_json t =
   `Assoc
@@ -20,6 +26,7 @@ let t_of_json json =
       | Some (`Int v), Some (`List users), Some configuration ->
           let* () =
             if v = current_version then Ok ()
+            else if v = 3 then Ok ()
             else if v = 2 then Ok ()
             else if v = 1 then Ok ()
             else
@@ -34,7 +41,7 @@ let t_of_json json =
                 let* acc = acc in
                 let* user =
                   if v = 1 then User_model.user_v1_of_json js
-                  else if v = 2 then User_model.user_v2_of_json js
+                  else if v = 2 || v = 3 then User_model.user_v2_of_json js
                   else User_model.user_of_json js
                 in
                 Ok (user :: acc))
