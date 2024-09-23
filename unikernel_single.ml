@@ -55,7 +55,7 @@ let unikernel_single_layout unikernel now console_output =
                                    text-secondary-50 font-semibold";
                                 ];
                             ]
-                          [ txt "Destory" ];
+                          [ txt "Destroy" ];
                       ];
                   ];
                 div
