@@ -178,6 +178,7 @@ let user_to_json (u : user) : Yojson.Basic.t =
         | None -> `Null
         | Some s -> `String (Uuidm.to_string s) );
       ("active", `Bool u.active);
+      ("super_user", `Bool u.super_user);
     ]
 
 let user_v1_of_json = function
