@@ -1,8 +1,5 @@
 document.addEventListener('DOMContentLoaded', function () {
 	AOS.init();
-	if (window.location.pathname.startsWith("/unikernel/info")) {
-		setInterval(getConsoleOutput, 300);
-	}
 	if (window.location.pathname.startsWith("/admin/user/")) {
 		const tabs = document.querySelectorAll(".tab-link");
 		const tabPanes = document.querySelectorAll(".tab-pane");
@@ -209,44 +206,6 @@ async function destroyUnikernel(name) {
 		}
 	} catch (error) {
 		postAlert("bg-secondary-300", error);
-	}
-}
-
-
-
-var consoleArea = document.createElement("div");
-async function getConsoleOutput() {
-	let unikernel_name = getUnikernelName(window.location.href);
-	consoleArea.classList.add("w-full", "bg-transparent", "border-0", "h-screen", "overflow-hidden");
-	if (unikernel_name) {
-		const consoleDiv = document.getElementById("console-container");
-		try {
-			const response = await fetch("/unikernel/console/" + unikernel_name, {
-				method: "GET",
-			});
-			const responseText = await response.json();
-
-			if (response.status === 200) {
-				consoleArea.classList.remove("text-secondary-500");
-				consoleArea.innerHTML = "";
-				responseText.forEach(log => {
-					const timeElement = document.createElement("p");
-					timeElement.classList.add("text-gray-600", "font-mono", "text-sm");
-					const lineElement = document.createElement("p");
-					lineElement.classList.add("text-white", "font-mono", "text-sm");
-					lineElement.textContent = log.line;
-					consoleArea.appendChild(timeElement);
-					consoleArea.appendChild(lineElement);
-				});
-			} else {
-				consoleArea.classList.add("text-secondary-500");
-				consoleArea.innerHTML = `Error: ${responseText.data}<br>`;
-			}
-		} catch (error) {
-			consoleArea.classList.add("text-secondary-500");
-			consoleArea.innerHTML = `Error: ${unikernel_name} ${error}<br>`;
-		}
-		consoleDiv.appendChild(consoleArea);
 	}
 }
 

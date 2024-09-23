@@ -8,7 +8,6 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
       String.compare (Vmm_core.Name.to_string a) (Vmm_core.Name.to_string b)
   end
 
-  module Set = Set.Make (Name)
   module Map = Map.Make (Name)
 
   type t = {
@@ -17,8 +16,6 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     cert : X509.Certificate.t;
     key : X509.Private_key.t;
     mutable policies : (Vmm_core.Name.t * Vmm_core.Policy.t) list;
-    mutable console_readers : Set.t;
-    mutable console_output : Yojson.Basic.t list Map.t;
   }
 
   let policy t domain =
@@ -181,52 +178,54 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
     in
     split [] data 0 |> List.rev
 
-  let rec continue_reading t name flow =
+  let continue_reading name flow =
     let open Lwt.Infix in
-    TLS.read flow >>= function
+    TLS.read flow >>= fun r ->
+    TLS.close flow >|= fun () ->
+    match r with
     | Ok (`Data d) ->
         let str = Cstruct.to_string d in
         let bufs = split_many str in
-        List.iter
-          (fun d ->
+        List.fold_left
+          (fun acc d ->
             match decode d with
             | Error s ->
                 Logs.err (fun m ->
                     m "albatross stop reading console %a: error %s"
-                      Vmm_core.Name.pp name s)
-            | Ok (_, `Data (`Console_data (ts, data))) ->
-                let d = Albatross_json.console_data_to_json (ts, data) in
-                t.console_output <-
-                  Map.update name
-                    (function
-                      | None -> Some [ d ]
-                      | Some xs ->
-                          let xs =
-                            if List.length xs > 20 then List.tl xs else xs
-                          in
-                          Some (xs @ [ d ]))
-                    t.console_output
+                      Vmm_core.Name.pp name s);
+                acc
+            | Ok (_, `Data (`Console_data (ts, data))) -> (ts, data) :: acc
+            | Ok (_, `Data (`Utc_console_data (ts, data))) -> (ts, data) :: acc
             | Ok w ->
                 Logs.warn (fun m ->
                     m "albatross unexpected reply, need console output, got %a"
                       (Vmm_commands.pp_wire ~verbose:false)
-                      w))
-          bufs;
-        continue_reading t name flow
+                      w);
+                acc)
+          [] bufs
+        |> List.rev
     | Ok `Eof ->
         Logs.info (fun m ->
             m "albatross received eof while reading console %a" Vmm_core.Name.pp
               name);
-        t.console_readers <- Set.remove name t.console_readers;
-        TLS.close flow
+        []
     | Error e ->
         Logs.err (fun m ->
             m "albatross received error while reading console %a: %a"
               Vmm_core.Name.pp name TLS.pp_error e);
-        t.console_readers <- Set.remove name t.console_readers;
-        TLS.close flow
+        []
 
-  let raw_query t ?(name = Vmm_core.Name.root) certificates cmd =
+  let reply tls_flow d =
+    let open Lwt.Infix in
+    TLS.close tls_flow >|= fun () -> decode_reply d
+
+  let console name tls_flow d =
+    let open Lwt.Infix in
+    continue_reading name tls_flow >|= fun output ->
+    Result.map (fun r -> (r, output)) (decode_reply d)
+
+  let raw_query t ?(name = Vmm_core.Name.root) ?console_mbox certificates cmd f
+      =
     let open Lwt.Infix in
     S.TCP.create_connection (S.tcp t.stack) t.remote >>= function
     | Error e ->
@@ -263,14 +262,7 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
             | Ok tls_flow -> (
                 TLS.read tls_flow >>= fun r ->
                 match r with
-                | Ok (`Data d) ->
-                    (match snd (Vmm_commands.endpoint cmd) with
-                    | `End -> TLS.close tls_flow
-                    | `Read ->
-                        t.console_readers <- Set.add name t.console_readers;
-                        Lwt.async (fun () -> continue_reading t name tls_flow);
-                        Lwt.return_unit)
-                    >|= fun () -> decode_reply (Cstruct.to_string d)
+                | Ok (`Data d) -> f tls_flow (Cstruct.to_string d)
                 | Ok `Eof ->
                     TLS.close tls_flow >|= fun () ->
                     Error
@@ -292,22 +284,12 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
 
   let init stack server ?(port = 1025) cert key =
     let open Lwt.Infix in
-    let t =
-      {
-        stack;
-        remote = (server, port);
-        cert;
-        key;
-        policies = [];
-        console_readers = Set.empty;
-        console_output = Map.empty;
-      }
-    in
+    let t = { stack; remote = (server, port); cert; key; policies = [] } in
     let cmd = `Policy_cmd `Policy_info in
     match gen_cert t cmd "." with
     | Error s -> invalid_arg s
     | Ok certificates -> (
-        raw_query t certificates cmd >|= function
+        raw_query t certificates cmd reply >|= function
         | Ok (_hdr, `Success (`Policies ps)) ->
             t.policies <- ps;
             t
@@ -321,22 +303,24 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
             Logs.err (fun m -> m "albatross: error querying policies: %s" str);
             t)
 
-  let query t ~domain ?(name = ".") cmd =
+  let certs t domain name cmd =
     match
       Result.bind (Vmm_core.Name.path_of_string domain) (fun domain ->
           Vmm_core.Name.create domain name)
     with
-    | Error (`Msg msg) -> Lwt.return (Error msg)
-    | Ok vmm_name -> (
-        match cmd with
-        | `Console_cmd (`Console_subscribe _)
-          when Set.mem vmm_name t.console_readers ->
-            let hdr =
-              Vmm_commands.{ version = current; sequence = 0L; name = vmm_name }
-            in
-            Lwt.return (Ok (hdr, `Success `Empty))
-        | _ -> (
-            match gen_cert t ~domain cmd name with
-            | Error str -> Lwt.return (Error str)
-            | Ok certificates -> raw_query t ~name:vmm_name certificates cmd))
+    | Error (`Msg msg) -> Error msg
+    | Ok vmm_name ->
+        Result.map (fun c -> (vmm_name, c)) (gen_cert t ~domain cmd name)
+
+  let query t ~domain ?(name = ".") cmd =
+    match certs t domain name cmd with
+    | Error str -> Lwt.return (Error str)
+    | Ok (name, certificates) -> raw_query t ~name certificates cmd reply
+
+  let query_console t ~domain ~name =
+    let cmd = `Console_cmd (`Console_subscribe (`Count 20)) in
+    match certs t domain name cmd with
+    | Error str -> Lwt.return (Error str)
+    | Ok (name, certificates) ->
+        raw_query t ~name certificates cmd (console name)
 end

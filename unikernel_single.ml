@@ -1,4 +1,4 @@
-let unikernel_single_layout unikernel now =
+let unikernel_single_layout unikernel now console_output =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
@@ -455,7 +455,29 @@ let unikernel_single_layout unikernel now =
                         p
                           ~a:[ a_class [ "text-xl font-semibold" ] ]
                           [ txt "Console Output" ];
-                        div ~a:[ a_id "console-container" ] [];
+                        div
+                          ~a:[ a_id "console-container" ]
+                          [
+                            div
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "w-full bg-transparent border-0 h-screen \
+                                       overflow-hidden";
+                                    ];
+                                ]
+                              (List.map
+                                 (fun (ts, data) ->
+                                   p
+                                     ~a:
+                                       [
+                                         a_class
+                                           [ "text-white font-mono text-sm" ];
+                                       ]
+                                     [ txt (Ptime.to_rfc3339 ts); txt data ])
+                                 console_output);
+                          ];
                       ];
                   ];
               ];
