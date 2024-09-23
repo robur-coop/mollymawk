@@ -1,4 +1,5 @@
-module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
+module Make (T : Mirage_time.S) (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) =
+struct
   module TLS = Tls_mirage.Make (S.TCP)
 
   module Name = struct
@@ -221,8 +222,16 @@ module Make (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) = struct
 
   let console name tls_flow d =
     let open Lwt.Infix in
-    continue_reading name tls_flow >|= fun output ->
-    Result.map (fun r -> (r, output)) (decode_reply d)
+    Lwt.choose
+      [
+        continue_reading name tls_flow;
+        ( T.sleep_ns (Duration.of_sec 1) >>= fun () ->
+          TLS.close tls_flow >|= fun () ->
+          Logs.warn (fun m ->
+              m "albatross: timeout after 1 second reading console");
+          [] );
+      ]
+    >|= fun output -> Result.map (fun r -> (r, output)) (decode_reply d)
 
   let raw_query t ?(name = Vmm_core.Name.root) certificates cmd f =
     let open Lwt.Infix in

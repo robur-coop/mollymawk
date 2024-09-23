@@ -66,7 +66,7 @@ struct
       ~on_eof:(on_eof f_init);
     finished >>= fun data -> data
 
-  module Albatross = Albatross.Make (P) (S)
+  module Albatross = Albatross.Make (T) (P) (S)
 
   let to_map ~assoc m =
     let open Multipart_form in
