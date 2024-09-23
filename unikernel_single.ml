@@ -1,4 +1,4 @@
-let unikernel_single_layout unikernel now =
+let unikernel_single_layout unikernel now console_output =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
@@ -55,7 +55,7 @@ let unikernel_single_layout unikernel now =
                                    text-secondary-50 font-semibold";
                                 ];
                             ]
-                          [ txt "Destory" ];
+                          [ txt "Destroy" ];
                       ];
                   ];
                 div
@@ -170,56 +170,25 @@ let unikernel_single_layout unikernel now =
                                                     text-primary-600 uppercase";
                                                  ];
                                              ]
-                                           [ txt "Key" ];
-                                         th
-                                           ~a:
-                                             [
-                                               a_class
-                                                 [
-                                                   "px-6 py-2 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase";
-                                                 ];
-                                             ]
-                                           [ txt "Value" ];
+                                           [ txt "Argument" ];
                                        ];
                                    ])
                               (List.map
                                  (fun arg ->
-                                   match String.split_on_char '=' arg with
-                                   | [ key; value ] ->
-                                       tr
-                                         [
-                                           td
-                                             ~a:
+                                   tr
+                                     [
+                                       td
+                                         ~a:
+                                           [
+                                             a_class
                                                [
-                                                 a_class
-                                                   [
-                                                     "px-6 py-1 \
-                                                      whitespace-nowrap \
-                                                      text-sm font-medium \
-                                                      text-gray-800";
-                                                   ];
-                                               ]
-                                             [
-                                               txt
-                                                 (String.sub key 2
-                                                    (String.length key - 2));
-                                             ];
-                                           td
-                                             ~a:
-                                               [
-                                                 a_class
-                                                   [
-                                                     "px-6 py-1 \
-                                                      whitespace-normal \
-                                                      text-sm font-medium \
-                                                      text-gray-800";
-                                                   ];
-                                               ]
-                                             [ txt value ];
-                                         ]
-                                   | _ -> tr [])
+                                                 "px-6 py-1 whitespace-nowrap \
+                                                  text-sm font-medium \
+                                                  text-gray-800";
+                                               ];
+                                           ]
+                                         [ txt arg ];
+                                     ])
                                  (Option.value data.argv ~default:[]));
                           ];
                         div
@@ -455,7 +424,29 @@ let unikernel_single_layout unikernel now =
                         p
                           ~a:[ a_class [ "text-xl font-semibold" ] ]
                           [ txt "Console Output" ];
-                        div ~a:[ a_id "console-container" ] [];
+                        div
+                          ~a:[ a_id "console-container" ]
+                          [
+                            div
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "w-full bg-transparent border-0 h-screen \
+                                       overflow-hidden";
+                                    ];
+                                ]
+                              (List.map
+                                 (fun (ts, data) ->
+                                   p
+                                     ~a:
+                                       [
+                                         a_class
+                                           [ "text-white font-mono text-sm" ];
+                                       ]
+                                     [ txt (Ptime.to_rfc3339 ts); txt data ])
+                                 console_output);
+                          ];
                       ];
                   ];
               ];

@@ -66,7 +66,7 @@ struct
       ~on_eof:(on_eof f_init);
     finished >>= fun data -> data
 
-  module Albatross = Albatross.Make (P) (S)
+  module Albatross = Albatross.Make (T) (P) (S)
 
   let to_map ~assoc m =
     let open Multipart_form in
@@ -583,14 +583,20 @@ struct
          [])
     >>= fun unikernels ->
     if List.length unikernels > 0 then
-      Lwt.return
-        (reply reqd ~content_type:"text/html"
-           (Dashboard.dashboard_layout user
-              ~content:
-                (Unikernel_single.unikernel_single_layout (List.hd unikernels)
-                   (Ptime.v (P.now_d_ps ())))
-              ~icon:"/images/robur.png" ())
-           `OK)
+      (Albatross.query_console ~domain:user.name albatross ~name >|= function
+       | Error err ->
+           Logs.warn (fun m -> m "error querying console of albatross: %s" err);
+           []
+       | Ok (_, console_output) -> console_output)
+      >|= fun console_output ->
+      reply reqd ~content_type:"text/html"
+        (Dashboard.dashboard_layout user
+           ~content:
+             (Unikernel_single.unikernel_single_layout (List.hd unikernels)
+                (Ptime.v (P.now_d_ps ()))
+                console_output)
+           ~icon:"/images/robur.png" ())
+        `OK
     else
       let error =
         {
@@ -708,32 +714,21 @@ struct
 
   let unikernel_console albatross name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
-    Albatross.query ~domain:user.name albatross ~name
-      (`Console_cmd (`Console_subscribe (`Count 10)))
-    >>= function
+    Albatross.query_console ~domain:user.name albatross ~name >>= function
     | Error err ->
         Logs.warn (fun m -> m "error querying albatross: %s" err);
         http_response reqd ~title:"Error"
           ~data:("Error while querying Albatross: " ^ err)
           `Internal_server_error
-    | Ok _ -> (
-        match
-          Result.bind (Vmm_core.Name.path_of_string user.name) (fun domain ->
-              Vmm_core.Name.create domain name)
-        with
-        | Ok name ->
-            let data =
-              Option.value ~default:[]
-                (Albatross.Map.find_opt name albatross.Albatross.console_output)
-            in
-            Lwt.return
-              (reply reqd ~content_type:"application/json"
-                 (Yojson.Basic.to_string (`List data))
-                 `OK)
-        | Error (`Msg err) ->
-            http_response reqd ~title:"Error"
-              ~data:("Error while querying Albatross: " ^ err)
-              `Internal_server_error)
+    | Ok (_, console_output) ->
+        let console_output =
+          List.map Albatross_json.console_data_to_json console_output
+        in
+
+        Lwt.return
+          (reply reqd ~content_type:"application/json"
+             (Yojson.Basic.to_string (`List console_output))
+             `OK)
 
   let view_user albatross store uuid reqd (user : User_model.user) =
     let users = User_model.create_user_uuid_map (snd store).Storage.users in
