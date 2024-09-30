@@ -750,7 +750,7 @@ struct
              [])
         >>= fun unikernels ->
         let policy =
-          match Albatross.policy albatross u.name with
+          match Albatross.policy ~domain:u.name albatross with
           | Ok p -> p
           | Error _ -> None
         in

@@ -2,29 +2,41 @@ module Make (T : Mirage_time.S) (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6)
 struct
   module TLS = Tls_mirage.Make (S.TCP)
 
-  module Name = struct
-    type t = Vmm_core.Name.t
-
-    let compare a b =
-      String.compare (Vmm_core.Name.to_string a) (Vmm_core.Name.to_string b)
-  end
-
-  module Map = Map.Make (Name)
-
   type t = {
     stack : S.t;
     remote : Ipaddr.t * int;
     cert : X509.Certificate.t;
     key : X509.Private_key.t;
-    mutable policies : (Vmm_core.Name.t * Vmm_core.Policy.t) list;
+    mutable policies : Vmm_core.Policy.t Vmm_trie.t;
   }
 
-  let policy t domain =
-    match Vmm_core.Name.path_of_string domain with
-    | Error (`Msg msg) ->
-        Error (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
-    | Ok path ->
-        Ok (List.assoc_opt (Vmm_core.Name.create_of_path path) t.policies)
+  let policy ?domain t =
+    let ( let* ) = Result.bind in
+    let* path =
+      match domain with
+      | None -> Ok Vmm_core.Name.root
+      | Some domain -> (
+          match Vmm_core.Name.path_of_string domain with
+          | Error (`Msg msg) ->
+              Error
+                (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
+          | Ok path -> Ok (Vmm_core.Name.create_of_path path))
+    in
+    Ok (Vmm_trie.find path t.policies)
+
+  let policies ?domain t =
+    let ( let* ) = Result.bind in
+    let* path =
+      match domain with
+      | None -> Ok Vmm_core.Name.root
+      | Some domain -> (
+          match Vmm_core.Name.path_of_string domain with
+          | Error (`Msg msg) ->
+              Error
+                (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
+          | Ok path -> Ok (Vmm_core.Name.create_of_path path))
+    in
+    Ok (Vmm_trie.collect path t.policies)
 
   let key_ids exts pub issuer =
     let open X509 in
@@ -98,7 +110,7 @@ struct
       match domain with
       | None -> Ok (t.key, t.cert, [])
       | Some domain ->
-          let* policy = policy t domain in
+          let* policy = policy ~domain t in
           let policy =
             Option.value
               ~default:
@@ -292,13 +304,20 @@ struct
 
   let init stack server ?(port = 1025) cert key =
     let open Lwt.Infix in
-    let t = { stack; remote = (server, port); cert; key; policies = [] } in
+    let t =
+      { stack; remote = (server, port); cert; key; policies = Vmm_trie.empty }
+    in
     let cmd = `Policy_cmd `Policy_info in
     match gen_cert t cmd "." with
     | Error s -> invalid_arg s
     | Ok certificates -> (
         raw_query t certificates cmd reply >|= function
         | Ok (_hdr, `Success (`Policies ps)) ->
+            let ps =
+              List.fold_left
+                (fun acc (name, p) -> fst (Vmm_trie.insert name p acc))
+                Vmm_trie.empty ps
+            in
             t.policies <- ps;
             t
         | Ok w ->
