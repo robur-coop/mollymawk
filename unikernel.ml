@@ -779,6 +779,135 @@ struct
                 ~icon:"/images/robur.png" ())
              `Not_found)
 
+  let edit_policy albatross store uuid reqd (user : User_model.user) =
+    let users = User_model.create_user_uuid_map (snd store).Storage.users in
+    match User_model.find_user_by_key uuid users with
+    | Some u ->
+        let policy =
+          match Albatross.policy albatross u.name with
+          | Ok p -> p
+          | Error _ -> None
+        in
+        (Albatross.query albatross ~domain:"." (`Policy_cmd `Policy_info)
+         >|= function
+         | Error msg ->
+             Logs.err (fun m ->
+                 m "error while communicating with albatross: %s" msg);
+             []
+         | Ok (_hdr, `Success (`Policies policies)) -> policies
+         | Ok reply ->
+             Logs.err (fun m ->
+                 m "expected a policy info reply, received %a"
+                   (Vmm_commands.pp_wire ~verbose:false)
+                   reply);
+             [])
+        >>= fun root_policy ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout user
+                ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
+                ~content:
+                  (Update_policy.update_policy_layout u ~user_policy:policy
+                     ~root_policy)
+                ~icon:"/images/robur.png" ())
+             `OK)
+    | None ->
+        let status =
+          {
+            Utils.Status.code = 404;
+            title = "Error";
+            data = "Couldn't find account with uuid: " ^ uuid;
+            success = false;
+          }
+        in
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
+                ~content:(Error_page.error_layout status)
+                ~icon:"/images/robur.png" ())
+             `Not_found)
+
+  let update_policy store albatross reqd _user =
+    decode_request_body reqd >>= fun data ->
+    let json =
+      try Ok (Yojson.Basic.from_string data)
+      with Yojson.Json_error s -> Error (`Msg s)
+    in
+    match json with
+    | Error (`Msg err) ->
+        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
+        http_response reqd ~title:"Error" ~data:(String.escaped err)
+          `Bad_request
+    | Ok json -> (
+        match json with
+        | `Assoc xs -> (
+            match
+              Utils.Json.
+                ( get "vms" xs,
+                  get "memory" xs,
+                  get "block" xs,
+                  get "cpuids" xs,
+                  get "bridges" xs,
+                  get "user_uuid" xs )
+            with
+            | ( Some (`Int vms),
+                Some (`Int memory),
+                Some (`Int block),
+                Some (`String cpuids),
+                Some (`String bridges),
+                Some (`String user_uuid) ) -> (
+                let users =
+                  User_model.create_user_uuid_map (snd store).Storage.users
+                in
+                match User_model.find_user_by_key user_uuid users with
+                | Some u ->
+                    let policy_data =
+                      {
+                        Vmm_core.Policy.vms;
+                        memory;
+                        block = Some block;
+                        cpuids =
+                          Vmm_core.IS.of_list
+                            (List.map int_of_string
+                               (String.split_on_char ',' cpuids));
+                        bridges =
+                          Vmm_core.String_set.of_list
+                            (String.split_on_char ',' bridges);
+                      }
+                    in
+                    (Albatross.query albatross ~domain:u.name
+                       (`Policy_cmd (`Policy_add policy_data))
+                     >|= function
+                     | Error msg ->
+                         Logs.err (fun m ->
+                             m "error while communicating with albatross: %s"
+                               msg);
+                         []
+                     | Ok (_hdr, `Success (`Policies policies)) -> policies
+                     | Ok reply ->
+                         Logs.err (fun m ->
+                             m "expected a policy info reply, received %a"
+                               (Vmm_commands.pp_wire ~verbose:false)
+                               reply);
+                         [])
+                    >>= fun _policies ->
+                    http_response reqd ~title:"Success"
+                      ~data:"Policy updated succesfully" `OK
+                | None ->
+                    Logs.warn (fun m ->
+                        m "Failed to find user with uuid: %s" user_uuid);
+                    http_response reqd ~title:"Error" ~data:"User not found"
+                      `Not_found)
+            | _ ->
+                http_response reqd ~title:"Error"
+                  ~data:
+                    (Fmt.str "policy: unexpected types, got %s"
+                       (Yojson.Basic.to_string (`Assoc xs)))
+                  `Bad_request)
+        | _ ->
+            http_response reqd ~title:"Error" ~data:"Expected a dictionary"
+              `Bad_request)
+
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
@@ -855,6 +984,14 @@ struct
                 let uuid = String.sub path 12 (String.length path - 12) in
                 authenticate ~check_admin:true !store reqd
                   (view_user !albatross !store uuid reqd))
+        | path
+          when String.(
+                 length path >= 21 && sub path 0 21 = "/admin/u/policy/edit/")
+          ->
+            check_meth `GET (fun () ->
+                let uuid = String.sub path 21 (String.length path - 21) in
+                authenticate ~check_admin:true !store reqd
+                  (edit_policy !albatross !store uuid reqd))
         | "/admin/settings" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true !store reqd
@@ -863,6 +1000,10 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true !store reqd
                   (update_settings stack store albatross reqd))
+        | "/api/admin/u/policy/update" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_admin:true ~api_meth:true !store reqd
+                  (update_policy !store !albatross reqd))
         | "/api/admin/user/activate/toggle" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true !store reqd
