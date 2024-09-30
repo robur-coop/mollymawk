@@ -28,15 +28,15 @@ struct
     let ( let* ) = Result.bind in
     let* path =
       match domain with
-      | None -> Ok Vmm_core.Name.root
+      | None -> Ok Vmm_core.Name.root_path
       | Some domain -> (
           match Vmm_core.Name.path_of_string domain with
           | Error (`Msg msg) ->
               Error
                 (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
-          | Ok path -> Ok (Vmm_core.Name.create_of_path path))
+          | Ok path -> Ok path)
     in
-    Ok (Vmm_trie.collect path t.policies)
+    Ok (Vmm_trie.fold path t.policies (fun name p acc -> (name, p) :: acc) [])
 
   let key_ids exts pub issuer =
     let open X509 in
