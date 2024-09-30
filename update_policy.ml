@@ -10,7 +10,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
       }
   in
   let root_policy =
-    match root_policy with (_, hd) :: _ -> hd | _ -> empty_policy
+    match root_policy with Some p -> p | None -> empty_policy
   in
   let policy =
     match user_policy with None -> empty_policy | Some policy -> policy

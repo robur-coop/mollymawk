@@ -784,24 +784,13 @@ struct
     match User_model.find_user_by_key uuid users with
     | Some u ->
         let policy =
-          match Albatross.policy albatross u.name with
+          match Albatross.policy albatross ~domain:u.name with
           | Ok p -> p
           | Error _ -> None
         in
-        (Albatross.query albatross ~domain:"." (`Policy_cmd `Policy_info)
-         >|= function
-         | Error msg ->
-             Logs.err (fun m ->
-                 m "error while communicating with albatross: %s" msg);
-             []
-         | Ok (_hdr, `Success (`Policies policies)) -> policies
-         | Ok reply ->
-             Logs.err (fun m ->
-                 m "expected a policy info reply, received %a"
-                   (Vmm_commands.pp_wire ~verbose:false)
-                   reply);
-             [])
-        >>= fun root_policy ->
+        let root_policy =
+          match Albatross.policy albatross with Ok p -> p | Error _ -> None
+        in
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Dashboard.dashboard_layout user
