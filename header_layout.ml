@@ -22,4 +22,12 @@ let header ?(page_title = "Mollymawk") ~icon () =
           ~href:"https://unpkg.com/aos@2.3.1/dist/aos.css" ();
         script ~a:[ a_src "https://unpkg.com/aos@2.3.1/dist/aos.js" ] (txt "");
         link ~rel:[ `Icon ] ~href:icon ();
+        script
+          ~a:
+            [
+              a_defer ();
+              a_src
+                "https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js";
+            ]
+          (txt "");
       ])
