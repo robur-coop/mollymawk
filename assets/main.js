@@ -250,3 +250,71 @@ async function toggleUserActiveStatus(uuid) {
 async function toggleUserAdminStatus(uuid) {
 	await toggleUserStatus(uuid, "/api/admin/user/admin/toggle");
 }
+
+
+function multiselect() {
+	return {
+		isOpen: false,
+		selected: [1, 2, 3], // TODO: replace with variable
+		options: [1, 2, 3, 4, 5, 6, 7], // TODO: replace with variable
+		toggleDropdown() {
+			this.isOpen = !this.isOpen;
+		},
+		updateSelection(event, option) {
+			if (event.target.checked) {
+				this.selected.push(option);
+			} else {
+				this.selected = this.selected.filter(item => item !== option);
+			}
+		},
+		removeItem(index) {
+			this.selected.splice(index, 1);
+		}
+	};
+}
+
+async function updatePolicy() {
+	const vm_count = document.getElementById("f_allowed_vms").innerText;
+	const mem_size = document.getElementById("f_allowed_memory").innerText;
+	const storage_size = document.getElementById("f_allowed_storage").innerText;
+	const cpuids = document.getElementById("selectedCPUs").value;
+	const bridges = document.getElementById("selectedBridges").value;
+	const formAlert = document.getElementById("form-alert");
+	const user_id = document.getElementById("user_id").innerText;
+	console.log(vm_count, mem_size, storage_size, cpuids, bridges);
+	try {
+		const response = await fetch("/api/admin/u/policy/update", {
+			method: 'POST',
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(
+				{
+					"vms": Number(vm_count),
+					"memory": Number(mem_size),
+					"block": Number(storage_size),
+					"cpuids": cpuids,
+					"bridges": bridges,
+					"user_uuid": user_id
+				})
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			formAlert.classList.remove("hidden", "text-secondary-500");
+			formAlert.classList.add("text-primary-500");
+			formAlert.textContent = "Succesfully updated";
+			postAlert("bg-primary-300", data.data);
+			setTimeout(function () {
+				window.location.reload();
+			}, 2000);
+		} else {
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = data.data
+		}
+	} catch (error) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = error
+	}
+}
