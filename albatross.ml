@@ -14,7 +14,7 @@ struct
     Vmm_core.Policy.
       {
         vms = 0;
-        cpuids = Vmm_core.IS.of_list [];
+        cpuids = Vmm_core.IS.empty;
         memory = 0;
         block = Some 0;
         bridges = Vmm_core.String_set.of_list [];
