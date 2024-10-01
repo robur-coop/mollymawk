@@ -16,7 +16,7 @@ struct
         vms = 0;
         cpuids = Vmm_core.IS.empty;
         memory = 0;
-        block = Some 0;
+        block = None;
         bridges = Vmm_core.String_set.empty;
       }
 
