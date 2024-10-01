@@ -208,7 +208,7 @@ let policy_of_json js =
             }
           in
           match Vmm_core.Policy.usable policy with
-          | Ok p -> Ok p
+          | Ok () -> Ok policy
           | Error (`Msg err) -> Error (`Msg err))
       | _ ->
           Error
