@@ -304,7 +304,7 @@ async function updatePolicy() {
 			formAlert.classList.remove("hidden", "text-secondary-500");
 			formAlert.classList.add("text-primary-500");
 			formAlert.textContent = "Succesfully updated";
-			postAlert("bg-primary-300", data.data);
+			postAlert("bg-primary-300", "Policy updated succesfully");
 			setTimeout(function () {
 				window.history.back();
 			}, 2000);

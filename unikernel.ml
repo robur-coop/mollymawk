@@ -848,7 +848,7 @@ struct
                   User_model.create_user_uuid_map (snd store).Storage.users
                 in
                 match User_model.find_user_by_key user_uuid users with
-                | Some u ->
+                | Some u -> (
                     let policy_data =
                       {
                         Vmm_core.Policy.vms;
@@ -867,24 +867,25 @@ struct
                                (String.split_on_char ',' bridges));
                       }
                     in
-                    (Albatross.query albatross ~domain:u.name
-                       (`Policy_cmd (`Policy_add policy_data))
-                     >|= function
-                     | Error msg ->
-                         Logs.err (fun m ->
-                             m "error while communicating with albatross: %s"
-                               msg);
-                         []
-                     | Ok (_hdr, `Success (`Policies policies)) -> policies
-                     | Ok reply ->
-                         Logs.err (fun m ->
-                             m "expected a policy info reply, received %a"
-                               (Vmm_commands.pp_wire ~verbose:false)
-                               reply);
-                         [])
-                    >>= fun _policies ->
-                    http_response reqd ~title:"Success"
-                      ~data:"Policy updated succesfully" `OK
+                    Albatross.query albatross ~domain:u.name
+                      (`Policy_cmd (`Policy_add policy_data))
+                    >>= function
+                    | Error err ->
+                        Logs.warn (fun m ->
+                            m "Error querying albatross: %s" err);
+                        http_response reqd ~title:"Error"
+                          ~data:("Error while querying Albatross: " ^ err)
+                          `Internal_server_error
+                    | Ok (_hdr, res) -> (
+                        match Albatross_json.res res with
+                        | Ok res ->
+                            http_response reqd ~title:"Success"
+                              ~data:(Yojson.Safe.to_string res)
+                              `OK
+                        | Error (`String res) ->
+                            http_response reqd ~title:"Error"
+                              ~data:(Yojson.Safe.to_string (`String res))
+                              `Internal_server_error))
                 | None ->
                     Logs.warn (fun m ->
                         m "Failed to find user with uuid: %s" user_uuid);
