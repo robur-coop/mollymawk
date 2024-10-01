@@ -252,11 +252,11 @@ async function toggleUserAdminStatus(uuid) {
 }
 
 
-function multiselect() {
+function multiselect(selected, options) {
 	return {
 		isOpen: false,
-		selected: [1, 2, 3], // TODO: replace with variable
-		options: [1, 2, 3, 4, 5, 6, 7], // TODO: replace with variable
+		selected: selected,
+		options: options,
 		toggleDropdown() {
 			this.isOpen = !this.isOpen;
 		},

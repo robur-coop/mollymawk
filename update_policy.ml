@@ -226,7 +226,15 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
               ~a:
                 [
                   Unsafe.string_attrib "x-data"
-                    "multiselect([\n                                    ])";
+                    ("multiselect(" ^ "[\""
+                    ^ String.concat "\", \""
+                        (List.map string_of_int
+                           (Vmm_core.IS.elements user_policy.cpuids))
+                    ^ "\"]" ^ "," ^ "[\""
+                    ^ String.concat "\", \""
+                        (List.map string_of_int
+                           (Vmm_core.IS.elements root_policy.cpuids))
+                    ^ "\"]" ^ ")");
                   a_class [ "multiselect border my-4 p-4 rounded" ];
                 ]
               [
@@ -340,7 +348,14 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
             div
               ~a:
                 [
-                  Unsafe.string_attrib "x-data" "multiselect()";
+                  Unsafe.string_attrib "x-data"
+                    ("multiselect(" ^ "[\""
+                    ^ String.concat "\", \""
+                        (Vmm_core.String_set.elements user_policy.bridges)
+                    ^ "\"]" ^ "," ^ "[\""
+                    ^ String.concat "\", \""
+                        (Vmm_core.String_set.elements root_policy.bridges)
+                    ^ "\"]" ^ ")");
                   a_class [ "multiselect border my-4 p-4 rounded" ];
                 ]
               [
