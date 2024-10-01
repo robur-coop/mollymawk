@@ -61,7 +61,7 @@ struct
           if name <> Vmm_core.Name.root then
             ( total_vms + policy.Vmm_core.Policy.vms,
               total_memory + policy.memory,
-              total_block + match policy.block with Some b -> b | None -> 0 )
+              total_block + Option.value ~default:0 policy.block)
           else (total_vms, total_memory, total_block))
         (0, 0, 0) policies
     in
