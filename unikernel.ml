@@ -830,10 +830,26 @@ struct
         let user_uuid =
           Yojson.Basic.(to_string (json |> Util.member "user_uuid"))
         in
-        match Albatross_json.policy_of_json json with
-        | Ok policy -> http_response reqd ~title:"Error" ~data:"" `Bad_request
-        | Error (`Msg err) ->
-            http_response reqd ~title:"Error" ~data:err `Bad_request)
+        let users = User_model.create_user_uuid_map (snd store).Storage.users in
+        match User_model.find_user_by_key user_uuid users with
+        | Some u -> (
+            match Albatross_json.policy_of_json json with
+            | Ok policy -> (
+                Albatross.set_policy albatross ~domain:u.name policy
+                >>= function
+                | Error err ->
+                    http_response reqd ~title:"Error" ~data:err
+                      `Internal_server_error
+                | Ok policies ->
+                    http_response reqd ~title:"Success"
+                      ~data:
+                        (Yojson.Basic.to_string
+                           (Albatross_json.policy_infos policies))
+                      `OK)
+            | Error (`Msg err) ->
+                http_response reqd ~title:"Error" ~data:err `Bad_request)
+        | None ->
+            http_response reqd ~title:"Error" ~data:"User not found" `Not_found)
 
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
