@@ -823,7 +823,7 @@ struct
     in
     match json with
     | Error (`Msg err) ->
-        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
+        Logs.err (fun m -> m "Failed to parse JSON: %s" err);
         http_response reqd ~title:"Error" ~data:(String.escaped err)
           `Bad_request
     | Ok json -> (
@@ -835,17 +835,39 @@ struct
         | Some u -> (
             match Albatross_json.policy_of_json json with
             | Ok policy -> (
-                Albatross.set_policy albatross ~domain:u.name policy
-                >>= function
+                match Albatross.policy albatross with
                 | Error err ->
+                    Logs.err (fun m -> m "policy: %s" err);
                     http_response reqd ~title:"Error" ~data:err
                       `Internal_server_error
-                | Ok policies ->
-                    http_response reqd ~title:"Success"
-                      ~data:
-                        (Yojson.Basic.to_string
-                           (Albatross_json.policy_infos policies))
-                      `OK)
+                | Ok root_policy -> (
+                    match root_policy with
+                    | None ->
+                        Logs.err (fun m ->
+                            m "policy: root policy can't be null ");
+                        http_response reqd ~title:"Error"
+                          ~data:"root policy is null" `Internal_server_error
+                    | Some root_policy -> (
+                        match
+                          Vmm_core.Policy.is_smaller ~super:root_policy
+                            ~sub:policy
+                        with
+                        | Error (`Msg err) ->
+                            Logs.err (fun m -> m "policy: %s" err);
+                            http_response reqd ~title:"Error" ~data:err
+                              `Internal_server_error
+                        | Ok () -> (
+                            Albatross.set_policy albatross ~domain:u.name policy
+                            >>= function
+                            | Error err ->
+                                http_response reqd ~title:"Error" ~data:err
+                                  `Internal_server_error
+                            | Ok policies ->
+                                http_response reqd ~title:"Success"
+                                  ~data:
+                                    (Yojson.Basic.to_string
+                                       (Albatross_json.policy_infos policies))
+                                  `OK))))
             | Error (`Msg err) ->
                 http_response reqd ~title:"Error" ~data:err `Bad_request)
         | None ->
