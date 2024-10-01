@@ -224,19 +224,25 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
               [ txt "CPU IDs" ];
             div
               ~a:
-                [
-                  Unsafe.string_attrib "x-data"
-                    ("multiselect(" ^ "[\""
-                    ^ String.concat "\", \""
-                        (List.map string_of_int
-                           (Vmm_core.IS.elements user_policy.cpuids))
-                    ^ "\"]" ^ "," ^ "[\""
-                    ^ String.concat "\", \""
-                        (List.map string_of_int
-                           (Vmm_core.IS.elements root_policy.cpuids))
-                    ^ "\"]" ^ ")");
-                  a_class [ "multiselect border my-4 p-4 rounded" ];
-                ]
+                (let cpuid_to_array_string lst =
+                   if lst = [] then "[]"
+                   else
+                     "[\""
+                     ^ String.concat "\", \"" (List.map string_of_int lst)
+                     ^ "\"]"
+                 in
+
+                 [
+                   Unsafe.string_attrib "x-data"
+                     ("multiselect("
+                     ^ cpuid_to_array_string
+                         (Vmm_core.IS.elements user_policy.cpuids)
+                     ^ ", "
+                     ^ cpuid_to_array_string
+                         (Vmm_core.IS.elements root_policy.cpuids)
+                     ^ ")");
+                   a_class [ "multiselect border my-4 p-4 rounded" ];
+                 ])
               [
                 div
                   ~a:[ a_class [ "selected-items" ] ]
@@ -347,17 +353,23 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
               [ txt "Network interfaces" ];
             div
               ~a:
-                [
-                  Unsafe.string_attrib "x-data"
-                    ("multiselect(" ^ "[\""
-                    ^ String.concat "\", \""
-                        (Vmm_core.String_set.elements user_policy.bridges)
-                    ^ "\"]" ^ "," ^ "[\""
-                    ^ String.concat "\", \""
-                        (Vmm_core.String_set.elements root_policy.bridges)
-                    ^ "\"]" ^ ")");
-                  a_class [ "multiselect border my-4 p-4 rounded" ];
-                ]
+                (let bridges_to_array_string set =
+                   if Vmm_core.String_set.is_empty set then "[]"
+                   else
+                     "[\""
+                     ^ String.concat "\", \"" (Vmm_core.String_set.elements set)
+                     ^ "\"]"
+                 in
+
+                 [
+                   Unsafe.string_attrib "x-data"
+                     ("multiselect("
+                     ^ bridges_to_array_string user_policy.bridges
+                     ^ ", "
+                     ^ bridges_to_array_string root_policy.bridges
+                     ^ ")");
+                   a_class [ "multiselect border my-4 p-4 rounded" ];
+                 ])
               [
                 div
                   ~a:[ a_class [ "selected-items" ] ]
