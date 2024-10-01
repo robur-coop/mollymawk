@@ -789,7 +789,7 @@ struct
               match p with Some p -> p | None -> Albatross.empty_policy)
           | Error _ -> Albatross.empty_policy
         in
-        let policy_avalaible = Albatross.policy_resource_used () albatross in
+        let policy_avalaible = Albatross.policy_resource_avalaible albatross in
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Dashboard.dashboard_layout user
@@ -827,79 +827,13 @@ struct
         http_response reqd ~title:"Error" ~data:(String.escaped err)
           `Bad_request
     | Ok json -> (
-        match json with
-        | `Assoc xs -> (
-            match
-              Utils.Json.
-                ( get "vms" xs,
-                  get "memory" xs,
-                  get "block" xs,
-                  get "cpuids" xs,
-                  get "bridges" xs,
-                  get "user_uuid" xs )
-            with
-            | ( Some (`Int vms),
-                Some (`Int memory),
-                Some (`Int block),
-                Some (`String cpuids),
-                Some (`String bridges),
-                Some (`String user_uuid) ) -> (
-                let users =
-                  User_model.create_user_uuid_map (snd store).Storage.users
-                in
-                match User_model.find_user_by_key user_uuid users with
-                | Some u -> (
-                    let policy_data =
-                      {
-                        Vmm_core.Policy.vms;
-                        memory;
-                        block = Some block;
-                        cpuids =
-                          (if cpuids = "" then Vmm_core.IS.empty
-                           else
-                             Vmm_core.IS.of_list
-                               (List.map int_of_string
-                                  (String.split_on_char ',' cpuids)));
-                        bridges =
-                          (if bridges = "" then Vmm_core.String_set.empty
-                           else
-                             Vmm_core.String_set.of_list
-                               (String.split_on_char ',' bridges));
-                      }
-                    in
-                    Albatross.query albatross ~domain:u.name
-                      (`Policy_cmd (`Policy_add policy_data))
-                    >>= function
-                    | Error err ->
-                        Logs.warn (fun m ->
-                            m "Error querying albatross: %s" err);
-                        http_response reqd ~title:"Error"
-                          ~data:("Error while querying Albatross: " ^ err)
-                          `Internal_server_error
-                    | Ok (_hdr, res) -> (
-                        match Albatross_json.res res with
-                        | Ok res ->
-                            http_response reqd ~title:"Success"
-                              ~data:(Yojson.Safe.to_string res)
-                              `OK
-                        | Error (`String res) ->
-                            http_response reqd ~title:"Error"
-                              ~data:(Yojson.Safe.to_string (`String res))
-                              `Internal_server_error))
-                | None ->
-                    Logs.warn (fun m ->
-                        m "Failed to find user with uuid: %s" user_uuid);
-                    http_response reqd ~title:"Error" ~data:"User not found"
-                      `Not_found)
-            | _ ->
-                http_response reqd ~title:"Error"
-                  ~data:
-                    (Fmt.str "policy: unexpected types, got %s"
-                       (Yojson.Basic.to_string (`Assoc xs)))
-                  `Bad_request)
-        | _ ->
-            http_response reqd ~title:"Error" ~data:"Expected a dictionary"
-              `Bad_request)
+        let user_uuid =
+          Yojson.Basic.(to_string (json |> Util.member "user_uuid"))
+        in
+        match Albatross_json.policy_of_json json with
+        | Ok policy -> http_response reqd ~title:"Error" ~data:"" `Bad_request
+        | Error (`Msg err) ->
+            http_response reqd ~title:"Error" ~data:err `Bad_request)
 
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =

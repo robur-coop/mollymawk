@@ -48,7 +48,7 @@ struct
     in
     Ok (Vmm_trie.fold path t.policies (fun name p acc -> (name, p) :: acc) [])
 
-  let policy_resource_used t =
+  let policy_resource_avalaible t =
     let root_policy =
       match policy t with
       | Ok p -> ( match p with Some p -> p | None -> empty_policy)
@@ -57,8 +57,8 @@ struct
     let policies = match policies t with Ok p -> p | Error _err -> [] in
     let vms_used, memory_used, storage_used =
       List.fold_left
-        (fun (total_vms, total_memory, total_block) (name, policy) ->
-          if not Vmm_core.Name.(equal name root) then
+        (fun (total_vms, total_memory, total_block) (name_, policy) ->
+          if not Vmm_core.Name.(equal name_ root) then
             ( total_vms + policy.Vmm_core.Policy.vms,
               total_memory + policy.memory,
               total_block + Option.value ~default:0 policy.block )

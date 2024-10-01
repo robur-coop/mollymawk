@@ -173,6 +173,45 @@ let block_device_of_json js =
       | _, _, _ -> Error (`Msg "couldn't decode json"))
   | _ -> Error (`Msg "bad json, either string or assoc")
 
+let policy_of_json js =
+  match js with
+  | `Assoc xs -> (
+      match
+        Utils.Json.
+          ( get "vms" xs,
+            get "memory" xs,
+            get "block" xs,
+            get "cpuids" xs,
+            get "bridges" xs )
+      with
+      | ( Some (`Int vms),
+          Some (`Int memory),
+          Some (`Int block),
+          Some (`String cpuids),
+          Some (`String bridges) ) ->
+          Ok
+            {
+              Vmm_core.Policy.vms;
+              memory;
+              block = Some block;
+              cpuids =
+                (if cpuids = "" then Vmm_core.IS.empty
+                 else
+                   Vmm_core.IS.of_list
+                     (List.map int_of_string (String.split_on_char ',' cpuids)));
+              bridges =
+                (if bridges = "" then Vmm_core.String_set.empty
+                 else
+                   Vmm_core.String_set.of_list
+                     (String.split_on_char ',' bridges));
+            }
+      | _ ->
+          Error
+            (`Msg
+              (Fmt.str "policy: unexpected types, got %s"
+                 (Yojson.Basic.to_string (`Assoc xs)))))
+  | _ -> Error (`Msg "policy: Expected a dictionary")
+
 let config_of_json str =
   let ( let* ) = Result.bind in
   let* json =
