@@ -782,23 +782,39 @@ struct
   let edit_policy albatross store uuid reqd (user : User_model.user) =
     let users = User_model.create_user_uuid_map (snd store).Storage.users in
     match User_model.find_user_by_key uuid users with
-    | Some u ->
+    | Some u -> (
         let user_policy =
           match Albatross.policy albatross ~domain:u.name with
           | Ok p -> (
               match p with Some p -> p | None -> Albatross.empty_policy)
           | Error _ -> Albatross.empty_policy
         in
-        let policy_avalaible = Albatross.policy_resource_avalaible albatross in
-        Lwt.return
-          (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user
-                ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
-                ~content:
-                  (Update_policy.update_policy_layout u ~user_policy
-                     ~root_policy:policy_avalaible)
-                ~icon:"/images/robur.png" ())
-             `OK)
+        match Albatross.policy_resource_avalaible albatross with
+        | Ok root_policy ->
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user
+                    ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
+                    ~content:
+                      (Update_policy.update_policy_layout u ~user_policy
+                         ~root_policy)
+                    ~icon:"/images/robur.png" ())
+                 `OK)
+        | Error err ->
+            let status =
+              {
+                Utils.Status.code = 500;
+                title = "Error";
+                data = "Policy error: " ^ err;
+                success = false;
+              }
+            in
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                    ~content:(Error_page.error_layout status)
+                    ~icon:"/images/robur.png" ())
+                 `Not_found))
     | None ->
         let status =
           {

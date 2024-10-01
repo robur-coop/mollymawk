@@ -188,7 +188,7 @@ let policy_of_json js =
           Some (`Int memory),
           Some (`Int block),
           Some (`String cpuids),
-          Some (`String bridges) ) -> (
+          Some (`String bridges) ) ->
           let policy =
             {
               Vmm_core.Policy.vms;

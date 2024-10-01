@@ -53,13 +53,13 @@ struct
       match policy t with
       | Ok p -> (
           match p with
-          | Some p -> p
+          | Some p -> Ok p
           | None ->
               Logs.err (fun m -> m "policy error: empty root policy");
-              empty_policy)
+              Error (`Msg "root policy is empty"))
       | Error err ->
           Logs.err (fun m -> m "policy error:  %s" err);
-          empty_policy
+          Error (`Msg "error getting root policy")
     in
     let policies =
       match policies t with
@@ -78,14 +78,18 @@ struct
           else (total_vms, total_memory, total_block))
         (0, 0, 0) policies
     in
-    Vmm_core.Policy.
-      {
-        vms = root_policy.vms - vms_used;
-        cpuids = root_policy.cpuids;
-        memory = root_policy.memory - memory_used;
-        block = Option.map (fun b -> b - storage_used) root_policy.block;
-        bridges = root_policy.bridges;
-      }
+    match root_policy with
+    | Ok root_policy ->
+        Ok
+          Vmm_core.Policy.
+            {
+              vms = root_policy.vms - vms_used;
+              cpuids = root_policy.cpuids;
+              memory = root_policy.memory - memory_used;
+              block = Option.map (fun b -> b - storage_used) root_policy.block;
+              bridges = root_policy.bridges;
+            }
+    | Error (`Msg err) -> Error err
 
   let key_ids exts pub issuer =
     let open X509 in
