@@ -10,6 +10,16 @@ struct
     mutable policies : Vmm_core.Policy.t Vmm_trie.t;
   }
 
+  let empty_policy =
+    Vmm_core.Policy.
+      {
+        vms = 0;
+        cpuids = Vmm_core.IS.of_list [];
+        memory = 0;
+        block = Some 0;
+        bridges = Vmm_core.String_set.of_list [];
+      }
+
   let policy ?domain t =
     let ( let* ) = Result.bind in
     let* path =
@@ -37,6 +47,35 @@ struct
           | Ok path -> Ok path)
     in
     Ok (Vmm_trie.fold path t.policies (fun name p acc -> (name, p) :: acc) [])
+
+  let policy_resource_used () t =
+    let root_policy =
+      match policy t with
+      | Ok p -> ( match p with Some p -> p | None -> empty_policy)
+      | Error _ -> empty_policy
+    in
+    let policies = match policies t with Ok p -> p | Error _err -> [] in
+    let vms_used, memory_used, storage_used =
+      List.fold_left
+        (fun (total_vms, total_memory, total_block) (name, policy) ->
+          if name <> Vmm_core.Name.root then
+            ( total_vms + policy.Vmm_core.Policy.vms,
+              total_memory + policy.memory,
+              total_block + match policy.block with Some b -> b | None -> 0 )
+          else (total_vms, total_memory, total_block))
+        (0, 0, 0) policies
+    in
+    Vmm_core.Policy.
+      {
+        vms = root_policy.vms - vms_used;
+        cpuids = root_policy.cpuids;
+        memory = root_policy.memory - memory_used;
+        block =
+          (match root_policy.block with
+          | Some b -> if b > 0 then Some (b - storage_used) else None
+          | None -> None);
+        bridges = root_policy.bridges;
+      }
 
   let key_ids exts pub issuer =
     let open X509 in
