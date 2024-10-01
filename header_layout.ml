@@ -21,7 +21,7 @@ let header ?(page_title = "Mollymawk") ~icon () =
         link ~rel:[ `Stylesheet ]
           ~href:"https://unpkg.com/aos@2.3.1/dist/aos.css" ();
         (*aos is animate-on-scroll, adds bouncy effects to html elements*)
-          script ~a:[ a_src "https://unpkg.com/aos@2.3.1/dist/aos.js" ] (txt "");
+        script ~a:[ a_src "https://unpkg.com/aos@2.3.1/dist/aos.js" ] (txt "");
         link ~rel:[ `Icon ] ~href:icon ();
         (*https://alpinejs.dev/ is a lightweight js library and we use it for multiselect form elements*)
         script
