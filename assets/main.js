@@ -281,8 +281,9 @@ async function updatePolicy() {
 	const bridges = document.getElementById("selectedBridges").value;
 	const formAlert = document.getElementById("form-alert");
 	const user_id = document.getElementById("user_id").innerText;
-	console.log(vm_count, mem_size, storage_size, cpuids, bridges);
+	const policyButton = document.getElementById("set-policy-btn");
 	try {
+		buttonLoading(policyButton, true, "Processing...")
 		const response = await fetch("/api/admin/u/policy/update", {
 			method: 'POST',
 			headers: {
@@ -305,16 +306,19 @@ async function updatePolicy() {
 			formAlert.textContent = "Succesfully updated";
 			postAlert("bg-primary-300", data.data);
 			setTimeout(function () {
-				window.location.reload();
+				window.history.back();
 			}, 2000);
+			buttonLoading(policyButton, false, "Set Policy")
 		} else {
 			formAlert.classList.remove("hidden", "text-primary-500");
 			formAlert.classList.add("text-secondary-500");
 			formAlert.textContent = data.data
+			buttonLoading(policyButton, false, "Set Policy")
 		}
 	} catch (error) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = error
+		buttonLoading(policyButton, false, "Set Policy")
 	}
 }

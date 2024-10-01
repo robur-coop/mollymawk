@@ -9,7 +9,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
         p ~a:[ a_id "form-alert"; a_class [ "my-4" ] ] [];
         p ~a:[ a_id "user_id"; a_class [ "hidden" ] ] [ txt user.uuid ];
         div
-          ~a:[ a_class [ "my-4" ] ]
+          ~a:[ a_class [ "my-3" ] ]
           [
             label
               ~a:[ a_class [ "block text-sm font-medium" ] ]
@@ -75,7 +75,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
           ];
         hr ();
         div
-          ~a:[ a_class [ "my-4" ] ]
+          ~a:[ a_class [ "my-3" ] ]
           [
             label
               ~a:[ a_class [ "block text-sm font-medium" ] ]
@@ -144,7 +144,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
           ];
         hr ();
         div
-          ~a:[ a_class [ "my-4" ] ]
+          ~a:[ a_class [ "my-3" ] ]
           [
             label
               ~a:[ a_class [ "block text-sm font-medium" ] ]
@@ -217,7 +217,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
               ];
           ];
         div
-          ~a:[ a_class [ "my-4" ] ]
+          ~a:[ a_class [ "my-3" ] ]
           [
             label
               ~a:[ a_class [ "block text-sm font-medium" ] ]
@@ -340,7 +340,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
               ];
           ];
         div
-          ~a:[ a_class [ "my-4" ] ]
+          ~a:[ a_class [ "my-3" ] ]
           [
             label
               ~a:[ a_class [ "block text-sm font-medium" ] ]
@@ -461,12 +461,13 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
           ];
         hr ();
         div
-          ~a:[ a_class [ "my-4" ] ]
+          ~a:[ a_class [ "my-3" ] ]
           [
             button
               ~a:
                 [
                   a_onclick "updatePolicy()";
+                  a_id "set-policy-btn";
                   a_class [ "bg-primary-500 py-1 px-2 text-primary-50 rounded" ];
                 ]
               [ txt "Set Policy" ];

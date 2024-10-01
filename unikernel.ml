@@ -855,12 +855,16 @@ struct
                         memory;
                         block = Some block;
                         cpuids =
-                          Vmm_core.IS.of_list
-                            (List.map int_of_string
-                               (String.split_on_char ',' cpuids));
+                          (if cpuids = "" then Vmm_core.IS.empty
+                           else
+                             Vmm_core.IS.of_list
+                               (List.map int_of_string
+                                  (String.split_on_char ',' cpuids)));
                         bridges =
-                          Vmm_core.String_set.of_list
-                            (String.split_on_char ',' bridges);
+                          (if bridges = "" then Vmm_core.String_set.empty
+                           else
+                             Vmm_core.String_set.of_list
+                               (String.split_on_char ',' bridges));
                       }
                     in
                     (Albatross.query albatross ~domain:u.name
