@@ -61,7 +61,7 @@ struct
           if not Vmm_core.Name.(equal name root) then
             ( total_vms + policy.Vmm_core.Policy.vms,
               total_memory + policy.memory,
-              total_block + Option.value ~default:0 policy.block)
+              total_block + Option.value ~default:0 policy.block )
           else (total_vms, total_memory, total_block))
         (0, 0, 0) policies
     in
@@ -147,20 +147,7 @@ struct
       | None -> Ok (t.key, t.cert, [])
       | Some domain ->
           let* policy = policy ~domain t in
-          let policy =
-            Option.value
-              ~default:
-                Vmm_core.(
-                  Policy.
-                    {
-                      vms = 0;
-                      cpuids = IS.empty;
-                      memory = 0;
-                      block = None;
-                      bridges = String_set.empty;
-                    })
-              policy
-          in
+          let policy = Option.value ~default:empty_policy policy in
           let cmd = `Policy_cmd (`Policy_add policy) in
           let* key, cert =
             key_cert ~is_ca:true ~cmd t.key domain
