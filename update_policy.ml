@@ -1,20 +1,4 @@
 let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
-  let empty_policy =
-    Vmm_core.Policy.
-      {
-        vms = 0;
-        cpuids = Vmm_core.IS.of_list [];
-        memory = 0;
-        block = Some 0;
-        bridges = Vmm_core.String_set.of_list [];
-      }
-  in
-  let root_policy =
-    match root_policy with Some p -> p | None -> empty_policy
-  in
-  let policy =
-    match user_policy with None -> empty_policy | Some policy -> policy
-  in
   Tyxml_html.(
     section
       ~a:[ a_id "policy-form" ]
@@ -32,7 +16,9 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
               [ txt "Allowed VMs" ];
             p
               [
-                txt ("total: " ^ string_of_int root_policy.Vmm_core.Policy.vms);
+                txt
+                  ("total available: "
+                  ^ string_of_int root_policy.Vmm_core.Policy.vms);
               ];
             div
               ~a:
@@ -40,7 +26,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
                   a_class [ "space-x-5 my-4" ];
                   Unsafe.string_attrib "x-data"
                     ("{count : "
-                    ^ string_of_int policy.Vmm_core.Policy.vms
+                    ^ string_of_int user_policy.Vmm_core.Policy.vms
                     ^ "}");
                 ]
               [
@@ -94,13 +80,20 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
             label
               ~a:[ a_class [ "block text-sm font-medium" ] ]
               [ txt "Allowed Memory" ];
+            p
+              [
+                txt
+                  ("total available: "
+                  ^ string_of_int root_policy.Vmm_core.Policy.memory
+                  ^ " MB");
+              ];
             div
               ~a:
                 [
                   a_class [ "space-x-5 my-4" ];
                   Unsafe.string_attrib "x-data"
                     ("{count : "
-                    ^ string_of_int policy.Vmm_core.Policy.memory
+                    ^ string_of_int user_policy.Vmm_core.Policy.memory
                     ^ "}");
                 ]
               [
@@ -156,13 +149,23 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
             label
               ~a:[ a_class [ "block text-sm font-medium" ] ]
               [ txt "Allowed Storage" ];
+            p
+              [
+                txt
+                  ("total available: "
+                  ^ string_of_int
+                      (match root_policy.Vmm_core.Policy.block with
+                      | None -> 0
+                      | Some x -> x)
+                  ^ " MB");
+              ];
             div
               ~a:
                 [
                   a_class [ "space-x-5 my-4" ];
                   Unsafe.string_attrib "x-data"
                     ("{count : "
-                    ^ (match policy.Vmm_core.Policy.block with
+                    ^ (match user_policy.Vmm_core.Policy.block with
                       | None -> string_of_int 0
                       | Some x -> string_of_int x)
                     ^ "}");
