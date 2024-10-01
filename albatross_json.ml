@@ -207,9 +207,9 @@ let policy_of_json js =
                      (String.split_on_char ',' bridges));
             }
           in
-          match Vmm_core.Policy.usable policy with
-          | Ok () -> Ok policy
-          | Error (`Msg err) -> Error (`Msg err))
+          let ( let* ) = Result.bind in
+          let* () = Vmm_core.Policy.usable policy in
+          Ok policy
       | _ ->
           Error
             (`Msg
