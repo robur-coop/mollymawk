@@ -17,7 +17,7 @@ struct
         cpuids = Vmm_core.IS.empty;
         memory = 0;
         block = Some 0;
-        bridges = Vmm_core.String_set.of_list [];
+        bridges = Vmm_core.String_set.empty;
       }
 
   let policy ?domain t =
