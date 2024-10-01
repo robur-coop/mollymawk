@@ -51,10 +51,23 @@ struct
   let policy_resource_avalaible t =
     let root_policy =
       match policy t with
-      | Ok p -> ( match p with Some p -> p | None -> empty_policy)
-      | Error _ -> empty_policy
+      | Ok p -> (
+          match p with
+          | Some p -> p
+          | None ->
+              Logs.err (fun m -> m "policy error: empty root policy");
+              empty_policy)
+      | Error err ->
+          Logs.err (fun m -> m "policy error:  %s" err);
+          empty_policy
     in
-    let policies = match policies t with Ok p -> p | Error _err -> [] in
+    let policies =
+      match policies t with
+      | Ok p -> p
+      | Error err ->
+          Logs.err (fun m -> m "policy error:  %s" err);
+          []
+    in
     let vms_used, memory_used, storage_used =
       List.fold_left
         (fun (total_vms, total_memory, total_block) (name_, policy) ->
