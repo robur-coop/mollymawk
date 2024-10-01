@@ -373,4 +373,22 @@ struct
     | Error str -> Lwt.return (Error str)
     | Ok (name, certificates) ->
         raw_query t ~name certificates cmd (console name)
+
+  let set_policy t ~domain policy =
+    let open Lwt.Infix in
+    match Vmm_core.Name.path_of_string domain with
+    | Error (`Msg msg) -> Lwt.return (Error ("couldn't set policy: " ^ msg))
+    | Ok p -> (
+        (* we set it locally - which is then used for the next command *)
+        let old_policies = t.policies in
+        let name = Vmm_core.Name.create_of_path p in
+        t.policies <- fst (Vmm_trie.insert name policy t.policies);
+        (* now we tell albatross about it, using a command for throwing it away *)
+        (* note that the 'certs' / 'gen_cert' uses the policies for intermediate certificates *)
+        query t ~domain (`Unikernel_cmd `Unikernel_info) >|= function
+        | Ok _ -> Ok ()
+        | Error msg ->
+            Logs.warn (fun m -> m "error updating policies: %s" msg);
+            t.policies <- old_policies;
+            Error msg)
 end
