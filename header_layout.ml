@@ -20,8 +20,10 @@ let header ?(page_title = "Mollymawk") ~icon () =
         script ~a:[ a_src "https://kit.fontawesome.com/d1697f2fa9.js" ] (txt "");
         link ~rel:[ `Stylesheet ]
           ~href:"https://unpkg.com/aos@2.3.1/dist/aos.css" ();
-        script ~a:[ a_src "https://unpkg.com/aos@2.3.1/dist/aos.js" ] (txt "");
+        (*aos is animate-on-scroll, adds bouncy effects to html elements*)
+          script ~a:[ a_src "https://unpkg.com/aos@2.3.1/dist/aos.js" ] (txt "");
         link ~rel:[ `Icon ] ~href:icon ();
+        (*https://alpinejs.dev/ is a lightweight js library and we use it for multiselect form elements*)
         script
           ~a:
             [
