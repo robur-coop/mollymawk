@@ -188,23 +188,28 @@ let policy_of_json js =
           Some (`Int memory),
           Some (`Int block),
           Some (`String cpuids),
-          Some (`String bridges) ) ->
-          Ok
+          Some (`String bridges) ) -> (
+          let policy =
             {
               Vmm_core.Policy.vms;
               memory;
-              block = Some block;
+              block = (if block = 0 then None else Some block);
               cpuids =
                 (if cpuids = "" then Vmm_core.IS.empty
                  else
                    Vmm_core.IS.of_list
-                     (List.map int_of_string (String.split_on_char ',' cpuids)));
+                     (List.filter_map int_of_string_opt
+                        (String.split_on_char ',' cpuids)));
               bridges =
                 (if bridges = "" then Vmm_core.String_set.empty
                  else
                    Vmm_core.String_set.of_list
                      (String.split_on_char ',' bridges));
             }
+          in
+          match Vmm_core.Policy.usable policy with
+          | Ok p -> Ok p
+          | Error (`Msg err) -> Error (`Msg err))
       | _ ->
           Error
             (`Msg
