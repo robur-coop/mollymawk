@@ -314,7 +314,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
                               ~a:
                                 [
                                   a_input_type `Checkbox;
-                                  a_class [ "text-primary-500 bg-primary-500" ];
+                                  a_class [ "accent-primary-500 mr-2" ];
                                   Unsafe.string_attrib ":value" "option";
                                   Unsafe.string_attrib "x-on:change"
                                     "updateSelection($event, option)";
@@ -344,7 +344,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
           [
             label
               ~a:[ a_class [ "block text-sm font-medium" ] ]
-              [ txt "Bridges" ];
+              [ txt "Network interfaces" ];
             div
               ~a:
                 [
@@ -435,7 +435,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
                               ~a:
                                 [
                                   a_input_type `Checkbox;
-                                  a_class [ "text-primary-500 bg-primary-500" ];
+                                  a_class [ "accent-primary-500 mr-2" ];
                                   Unsafe.string_attrib ":value" "option";
                                   Unsafe.string_attrib "x-on:change"
                                     "updateSelection($event, option)";
