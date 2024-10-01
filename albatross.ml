@@ -70,10 +70,7 @@ struct
         vms = root_policy.vms - vms_used;
         cpuids = root_policy.cpuids;
         memory = root_policy.memory - memory_used;
-        block =
-          (match root_policy.block with
-          | Some b -> if b > 0 then Some (b - storage_used) else None
-          | None -> None);
+        block = Option.map (fun b -> b - storage_used) root_policy.block;
         bridges = root_policy.bridges;
       }
 
