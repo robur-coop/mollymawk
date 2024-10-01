@@ -48,7 +48,7 @@ struct
     in
     Ok (Vmm_trie.fold path t.policies (fun name p acc -> (name, p) :: acc) [])
 
-  let policy_resource_used () t =
+  let policy_resource_used t =
     let root_policy =
       match policy t with
       | Ok p -> ( match p with Some p -> p | None -> empty_policy)
