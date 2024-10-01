@@ -195,11 +195,18 @@ let policy_of_json js =
               memory;
               block = (if block = 0 then None else Some block);
               cpuids =
-                (if cpuids = "" then Vmm_core.IS.empty
-                 else
-                   Vmm_core.IS.of_list
-                     (List.filter_map int_of_string_opt
-                        (String.split_on_char ',' cpuids)));
+                (let parsed_cpuids =
+                   List.filter_map
+                     (fun s ->
+                       match int_of_string_opt s with
+                       | Some i -> Some i
+                       | None ->
+                           Logs.err (fun m -> m "Invalid CPU id: %s" s);
+                           None)
+                     (String.split_on_char ',' cpuids)
+                 in
+                 if parsed_cpuids = [] then Vmm_core.IS.empty
+                 else Vmm_core.IS.of_list parsed_cpuids);
               bridges =
                 (if bridges = "" then Vmm_core.String_set.empty
                  else
