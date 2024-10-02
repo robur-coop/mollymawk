@@ -184,7 +184,7 @@ let policy_of_json js =
             get "cpuids" xs,
             get "bridges" xs )
       with
-      | ( Some (`Int vms),
+      | ( Some (`Int unikernels),
           Some (`Int memory),
           Some (`Int block),
           Some (`String cpuids),
