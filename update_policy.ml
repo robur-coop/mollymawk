@@ -21,7 +21,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
                 txt
                   ("total available: "
                   ^ string_of_int
-                      Vmm_core.Policy.(root_policy.vms - user_policy.vms));
+                      Vmm_core.Policy.(unallocated_resources.vms + user_policy.vms));
               ];
             p
               [
