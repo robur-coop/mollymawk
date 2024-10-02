@@ -205,8 +205,7 @@ let policy_of_json js =
                            None)
                      (String.split_on_char ',' cpuids)
                  in
-                 if parsed_cpuids = [] then Vmm_core.IS.empty
-                 else Vmm_core.IS.of_list parsed_cpuids);
+                 Vmm_core.IS.of_list parsed_cpuids;
               bridges =
                    Vmm_core.String_set.of_list
                      (String.split_on_char ',' bridges);
