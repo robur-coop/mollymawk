@@ -44,7 +44,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
                 span
                   ~a:
                     [
-                      a_id "f_allowed_vms";
+                      a_id "f_allowed_unikernels";
                       a_contenteditable true;
                       a_class [ "text-4xl border px-4" ];
                       a_user_data "x-on:keydown.enter.prevent" "";
