@@ -860,12 +860,6 @@ struct
                       `Internal_server_error
                 | Ok Some root_policy -> (
                     match root_policy with
-                    | None ->
-                        Logs.err (fun m ->
-                            m "policy: root policy can't be null ");
-                        http_response reqd ~title:"Error"
-                          ~data:"root policy is null" `Internal_server_error
-                    | Some root_policy -> (
                         match
                           Vmm_core.Policy.is_smaller ~super:root_policy
                             ~sub:policy
