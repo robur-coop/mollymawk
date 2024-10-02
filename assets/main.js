@@ -291,7 +291,7 @@ async function updatePolicy() {
 			},
 			body: JSON.stringify(
 				{
-					"vms": Number(vm_count),
+					"unikernels": Number(unikernel_count),
 					"memory": Number(mem_size),
 					"block": Number(storage_size),
 					"cpuids": cpuids,
