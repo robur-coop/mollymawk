@@ -191,7 +191,7 @@ let policy_of_json js =
           Some (`String bridges) ) ->
           let policy =
             {
-              Vmm_core.Policy.vms;
+              Vmm_core.Policy.vms = unikernels;
               memory;
               block = (if block = 0 then None else Some block);
               cpuids =
