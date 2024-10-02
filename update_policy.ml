@@ -84,7 +84,7 @@ let update_policy_layout (user : User_model.user) ~user_policy
             label
               ~a:[ a_class [ "block font-medium" ] ]
               [ txt "Allowed Memory" ];
-            p
+            small
               ~a:[ a_class [ "text-sm" ] ]
               [
                 txt
@@ -156,7 +156,7 @@ let update_policy_layout (user : User_model.user) ~user_policy
             label
               ~a:[ a_class [ "block font-medium" ] ]
               [ txt "Allowed Storage" ];
-            p
+            small
               ~a:[ a_class [ "text-sm" ] ]
               [
                 txt
