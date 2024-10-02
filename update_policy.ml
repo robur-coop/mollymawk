@@ -173,10 +173,10 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
                   ("total available: "
                   ^ string_of_int
                       Vmm_core.Policy.(
-                        match (root_policy.block, user_policy.block) with
-                        | Some root_block, Some user_block ->
-                            root_block - user_block
-                        | Some root_block, None -> root_block
+                        match (unallocated_resources.block, user_policy.block) with
+                        | Some unallocated, Some user_block ->
+                            unallocated + user_block
+                        | Some unallocated, None -> unallocated
                         | _ -> 0));
               ];
             p
