@@ -178,7 +178,7 @@ let policy_of_json js =
   | `Assoc xs -> (
       match
         Utils.Json.
-          ( get "vms" xs,
+          ( get "unikernels" xs,
             get "memory" xs,
             get "block" xs,
             get "cpuids" xs,
