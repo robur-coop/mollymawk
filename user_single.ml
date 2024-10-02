@@ -270,7 +270,7 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                                                     text-primary-600 uppercase";
                                                  ];
                                              ]
-                                           [ txt "Allowed VMs" ];
+                                           [ txt "Allowed unikernels" ];
                                          th
                                            ~a:
                                              [
