@@ -854,32 +854,45 @@ struct
             match Albatross_json.policy_of_json json with
             | Ok policy -> (
                 match Albatross.policy albatross with
-                | Error err ->
-                    Logs.err (fun m -> m "couldn't retrieve root policy: %s" err);
-                    http_response reqd ~title:"Error" ~data:err
-                      `Internal_server_error
-                | Ok Some root_policy -> (
-                    match root_policy with
-                        match
-                          Vmm_core.Policy.is_smaller ~super:root_policy
-                            ~sub:policy
-                        with
-                        | Error (`Msg err) ->
-                            Logs.err (fun m -> m "policy %a is not smaller than root policy %a: %s" Vmm_core.Policy.pp policy Vmm_core.Policy.pp root_policy err);
-                            http_response reqd ~title:"Error" ~data:err
+                | Ok (Some root_policy) -> (
+                    match
+                      Vmm_core.Policy.is_smaller ~super:root_policy ~sub:policy
+                    with
+                    | Error (`Msg err) ->
+                        Logs.err (fun m ->
+                            m "policy %a is not smaller than root policy %a: %s"
+                              Vmm_core.Policy.pp policy Vmm_core.Policy.pp
+                              root_policy err);
+                        http_response reqd ~title:"Error"
+                          ~data:
+                            ("policy is not smaller than root policy: " ^ err)
+                          `Internal_server_error
+                    | Ok () -> (
+                        Albatross.set_policy albatross ~domain:u.name policy
+                        >>= function
+                        | Error err ->
+                            Logs.err (fun m ->
+                                m "error setting policy %a for %s: %s"
+                                  Vmm_core.Policy.pp policy u.name err);
+                            http_response reqd ~title:"Error"
+                              ~data:("error setting policy: " ^ err)
                               `Internal_server_error
-                        | Ok () -> (
-                            Albatross.set_policy albatross ~domain:u.name policy
-                            >>= function
-                            | Error err ->
-                                http_response reqd ~title:"Error" ~data:err
-                                  `Internal_server_error
-                            | Ok policy ->
-                                http_response reqd ~title:"Success"
-                                  ~data:
-                                    (Yojson.Basic.to_string
-                                       (Albatross_json.policy_info policy))
-                                  `OK))))
+                        | Ok policy ->
+                            http_response reqd ~title:"Success"
+                              ~data:
+                                (Yojson.Basic.to_string
+                                   (Albatross_json.policy_info policy))
+                              `OK))
+                | Ok None ->
+                    Logs.err (fun m -> m "policy: root policy can't be null ");
+                    http_response reqd ~title:"Error"
+                      ~data:"root policy is null" `Internal_server_error
+                | Error err ->
+                    Logs.err (fun m ->
+                        m "policy: an error occured while fetching root policy ");
+                    http_response reqd ~title:"Error"
+                      ~data:("error with root policy: " ^ err)
+                      `Internal_server_error)
             | Error (`Msg err) ->
                 http_response reqd ~title:"Error" ~data:err `Bad_request)
         | None ->
