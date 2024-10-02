@@ -13,7 +13,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
           [
             label
               ~a:[ a_class [ "block text-sm font-medium" ] ]
-              [ txt "Allowed VMs" ];
+              [ txt "Allowed unikernels" ];
             p
               [
                 txt
