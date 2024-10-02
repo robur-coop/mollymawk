@@ -858,7 +858,7 @@ struct
                     Logs.err (fun m -> m "couldn't retrieve root policy: %s" err);
                     http_response reqd ~title:"Error" ~data:err
                       `Internal_server_error
-                | Ok root_policy -> (
+                | Ok Some root_policy -> (
                     match root_policy with
                     | None ->
                         Logs.err (fun m ->
