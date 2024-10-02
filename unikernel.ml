@@ -889,7 +889,10 @@ struct
                       ~data:"root policy is null" `Internal_server_error
                 | Error err ->
                     Logs.err (fun m ->
-                        m "policy: an error occured while fetching root policy: %s" err);
+                        m
+                          "policy: an error occured while fetching root \
+                           policy: %s"
+                          err);
                     http_response reqd ~title:"Error"
                       ~data:("error with root policy: " ^ err)
                       `Internal_server_error)
