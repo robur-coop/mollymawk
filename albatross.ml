@@ -81,14 +81,15 @@ struct
     match root_policy with
     | Ok root_policy ->
         Ok
-          Vmm_core.Policy.
-            {
-              vms = root_policy.vms - vms_used;
-              cpuids = root_policy.cpuids;
-              memory = root_policy.memory - memory_used;
-              block = Option.map (fun b -> b - storage_used) root_policy.block;
-              bridges = root_policy.bridges;
-            }
+          ( Vmm_core.Policy.
+              {
+                vms = root_policy.vms - vms_used;
+                cpuids = root_policy.cpuids;
+                memory = root_policy.memory - memory_used;
+                block = Option.map (fun b -> b - storage_used) root_policy.block;
+                bridges = root_policy.bridges;
+              },
+            root_policy )
     | Error (`Msg err) -> Error err
 
   let key_ids exts pub issuer =
