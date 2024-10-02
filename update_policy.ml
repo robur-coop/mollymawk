@@ -16,22 +16,18 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
               ~a:[ a_class [ "block text-sm font-medium" ] ]
               [ txt "Allowed unikernels" ];
             p
+              ~a:[ a_class [ "space-x-5" ] ]
               [
-                span
-                  ~a:[ a_class [ "space-x-5" ] ]
-                  [
-                    txt
-                      ("total available: "
-                      ^ string_of_int
-                          Vmm_core.Policy.(root_policy.vms - user_policy.vms));
-                  ];
-                span
-                  [
-                    txt
-                      ("total unallocated: "
-                      ^ string_of_int unallocated_resources.Vmm_core.Policy.vms
-                      );
-                  ];
+                txt
+                  ("total available: "
+                  ^ string_of_int
+                      Vmm_core.Policy.(root_policy.vms - user_policy.vms));
+              ];
+            p
+              [
+                txt
+                  ("total unallocated: "
+                  ^ string_of_int unallocated_resources.Vmm_core.Policy.vms);
               ];
             div
               ~a:
@@ -94,23 +90,19 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
               ~a:[ a_class [ "block text-sm font-medium" ] ]
               [ txt "Allowed Memory" ];
             p
+              ~a:[ a_class [ "space-x-5" ] ]
               [
-                span
-                  ~a:[ a_class [ "space-x-5" ] ]
-                  [
-                    txt
-                      ("total available: "
-                      ^ string_of_int
-                          Vmm_core.Policy.(
-                            root_policy.memory - user_policy.memory));
-                  ];
-                span
-                  [
-                    txt
-                      ("total unallocated: "
-                      ^ string_of_int
-                          unallocated_resources.Vmm_core.Policy.memory);
-                  ];
+                txt
+                  ("total available: "
+                  ^ string_of_int
+                      Vmm_core.Policy.(root_policy.memory - user_policy.memory)
+                  );
+              ];
+            p
+              [
+                txt
+                  ("total unallocated: "
+                  ^ string_of_int unallocated_resources.Vmm_core.Policy.memory);
               ];
             div
               ~a:
@@ -175,32 +167,27 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
               ~a:[ a_class [ "block text-sm font-medium" ] ]
               [ txt "Allowed Storage" ];
             p
+              ~a:[ a_class [ "space-x-5" ] ]
               [
-                span
-                  ~a:[ a_class [ "space-x-5" ] ]
-                  [
-                    txt
-                      ("total available: "
-                      ^ string_of_int
-                          Vmm_core.Policy.(
-                            match (root_policy.block, user_policy.block) with
-                            | Some root_block, Some user_block ->
-                                root_block - user_block
-                            | Some root_block, None -> root_block
-                            | _ -> 0));
-                  ];
-                span
-                  [
-                    txt
-                      ("total unallocated: "
-                      ^ string_of_int
-                          (match
-                             unallocated_resources.Vmm_core.Policy.block
-                           with
-                          | None -> 0
-                          | Some x -> x)
-                      ^ " MB");
-                  ];
+                txt
+                  ("total available: "
+                  ^ string_of_int
+                      Vmm_core.Policy.(
+                        match (root_policy.block, user_policy.block) with
+                        | Some root_block, Some user_block ->
+                            root_block - user_block
+                        | Some root_block, None -> root_block
+                        | _ -> 0));
+              ];
+            p
+              [
+                txt
+                  ("total unallocated: "
+                  ^ string_of_int
+                      (match unallocated_resources.Vmm_core.Policy.block with
+                      | None -> 0
+                      | Some x -> x)
+                  ^ " MB");
               ];
             div
               ~a:
