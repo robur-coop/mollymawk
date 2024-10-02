@@ -274,7 +274,7 @@ function multiselect(selected, options) {
 }
 
 async function updatePolicy() {
-	const vm_count = document.getElementById("f_allowed_vms").innerText;
+	const unikernel_count = document.getElementById("f_allowed_unikernels").innerText;
 	const mem_size = document.getElementById("f_allowed_memory").innerText;
 	const storage_size = document.getElementById("f_allowed_storage").innerText;
 	const cpuids = document.getElementById("selectedCPUs").value;
