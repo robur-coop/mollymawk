@@ -847,7 +847,9 @@ struct
           Yojson.Basic.(to_string (json |> Util.member "user_uuid"))
         in
         let users = User_model.create_user_uuid_map (snd store).Storage.users in
-        match User_model.find_user_by_key user_uuid users with
+        match
+          User_model.find_user_by_key (Utils.Json.clean_string user_uuid) users
+        with
         | Some u -> (
             match Albatross_json.policy_of_json json with
             | Ok policy -> (
