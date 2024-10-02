@@ -1,11 +1,11 @@
-let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
+let update_policy_layout (user : User_model.user) ~user_policy
     ~unallocated_resources =
   Tyxml_html.(
     section
       ~a:[ a_id "policy-form" ]
       [
         h2
-          ~a:[ a_class [ "font-semibold text-xl" ] ]
+          ~a:[ a_class [ "font-semibold text-2xl" ] ]
           [ txt ("Set Policy for " ^ user.name) ];
         p ~a:[ a_id "form-alert"; a_class [ "my-4" ] ] [];
         p ~a:[ a_id "user_id"; a_class [ "hidden" ] ] [ txt user.uuid ];
@@ -13,22 +13,16 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
           ~a:[ a_class [ "my-3" ] ]
           [
             label
-              ~a:[ a_class [ "block text-sm font-medium" ] ]
-              [ txt "Allowed unikernels" ];
-            p
-              ~a:[ a_class [ "space-x-5" ] ]
+              ~a:[ a_class [ "block font-medium" ] ]
+              [ txt "Allowed Unikernels" ];
+            small
+              ~a:[ a_class [ "text-sm" ] ]
               [
                 txt
-                  ("total available: "
+                  ("can assign up to: "
                   ^ string_of_int
                       Vmm_core.Policy.(
                         unallocated_resources.vms + user_policy.vms));
-              ];
-            p
-              [
-                txt
-                  ("total unallocated: "
-                  ^ string_of_int unallocated_resources.Vmm_core.Policy.vms);
               ];
             div
               ~a:
@@ -88,22 +82,17 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
           ~a:[ a_class [ "my-3" ] ]
           [
             label
-              ~a:[ a_class [ "block text-sm font-medium" ] ]
+              ~a:[ a_class [ "block font-medium" ] ]
               [ txt "Allowed Memory" ];
             p
-              ~a:[ a_class [ "space-x-5" ] ]
+              ~a:[ a_class [ "text-sm" ] ]
               [
                 txt
-                  ("total available: "
+                  ("can assign up to: "
                   ^ string_of_int
-                      Vmm_core.Policy.(root_policy.memory - user_policy.memory)
-                  );
-              ];
-            p
-              [
-                txt
-                  ("total unallocated: "
-                  ^ string_of_int unallocated_resources.Vmm_core.Policy.memory);
+                      Vmm_core.Policy.(
+                        unallocated_resources.memory + user_policy.memory)
+                  ^ " MB");
               ];
             div
               ~a:
@@ -145,7 +134,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
                         "$event.target.innerText = count;";
                     ]
                   [];
-                span ~a:[ a_class [ "text-4xl" ] ] [ txt "MB" ];
+                span ~a:[ a_class [ "text-4xl" ] ] [ txt " MB" ];
                 button
                   ~a:
                     [
@@ -165,13 +154,13 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
           ~a:[ a_class [ "my-3" ] ]
           [
             label
-              ~a:[ a_class [ "block text-sm font-medium" ] ]
+              ~a:[ a_class [ "block font-medium" ] ]
               [ txt "Allowed Storage" ];
             p
-              ~a:[ a_class [ "space-x-5" ] ]
+              ~a:[ a_class [ "text-sm" ] ]
               [
                 txt
-                  ("total available: "
+                  ("can assign up to: "
                   ^ string_of_int
                       Vmm_core.Policy.(
                         match
@@ -180,16 +169,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
                         | Some unallocated, Some user_block ->
                             unallocated + user_block
                         | Some unallocated, None -> unallocated
-                        | _ -> 0));
-              ];
-            p
-              [
-                txt
-                  ("total unallocated: "
-                  ^ string_of_int
-                      (match unallocated_resources.Vmm_core.Policy.block with
-                      | None -> 0
-                      | Some x -> x)
+                        | _ -> 0)
                   ^ " MB");
               ];
             div
@@ -252,9 +232,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
         div
           ~a:[ a_class [ "my-3" ] ]
           [
-            label
-              ~a:[ a_class [ "block text-sm font-medium" ] ]
-              [ txt "CPU IDs" ];
+            label ~a:[ a_class [ "block font-medium" ] ] [ txt "CPU IDs" ];
             div
               ~a:
                 (let cpuid_to_array_string lst =
@@ -382,7 +360,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
           ~a:[ a_class [ "my-3" ] ]
           [
             label
-              ~a:[ a_class [ "block text-sm font-medium" ] ]
+              ~a:[ a_class [ "block font-medium" ] ]
               [ txt "Network interfaces" ];
             div
               ~a:
