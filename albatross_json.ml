@@ -201,7 +201,7 @@ let policy_of_json js =
                        match int_of_string_opt s with
                        | Some i -> Some i
                        | None ->
-                           Logs.err (fun m -> m "Invalid CPU id: %s" s);
+                           Logs.warn (fun m -> m "Ignoring invalid CPU id: %s" s);
                            None)
                      (String.split_on_char ',' cpuids)
                  in
