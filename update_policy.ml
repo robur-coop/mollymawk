@@ -21,7 +21,8 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
                 txt
                   ("total available: "
                   ^ string_of_int
-                      Vmm_core.Policy.(unallocated_resources.vms + user_policy.vms));
+                      Vmm_core.Policy.(
+                        unallocated_resources.vms + user_policy.vms));
               ];
             p
               [
@@ -173,7 +174,9 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
                   ("total available: "
                   ^ string_of_int
                       Vmm_core.Policy.(
-                        match (unallocated_resources.block, user_policy.block) with
+                        match
+                          (unallocated_resources.block, user_policy.block)
+                        with
                         | Some unallocated, Some user_block ->
                             unallocated + user_block
                         | Some unallocated, None -> unallocated
