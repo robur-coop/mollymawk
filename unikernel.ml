@@ -871,7 +871,7 @@ struct
                             ~sub:policy
                         with
                         | Error (`Msg err) ->
-                            Logs.err (fun m -> m "policy: %s" err);
+                            Logs.err (fun m -> m "policy %a is not smaller than root policy %a: %s" Vmm_core.Policy.pp policy Vmm_core.Policy.pp root_policy err);
                             http_response reqd ~title:"Error" ~data:err
                               `Internal_server_error
                         | Ok () -> (
