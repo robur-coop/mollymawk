@@ -880,11 +880,11 @@ struct
                             | Error err ->
                                 http_response reqd ~title:"Error" ~data:err
                                   `Internal_server_error
-                            | Ok policies ->
+                            | Ok policy ->
                                 http_response reqd ~title:"Success"
                                   ~data:
                                     (Yojson.Basic.to_string
-                                       (Albatross_json.policy_infos policies))
+                                       (Albatross_json.policy_info policy))
                                   `OK))))
             | Error (`Msg err) ->
                 http_response reqd ~title:"Error" ~data:err `Bad_request)

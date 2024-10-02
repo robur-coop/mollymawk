@@ -201,14 +201,14 @@ let policy_of_json js =
                        match int_of_string_opt s with
                        | Some i -> Some i
                        | None ->
-                           Logs.warn (fun m -> m "Ignoring invalid CPU id: %s" s);
+                           Logs.warn (fun m ->
+                               m "Ignoring invalid CPU id: %s" s);
                            None)
                      (String.split_on_char ',' cpuids)
                  in
-                 Vmm_core.IS.of_list parsed_cpuids;
+                 Vmm_core.IS.of_list parsed_cpuids);
               bridges =
-                   Vmm_core.String_set.of_list
-                     (String.split_on_char ',' bridges);
+                Vmm_core.String_set.of_list (String.split_on_char ',' bridges);
             }
           in
           let ( let* ) = Result.bind in

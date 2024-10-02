@@ -403,7 +403,7 @@ struct
         (* now we tell albatross about it, using a command for throwing it away *)
         (* note that the 'certs' / 'gen_cert' uses the policies for intermediate certificates *)
         query t ~domain (`Unikernel_cmd `Unikernel_info) >|= function
-        | Ok _ -> Ok (Vmm_trie.collect name t.policies)
+        | Ok _ -> Ok (name, policy)
         | Error msg ->
             Logs.warn (fun m -> m "error updating policies: %s" msg);
             t.policies <- old_policies;
