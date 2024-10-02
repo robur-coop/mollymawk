@@ -18,7 +18,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
             p
               [
                 span
-                  ~a:[ a_class [ "space-x-3" ] ]
+                  ~a:[ a_class [ "space-x-5" ] ]
                   [
                     txt
                       ("total available: "
@@ -96,7 +96,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
             p
               [
                 span
-                  ~a:[ a_class [ "space-x-3" ] ]
+                  ~a:[ a_class [ "space-x-5" ] ]
                   [
                     txt
                       ("total available: "
@@ -177,7 +177,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy
             p
               [
                 span
-                  ~a:[ a_class [ "space-x-3" ] ]
+                  ~a:[ a_class [ "space-x-5" ] ]
                   [
                     txt
                       ("total available: "
