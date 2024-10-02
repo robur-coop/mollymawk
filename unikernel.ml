@@ -855,7 +855,7 @@ struct
             | Ok policy -> (
                 match Albatross.policy albatross with
                 | Error err ->
-                    Logs.err (fun m -> m "policy: %s" err);
+                    Logs.err (fun m -> m "couldn't retrieve root policy: %s" err);
                     http_response reqd ~title:"Error" ~data:err
                       `Internal_server_error
                 | Ok root_policy -> (
