@@ -10,6 +10,16 @@ struct
     mutable policies : Vmm_core.Policy.t Vmm_trie.t;
   }
 
+  let empty_policy =
+    Vmm_core.Policy.
+      {
+        vms = 0;
+        cpuids = Vmm_core.IS.empty;
+        memory = 0;
+        block = None;
+        bridges = Vmm_core.String_set.empty;
+      }
+
   let policy ?domain t =
     let ( let* ) = Result.bind in
     let* path =
@@ -37,6 +47,49 @@ struct
           | Ok path -> Ok path)
     in
     Ok (Vmm_trie.fold path t.policies (fun name p acc -> (name, p) :: acc) [])
+
+  let policy_resource_avalaible t =
+    let root_policy =
+      match policy t with
+      | Ok p -> (
+          match p with
+          | Some p -> Ok p
+          | None ->
+              Logs.err (fun m -> m "policy error: empty root policy");
+              Error (`Msg "root policy is empty"))
+      | Error err ->
+          Logs.err (fun m -> m "policy error:  %s" err);
+          Error (`Msg "error getting root policy")
+    in
+    let policies =
+      match policies t with
+      | Ok p -> p
+      | Error err ->
+          Logs.err (fun m -> m "policy error:  %s" err);
+          []
+    in
+    let vms_used, memory_used, storage_used =
+      List.fold_left
+        (fun (total_vms, total_memory, total_block) (name_, policy) ->
+          if not Vmm_core.Name.(equal name_ root) then
+            ( total_vms + policy.Vmm_core.Policy.vms,
+              total_memory + policy.memory,
+              total_block + Option.value ~default:0 policy.block )
+          else (total_vms, total_memory, total_block))
+        (0, 0, 0) policies
+    in
+    match root_policy with
+    | Ok root_policy ->
+        Ok
+          Vmm_core.Policy.
+            {
+              vms = root_policy.vms - vms_used;
+              cpuids = root_policy.cpuids;
+              memory = root_policy.memory - memory_used;
+              block = Option.map (fun b -> b - storage_used) root_policy.block;
+              bridges = root_policy.bridges;
+            }
+    | Error (`Msg err) -> Error err
 
   let key_ids exts pub issuer =
     let open X509 in
@@ -111,20 +164,7 @@ struct
       | None -> Ok (t.key, t.cert, [])
       | Some domain ->
           let* policy = policy ~domain t in
-          let policy =
-            Option.value
-              ~default:
-                Vmm_core.(
-                  Policy.
-                    {
-                      vms = 0;
-                      cpuids = IS.empty;
-                      memory = 0;
-                      block = None;
-                      bridges = String_set.empty;
-                    })
-              policy
-          in
+          let policy = Option.value ~default:empty_policy policy in
           let cmd = `Policy_cmd (`Policy_add policy) in
           let* key, cert =
             key_cert ~is_ca:true ~cmd t.key domain
@@ -363,7 +403,7 @@ struct
         (* now we tell albatross about it, using a command for throwing it away *)
         (* note that the 'certs' / 'gen_cert' uses the policies for intermediate certificates *)
         query t ~domain (`Unikernel_cmd `Unikernel_info) >|= function
-        | Ok _ -> Ok ()
+        | Ok _ -> Ok (name, policy)
         | Error msg ->
             Logs.warn (fun m -> m "error updating policies: %s" msg);
             t.policies <- old_policies;

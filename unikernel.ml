@@ -779,6 +779,128 @@ struct
                 ~icon:"/images/robur.png" ())
              `Not_found)
 
+  let edit_policy albatross store uuid reqd (user : User_model.user) =
+    let users = User_model.create_user_uuid_map (snd store).Storage.users in
+    match User_model.find_user_by_key uuid users with
+    | Some u -> (
+        let user_policy =
+          match Albatross.policy albatross ~domain:u.name with
+          | Ok p -> (
+              match p with Some p -> p | None -> Albatross.empty_policy)
+          | Error _ -> Albatross.empty_policy
+        in
+        match Albatross.policy_resource_avalaible albatross with
+        | Ok unallocated_resources ->
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user
+                    ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
+                    ~content:
+                      (Update_policy.update_policy_layout u ~user_policy
+                         ~unallocated_resources)
+                    ~icon:"/images/robur.png" ())
+                 `OK)
+        | Error err ->
+            let status =
+              {
+                Utils.Status.code = 500;
+                title = "Error";
+                data = "Policy error: " ^ err;
+                success = false;
+              }
+            in
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                    ~content:(Error_page.error_layout status)
+                    ~icon:"/images/robur.png" ())
+                 `Not_found))
+    | None ->
+        let status =
+          {
+            Utils.Status.code = 404;
+            title = "Error";
+            data = "Couldn't find account with uuid: " ^ uuid;
+            success = false;
+          }
+        in
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
+                ~content:(Error_page.error_layout status)
+                ~icon:"/images/robur.png" ())
+             `Not_found)
+
+  let update_policy store albatross reqd _user =
+    decode_request_body reqd >>= fun data ->
+    let json =
+      try Ok (Yojson.Basic.from_string data)
+      with Yojson.Json_error s -> Error (`Msg s)
+    in
+    match json with
+    | Error (`Msg err) ->
+        Logs.err (fun m -> m "Failed to parse JSON: %s" err);
+        http_response reqd ~title:"Error" ~data:(String.escaped err)
+          `Bad_request
+    | Ok json -> (
+        let user_uuid =
+          Yojson.Basic.(to_string (json |> Util.member "user_uuid"))
+        in
+        let users = User_model.create_user_uuid_map (snd store).Storage.users in
+        match
+          User_model.find_user_by_key (Utils.Json.clean_string user_uuid) users
+        with
+        | Some u -> (
+            match Albatross_json.policy_of_json json with
+            | Ok policy -> (
+                match Albatross.policy albatross with
+                | Ok (Some root_policy) -> (
+                    match
+                      Vmm_core.Policy.is_smaller ~super:root_policy ~sub:policy
+                    with
+                    | Error (`Msg err) ->
+                        Logs.err (fun m ->
+                            m "policy %a is not smaller than root policy %a: %s"
+                              Vmm_core.Policy.pp policy Vmm_core.Policy.pp
+                              root_policy err);
+                        http_response reqd ~title:"Error"
+                          ~data:
+                            ("policy is not smaller than root policy: " ^ err)
+                          `Internal_server_error
+                    | Ok () -> (
+                        Albatross.set_policy albatross ~domain:u.name policy
+                        >>= function
+                        | Error err ->
+                            Logs.err (fun m ->
+                                m "error setting policy %a for %s: %s"
+                                  Vmm_core.Policy.pp policy u.name err);
+                            http_response reqd ~title:"Error"
+                              ~data:("error setting policy: " ^ err)
+                              `Internal_server_error
+                        | Ok policy ->
+                            http_response reqd ~title:"Success"
+                              ~data:
+                                (Yojson.Basic.to_string
+                                   (Albatross_json.policy_info policy))
+                              `OK))
+                | Ok None ->
+                    Logs.err (fun m -> m "policy: root policy can't be null ");
+                    http_response reqd ~title:"Error"
+                      ~data:"root policy is null" `Internal_server_error
+                | Error err ->
+                    Logs.err (fun m ->
+                        m
+                          "policy: an error occured while fetching root \
+                           policy: %s"
+                          err);
+                    http_response reqd ~title:"Error"
+                      ~data:("error with root policy: " ^ err)
+                      `Internal_server_error)
+            | Error (`Msg err) ->
+                http_response reqd ~title:"Error" ~data:err `Bad_request)
+        | None ->
+            http_response reqd ~title:"Error" ~data:"User not found" `Not_found)
+
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
@@ -855,6 +977,14 @@ struct
                 let uuid = String.sub path 12 (String.length path - 12) in
                 authenticate ~check_admin:true !store reqd
                   (view_user !albatross !store uuid reqd))
+        | path
+          when String.(
+                 length path >= 21 && sub path 0 21 = "/admin/u/policy/edit/")
+          ->
+            check_meth `GET (fun () ->
+                let uuid = String.sub path 21 (String.length path - 21) in
+                authenticate ~check_admin:true !store reqd
+                  (edit_policy !albatross !store uuid reqd))
         | "/admin/settings" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true !store reqd
@@ -863,6 +993,10 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true !store reqd
                   (update_settings stack store albatross reqd))
+        | "/api/admin/u/policy/update" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_admin:true ~api_meth:true !store reqd
+                  (update_policy !store !albatross reqd))
         | "/api/admin/user/activate/toggle" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true !store reqd
