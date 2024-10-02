@@ -208,10 +208,8 @@ let policy_of_json js =
                  if parsed_cpuids = [] then Vmm_core.IS.empty
                  else Vmm_core.IS.of_list parsed_cpuids);
               bridges =
-                (if bridges = "" then Vmm_core.String_set.empty
-                 else
                    Vmm_core.String_set.of_list
-                     (String.split_on_char ',' bridges));
+                     (String.split_on_char ',' bridges);
             }
           in
           let ( let* ) = Result.bind in
