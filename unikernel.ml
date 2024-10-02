@@ -790,14 +790,14 @@ struct
           | Error _ -> Albatross.empty_policy
         in
         match Albatross.policy_resource_avalaible albatross with
-        | Ok root_policy ->
+        | Ok unallocated_resources ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
                  (Dashboard.dashboard_layout user
                     ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
                     ~content:
                       (Update_policy.update_policy_layout u ~user_policy
-                         ~root_policy)
+                         ~unallocated_resources)
                     ~icon:"/images/robur.png" ())
                  `OK)
         | Error err ->
@@ -889,7 +889,10 @@ struct
                       ~data:"root policy is null" `Internal_server_error
                 | Error err ->
                     Logs.err (fun m ->
-                        m "policy: an error occured while fetching root policy: %s" err);
+                        m
+                          "policy: an error occured while fetching root \
+                           policy: %s"
+                          err);
                     http_response reqd ~title:"Error"
                       ~data:("error with root policy: " ^ err)
                       `Internal_server_error)

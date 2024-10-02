@@ -1,4 +1,5 @@
-let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
+let update_policy_layout (user : User_model.user) ~user_policy
+    ~unallocated_resources =
   Tyxml_html.(
     section
       ~a:[ a_id "policy-form" ]
@@ -18,7 +19,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
               [
                 txt
                   ("total available: "
-                  ^ string_of_int root_policy.Vmm_core.Policy.vms);
+                  ^ string_of_int unallocated_resources.Vmm_core.Policy.vms);
               ];
             div
               ~a:
@@ -84,7 +85,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
               [
                 txt
                   ("total available: "
-                  ^ string_of_int root_policy.Vmm_core.Policy.memory
+                  ^ string_of_int unallocated_resources.Vmm_core.Policy.memory
                   ^ " MB");
               ];
             div
@@ -154,7 +155,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
                 txt
                   ("total available: "
                   ^ string_of_int
-                      (match root_policy.Vmm_core.Policy.block with
+                      (match unallocated_resources.Vmm_core.Policy.block with
                       | None -> 0
                       | Some x -> x)
                   ^ " MB");
@@ -239,7 +240,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
                          (Vmm_core.IS.elements user_policy.cpuids)
                      ^ ", "
                      ^ cpuid_to_array_string
-                         (Vmm_core.IS.elements root_policy.cpuids)
+                         (Vmm_core.IS.elements unallocated_resources.cpuids)
                      ^ ")");
                    a_class [ "multiselect border my-4 p-4 rounded" ];
                  ])
@@ -366,7 +367,7 @@ let update_policy_layout (user : User_model.user) ~user_policy ~root_policy =
                      ("multiselect("
                      ^ bridges_to_array_string user_policy.bridges
                      ^ ", "
-                     ^ bridges_to_array_string root_policy.bridges
+                     ^ bridges_to_array_string unallocated_resources.bridges
                      ^ ")");
                    a_class [ "multiselect border my-4 p-4 rounded" ];
                  ])
