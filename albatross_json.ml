@@ -74,7 +74,7 @@ let policy_info (name, policy) =
   `Assoc
     [
       ("name", `String (Vmm_core.Name.to_string name));
-      ("allowed_vms", `Int policy.Vmm_core.Policy.vms);
+      ("allowed_unikernels", `Int policy.Vmm_core.Policy.vms);
       ( "allowed_cpuids",
         `List
           (List.map (fun id -> `Int id) (Vmm_core.IS.elements policy.cpuids)) );
