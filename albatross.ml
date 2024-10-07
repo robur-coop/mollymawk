@@ -13,7 +13,7 @@ struct
   let empty_policy =
     Vmm_core.Policy.
       {
-        vms = 0;
+        unikernels = 0;
         cpuids = Vmm_core.IS.empty;
         memory = 0;
         block = None;
@@ -68,11 +68,11 @@ struct
           Logs.err (fun m -> m "policy error:  %s" err);
           []
     in
-    let vms_used, memory_used, storage_used =
+    let unikernels_used, memory_used, storage_used =
       List.fold_left
         (fun (total_vms, total_memory, total_block) (name_, policy) ->
           if not Vmm_core.Name.(equal name_ root) then
-            ( total_vms + policy.Vmm_core.Policy.vms,
+            ( total_vms + policy.Vmm_core.Policy.unikernels,
               total_memory + policy.memory,
               total_block + Option.value ~default:0 policy.block )
           else (total_vms, total_memory, total_block))
@@ -83,7 +83,7 @@ struct
         Ok
           Vmm_core.Policy.
             {
-              vms = root_policy.vms - vms_used;
+              unikernels = root_policy.unikernels - unikernels_used;
               cpuids = root_policy.cpuids;
               memory = root_policy.memory - memory_used;
               block = Option.map (fun b -> b - storage_used) root_policy.block;

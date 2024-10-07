@@ -344,7 +344,7 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                                       [
                                         txt
                                           (string_of_int
-                                             policy.Vmm_core.Policy.vms);
+                                             policy.Vmm_core.Policy.unikernels);
                                       ];
                                     td
                                       ~a:

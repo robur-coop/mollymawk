@@ -22,7 +22,8 @@ let update_policy_layout (user : User_model.user) ~user_policy
                   ("can assign up to: "
                   ^ string_of_int
                       Vmm_core.Policy.(
-                        unallocated_resources.vms + user_policy.vms));
+                        unallocated_resources.unikernels
+                        + user_policy.unikernels));
               ];
             div
               ~a:
@@ -30,7 +31,7 @@ let update_policy_layout (user : User_model.user) ~user_policy
                   a_class [ "space-x-5 my-4" ];
                   Unsafe.string_attrib "x-data"
                     ("{count : "
-                    ^ string_of_int user_policy.Vmm_core.Policy.vms
+                    ^ string_of_int user_policy.Vmm_core.Policy.unikernels
                     ^ "}");
                 ]
               [
