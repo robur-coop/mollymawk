@@ -287,8 +287,9 @@ let unikernel_single_layout unikernel now console_output =
                                          [
                                            txt
                                              (string_of_int
-                                                (Option.value size ~default:(-1))
-                                             ^ "MB");
+                                                (Option.value size ~default:512)
+                                                (* TODO: Read the default from albatross json *)
+                                             ^ " bytes");
                                          ];
                                      ])
                                  data.block_devices);

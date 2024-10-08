@@ -19,7 +19,7 @@ let unikernel_info (unikernel_name, info) =
   and block_devices bs =
     let block (name, dev, sec) =
       let dev = Option.value ~default:"none specified (name is used)" dev in
-      let s = Option.value ~default:(-1) sec in
+      let s = Option.value ~default:512 (* TODO we should find a path to query solo5 for the default sector size*) sec in
       `Assoc
         [
           ("name", `String name);
