@@ -74,7 +74,7 @@ let policy_info (name, policy) =
   `Assoc
     [
       ("name", `String (Vmm_core.Name.to_string name));
-      ("allowed_unikernels", `Int policy.Vmm_core.Policy.vms);
+      ("allowed_unikernels", `Int policy.Vmm_core.Policy.unikernels);
       ( "allowed_cpuids",
         `List
           (List.map (fun id -> `Int id) (Vmm_core.IS.elements policy.cpuids)) );
@@ -191,7 +191,7 @@ let policy_of_json js =
           Some (`String bridges) ) ->
           let policy =
             {
-              Vmm_core.Policy.vms = unikernels;
+              Vmm_core.Policy.unikernels;
               memory;
               block = (if block = 0 then None else Some block);
               cpuids =
