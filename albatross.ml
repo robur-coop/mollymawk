@@ -287,6 +287,9 @@ struct
 
   let raw_query t ?(name = Vmm_core.Name.root) certificates cmd f =
     let open Lwt.Infix in
+    if Ipaddr.compare (fst t.remote) Ipaddr.(V4 V4.any) = 0 then
+      Lwt.return (Error "albatross not configured")
+    else
     S.TCP.create_connection (S.tcp t.stack) t.remote >>= function
     | Error e ->
         Lwt.return
