@@ -434,7 +434,7 @@ let dashboard_layout (user : User_model.user) ~icon
                                      ];
                                  ]
                                [];
-                             span [ txt "Documentaion" ];
+                             span [ txt "Documentation" ];
                            ];
                          a
                            ~a:
