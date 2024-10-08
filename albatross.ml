@@ -290,60 +290,62 @@ struct
     if Ipaddr.compare (fst t.remote) Ipaddr.(V4 V4.any) = 0 then
       Lwt.return (Error "albatross not configured")
     else
-    S.TCP.create_connection (S.tcp t.stack) t.remote >>= function
-    | Error e ->
-        Lwt.return
-          (Error
-             (Fmt.str "albatross connection failure %a while quering %a %a: %a"
-                Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                t.remote Vmm_core.Name.pp name
-                (Vmm_commands.pp ~verbose:false)
-                cmd S.TCP.pp_error e))
-    | Ok flow -> (
-        match
-          let authenticator =
-            X509.Authenticator.chain_of_trust
-              ~time:(fun () -> Some (Ptime.v (P.now_d_ps ())))
-              [ t.cert ]
-          in
-          Tls.Config.client ~authenticator ~certificates ()
-        with
-        | Error (`Msg msg) ->
-            Lwt.return
-              (Error (Fmt.str "albatross setting up TLS config: %s" msg))
-        | Ok tls_config -> (
-            TLS.client_of_flow tls_config flow >>= function
-            | Error e ->
-                S.TCP.close flow >|= fun () ->
-                Error
-                  (Fmt.str
-                     "albatross establishing TLS to %a while querying %a %a: %a"
-                     Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                     t.remote Vmm_core.Name.pp name
-                     (Vmm_commands.pp ~verbose:false)
-                     cmd TLS.pp_write_error e)
-            | Ok tls_flow -> (
-                TLS.read tls_flow >>= fun r ->
-                match r with
-                | Ok (`Data d) -> f tls_flow (Cstruct.to_string d)
-                | Ok `Eof ->
-                    TLS.close tls_flow >|= fun () ->
-                    Error
-                      (Fmt.str "eof from albatross %a querying %a %a"
-                         Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                         t.remote Vmm_core.Name.pp name
-                         (Vmm_commands.pp ~verbose:false)
-                         cmd)
-                | Error e ->
-                    TLS.close tls_flow >|= fun () ->
-                    Error
-                      (Fmt.str
-                         "albatross received error reading from %a querying %a \
-                          %a: %a"
-                         Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                         t.remote Vmm_core.Name.pp name
-                         (Vmm_commands.pp ~verbose:false)
-                         cmd TLS.pp_error e))))
+      S.TCP.create_connection (S.tcp t.stack) t.remote >>= function
+      | Error e ->
+          Lwt.return
+            (Error
+               (Fmt.str
+                  "albatross connection failure %a while quering %a %a: %a"
+                  Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                  t.remote Vmm_core.Name.pp name
+                  (Vmm_commands.pp ~verbose:false)
+                  cmd S.TCP.pp_error e))
+      | Ok flow -> (
+          match
+            let authenticator =
+              X509.Authenticator.chain_of_trust
+                ~time:(fun () -> Some (Ptime.v (P.now_d_ps ())))
+                [ t.cert ]
+            in
+            Tls.Config.client ~authenticator ~certificates ()
+          with
+          | Error (`Msg msg) ->
+              Lwt.return
+                (Error (Fmt.str "albatross setting up TLS config: %s" msg))
+          | Ok tls_config -> (
+              TLS.client_of_flow tls_config flow >>= function
+              | Error e ->
+                  S.TCP.close flow >|= fun () ->
+                  Error
+                    (Fmt.str
+                       "albatross establishing TLS to %a while querying %a %a: \
+                        %a"
+                       Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                       t.remote Vmm_core.Name.pp name
+                       (Vmm_commands.pp ~verbose:false)
+                       cmd TLS.pp_write_error e)
+              | Ok tls_flow -> (
+                  TLS.read tls_flow >>= fun r ->
+                  match r with
+                  | Ok (`Data d) -> f tls_flow (Cstruct.to_string d)
+                  | Ok `Eof ->
+                      TLS.close tls_flow >|= fun () ->
+                      Error
+                        (Fmt.str "eof from albatross %a querying %a %a"
+                           Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                           t.remote Vmm_core.Name.pp name
+                           (Vmm_commands.pp ~verbose:false)
+                           cmd)
+                  | Error e ->
+                      TLS.close tls_flow >|= fun () ->
+                      Error
+                        (Fmt.str
+                           "albatross received error reading from %a querying \
+                            %a %a: %a"
+                           Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                           t.remote Vmm_core.Name.pp name
+                           (Vmm_commands.pp ~verbose:false)
+                           cmd TLS.pp_error e))))
 
   let init stack server ?(port = 1025) cert key =
     let open Lwt.Infix in
