@@ -153,8 +153,7 @@ struct
       @ (if email_verified && false (* TODO *) then
            [ Middleware.email_verified_middleware now users ]
          else [])
-      @ (if check_csrf then
-           [ Middleware.csrf_form_verification users now form_csrf ]
+      @ (if check_csrf then [ Middleware.csrf_verification users now form_csrf ]
          else [])
       @ [ Middleware.auth_middleware now users ]
     in

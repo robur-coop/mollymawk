@@ -186,7 +186,7 @@ let csrf_cookie_verification form_csrf reqd =
         ~check_csrf:cookie
   | None -> false
 
-let csrf_form_verification users now form_csrf handler reqd =
+let csrf_verification users now form_csrf handler reqd =
   match user_of_cookie users now reqd with
   | Ok user -> (
       let user_csrf_token =
