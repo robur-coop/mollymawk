@@ -70,7 +70,7 @@ let redirect_to_error ~title ~data status user code api_meth reqd () =
 
 let redirect_to_verify_email reqd ?(msg = "") () =
   let headers = Httpaf.Headers.of_list [
-      ("location", "/verify-email")
+      ("location", "/verify-email");
       ("Content-Length", string_of_int (String.length msg));
     ]
   in
@@ -80,7 +80,7 @@ let redirect_to_verify_email reqd ?(msg = "") () =
 
 let redirect_to_dashboard reqd ?(msg = "") () =
   let headers = Httpaf.Headers.of_list [
-      ("location", "/dashboard")
+      ("location", "/dashboard");
       ("Content-Length", string_of_int (String.length msg));
     ] in
   let response = Httpaf.Response.create ~headers `Found in
