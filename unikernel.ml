@@ -49,6 +49,41 @@ struct
   module Store = Storage.Make (BLOCK)
   module Map = Map.Make (String)
 
+  let generate_csrf_token ?(update_user = false) ?(user = None) store now =
+    if update_user then
+      match user with
+      | Some u -> (
+          let csrf = Middleware.get_csrf now () in
+          let updated_user =
+            User_model.update_user u ~updated_at:now
+              ~cookies:(csrf :: u.cookies) ()
+          in
+          Store.update_user !store updated_user >>= function
+          | Ok store' ->
+              store := store';
+              Lwt.return (Ok csrf.value)
+          | Error (`Msg err) ->
+              let error =
+                {
+                  Utils.Status.code = 500;
+                  title = "CSRF Token Error";
+                  success = false;
+                  data = err;
+                }
+              in
+              Lwt.return (Error error))
+      | None ->
+          let error =
+            {
+              Utils.Status.code = 500;
+              title = "CSRF Token Error";
+              success = false;
+              data = "Error generating csrf. No user";
+            }
+          in
+          Lwt.return (Error error)
+    else Lwt.return (Ok (Middleware.get_csrf now ()).value)
+
   let decode_request_body reqd =
     let request_body = Httpaf.Reqd.request_body reqd in
     let finished, notify_finished = Lwt.wait () in
@@ -65,6 +100,21 @@ struct
     Httpaf.Body.schedule_read request_body ~on_read:(on_read on_eof f_init)
       ~on_eof:(on_eof f_init);
     finished >>= fun data -> data
+
+  let extract_csrf_token reqd =
+    decode_request_body reqd >>= fun data ->
+    let json =
+      try Ok (Yojson.Basic.from_string data)
+      with Yojson.Json_error s -> Error (`Msg s)
+    in
+    match json with
+    | Error (`Msg err) ->
+        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
+        Lwt.return String.empty
+    | Ok json ->
+        json
+        |> Yojson.Basic.Util.member "csrf_token"
+        |> Yojson.Basic.to_string |> Lwt.return
 
   module Albatross = Albatross.Make (T) (P) (S)
 
@@ -92,7 +142,7 @@ struct
     go (Map.empty, []) m
 
   let authenticate ?(email_verified = true) ?(check_admin = false)
-      ?(api_meth = false) store reqd f =
+      ?(api_meth = false) ?(check_csrf = false) ?(form_csrf = "") store reqd f =
     let now = Ptime.v (P.now_d_ps ()) in
     let _, (t : Storage.t) = store in
     let users = User_model.create_user_session_map t.users in
@@ -102,6 +152,9 @@ struct
        else [])
       @ (if email_verified && false (* TODO *) then
            [ Middleware.email_verified_middleware now users ]
+         else [])
+      @ (if check_csrf then
+           [ Middleware.csrf_form_verification users now form_csrf ]
          else [])
       @ [ Middleware.auth_middleware now users ]
     in
@@ -137,23 +190,30 @@ struct
          http_status)
 
   let sign_up reqd =
-    match Middleware.has_session_cookie reqd with
+    let now = Ptime.v (P.now_d_ps ()) in
+    let csrf = Middleware.get_csrf now () in
+    match Middleware.has_cookie "molly_session" reqd with
     | Some cookie -> (
         match Middleware.cookie_value_from_auth_cookie cookie with
         | Ok "" ->
+            let csrf_cookie =
+              csrf.name ^ "=" ^ csrf.value ^ ";Path=/sign-up;HttpOnly=true"
+            in
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Sign_up.register_page ~icon:"/images/robur.png" ())
+                 (Sign_up.register_page csrf.value ~icon:"/images/robur.png" ())
+                 ~header_list:
+                   [ ("Set-Cookie", csrf_cookie); ("X-MOLLY-CSRF", csrf.value) ]
                  `OK)
         | _ -> Middleware.redirect_to_dashboard reqd ())
     | None ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Sign_up.register_page ~icon:"/images/robur.png" ())
+             (Sign_up.register_page csrf.value ~icon:"/images/robur.png" ())
              `OK)
 
   let sign_in reqd =
-    match Middleware.has_session_cookie reqd with
+    match Middleware.has_cookie "molly_session" reqd with
     | Some cookie -> (
         match Middleware.cookie_value_from_auth_cookie cookie with
         | Ok "" ->
@@ -180,7 +240,7 @@ struct
         http_response reqd ~title:"Error" ~data:(String.escaped err)
           `Bad_request
     | Ok json -> (
-        let validate_user_input ~name ~email ~password =
+        let validate_user_input ~name ~email ~password ~form_csrf =
           if name = "" || email = "" || password = "" then
             Error "All fields must be filled."
           else if String.length name < 4 then
@@ -189,6 +249,8 @@ struct
             Error "Invalid email address."
           else if String.length password < 8 then
             Error "Password must be at least 8 characters long."
+          else if form_csrf = "" then
+            Error "CSRF token mismatch error. Please referesh and try again."
           else Ok "Validation passed."
         in
         let name =
@@ -200,60 +262,76 @@ struct
         let password =
           json |> Yojson.Basic.Util.member "password" |> Yojson.Basic.to_string
         in
-        match validate_user_input ~name ~email ~password with
+        let form_csrf =
+          json
+          |> Yojson.Basic.Util.member "csrf_token"
+          |> Yojson.Basic.to_string
+        in
+        match validate_user_input ~name ~email ~password ~form_csrf with
         | Error err ->
             http_response reqd ~title:"Error" ~data:(String.escaped err)
               `Bad_request
-        | Ok _ -> (
-            let _, (s : Storage.t) = !store in
-            let users = s.users in
-            let existing_email = User_model.check_if_email_exists email users in
-            let existing_name = User_model.check_if_name_exists name users in
-            match (existing_name, existing_email) with
-            | Some _, None ->
-                http_response reqd ~title:"Error"
-                  ~data:"A user with this name already exist." `Bad_request
-            | None, Some _ ->
-                http_response reqd ~title:"Error"
-                  ~data:"A user with this email already exist." `Bad_request
-            | None, None -> (
-                let created_at = Ptime.v (P.now_d_ps ()) in
-                let user =
-                  let active, super_user =
-                    if List.length users = 0 then (true, true)
-                    else (false, false)
+        | Ok _ ->
+            if Middleware.csrf_cookie_verification form_csrf reqd then
+              let _, (s : Storage.t) = !store in
+              let users = s.users in
+              let existing_email =
+                User_model.check_if_email_exists email users
+              in
+              let existing_name = User_model.check_if_name_exists name users in
+              match (existing_name, existing_email) with
+              | Some _, None ->
+                  http_response reqd ~title:"Error"
+                    ~data:"A user with this name already exist." `Bad_request
+              | None, Some _ ->
+                  http_response reqd ~title:"Error"
+                    ~data:"A user with this email already exist." `Bad_request
+              | None, None -> (
+                  let created_at = Ptime.v (P.now_d_ps ()) in
+                  let user =
+                    let active, super_user =
+                      if List.length users = 0 then (true, true)
+                      else (false, false)
+                    in
+                    User_model.create_user ~name ~email ~password ~created_at
+                      ~active ~super_user
                   in
-                  User_model.create_user ~name ~email ~password ~created_at
-                    ~active ~super_user
-                in
-                Store.add_user !store user >>= function
-                | Ok store' ->
-                    store := store';
-                    let cookie =
-                      List.find
-                        (fun (c : User_model.cookie) ->
-                          c.name = "molly_session")
-                        user.cookies
-                    in
-                    let cookie_value =
-                      cookie.name ^ "=" ^ cookie.value ^ ";Path=/;HttpOnly=true"
-                    in
-                    let header_list =
-                      [
-                        ("Set-Cookie", cookie_value); ("location", "/dashboard");
-                      ]
-                    in
-                    http_response reqd ~header_list ~title:"Success"
-                      ~data:
-                        (Yojson.Basic.to_string (User_model.user_to_json user))
-                      `OK
-                | Error (`Msg err) ->
-                    http_response reqd ~title:"Error" ~data:(String.escaped err)
-                      `Bad_request)
-            | _ ->
-                http_response reqd ~title:"Error"
-                  ~data:"A user with this name or email already exist."
-                  `Bad_request))
+                  Store.add_user !store user >>= function
+                  | Ok store' ->
+                      store := store';
+                      let cookie =
+                        List.find
+                          (fun (c : User_model.cookie) ->
+                            c.name = "molly_session")
+                          user.cookies
+                      in
+                      let cookie_value =
+                        cookie.name ^ "=" ^ cookie.value
+                        ^ ";Path=/;HttpOnly=true"
+                      in
+                      let header_list =
+                        [
+                          ("Set-Cookie", cookie_value);
+                          ("location", "/dashboard");
+                        ]
+                      in
+                      http_response reqd ~header_list ~title:"Success"
+                        ~data:
+                          (Yojson.Basic.to_string
+                             (User_model.user_to_json user))
+                        `OK
+                  | Error (`Msg err) ->
+                      http_response reqd ~title:"Error"
+                        ~data:(String.escaped err) `Bad_request)
+              | _ ->
+                  http_response reqd ~title:"Error"
+                    ~data:"A user with this name or email already exist."
+                    `Bad_request
+            else
+              http_response reqd ~title:"Error"
+                ~data:
+                  "CSRF token mismatch error. Please referesh and try again."
+                `Bad_request)
 
   let login store reqd =
     decode_request_body reqd >>= fun data ->
@@ -332,26 +410,30 @@ struct
                       `Internal_server_error)))
 
   let verify_email store reqd user =
-    let email_verification_uuid = User_model.generate_uuid () in
-    let updated_user =
-      User_model.update_user user
-        ~updated_at:(Ptime.v (P.now_d_ps ()))
-        ~email_verification_uuid:(Some email_verification_uuid) ()
-    in
-    Store.update_user !store updated_user >>= function
-    | Ok store' ->
-        store := store';
-        let verification_link =
-          Utils.Email.generate_verification_link email_verification_uuid
-        in
-        Logs.info (fun m -> m "Verification link is: %s" verification_link);
-        Lwt.return
-          (reply reqd ~content_type:"text/html"
-             (Verify_email.verify_page ~user ~icon:"/images/robur.png" ())
-             `OK)
-    | Error (`Msg err) ->
-        http_response reqd ~title:"Error" ~data:(String.escaped err)
-          `Internal_server_error
+    let now = Ptime.v (P.now_d_ps ()) in
+    generate_csrf_token ~update_user:true ~user:(Some user) store now
+    >>= function
+    | csrf -> (
+        match csrf with
+        | Ok csrf ->
+            let email_verification_uuid = User_model.generate_uuid () in
+            let verification_link =
+              Utils.Email.generate_verification_link email_verification_uuid
+            in
+            Logs.info (fun m -> m "Verification link is: %s" verification_link);
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Verify_email.verify_page user csrf ~icon:"/images/robur.png"
+                    ())
+                 ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                 `OK)
+        | Error err ->
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+                    ~content:(Error_page.error_layout err)
+                    ~icon:"/images/robur.png" ())
+                 `Internal_server_error))
 
   let verify_email_token store reqd verification_token (user : User_model.user)
       =
@@ -492,13 +574,29 @@ struct
          `OK)
 
   let settings store reqd user =
-    Lwt.return
-      (reply reqd ~content_type:"text/html"
-         (Dashboard.dashboard_layout user ~page_title:"Settings | Mollymawk"
-            ~content:
-              (Settings_page.settings_layout (snd store).Storage.configuration)
-            ~icon:"/images/robur.png" ())
-         `OK)
+    let now = Ptime.v (P.now_d_ps ()) in
+    generate_csrf_token ~update_user:true ~user:(Some user) store now
+    >>= function
+    | csrf -> (
+        match csrf with
+        | Ok csrf ->
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user
+                    ~page_title:"Settings | Mollymawk"
+                    ~content:
+                      (Settings_page.settings_layout
+                         (snd !store).Storage.configuration csrf)
+                    ~icon:"/images/robur.png" ())
+                 ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                 `OK)
+        | Error err ->
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+                    ~content:(Error_page.error_layout err)
+                    ~icon:"/images/robur.png" ())
+                 `Internal_server_error))
 
   let update_settings stack store albatross reqd _user =
     decode_request_body reqd >>= fun data ->
@@ -535,14 +633,28 @@ struct
             http_response reqd ~title:"Error" ~data:(String.escaped err)
               `Bad_request)
 
-  let deploy_form reqd user =
-    Lwt.return
-      (reply reqd ~content_type:"text/html"
-         (Dashboard.dashboard_layout user
-            ~page_title:"Deploy a Unikernel | Mollymawk"
-            ~content:Unikernel_create.unikernel_create_layout
-            ~icon:"/images/robur.png" ())
-         `OK)
+  let deploy_form store reqd (user : User_model.user) =
+    let now = Ptime.v (P.now_d_ps ()) in
+    generate_csrf_token ~update_user:true ~user:(Some user) store now
+    >>= function
+    | csrf -> (
+        match csrf with
+        | Ok csrf ->
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user
+                    ~page_title:"Deploy a Unikernel | Mollymawk"
+                    ~content:(Unikernel_create.unikernel_create_layout csrf)
+                    ~icon:"/images/robur.png" ())
+                 ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                 `OK)
+        | Error err ->
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+                    ~content:(Error_page.error_layout err)
+                    ~icon:"/images/robur.png" ())
+                 `Internal_server_error))
 
   let unikernel_info albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
@@ -565,7 +677,7 @@ struct
               ~data:(Yojson.Safe.to_string (`String res))
               `Internal_server_error)
 
-  let unikernel_info_one albatross name reqd (user : User_model.user) =
+  let unikernel_info_one albatross store name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
     (Albatross.query albatross ~domain:user.name ~name
        (`Unikernel_cmd `Unikernel_info)
@@ -588,15 +700,27 @@ struct
            Logs.warn (fun m -> m "error querying console of albatross: %s" err);
            []
        | Ok (_, console_output) -> console_output)
-      >|= fun console_output ->
-      reply reqd ~content_type:"text/html"
-        (Dashboard.dashboard_layout user
-           ~content:
-             (Unikernel_single.unikernel_single_layout (List.hd unikernels)
-                (Ptime.v (P.now_d_ps ()))
-                console_output)
-           ~icon:"/images/robur.png" ())
-        `OK
+      >>= fun console_output ->
+      let now = Ptime.v (P.now_d_ps ()) in
+      generate_csrf_token ~update_user:true ~user:(Some user) store now
+      >|= function
+      | csrf -> (
+          match csrf with
+          | Ok csrf ->
+              reply reqd ~content_type:"text/html"
+                (Dashboard.dashboard_layout user
+                   ~content:
+                     (Unikernel_single.unikernel_single_layout
+                        (List.hd unikernels) now console_output csrf)
+                   ~icon:"/images/robur.png" ())
+                ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                `OK
+          | Error err ->
+              reply reqd ~content_type:"text/html"
+                (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+                   ~content:(Error_page.error_layout err)
+                   ~icon:"/images/robur.png" ())
+                `Internal_server_error)
     else
       let error =
         {
@@ -614,26 +738,40 @@ struct
               ~icon:"/images/robur.png" ())
            `Internal_server_error)
 
-  let unikernel_destroy albatross name reqd (user : User_model.user) =
+  let unikernel_destroy albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
-    Albatross.query albatross ~domain:user.name ~name
-      (`Unikernel_cmd `Unikernel_destroy)
-    >>= function
-    | Error msg ->
-        Logs.err (fun m -> m "Error querying albatross: %s" msg);
-        http_response reqd ~title:"Error"
-          ~data:("Error querying albatross: " ^ msg)
-          `Internal_server_error
-    | Ok (_hdr, res) -> (
-        match Albatross_json.res res with
-        | Ok res ->
-            http_response reqd ~title:"Success"
-              ~data:(Yojson.Safe.to_string res)
-              `OK
-        | Error (`String res) ->
+    decode_request_body reqd >>= fun data ->
+    let json =
+      try Ok (Yojson.Basic.from_string data)
+      with Yojson.Json_error s -> Error (`Msg s)
+    in
+    match json with
+    | Error (`Msg err) ->
+        Logs.err (fun m -> m "Failed to parse JSON: %s" err);
+        http_response reqd ~title:"Error" ~data:(String.escaped err)
+          `Bad_request
+    | Ok json -> (
+        let unikernel_name =
+          Yojson.Basic.(to_string (json |> Util.member "name"))
+        in
+        Albatross.query albatross ~domain:user.name ~name:unikernel_name
+          (`Unikernel_cmd `Unikernel_destroy)
+        >>= function
+        | Error msg ->
+            Logs.err (fun m -> m "Error querying albatross: %s" msg);
             http_response reqd ~title:"Error"
-              ~data:(Yojson.Safe.to_string (`String res))
-              `Internal_server_error)
+              ~data:("Error querying albatross: " ^ msg)
+              `Internal_server_error
+        | Ok (_hdr, res) -> (
+            match Albatross_json.res res with
+            | Ok res ->
+                http_response reqd ~title:"Success"
+                  ~data:(Yojson.Safe.to_string res)
+                  `OK
+            | Error (`String res) ->
+                http_response reqd ~title:"Error"
+                  ~data:(Yojson.Safe.to_string (`String res))
+                  `Internal_server_error))
 
   let unikernel_create albatross reqd (user : User_model.user) =
     let response_body = Httpaf.Reqd.request_body reqd in
@@ -675,37 +813,65 @@ struct
             match
               ( Map.find_opt "arguments" m,
                 Map.find_opt "name" m,
-                Map.find_opt "binary" m )
+                Map.find_opt "binary" m,
+                Map.find_opt "molly_csrf" m )
             with
-            | Some (_, args), Some (_, name), Some (_, binary) -> (
+            | ( Some (_, args),
+                Some (_, name),
+                Some (_, binary),
+                Some (_, form_csrf_token) ) -> (
                 Logs.info (fun m -> m "args %s" args);
-                match Albatross_json.config_of_json args with
-                | Ok cfg -> (
-                    let config = { cfg with image = binary } in
-                    (* TODO use uuid in the future *)
-                    Albatross.query albatross ~domain:user.name ~name
-                      (`Unikernel_cmd (`Unikernel_create config))
-                    >>= function
-                    | Error err ->
-                        Logs.warn (fun m ->
-                            m "Error querying albatross: %s" err);
-                        http_response reqd ~title:"Error"
-                          ~data:("Error while querying Albatross: " ^ err)
-                          `Internal_server_error
-                    | Ok (_hdr, res) -> (
-                        match Albatross_json.res res with
-                        | Ok res ->
-                            http_response reqd ~title:"Success"
-                              ~data:(Yojson.Safe.to_string res)
-                              `OK
-                        | Error (`String res) ->
-                            http_response reqd ~title:"Error"
-                              ~data:(Yojson.Safe.to_string (`String res))
-                              `Internal_server_error))
-                | Error (`Msg err) ->
-                    Logs.warn (fun m -> m "couldn't decode data %s" err);
+                let user_csrf_token =
+                  List.find_opt
+                    (fun (cookie : User_model.cookie) ->
+                      String.equal cookie.name "molly_csrf")
+                    user.User_model.cookies
+                in
+                match user_csrf_token with
+                | Some csrf_token ->
+                    if
+                      Middleware.csrf_match ~input_csrf:form_csrf_token
+                        ~check_csrf:csrf_token.value
+                    then (
+                      match Albatross_json.config_of_json args with
+                      | Ok cfg -> (
+                          let config = { cfg with image = binary } in
+                          (* TODO use uuid in the future *)
+                          Albatross.query albatross ~domain:user.name ~name
+                            (`Unikernel_cmd (`Unikernel_create config))
+                          >>= function
+                          | Error err ->
+                              Logs.warn (fun m ->
+                                  m "Error querying albatross: %s" err);
+                              http_response reqd ~title:"Error"
+                                ~data:("Error while querying Albatross: " ^ err)
+                                `Internal_server_error
+                          | Ok (_hdr, res) -> (
+                              match Albatross_json.res res with
+                              | Ok res ->
+                                  http_response reqd ~title:"Success"
+                                    ~data:(Yojson.Safe.to_string res)
+                                    `OK
+                              | Error (`String res) ->
+                                  http_response reqd ~title:"Error"
+                                    ~data:(Yojson.Safe.to_string (`String res))
+                                    `Internal_server_error))
+                      | Error (`Msg err) ->
+                          Logs.warn (fun m -> m "couldn't decode data %s" err);
 
-                    http_response reqd ~title:"Error" ~data:err
+                          http_response reqd ~title:"Error" ~data:err
+                            `Internal_server_error)
+                    else
+                      http_response reqd ~title:"Error"
+                        ~data:
+                          "CSRF token mismatch error. Please referesh and try \
+                           again."
+                        `Internal_server_error
+                | None ->
+                    http_response reqd ~title:"Error"
+                      ~data:
+                        "CSRF token mismatch error. Please referesh and try \
+                         again."
                       `Internal_server_error)
             | _ ->
                 Logs.warn (fun m -> m "couldn't find fields");
@@ -731,9 +897,9 @@ struct
              `OK)
 
   let view_user albatross store uuid reqd (user : User_model.user) =
-    let users = User_model.create_user_uuid_map (snd store).Storage.users in
+    let users = User_model.create_user_uuid_map (snd !store).Storage.users in
     match User_model.find_user_by_key uuid users with
-    | Some u ->
+    | Some u -> (
         (Albatross.query albatross ~domain:u.name
            (`Unikernel_cmd `Unikernel_info)
          >|= function
@@ -754,15 +920,31 @@ struct
           | Ok p -> p
           | Error _ -> None
         in
-        Lwt.return
-          (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user
-                ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
-                ~content:
-                  (User_single.user_single_layout u unikernels policy
-                     (Ptime.v (P.now_d_ps ())))
-                ~icon:"/images/robur.png" ())
-             `OK)
+        let now = Ptime.v (P.now_d_ps ()) in
+        generate_csrf_token ~update_user:true ~user:(Some user) store now
+        >>= function
+        | csrf -> (
+            match csrf with
+            | Ok csrf ->
+                Lwt.return
+                  (reply reqd ~content_type:"text/html"
+                     (Dashboard.dashboard_layout user
+                        ~page_title:
+                          (String.capitalize_ascii u.name ^ " | Mollymawk")
+                        ~content:
+                          (User_single.user_single_layout u unikernels policy
+                             now csrf)
+                        ~icon:"/images/robur.png" ())
+                     ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                     `OK)
+            | Error err ->
+                Lwt.return
+                  (reply reqd ~content_type:"text/html"
+                     (Dashboard.dashboard_layout user
+                        ~page_title:"500 | Mollymawk"
+                        ~content:(Error_page.error_layout err)
+                        ~icon:"/images/robur.png" ())
+                     `Internal_server_error)))
     | None ->
         let status =
           {
@@ -774,13 +956,13 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
+             (Dashboard.dashboard_layout user ~page_title:"404 | Mollymawk"
                 ~content:(Error_page.error_layout status)
                 ~icon:"/images/robur.png" ())
              `Not_found)
 
   let edit_policy albatross store uuid reqd (user : User_model.user) =
-    let users = User_model.create_user_uuid_map (snd store).Storage.users in
+    let users = User_model.create_user_uuid_map (snd !store).Storage.users in
     match User_model.find_user_by_key uuid users with
     | Some u -> (
         let user_policy =
@@ -790,16 +972,32 @@ struct
           | Error _ -> Albatross.empty_policy
         in
         match Albatross.policy_resource_avalaible albatross with
-        | Ok unallocated_resources ->
-            Lwt.return
-              (reply reqd ~content_type:"text/html"
-                 (Dashboard.dashboard_layout user
-                    ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
-                    ~content:
-                      (Update_policy.update_policy_layout u ~user_policy
-                         ~unallocated_resources)
-                    ~icon:"/images/robur.png" ())
-                 `OK)
+        | Ok unallocated_resources -> (
+            let now = Ptime.v (P.now_d_ps ()) in
+            generate_csrf_token ~update_user:true ~user:(Some user) store now
+            >>= function
+            | csrf -> (
+                match csrf with
+                | Ok csrf ->
+                    Lwt.return
+                      (reply reqd ~content_type:"text/html"
+                         (Dashboard.dashboard_layout user
+                            ~page_title:
+                              (String.capitalize_ascii u.name ^ " | Mollymawk")
+                            ~content:
+                              (Update_policy.update_policy_layout u ~user_policy
+                                 ~unallocated_resources csrf)
+                            ~icon:"/images/robur.png" ())
+                         ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                         `OK)
+                | Error err ->
+                    Lwt.return
+                      (reply reqd ~content_type:"text/html"
+                         (Dashboard.dashboard_layout user
+                            ~page_title:"500 | Mollymawk"
+                            ~content:(Error_page.error_layout err)
+                            ~icon:"/images/robur.png" ())
+                         `Internal_server_error)))
         | Error err ->
             let status =
               {
@@ -976,7 +1174,7 @@ struct
             check_meth `GET (fun () ->
                 let uuid = String.sub path 12 (String.length path - 12) in
                 authenticate ~check_admin:true !store reqd
-                  (view_user !albatross !store uuid reqd))
+                  (view_user !albatross store uuid reqd))
         | path
           when String.(
                  length path >= 21 && sub path 0 21 = "/admin/u/policy/edit/")
@@ -984,26 +1182,33 @@ struct
             check_meth `GET (fun () ->
                 let uuid = String.sub path 21 (String.length path - 21) in
                 authenticate ~check_admin:true !store reqd
-                  (edit_policy !albatross !store uuid reqd))
+                  (edit_policy !albatross store uuid reqd))
         | "/admin/settings" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true !store reqd
-                  (settings !store reqd))
+                authenticate ~check_admin:true !store reqd (settings store reqd))
         | "/api/admin/settings/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true !store reqd
+                extract_csrf_token reqd >>= fun form_csrf ->
+                authenticate ~check_admin:true ~check_csrf:true ~form_csrf
+                  ~api_meth:true !store reqd
                   (update_settings stack store albatross reqd))
         | "/api/admin/u/policy/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true !store reqd
+                extract_csrf_token reqd >>= fun form_csrf ->
+                authenticate ~check_admin:true ~check_csrf:true ~form_csrf
+                  ~api_meth:true !store reqd
                   (update_policy !store !albatross reqd))
         | "/api/admin/user/activate/toggle" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true !store reqd
+                extract_csrf_token reqd >>= fun form_csrf ->
+                authenticate ~check_admin:true ~check_csrf:true ~form_csrf
+                  ~api_meth:true !store reqd
                   (toggle_account_activation store reqd))
         | "/api/admin/user/admin/toggle" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true !store reqd
+                extract_csrf_token reqd >>= fun form_csrf ->
+                authenticate ~check_admin:true ~check_csrf:true ~form_csrf
+                  ~api_meth:true !store reqd
                   (toggle_admin_activation store reqd))
         | "/api/unikernels" ->
             check_meth `GET (fun () ->
@@ -1017,19 +1222,15 @@ struct
                   String.sub path 16 (String.length path - 16)
                 in
                 authenticate !store reqd
-                  (unikernel_info_one !albatross unikernel_name reqd))
+                  (unikernel_info_one !albatross store unikernel_name reqd))
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
-                authenticate !store reqd (deploy_form reqd))
-        | path
-          when String.(
-                 length path >= 19 && sub path 0 19 = "/unikernel/destroy/") ->
-            check_meth `GET (fun () ->
-                let unikernel_name =
-                  String.sub path 19 (String.length path - 19)
-                in
-                authenticate !store reqd
-                  (unikernel_destroy !albatross unikernel_name reqd))
+                authenticate !store reqd (deploy_form store reqd))
+        | "/unikernel/destory" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= fun form_csrf ->
+                authenticate !store reqd ~check_csrf:true ~form_csrf
+                  (unikernel_destroy !albatross reqd))
         | path
           when String.(
                  length path >= 19 && sub path 0 19 = "/unikernel/console/") ->
