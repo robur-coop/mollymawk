@@ -85,7 +85,7 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
                                  a
                                    ~a:
                                      [
-                                       a_href "https://mirage.io";
+                                       a_href "https://mirageos.org";
                                        a_class
                                          [
                                            "flex space-x-1 items-center \
