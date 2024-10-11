@@ -98,12 +98,26 @@ let redirect_to_dashboard reqd ?(msg = "") () =
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
-let redirect_to_same_page reqd ?(msg = "") () =
+let redirect_to_same_page reqd ~title http_status ?(msg = "") () =
+  let code = Httpaf.Status.to_code http_status
+  and success = Httpaf.Status.is_successful http_status in
+  let status = { Utils.Status.code; title; data = msg; success } in
+  let data = Utils.Status.to_json status in
   let request = Httpaf.Reqd.request reqd in
-  let current_path = request.target in
-  let headers = Httpaf.Headers.of_list [ ("location", current_path) ] in
-  let response = Httpaf.Response.create ~headers `Found in
-  Httpaf.Reqd.respond_with_string reqd response msg;
+  let _current_path =
+    match Httpaf.Headers.get request.headers "Referer" with
+    | Some path -> path
+    | None -> request.target
+  in
+  let headers =
+    Httpaf.Headers.of_list
+      [
+        ("Content-Type", "application/json");
+        ("Content-length", string_of_int (String.length data));
+      ]
+  in
+  let response = Httpaf.Response.create ~headers http_status in
+  Httpaf.Reqd.respond_with_string reqd response data;
   Lwt.return_unit
 
 let cookie_value_from_auth_cookie cookie =
@@ -203,11 +217,11 @@ let csrf_verification users now form_csrf handler reqd =
                  ~input_csrf:(Utils.Json.clean_string form_csrf)
           then handler reqd
           else
-            redirect_to_same_page reqd
+            redirect_to_same_page reqd ~title:"CSRF Token Mismatch"
               ~msg:"CSRF token mismatch error. Please referesh and try again."
-              ()
+              `Bad_request ()
       | None ->
           redirect_to_same_page
             ~msg:"CSRF token mismatch error. Please referesh and try again."
-            reqd ())
+            ~title:"CSRF Token Mismatch" reqd `Bad_request ())
   | Error (`Msg err) -> redirect_to_login ~msg:err reqd ()

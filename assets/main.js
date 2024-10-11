@@ -85,7 +85,8 @@ async function saveConfig() {
 	const formButton = document.getElementById('config-button');
 	const molly_csrf = document.getElementById("molly-csrf").value.trim();
 	formButton.classList.add("disabled");
-	formButton.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`
+	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
+	formButton.disabled = true;
 	if (ipInput === '' || portInput === '' || certificateInput === '' || pkeyInput === '') {
 		formAlert.classList.remove("hidden");
 		formAlert.classList.add("text-secondary-500");
@@ -126,6 +127,7 @@ async function saveConfig() {
 		}
 	}
 	formButton.innerHTML = "Update"
+	formButton.disabled = false;
 }
 
 function closeBanner() {
