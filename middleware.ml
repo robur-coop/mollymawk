@@ -69,20 +69,25 @@ let redirect_to_error ~title ~data status user code api_meth reqd () =
      Httpaf.Reqd.respond_with_string reqd resp data)
 
 let redirect_to_verify_email reqd ?(msg = "") () =
-  let headers = Httpaf.Headers.of_list [
-      ("location", "/verify-email");
-      ("Content-Length", string_of_int (String.length msg));
-    ]
+  let headers =
+    Httpaf.Headers.of_list
+      [
+        ("location", "/verify-email");
+        ("Content-Length", string_of_int (String.length msg));
+      ]
   in
   let response = Httpaf.Response.create ~headers `Found in
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
 let redirect_to_dashboard reqd ?(msg = "") () =
-  let headers = Httpaf.Headers.of_list [
-      ("location", "/dashboard");
-      ("Content-Length", string_of_int (String.length msg));
-    ] in
+  let headers =
+    Httpaf.Headers.of_list
+      [
+        ("location", "/dashboard");
+        ("Content-Length", string_of_int (String.length msg));
+      ]
+  in
   let response = Httpaf.Response.create ~headers `Found in
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
