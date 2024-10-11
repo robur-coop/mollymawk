@@ -1,9 +1,10 @@
 let update_policy_layout (user : User_model.user) ~user_policy
-    ~unallocated_resources =
+    ~unallocated_resources csrf =
   Tyxml_html.(
     section
       ~a:[ a_id "policy-form" ]
       [
+        Utils.csrf_form_input csrf;
         h2
           ~a:[ a_class [ "font-semibold text-2xl" ] ]
           [ txt ("Set Policy for " ^ user.name) ];

@@ -1,6 +1,6 @@
 open Tyxml
 
-let verify_page ~icon ~(user : User_model.user) () =
+let verify_page ~icon (user : User_model.user) csrf () =
   let page =
     Html.(
       html
@@ -51,6 +51,7 @@ let verify_page ~icon ~(user : User_model.user) () =
                      div
                        ~a:[ a_class [ "my-5" ] ]
                        [
+                         Utils.csrf_form_input csrf;
                          h1
                            ~a:[ a_class [ "text-3xl font-bold" ] ]
                            [ txt "Please verify your email" ];

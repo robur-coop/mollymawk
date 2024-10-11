@@ -1,4 +1,5 @@
-let user_single_layout (user : User_model.user) unikernels policy current_time =
+let user_single_layout (user : User_model.user) unikernels policy current_time
+    csrf =
   Tyxml_html.(
     section
       ~a:[ a_class [ "p-4 bg-gray-50 my-1" ] ]
@@ -9,6 +10,7 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
         section
           ~a:[ a_class [ "my-5" ] ]
           [
+            Utils.csrf_form_input csrf;
             ul
               ~a:
                 [

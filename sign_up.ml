@@ -1,6 +1,6 @@
 open Tyxml
 
-let register_page ~icon () =
+let register_page csrf ~icon () =
   let page =
     Html.(
       html
@@ -38,6 +38,7 @@ let register_page ~icon () =
                          ];
                      ]
                    [
+                     Utils.csrf_form_input csrf;
                      div
                        ~a:[ a_class [ "w-full max-w-lg mt-16 pb-16 mx-auto" ] ]
                        [
@@ -255,7 +256,8 @@ let register_page ~icon () =
                 document.getElementById('register-button')\n\
                \                registerButton.addEventListener('click', async \
                 function() {\n\
-               \                    const name = \
+                const form_csrf = document.getElementById('molly-csrf').value\n\
+               \               const name = \
                 document.getElementById('name').value\n\
                \                    const email = \
                 document.getElementById('email').value\n\
@@ -304,7 +306,7 @@ let register_page ~icon () =
                 'application/json',\n\
                \                            },\n\
                \                            body: JSON.stringify({ name, \
-                email, password })\n\
+                email, password, form_csrf })\n\
                \                        })\n\
                \                        const data = await response.json();\n\
                \                        if (data.status === 200) {\n\

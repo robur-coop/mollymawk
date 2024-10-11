@@ -1,4 +1,4 @@
-let settings_layout (configuration : Configuration.t) =
+let settings_layout (configuration : Configuration.t) csrf =
   let ip = Ipaddr.to_string configuration.server_ip in
   let port = string_of_int configuration.server_port in
   let certificate = X509.Certificate.encode_pem configuration.certificate in
@@ -11,6 +11,7 @@ let settings_layout (configuration : Configuration.t) =
         div
           ~a:[ a_class [ "px-3 flex justify-between items-center" ] ]
           [
+            Utils.csrf_form_input csrf;
             div
               [
                 p
