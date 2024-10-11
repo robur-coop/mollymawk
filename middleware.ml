@@ -1,7 +1,13 @@
 type handler = Httpaf.Reqd.t -> unit Lwt.t
 type middleware = handler -> handler
 
-let has_session_cookie (reqd : Httpaf.Reqd.t) =
+let get_csrf now =
+  User_model.(
+    generate_cookie ~name:"molly_csrf"
+      ~uuid:(Uuidm.to_string (generate_uuid ()))
+      ~created_at:now ~expires_in:3600)
+
+let has_cookie cookie_name (reqd : Httpaf.Reqd.t) =
   let headers = (Httpaf.Reqd.request reqd).headers in
   match Httpaf.Headers.get headers "Cookie" with
   | Some cookies ->
@@ -10,7 +16,7 @@ let has_session_cookie (reqd : Httpaf.Reqd.t) =
         (fun cookie ->
           let parts = String.trim cookie |> String.split_on_char '=' in
           match parts with
-          | [ name; _ ] -> String.equal name "molly_session"
+          | [ name; _ ] -> String.equal name cookie_name
           | _ -> false)
         cookie_list
   | _ -> None
@@ -92,6 +98,14 @@ let redirect_to_dashboard reqd ?(msg = "") () =
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
+let redirect_to_same_page reqd ?(msg = "") () =
+  let request = Httpaf.Reqd.request reqd in
+  let current_path = request.target in
+  let headers = Httpaf.Headers.of_list [ ("location", current_path) ] in
+  let response = Httpaf.Response.create ~headers `Found in
+  Httpaf.Reqd.respond_with_string reqd response msg;
+  Lwt.return_unit
+
 let cookie_value_from_auth_cookie cookie =
   match String.split_on_char '=' (String.trim cookie) with
   | _ :: s :: _ -> Ok (String.trim s)
@@ -108,7 +122,7 @@ let user_from_auth_cookie cookie users =
       Error (`Msg s)
 
 let user_of_cookie users now reqd =
-  match has_session_cookie reqd with
+  match has_cookie "molly_session" reqd with
   | Some auth_cookie -> (
       match user_from_auth_cookie auth_cookie users with
       | Ok user -> (
@@ -161,3 +175,39 @@ let is_user_admin_middleware api_meth now users handler reqd =
             "You don't have the necessary permissions to access this service."
           `Unauthorized user 401 api_meth reqd ()
   | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
+
+let csrf_match ~input_csrf ~check_csrf = String.equal input_csrf check_csrf
+
+let csrf_cookie_verification form_csrf reqd =
+  match has_cookie "molly_csrf" reqd with
+  | Some cookie ->
+      csrf_match
+        ~input_csrf:(Utils.Json.clean_string form_csrf)
+        ~check_csrf:cookie
+  | None -> false
+
+let csrf_form_verification users now form_csrf handler reqd =
+  match user_of_cookie users now reqd with
+  | Ok user -> (
+      let user_csrf_token =
+        List.find_opt
+          (fun (cookie : User_model.cookie) ->
+            String.equal cookie.name "molly_csrf")
+          user.User_model.cookies
+      in
+      match user_csrf_token with
+      | Some csrf_token ->
+          if
+            User_model.is_valid_cookie csrf_token now
+            && csrf_match ~check_csrf:csrf_token.value
+                 ~input_csrf:(Utils.Json.clean_string form_csrf)
+          then handler reqd
+          else
+            redirect_to_same_page reqd
+              ~msg:"CSRF token mismatch error. Please referesh and try again."
+              ()
+      | None ->
+          redirect_to_same_page
+            ~msg:"CSRF token mismatch error. Please referesh and try again."
+            reqd ())
+  | Error (`Msg err) -> redirect_to_login ~msg:err reqd ()
