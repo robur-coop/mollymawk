@@ -93,10 +93,10 @@ let footer =
                     a
                       ~a:
                         [
-                          a_href "https://mirage.io";
+                          a_href "https://mirageos.org";
                           a_class [ "hover:text-primary-500 transition-colors" ];
                         ]
-                      [ txt "Mirage.io" ];
+                      [ txt "Mirageos.org" ];
                     a
                       ~a:
                         [

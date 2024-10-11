@@ -103,7 +103,7 @@ let dashboard_layout (user : User_model.user) ~icon
                                  a
                                    ~a:
                                      [
-                                       a_href "https://mirage.io";
+                                       a_href "https://mirageos.org";
                                        a_class
                                          [
                                            "flex space-x-1 items-center \
