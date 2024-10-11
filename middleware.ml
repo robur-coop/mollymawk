@@ -187,14 +187,12 @@ let is_user_admin_middleware api_meth now users handler reqd =
           `Unauthorized user 401 api_meth reqd ()
   | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
 
-let csrf_match ~input_csrf ~check_csrf = String.equal input_csrf check_csrf
+let csrf_match ~input_csrf ~check_csrf =
+  String.equal (Utils.Json.clean_string input_csrf) check_csrf
 
 let csrf_cookie_verification form_csrf reqd =
   match has_cookie "molly_csrf" reqd with
-  | Some cookie ->
-      csrf_match
-        ~input_csrf:(Utils.Json.clean_string form_csrf)
-        ~check_csrf:cookie
+  | Some cookie -> csrf_match ~input_csrf:form_csrf ~check_csrf:cookie
   | None -> false
 
 let csrf_verification users now form_csrf handler reqd =
@@ -210,8 +208,7 @@ let csrf_verification users now form_csrf handler reqd =
       | Some csrf_token ->
           if
             User_model.is_valid_cookie csrf_token now
-            && csrf_match ~check_csrf:csrf_token.value
-                 ~input_csrf:(Utils.Json.clean_string form_csrf)
+            && csrf_match ~check_csrf:csrf_token.value ~input_csrf:form_csrf
           then handler reqd
           else
             http_response ~title:"CSRF Token Mismatch"

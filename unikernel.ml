@@ -110,11 +110,14 @@ struct
     match json with
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
-        Lwt.return String.empty
+        Lwt.return (String.empty, `Null)
     | Ok json ->
-        json
-        |> Yojson.Basic.Util.member "csrf_token"
-        |> Yojson.Basic.to_string |> Lwt.return
+        let csrf_token =
+          match Yojson.Basic.Util.member "molly_csrf" json with
+          | `String token -> token
+          | _ -> String.empty
+        in
+        Lwt.return (csrf_token, json)
 
   module Albatross = Albatross.Make (T) (P) (S)
 
@@ -590,40 +593,26 @@ struct
                     ~icon:"/images/robur.png" ())
                  `Internal_server_error))
 
-  let update_settings stack store albatross reqd _user =
-    decode_request_body reqd >>= fun data ->
-    let json =
-      try Ok (Yojson.Basic.from_string data)
-      with Yojson.Json_error s -> Error (`Msg s)
-    in
-    match json with
-    | Error (`Msg err) ->
-        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
-        Middleware.http_response reqd ~title:"Error" ~data:(String.escaped err)
-          `Bad_request
-    | Ok json -> (
-        match
-          Configuration.of_json_from_http json (Ptime.v (P.now_d_ps ()))
-        with
-        | Ok configuration_settings -> (
-            Store.update_configuration !store configuration_settings
-            >>= function
-            | Ok store' ->
-                store := store';
-                Albatross.init stack configuration_settings.server_ip
-                  ~port:configuration_settings.server_port
-                  configuration_settings.certificate
-                  configuration_settings.private_key
-                >>= fun new_albatross ->
-                albatross := new_albatross;
-                Middleware.http_response reqd ~title:"Success"
-                  ~data:"Configuration updated successfully" `OK
-            | Error (`Msg err) ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:(String.escaped err) `Internal_server_error)
+  let update_settings json stack store albatross reqd _user =
+    match Configuration.of_json_from_http json (Ptime.v (P.now_d_ps ())) with
+    | Ok configuration_settings -> (
+        Store.update_configuration !store configuration_settings >>= function
+        | Ok store' ->
+            store := store';
+            Albatross.init stack configuration_settings.server_ip
+              ~port:configuration_settings.server_port
+              configuration_settings.certificate
+              configuration_settings.private_key
+            >>= fun new_albatross ->
+            albatross := new_albatross;
+            Middleware.http_response reqd ~title:"Success"
+              ~data:"Configuration updated successfully" `OK
         | Error (`Msg err) ->
-            Middleware.http_response ~title:"Error" ~data:(String.escaped err)
-              reqd `Bad_request)
+            Middleware.http_response reqd ~title:"Error"
+              ~data:(String.escaped err) `Internal_server_error)
+    | Error (`Msg err) ->
+        Middleware.http_response ~title:"Error" ~data:(String.escaped err) reqd
+          `Bad_request
 
   let deploy_form store reqd (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
@@ -730,40 +719,29 @@ struct
               ~icon:"/images/robur.png" ())
            `Internal_server_error)
 
-  let unikernel_destroy albatross reqd (user : User_model.user) =
+  let unikernel_destroy json albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
-    decode_request_body reqd >>= fun data ->
-    let json =
-      try Ok (Yojson.Basic.from_string data)
-      with Yojson.Json_error s -> Error (`Msg s)
+    let unikernel_name =
+      Yojson.Basic.(to_string (json |> Util.member "name"))
     in
-    match json with
-    | Error (`Msg err) ->
-        Logs.err (fun m -> m "Failed to parse JSON: %s" err);
-        Middleware.http_response reqd ~title:"Error" ~data:(String.escaped err)
-          `Bad_request
-    | Ok json -> (
-        let unikernel_name =
-          Yojson.Basic.(to_string (json |> Util.member "name"))
-        in
-        Albatross.query albatross ~domain:user.name ~name:unikernel_name
-          (`Unikernel_cmd `Unikernel_destroy)
-        >>= function
-        | Error msg ->
-            Logs.err (fun m -> m "Error querying albatross: %s" msg);
+    Albatross.query albatross ~domain:user.name ~name:unikernel_name
+      (`Unikernel_cmd `Unikernel_destroy)
+    >>= function
+    | Error msg ->
+        Logs.err (fun m -> m "Error querying albatross: %s" msg);
+        Middleware.http_response reqd ~title:"Error"
+          ~data:("Error querying albatross: " ^ msg)
+          `Internal_server_error
+    | Ok (_hdr, res) -> (
+        match Albatross_json.res res with
+        | Ok res ->
+            Middleware.http_response reqd ~title:"Success"
+              ~data:(Yojson.Safe.to_string res)
+              `OK
+        | Error (`String res) ->
             Middleware.http_response reqd ~title:"Error"
-              ~data:("Error querying albatross: " ^ msg)
-              `Internal_server_error
-        | Ok (_hdr, res) -> (
-            match Albatross_json.res res with
-            | Ok res ->
-                Middleware.http_response reqd ~title:"Success"
-                  ~data:(Yojson.Safe.to_string res)
-                  `OK
-            | Error (`String res) ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:(Yojson.Safe.to_string (`String res))
-                  `Internal_server_error))
+              ~data:(Yojson.Safe.to_string (`String res))
+              `Internal_server_error)
 
   let unikernel_create albatross reqd (user : User_model.user) =
     let response_body = Httpaf.Reqd.request_body reqd in
@@ -1021,77 +999,62 @@ struct
                 ~icon:"/images/robur.png" ())
              `Not_found)
 
-  let update_policy store albatross reqd _user =
-    decode_request_body reqd >>= fun data ->
-    let json =
-      try Ok (Yojson.Basic.from_string data)
-      with Yojson.Json_error s -> Error (`Msg s)
+  let update_policy json store albatross reqd _user =
+    let user_uuid =
+      Yojson.Basic.(to_string (json |> Util.member "user_uuid"))
     in
-    match json with
-    | Error (`Msg err) ->
-        Logs.err (fun m -> m "Failed to parse JSON: %s" err);
-        Middleware.http_response reqd ~title:"Error" ~data:(String.escaped err)
-          `Bad_request
-    | Ok json -> (
-        let user_uuid =
-          Yojson.Basic.(to_string (json |> Util.member "user_uuid"))
-        in
-        let users = User_model.create_user_uuid_map (snd store).Storage.users in
-        match
-          User_model.find_user_by_key (Utils.Json.clean_string user_uuid) users
-        with
-        | Some u -> (
-            match Albatross_json.policy_of_json json with
-            | Ok policy -> (
-                match Albatross.policy albatross with
-                | Ok (Some root_policy) -> (
-                    match
-                      Vmm_core.Policy.is_smaller ~super:root_policy ~sub:policy
-                    with
-                    | Error (`Msg err) ->
-                        Logs.err (fun m ->
-                            m "policy %a is not smaller than root policy %a: %s"
-                              Vmm_core.Policy.pp policy Vmm_core.Policy.pp
-                              root_policy err);
-                        Middleware.http_response reqd ~title:"Error"
-                          ~data:
-                            ("policy is not smaller than root policy: " ^ err)
-                          `Internal_server_error
-                    | Ok () -> (
-                        Albatross.set_policy albatross ~domain:u.name policy
-                        >>= function
-                        | Error err ->
-                            Logs.err (fun m ->
-                                m "error setting policy %a for %s: %s"
-                                  Vmm_core.Policy.pp policy u.name err);
-                            Middleware.http_response reqd ~title:"Error"
-                              ~data:("error setting policy: " ^ err)
-                              `Internal_server_error
-                        | Ok policy ->
-                            Middleware.http_response reqd ~title:"Success"
-                              ~data:
-                                (Yojson.Basic.to_string
-                                   (Albatross_json.policy_info policy))
-                              `OK))
-                | Ok None ->
-                    Logs.err (fun m -> m "policy: root policy can't be null ");
-                    Middleware.http_response reqd ~title:"Error"
-                      ~data:"root policy is null" `Internal_server_error
-                | Error err ->
+    let users = User_model.create_user_uuid_map (snd store).Storage.users in
+    match
+      User_model.find_user_by_key (Utils.Json.clean_string user_uuid) users
+    with
+    | Some u -> (
+        match Albatross_json.policy_of_json json with
+        | Ok policy -> (
+            match Albatross.policy albatross with
+            | Ok (Some root_policy) -> (
+                match
+                  Vmm_core.Policy.is_smaller ~super:root_policy ~sub:policy
+                with
+                | Error (`Msg err) ->
                     Logs.err (fun m ->
-                        m
-                          "policy: an error occured while fetching root \
-                           policy: %s"
-                          err);
+                        m "policy %a is not smaller than root policy %a: %s"
+                          Vmm_core.Policy.pp policy Vmm_core.Policy.pp
+                          root_policy err);
                     Middleware.http_response reqd ~title:"Error"
-                      ~data:("error with root policy: " ^ err)
-                      `Internal_server_error)
-            | Error (`Msg err) ->
-                Middleware.http_response reqd ~title:"Error" ~data:err
-                  `Bad_request)
-        | None ->
-            Middleware.http_response reqd ~title:"Error" ~data:"User not found"
-              `Not_found)
+                      ~data:("policy is not smaller than root policy: " ^ err)
+                      `Internal_server_error
+                | Ok () -> (
+                    Albatross.set_policy albatross ~domain:u.name policy
+                    >>= function
+                    | Error err ->
+                        Logs.err (fun m ->
+                            m "error setting policy %a for %s: %s"
+                              Vmm_core.Policy.pp policy u.name err);
+                        Middleware.http_response reqd ~title:"Error"
+                          ~data:("error setting policy: " ^ err)
+                          `Internal_server_error
+                    | Ok policy ->
+                        Middleware.http_response reqd ~title:"Success"
+                          ~data:
+                            (Yojson.Basic.to_string
+                               (Albatross_json.policy_info policy))
+                          `OK))
+            | Ok None ->
+                Logs.err (fun m -> m "policy: root policy can't be null ");
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:"root policy is null" `Internal_server_error
+            | Error err ->
+                Logs.err (fun m ->
+                    m "policy: an error occured while fetching root policy: %s"
+                      err);
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:("error with root policy: " ^ err)
+                  `Internal_server_error)
+        | Error (`Msg err) ->
+            Middleware.http_response reqd ~title:"Error" ~data:err `Bad_request)
+    | None ->
+        Middleware.http_response reqd ~title:"Error" ~data:"User not found"
+          `Not_found
 
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
@@ -1182,25 +1145,25 @@ struct
                 authenticate ~check_admin:true !store reqd (settings store reqd))
         | "/api/admin/settings/update" ->
             check_meth `POST (fun () ->
-                extract_csrf_token reqd >>= fun form_csrf ->
+                extract_csrf_token reqd >>= fun (form_csrf, json) ->
                 authenticate ~check_admin:true ~check_csrf:true ~form_csrf
                   ~api_meth:true !store reqd
-                  (update_settings stack store albatross reqd))
+                  (update_settings json stack store albatross reqd))
         | "/api/admin/u/policy/update" ->
             check_meth `POST (fun () ->
-                extract_csrf_token reqd >>= fun form_csrf ->
+                extract_csrf_token reqd >>= fun (form_csrf, json) ->
                 authenticate ~check_admin:true ~check_csrf:true ~form_csrf
                   ~api_meth:true !store reqd
-                  (update_policy !store !albatross reqd))
+                  (update_policy json !store !albatross reqd))
         | "/api/admin/user/activate/toggle" ->
             check_meth `POST (fun () ->
-                extract_csrf_token reqd >>= fun form_csrf ->
+                extract_csrf_token reqd >>= fun (form_csrf, _json) ->
                 authenticate ~check_admin:true ~check_csrf:true ~form_csrf
                   ~api_meth:true !store reqd
                   (toggle_account_activation store reqd))
         | "/api/admin/user/admin/toggle" ->
             check_meth `POST (fun () ->
-                extract_csrf_token reqd >>= fun form_csrf ->
+                extract_csrf_token reqd >>= fun (form_csrf, _json) ->
                 authenticate ~check_admin:true ~check_csrf:true ~form_csrf
                   ~api_meth:true !store reqd
                   (toggle_admin_activation store reqd))
@@ -1222,9 +1185,9 @@ struct
                 authenticate !store reqd (deploy_form store reqd))
         | "/unikernel/destory" ->
             check_meth `POST (fun () ->
-                extract_csrf_token reqd >>= fun form_csrf ->
+                extract_csrf_token reqd >>= fun (form_csrf, json) ->
                 authenticate !store reqd ~check_csrf:true ~form_csrf
-                  (unikernel_destroy !albatross reqd))
+                  (unikernel_destroy json !albatross reqd))
         | path
           when String.(
                  length path >= 19 && sub path 0 19 = "/unikernel/console/") ->
