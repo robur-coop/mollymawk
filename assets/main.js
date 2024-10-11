@@ -83,6 +83,7 @@ async function saveConfig() {
 	const pkeyInput = document.getElementById("private-key").value;
 	const formAlert = document.getElementById("form-alert");
 	const formButton = document.getElementById('config-button');
+	const molly_csrf = document.getElementById("molly-csrf").value.trim();
 	formButton.classList.add("disabled");
 	formButton.innerHTML = `<i class="fa-solid fa-spinner animate-spin"></i>`
 	if (ipInput === '' || portInput === '' || certificateInput === '' || pkeyInput === '') {
@@ -96,7 +97,13 @@ async function saveConfig() {
 				headers: {
 					"Content-Type": "application/json",
 				},
-				body: JSON.stringify({ "server_ip": ipInput, "server_port": Number(portInput), "certificate": certificateInput, "private_key": pkeyInput })
+				body: JSON.stringify({
+					"server_ip": ipInput,
+					"server_port": Number(portInput),
+					"certificate": certificateInput,
+					"private_key": pkeyInput,
+					"molly_csrf": molly_csrf
+				})
 			})
 			const data = await response.json();
 			if (data.status === 200) {
@@ -146,6 +153,7 @@ async function deployUnikernel() {
 	const name = document.getElementById("unikernel-name").value.trim();
 	const arguments = document.getElementById("unikernel-arguments").value.trim();
 	const binary = document.getElementById("unikernel-binary").files[0];
+	const molly_csrf = document.getElementById("molly-csrf").value.trim();
 	const formAlert = document.getElementById("form-alert");
 	if (!name || !binary) {
 		formAlert.classList.remove("hidden", "text-primary-500");
@@ -158,6 +166,7 @@ async function deployUnikernel() {
 		formData.append("name", name);
 		formData.append("binary", binary)
 		formData.append("arguments", arguments)
+		formData.append("molly_csrf", molly_csrf)
 		try {
 			const response = await fetch("/unikernel/create", {
 				method: 'POST',
@@ -191,10 +200,13 @@ async function deployUnikernel() {
 
 async function destroyUnikernel(name) {
 	try {
+		const molly_csrf = document.getElementById("molly-csrf").value.trim();
 		const response = await fetch(`/unikernel/destroy/${name}`, {
-			method: 'GET',
-			mode: "no-cors"
+			method: 'POST',
+			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
+			headers: { 'Content-Type': 'application/json' }
 		})
+
 		const data = await response.json();
 		if (data.status === 200) {
 			postAlert("bg-primary-300", `Successful: ${data.data}`);
@@ -225,9 +237,10 @@ function buttonLoading(btn, load, text) {
 
 async function toggleUserStatus(uuid, endpoint) {
 	try {
+		const molly_csrf = document.getElementById("molly-csrf").value.trim();
 		const response = await fetch(endpoint, {
 			method: 'POST',
-			body: JSON.stringify({ uuid: uuid }),
+			body: JSON.stringify({ uuid, molly_csrf }),
 			headers: { 'Content-Type': 'application/json' }
 		});
 
@@ -282,6 +295,7 @@ async function updatePolicy() {
 	const formAlert = document.getElementById("form-alert");
 	const user_id = document.getElementById("user_id").innerText;
 	const policyButton = document.getElementById("set-policy-btn");
+	const molly_csrf = document.getElementById("molly-csrf").value.trim();
 	try {
 		buttonLoading(policyButton, true, "Processing...")
 		const response = await fetch("/api/admin/u/policy/update", {
@@ -296,7 +310,8 @@ async function updatePolicy() {
 					"block": Number(storage_size),
 					"cpuids": cpuids,
 					"bridges": bridges,
-					"user_uuid": user_id
+					"user_uuid": user_id,
+					"molly_csrf": molly_csrf
 				})
 		})
 		const data = await response.json();
