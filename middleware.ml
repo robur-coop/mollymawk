@@ -98,23 +98,20 @@ let redirect_to_dashboard reqd ?(msg = "") () =
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
-let redirect_to_same_page reqd ~title http_status ?(msg = "") () =
+let http_response ~title ?(header_list = []) ?(data = "") reqd http_status =
   let code = Httpaf.Status.to_code http_status
   and success = Httpaf.Status.is_successful http_status in
-  let status = { Utils.Status.code; title; data = msg; success } in
+  let status = { Utils.Status.code; title; data; success } in
   let data = Utils.Status.to_json status in
-  let request = Httpaf.Reqd.request reqd in
-  let _current_path =
-    match Httpaf.Headers.get request.headers "Referer" with
-    | Some path -> path
-    | None -> request.target
-  in
   let headers =
-    Httpaf.Headers.of_list
-      [
-        ("Content-Type", "application/json");
-        ("Content-length", string_of_int (String.length data));
-      ]
+    Httpaf.Headers.(
+      add_list
+        (of_list
+           [
+             ("Content-Type", "application/json");
+             ("Content-length", string_of_int (String.length data));
+           ])
+        header_list)
   in
   let response = Httpaf.Response.create ~headers http_status in
   Httpaf.Reqd.respond_with_string reqd response data;
@@ -217,11 +214,11 @@ let csrf_verification users now form_csrf handler reqd =
                  ~input_csrf:(Utils.Json.clean_string form_csrf)
           then handler reqd
           else
-            redirect_to_same_page reqd ~title:"CSRF Token Mismatch"
-              ~msg:"CSRF token mismatch error. Please referesh and try again."
-              `Bad_request ()
+            http_response ~title:"CSRF Token Mismatch"
+              ~data:"CSRF token mismatch error. Please referesh and try again."
+              reqd `Bad_request
       | None ->
-          redirect_to_same_page
-            ~msg:"CSRF token mismatch error. Please referesh and try again."
-            ~title:"CSRF Token Mismatch" reqd `Bad_request ())
+          http_response
+            ~data:"CSRF token mismatch error. Please referesh and try again."
+            ~title:"CSRF Token Mismatch" reqd `Bad_request)
   | Error (`Msg err) -> redirect_to_login ~msg:err reqd ()
