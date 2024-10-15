@@ -223,6 +223,6 @@ let csrf_verification users now form_csrf handler reqd =
               reqd `Bad_request
       | None ->
           http_response
-            ~data:"CSRF token mismatch error. Please referesh and try again."
-            ~title:"CSRF Token Mismatch" reqd `Bad_request)
+            ~data:"Missing CSRF token. Please referesh and try again."
+            ~title:"Missing CSRF Token" reqd `Bad_request)
   | Error (`Msg err) -> redirect_to_login ~msg:err reqd ()
