@@ -103,11 +103,10 @@ struct
 
   let extract_csrf_token reqd =
     decode_request_body reqd >>= fun data ->
-    let json =
+    match
       try Ok (Yojson.Basic.from_string data)
       with Yojson.Json_error s -> Error (`Msg s)
-    in
-    match json with
+    with
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
         Lwt.return (String.empty, `Null)
