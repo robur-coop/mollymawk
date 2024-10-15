@@ -15,7 +15,6 @@ let has_cookie cookie_name (reqd : Httpaf.Reqd.t) =
       List.find_opt
         (fun cookie ->
           let parts = String.trim cookie |> String.split_on_char '=' in
-
           match parts with
           | [ name; _ ] -> String.equal name cookie_name
           | _ -> false)
