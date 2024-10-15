@@ -1180,7 +1180,7 @@ struct
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
                 authenticate !store reqd (deploy_form store reqd))
-        | "/unikernel/destory" ->
+        | "/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 extract_csrf_token reqd >>= fun (form_csrf, json) ->
                 authenticate !store reqd ~check_csrf:true ~form_csrf
