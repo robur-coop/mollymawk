@@ -198,9 +198,9 @@ let csrf_cookie_verification form_csrf reqd =
       | Error (`Msg err) ->
           Logs.err (fun m -> m "Error retrieving csrf value from cookie %s" err);
           false)
-  | None -> 
-    Logs.err (fun m -> m "Couldn't find csrf cookie.");
-    false
+  | None ->
+      Logs.err (fun m -> m "Couldn't find csrf cookie.");
+      false
 
 let csrf_verification users now form_csrf handler reqd =
   match user_of_cookie users now reqd with
