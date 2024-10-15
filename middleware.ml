@@ -15,8 +15,10 @@ let has_cookie cookie_name (reqd : Httpaf.Reqd.t) =
       List.find_opt
         (fun cookie ->
           let parts = String.trim cookie |> String.split_on_char '=' in
+
           match parts with
-          | [ name; _ ] -> String.equal name cookie_name
+          | [ name; _ ] ->
+              String.equal name cookie_name
           | _ -> false)
         cookie_list
   | _ -> None
@@ -117,13 +119,13 @@ let http_response ~title ?(header_list = []) ?(data = "") reqd http_status =
   Httpaf.Reqd.respond_with_string reqd response data;
   Lwt.return_unit
 
-let cookie_value_from_auth_cookie cookie =
+let cookie_value_from_cookie cookie =
   match String.split_on_char '=' (String.trim cookie) with
   | _ :: s :: _ -> Ok (String.trim s)
   | _ -> Error (`Msg "Bad cookie")
 
 let user_from_auth_cookie cookie users =
-  match cookie_value_from_auth_cookie cookie with
+  match cookie_value_from_cookie cookie with
   | Ok cookie_value -> (
       match User_model.find_user_by_key cookie_value users with
       | Some user -> Ok user
@@ -192,7 +194,12 @@ let csrf_match ~input_csrf ~check_csrf =
 
 let csrf_cookie_verification form_csrf reqd =
   match has_cookie "molly_csrf" reqd with
-  | Some cookie -> csrf_match ~input_csrf:form_csrf ~check_csrf:cookie
+  | Some cookie -> (
+      match cookie_value_from_cookie cookie with
+      | Ok token -> csrf_match ~input_csrf:form_csrf ~check_csrf:token
+      | Error (`Msg err) ->
+          Logs.err (fun m -> m "Error with csrf cookie %s" err);
+          false)
   | None -> false
 
 let csrf_verification users now form_csrf handler reqd =

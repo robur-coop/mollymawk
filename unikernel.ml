@@ -185,13 +185,11 @@ struct
   let sign_up reqd =
     let now = Ptime.v (P.now_d_ps ()) in
     let csrf = Middleware.get_csrf now () in
+    let csrf_cookie = csrf.name ^ "=" ^ csrf.value ^ ";Path=/;HttpOnly=true" in
     match Middleware.has_cookie "molly_session" reqd with
     | Some cookie -> (
-        match Middleware.cookie_value_from_auth_cookie cookie with
+        match Middleware.cookie_value_from_cookie cookie with
         | Ok "" ->
-            let csrf_cookie =
-              csrf.name ^ "=" ^ csrf.value ^ ";Path=/sign-up;HttpOnly=true"
-            in
             Lwt.return
               (reply reqd ~content_type:"text/html"
                  (Sign_up.register_page csrf.value ~icon:"/images/robur.png" ())
@@ -203,12 +201,14 @@ struct
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Sign_up.register_page csrf.value ~icon:"/images/robur.png" ())
+             ~header_list:
+               [ ("Set-Cookie", csrf_cookie); ("X-MOLLY-CSRF", csrf.value) ]
              `OK)
 
   let sign_in reqd =
     match Middleware.has_cookie "molly_session" reqd with
     | Some cookie -> (
-        match Middleware.cookie_value_from_auth_cookie cookie with
+        match Middleware.cookie_value_from_cookie cookie with
         | Ok "" ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
@@ -256,9 +256,7 @@ struct
           json |> Yojson.Basic.Util.member "password" |> Yojson.Basic.to_string
         in
         let form_csrf =
-          json
-          |> Yojson.Basic.Util.member "csrf_token"
-          |> Yojson.Basic.to_string
+          json |> Yojson.Basic.Util.member "form_csrf" |> Yojson.Basic.to_string
         in
         match validate_user_input ~name ~email ~password ~form_csrf with
         | Error err ->
