@@ -196,7 +196,7 @@ let csrf_cookie_verification form_csrf reqd =
       match cookie_value_from_cookie cookie with
       | Ok token -> csrf_match ~input_csrf:form_csrf ~check_csrf:token
       | Error (`Msg err) ->
-          Logs.err (fun m -> m "Error with csrf cookie %s" err);
+          Logs.err (fun m -> m "Error retrieving csrf value from cookie %s" err);
           false)
   | None -> 
     Logs.err (fun m -> m "Couldn't find csrf cookie.");
