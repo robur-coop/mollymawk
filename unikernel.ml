@@ -372,17 +372,28 @@ struct
   let verify_email store reqd user =
     let now = Ptime.v (P.now_d_ps ()) in
     generate_csrf_token store user now >>= function
-    | Ok csrf ->
+    | Ok csrf -> (
         let email_verification_uuid = User_model.generate_uuid () in
-        let verification_link =
-          Utils.Email.generate_verification_link email_verification_uuid
+        let updated_user =
+          User_model.update_user user
+            ~updated_at:(Ptime.v (P.now_d_ps ()))
+            ~email_verification_uuid:(Some email_verification_uuid) ()
         in
-        Logs.info (fun m -> m "Verification link is: %s" verification_link);
-        Lwt.return
-          (reply reqd ~content_type:"text/html"
-             (Verify_email.verify_page user ~csrf ~icon:"/images/robur.png")
-             ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-             `OK)
+        Store.update_user !store updated_user >>= function
+        | Ok store' ->
+            store := store';
+            let verification_link =
+              Utils.Email.generate_verification_link email_verification_uuid
+            in
+            Logs.info (fun m -> m "Verification link is: %s" verification_link);
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Verify_email.verify_page user ~csrf ~icon:"/images/robur.png")
+                 ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                 `OK)
+        | Error (`Msg err) ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:(String.escaped err) `Internal_server_error)
     | Error err ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
