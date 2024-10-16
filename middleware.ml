@@ -117,13 +117,13 @@ let http_response ~title ?(header_list = []) ?(data = "") reqd http_status =
   Httpaf.Reqd.respond_with_string reqd response data;
   Lwt.return_unit
 
-let cookie_value_from_cookie cookie =
+let cookie_value cookie =
   match String.split_on_char '=' (String.trim cookie) with
   | _ :: s :: _ -> Ok (String.trim s)
   | _ -> Error (`Msg "Bad cookie")
 
 let user_from_auth_cookie cookie users =
-  match cookie_value_from_cookie cookie with
+  match cookie_value cookie with
   | Ok cookie_value -> (
       match User_model.find_user_by_key cookie_value users with
       | Some user -> Ok user
@@ -162,6 +162,15 @@ let user_of_cookie users now reqd =
           m "auth-middleware: No molly-session in cookie header.");
       Error (`Msg "User not found")
 
+let session_cookie_value reqd =
+  match has_cookie "molly_session" reqd with
+  | Some cookie -> (
+      match cookie_value cookie with
+      | Ok "" -> Ok None
+      | Ok x -> Ok (Some x)
+      | Error _ as e -> e)
+  | None -> Error (`Msg "no cookie found")
+
 let auth_middleware now users handler reqd =
   match user_of_cookie users now reqd with
   | Ok user ->
@@ -193,7 +202,7 @@ let csrf_match ~input_csrf ~check_csrf =
 let csrf_cookie_verification form_csrf reqd =
   match has_cookie "molly_csrf" reqd with
   | Some cookie -> (
-      match cookie_value_from_cookie cookie with
+      match cookie_value cookie with
       | Ok token -> csrf_match ~input_csrf:form_csrf ~check_csrf:token
       | Error (`Msg err) ->
           Logs.err (fun m -> m "Error retrieving csrf value from cookie %s" err);

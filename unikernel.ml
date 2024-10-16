@@ -169,18 +169,9 @@ struct
     let now = Ptime.v (P.now_d_ps ()) in
     let csrf = Middleware.get_csrf now () in
     let csrf_cookie = csrf.name ^ "=" ^ csrf.value ^ ";Path=/;HttpOnly=true" in
-    match Middleware.has_cookie "molly_session" reqd with
-    | Some cookie -> (
-        match Middleware.cookie_value_from_cookie cookie with
-        | Ok "" ->
-            Lwt.return
-              (reply reqd ~content_type:"text/html"
-                 (Sign_up.register_page csrf.value ~icon:"/images/robur.png" ())
-                 ~header_list:
-                   [ ("Set-Cookie", csrf_cookie); ("X-MOLLY-CSRF", csrf.value) ]
-                 `OK)
-        | _ -> Middleware.redirect_to_dashboard reqd ())
-    | None ->
+    match Middleware.session_cookie_value reqd with
+    | Ok (Some x) -> Middleware.redirect_to_dashboard reqd ()
+    | Ok None | Error (`Msg _) ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Sign_up.register_page csrf.value ~icon:"/images/robur.png" ())
@@ -189,16 +180,9 @@ struct
              `OK)
 
   let sign_in reqd =
-    match Middleware.has_cookie "molly_session" reqd with
-    | Some cookie -> (
-        match Middleware.cookie_value_from_cookie cookie with
-        | Ok "" ->
-            Lwt.return
-              (reply reqd ~content_type:"text/html"
-                 (Sign_in.login_page ~icon:"/images/robur.png" ())
-                 `OK)
-        | _ -> Middleware.redirect_to_dashboard reqd ())
-    | None ->
+    match Middleware.session_cookie_value reqd with
+    | Ok (Some _) -> Middleware.redirect_to_dashboard reqd ()
+    | Ok None | Error (`Msg _) ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Sign_in.login_page ~icon:"/images/robur.png" ())
