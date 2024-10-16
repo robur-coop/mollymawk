@@ -95,14 +95,11 @@ struct
     with
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
-        Lwt.return (String.empty, `Null)
-    | Ok json ->
-        let csrf_token =
-          match Yojson.Basic.Util.member "molly_csrf" json with
-          | `String token -> token
-          | _ -> String.empty
-        in
-        Lwt.return (csrf_token, json)
+        Lwt.return (Error (`Msg err))
+    | Ok json -> (
+        match Yojson.Basic.Util.member "molly_csrf" json with
+        | `String token -> Lwt.return (Ok (token, json))
+        | _ -> Lwt.return (Error (`Msg "Couldn't find CSRF token")))
 
   module Albatross = Albatross.Make (T) (P) (S)
 
@@ -130,7 +127,7 @@ struct
     go (Map.empty, []) m
 
   let authenticate ?(email_verified = true) ?(check_admin = false)
-      ?(api_meth = false) ?(check_csrf = false) ?(form_csrf = "") store reqd f =
+      ?(api_meth = false) ?form_csrf store reqd f =
     let now = Ptime.v (P.now_d_ps ()) in
     let _, (t : Storage.t) = store in
     let users = User_model.create_user_session_map t.users in
@@ -141,8 +138,9 @@ struct
       @ (if email_verified && false (* TODO *) then
            [ Middleware.email_verified_middleware now users ]
          else [])
-      @ (if check_csrf then [ Middleware.csrf_verification users now form_csrf ]
-         else [])
+      @ Option.fold ~none:[]
+          ~some:(fun csrf -> [ Middleware.csrf_verification users now csrf ])
+          form_csrf
       @ [ Middleware.auth_middleware now users ]
     in
     Middleware.apply_middleware middlewares
@@ -1108,28 +1106,44 @@ struct
                 authenticate ~check_admin:true !store reqd (settings store reqd))
         | "/api/admin/settings/update" ->
             check_meth `POST (fun () ->
-                extract_csrf_token reqd >>= fun (form_csrf, json) ->
-                authenticate ~check_admin:true ~check_csrf:true ~form_csrf
-                  ~api_meth:true !store reqd
-                  (update_settings json stack store albatross reqd))
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, json) ->
+                    authenticate ~check_admin:true ~form_csrf ~api_meth:true
+                      !store reqd
+                      (update_settings json stack store albatross reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
         | "/api/admin/u/policy/update" ->
             check_meth `POST (fun () ->
-                extract_csrf_token reqd >>= fun (form_csrf, json) ->
-                authenticate ~check_admin:true ~check_csrf:true ~form_csrf
-                  ~api_meth:true !store reqd
-                  (update_policy json !store !albatross reqd))
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, json) ->
+                    authenticate ~check_admin:true ~form_csrf ~api_meth:true
+                      !store reqd
+                      (update_policy json !store !albatross reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
         | "/api/admin/user/activate/toggle" ->
             check_meth `POST (fun () ->
-                extract_csrf_token reqd >>= fun (form_csrf, _json) ->
-                authenticate ~check_admin:true ~check_csrf:true ~form_csrf
-                  ~api_meth:true !store reqd
-                  (toggle_account_activation store reqd))
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, _json) ->
+                    authenticate ~check_admin:true ~form_csrf ~api_meth:true
+                      !store reqd
+                      (toggle_account_activation store reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
         | "/api/admin/user/admin/toggle" ->
             check_meth `POST (fun () ->
-                extract_csrf_token reqd >>= fun (form_csrf, _json) ->
-                authenticate ~check_admin:true ~check_csrf:true ~form_csrf
-                  ~api_meth:true !store reqd
-                  (toggle_admin_activation store reqd))
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, _json) ->
+                    authenticate ~check_admin:true ~form_csrf ~api_meth:true
+                      !store reqd
+                      (toggle_admin_activation store reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
         | "/api/unikernels" ->
             check_meth `GET (fun () ->
                 authenticate ~api_meth:true !store reqd
@@ -1148,9 +1162,13 @@ struct
                 authenticate !store reqd (deploy_form store reqd))
         | "/unikernel/destroy" ->
             check_meth `POST (fun () ->
-                extract_csrf_token reqd >>= fun (form_csrf, json) ->
-                authenticate !store reqd ~check_csrf:true ~form_csrf
-                  (unikernel_destroy json !albatross reqd))
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, json) ->
+                    authenticate !store reqd ~form_csrf
+                      (unikernel_destroy json !albatross reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
         | path
           when String.(
                  length path >= 19 && sub path 0 19 = "/unikernel/console/") ->
