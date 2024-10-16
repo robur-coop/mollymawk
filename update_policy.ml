@@ -1,5 +1,5 @@
-let update_policy_layout (user : User_model.user) ~user_policy
-    ~unallocated_resources csrf =
+let update_policy_layout ~csrf (user : User_model.user) ~user_policy
+    ~unallocated_resources =
   Tyxml_html.(
     section
       ~a:[ a_id "policy-form" ]

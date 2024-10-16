@@ -1,6 +1,6 @@
 open Tyxml
 
-let verify_page ~icon (user : User_model.user) csrf () =
+let verify_page ~csrf ~icon (user : User_model.user) =
   let page =
     Html.(
       html

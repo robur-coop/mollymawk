@@ -174,7 +174,7 @@ struct
     | Ok None | Error (`Msg _) ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Sign_up.register_page csrf.value ~icon:"/images/robur.png" ())
+             (Sign_up.register_page ~csrf:csrf.value ~icon:"/images/robur.png")
              ~header_list:
                [ ("Set-Cookie", csrf_cookie); ("X-MOLLY-CSRF", csrf.value) ]
              `OK)
@@ -380,7 +380,7 @@ struct
         Logs.info (fun m -> m "Verification link is: %s" verification_link);
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Verify_email.verify_page user csrf ~icon:"/images/robur.png" ())
+             (Verify_email.verify_page user ~csrf ~icon:"/images/robur.png")
              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
              `OK)
     | Error err ->
@@ -537,8 +537,8 @@ struct
           (reply reqd ~content_type:"text/html"
              (Dashboard.dashboard_layout user ~page_title:"Settings | Mollymawk"
                 ~content:
-                  (Settings_page.settings_layout
-                     (snd !store).Storage.configuration csrf)
+                  (Settings_page.settings_layout ~csrf
+                     (snd !store).Storage.configuration)
                 ~icon:"/images/robur.png" ())
              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
              `OK)
@@ -579,7 +579,7 @@ struct
           (reply reqd ~content_type:"text/html"
              (Dashboard.dashboard_layout user
                 ~page_title:"Deploy a Unikernel | Mollymawk"
-                ~content:(Unikernel_create.unikernel_create_layout csrf)
+                ~content:(Unikernel_create.unikernel_create_layout ~csrf)
                 ~icon:"/images/robur.png" ())
              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
              `OK)
@@ -643,8 +643,8 @@ struct
             (reply reqd ~content_type:"text/html"
                (Dashboard.dashboard_layout user
                   ~content:
-                    (Unikernel_single.unikernel_single_layout
-                       (List.hd unikernels) now console_output csrf)
+                    (Unikernel_single.unikernel_single_layout ~csrf
+                       (List.hd unikernels) now console_output)
                   ~icon:"/images/robur.png" ())
                ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                `OK)
@@ -851,8 +851,8 @@ struct
                  (Dashboard.dashboard_layout user
                     ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
                     ~content:
-                      (User_single.user_single_layout u unikernels policy now
-                         csrf)
+                      (User_single.user_single_layout ~csrf u unikernels policy
+                         now)
                     ~icon:"/images/robur.png" ())
                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                  `OK)
@@ -900,8 +900,8 @@ struct
                         ~page_title:
                           (String.capitalize_ascii u.name ^ " | Mollymawk")
                         ~content:
-                          (Update_policy.update_policy_layout u ~user_policy
-                             ~unallocated_resources csrf)
+                          (Update_policy.update_policy_layout ~csrf u
+                             ~user_policy ~unallocated_resources)
                         ~icon:"/images/robur.png" ())
                      ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                      `OK)

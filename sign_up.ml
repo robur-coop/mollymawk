@@ -1,6 +1,6 @@
 open Tyxml
 
-let register_page csrf ~icon () =
+let register_page ~csrf ~icon =
   let page =
     Html.(
       html

@@ -1,4 +1,4 @@
-let unikernel_create_layout csrf =
+let unikernel_create_layout ~csrf =
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]

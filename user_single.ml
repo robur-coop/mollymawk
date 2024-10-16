@@ -1,5 +1,5 @@
-let user_single_layout (user : User_model.user) unikernels policy current_time
-    csrf =
+let user_single_layout ~csrf (user : User_model.user) unikernels policy
+    current_time =
   Tyxml_html.(
     section
       ~a:[ a_class [ "p-4 bg-gray-50 my-1" ] ]
