@@ -93,6 +93,18 @@ module Status = struct
     |> Yojson.Safe.to_string
 end
 
+let csrf_form_input csrf =
+  Tyxml_html.(
+    input
+      ~a:
+        [
+          a_input_type `Hidden;
+          a_id "molly-csrf";
+          a_name "molly-csrf-input";
+          a_value csrf;
+        ]
+      ())
+
 let display_banner = function
   | Some message ->
       Tyxml_html.(
