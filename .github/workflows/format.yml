@@ -30,7 +30,7 @@ jobs:
 
       - name: Format code
         run: |
-          find . -name \*\.ml -o -name \*\.mli -maxdepth 1 | xargs opam exec -- ocamlformat --inplace
+          git ls-files '*.ml' '*.mli' | xargs opam exec -- ocamlformat --inplace
 
       - name: Check for modified files
         id: git-check
