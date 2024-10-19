@@ -379,8 +379,8 @@ let unikernel_single_layout ~csrf unikernel now console_output =
                                          [
                                            txt
                                              (Option.value device ~default:name);
-                                         ]
-                                         td
+                                         ];
+                                       td
                                          ~a:
                                            [
                                              a_class
