@@ -364,7 +364,10 @@ let unikernel_single_layout ~csrf unikernel now console_output =
                                                   text-gray-800";
                                                ];
                                            ]
-                                         [ txt name ];
+                                         [
+                                           txt
+                                             (Option.value device ~default:name);
+                                         ];
                                        td
                                          ~a:
                                            [
@@ -375,10 +378,7 @@ let unikernel_single_layout ~csrf unikernel now console_output =
                                                   text-gray-800";
                                                ];
                                            ]
-                                         [
-                                           txt
-                                             (Option.value device ~default:name);
-                                         ];
+                                         [ txt name ];
                                        td
                                          ~a:
                                            [
