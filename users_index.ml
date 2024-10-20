@@ -43,7 +43,11 @@ let users_index_layout (users : User_model.user list) current_time =
                     [ a_class [ "p-1.5 min-w-full inline-block align-middle" ] ]
                   [
                     div
-                      ~a:[ a_class [ "overflow-hidden" ] ]
+                      ~a:
+                        [
+                          Unsafe.string_attrib "x-data" "sort_data()";
+                          a_class [ "overflow-hidden" ];
+                        ]
                       [
                         table
                           ~a:
@@ -63,47 +67,111 @@ let users_index_layout (users : User_model.user list) current_time =
                                      th
                                        ~a:
                                          [
+                                           Unsafe.string_attrib "x-on:click"
+                                             "sortByColumn";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
                                                 font-bold text-primary-600 \
-                                                uppercase";
+                                                uppercase cursor-pointer \
+                                                select-none";
                                              ];
                                          ]
-                                       [ txt "Name" ];
+                                       [
+                                         txt "Name";
+                                         span
+                                           ~a:[ a_class [ "px-2" ] ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   a_class
+                                                     [ "fa-solid fa-sort" ];
+                                                 ]
+                                               [];
+                                           ];
+                                       ];
                                      th
                                        ~a:
                                          [
+                                           Unsafe.string_attrib "x-on:click"
+                                             "sortByColumn";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
                                                 font-bold text-primary-600 \
-                                                uppercase";
+                                                uppercase cursor-pointer \
+                                                select-none";
                                              ];
                                          ]
-                                       [ txt "Email" ];
+                                       [
+                                         txt "Email";
+                                         span
+                                           ~a:[ a_class [ "px-2" ] ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   a_class
+                                                     [ "fa-solid fa-sort" ];
+                                                 ]
+                                               [];
+                                           ];
+                                       ];
                                      th
                                        ~a:
                                          [
+                                           Unsafe.string_attrib "x-on:click"
+                                             "sortByColumn";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
                                                 font-bold text-primary-600 \
-                                                uppercase";
+                                                uppercase cursor-pointer \
+                                                select-none";
                                              ];
                                          ]
-                                       [ txt "Created" ];
+                                       [
+                                         txt "Created";
+                                         span
+                                           ~a:[ a_class [ "px-2" ] ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   a_class
+                                                     [ "fa-solid fa-sort" ];
+                                                 ]
+                                               [];
+                                           ];
+                                       ];
                                      th
                                        ~a:
                                          [
+                                           Unsafe.string_attrib "x-on:click"
+                                             "sortByColumn";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
                                                 font-bold text-primary-600 \
-                                                uppercase";
+                                                uppercase cursor-pointer \
+                                                select-none";
                                              ];
                                          ]
-                                       [ txt "Last Modified" ];
+                                       [
+                                         txt "Last Modified";
+                                         span
+                                           ~a:[ a_class [ "px-2" ] ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   a_class
+                                                     [ "fa-solid fa-sort" ];
+                                                 ]
+                                               [];
+                                           ];
+                                       ];
                                      th
                                        ~a:
                                          [
