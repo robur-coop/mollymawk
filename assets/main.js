@@ -32,23 +32,18 @@ function getUnikernelName(url) {
 }
 
 function filterData() {
-	var input, filter, table, tr, td, i, txtValue;
-	input = document.getElementById("searchQuery");
-	filter = input.value.toUpperCase();
-	table = document.getElementById("data-table");
-	tr = table.getElementsByTagName("tr");
-	for (i = 0; i < tr.length; i++) {
-		td = tr[i].getElementsByTagName("td")[0];
-		if (td) {
-			txtValue = td.textContent || td.innerText;
-			if (txtValue.toUpperCase().indexOf(filter) > -1) {
-				tr[i].style.display = "";
-			} else {
-				tr[i].style.display = "none";
-			}
-		}
-	}
+    const input = document.getElementById("searchQuery").value.toUpperCase();
+    const table = document.getElementById("data-table");
+    const rows = Array.from(table.querySelectorAll("tbody tr"));
+
+    rows.forEach(row => {
+        const cells = Array.from(row.getElementsByTagName("td"));
+        const match = cells.some(td => td.textContent.toUpperCase().includes(input));
+        row.style.display = match ? "" : "none";
+    });
 }
+
+
 
 function openConfigForm(ip, port, certificate, p_key) {
 	const formSection = document.getElementById("config-form");
@@ -339,3 +334,64 @@ async function updatePolicy() {
 		buttonLoading(policyButton, false, "Set Policy")
 	}
 }
+
+function sort_data() {
+	return {
+		sortBy: "",
+		sortAsc: false,
+		sortByColumn($event) {
+			if (this.sortBy === $event.target.innerText) {
+				this.sortAsc = !this.sortAsc;
+			} else {
+				this.sortBy = $event.target.innerText;
+				this.sortAsc = true;
+			}
+
+			const tableBody = this.getTableBody();
+			if (!tableBody) {
+				console.error("Table body not found");
+				return;
+			}
+
+			let rows = this.getTableRows()
+				.sort(
+					this.sortCallback(
+						Array.from($event.target.parentNode.children).indexOf(
+							$event.target
+						)
+					)
+				)
+				.forEach((tr) => {
+					tableBody.appendChild(tr);
+				});
+		},
+		getTableRows() {
+			const tableBody = this.getTableBody();
+			if (tableBody) {
+				return Array.from(tableBody.querySelectorAll("tr"));
+			}
+			return [];
+		},
+		getCellValue(row, index) {
+			return row.children[index].innerText;
+		},
+		sortCallback(index) {
+			return (a, b) =>
+				((row1, row2) => {
+					return row1 !== "" &&
+						row2 !== "" &&
+						!isNaN(row1) &&
+						!isNaN(row2)
+						? row1 - row2
+						: row1.toString().localeCompare(row2);
+				})(
+					this.getCellValue(this.sortAsc ? a : b, index),
+					this.getCellValue(this.sortAsc ? b : a, index)
+				);
+		},
+		getTableBody() {
+			return document.querySelector("#data-table tbody");
+		}
+	};
+}
+

@@ -48,7 +48,11 @@ let unikernel_index_layout unikernels current_time =
                     [ a_class [ "p-1.5 min-w-full inline-block align-middle" ] ]
                   [
                     div
-                      ~a:[ a_class [ "overflow-hidden" ] ]
+                      ~a:
+                        [
+                          Unsafe.string_attrib "x-data" "sort_data()";
+                          a_class [ "overflow-hidden" ];
+                        ]
                       [
                         table
                           ~a:
@@ -68,36 +72,125 @@ let unikernel_index_layout unikernels current_time =
                                      th
                                        ~a:
                                          [
+                                           Unsafe.string_attrib "x-on:click"
+                                             "sortByColumn";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
                                                 font-bold text-primary-600 \
-                                                uppercase";
+                                                uppercase cursor-pointer \
+                                                select-none";
                                              ];
                                          ]
-                                       [ txt "Name" ];
+                                       [
+                                         txt "Name";
+                                         span
+                                           ~a:[ a_class [ "px-2" ] ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   a_class
+                                                     [ "fa-solid fa-sort" ];
+                                                 ]
+                                               [];
+                                           ];
+                                       ];
                                      th
                                        ~a:
                                          [
+                                           Unsafe.string_attrib "x-on:click"
+                                             "sortByColumn";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
                                                 font-bold text-primary-600 \
-                                                uppercase";
+                                                uppercase cursor-pointer \
+                                                select-none";
                                              ];
                                          ]
                                        [ txt "Type" ];
                                      th
                                        ~a:
                                          [
+                                           Unsafe.string_attrib "x-on:click"
+                                             "sortByColumn";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
                                                 font-bold text-primary-600 \
-                                                uppercase";
+                                                uppercase cursor-pointer \
+                                                select-none";
                                              ];
                                          ]
-                                       [ txt "CPU" ];
+                                       [
+                                         txt "CPU";
+                                         span
+                                           ~a:[ a_class [ "px-2" ] ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   a_class
+                                                     [ "fa-solid fa-sort" ];
+                                                 ]
+                                               [];
+                                           ];
+                                       ];
+                                     th
+                                       ~a:
+                                         [
+                                           Unsafe.string_attrib "x-on:click"
+                                             "sortByColumn";
+                                           a_class
+                                             [
+                                               "px-6 py-3 text-start text-xs \
+                                                font-bold text-primary-600 \
+                                                uppercase cursor-pointer \
+                                                select-none";
+                                             ];
+                                         ]
+                                       [
+                                         txt "Memory";
+                                         span
+                                           ~a:[ a_class [ "px-2" ] ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   a_class
+                                                     [ "fa-solid fa-sort" ];
+                                                 ]
+                                               [];
+                                           ];
+                                       ];
+                                     th
+                                       ~a:
+                                         [
+                                           Unsafe.string_attrib "x-on:click"
+                                             "sortByColumn";
+                                           a_class
+                                             [
+                                               "px-6 py-3 text-start text-xs \
+                                                font-bold text-primary-600 \
+                                                uppercase cursor-pointer \
+                                                select-none";
+                                             ];
+                                         ]
+                                       [
+                                         txt "Created";
+                                         span
+                                           ~a:[ a_class [ "px-2" ] ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   a_class
+                                                     [ "fa-solid fa-sort" ];
+                                                 ]
+                                               [];
+                                           ];
+                                       ];
                                      th
                                        ~a:
                                          [
@@ -105,29 +198,8 @@ let unikernel_index_layout unikernels current_time =
                                              [
                                                "px-6 py-3 text-start text-xs \
                                                 font-bold text-primary-600 \
-                                                uppercase";
-                                             ];
-                                         ]
-                                       [ txt "Memory" ];
-                                     th
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase";
-                                             ];
-                                         ]
-                                       [ txt "Created" ];
-                                     th
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase";
+                                                uppercase cursor-pointer \
+                                                select-none";
                                              ];
                                          ]
                                        [ txt "Action" ];

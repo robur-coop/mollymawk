@@ -170,7 +170,7 @@ struct
     let csrf = Middleware.get_csrf now () in
     let csrf_cookie = csrf.name ^ "=" ^ csrf.value ^ ";Path=/;HttpOnly=true" in
     match Middleware.session_cookie_value reqd with
-    | Ok (Some x) -> Middleware.redirect_to_dashboard reqd ()
+    | Ok (Some _x) -> Middleware.redirect_to_dashboard reqd ()
     | Ok None | Error (`Msg _) ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
