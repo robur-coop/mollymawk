@@ -222,7 +222,7 @@ let unikernel_single_layout ~csrf unikernel now console_output =
                                                     text-primary-600 uppercase";
                                                  ];
                                              ]
-                                           [ txt "Host device" ];
+                                           [ txt "Unikernel block device" ];
                                          th
                                            ~a:
                                              [
@@ -233,7 +233,7 @@ let unikernel_single_layout ~csrf unikernel now console_output =
                                                     text-primary-600 uppercase";
                                                  ];
                                              ]
-                                           [ txt "Name" ];
+                                           [ txt "Host device" ];
                                          th
                                            ~a:
                                              [
@@ -273,7 +273,8 @@ let unikernel_single_layout ~csrf unikernel now console_output =
                                                ];
                                            ]
                                          [
-                                           txt (Option.value device ~default:"");
+                                           txt
+                                             (Option.value device ~default:name);
                                          ];
                                        td
                                          ~a:
@@ -325,7 +326,7 @@ let unikernel_single_layout ~csrf unikernel now console_output =
                                                     text-primary-600 uppercase";
                                                  ];
                                              ]
-                                           [ txt "Host device" ];
+                                           [ txt "Unikernel network device" ];
                                          th
                                            ~a:
                                              [
@@ -336,7 +337,7 @@ let unikernel_single_layout ~csrf unikernel now console_output =
                                                     text-primary-600 uppercase";
                                                  ];
                                              ]
-                                           [ txt "Name" ];
+                                           [ txt "Host device" ];
                                          th
                                            ~a:
                                              [
