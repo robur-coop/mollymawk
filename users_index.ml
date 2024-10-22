@@ -188,6 +188,7 @@ let users_index_layout (users : User_model.user list) current_time =
                           (List.map
                              (fun (user : User_model.user) ->
                                tr
+                                 ~a:[ a_class [ "border-b border-gray-200" ] ]
                                  [
                                    td
                                      ~a:
