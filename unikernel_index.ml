@@ -212,6 +212,7 @@ let unikernel_index_layout unikernels current_time =
                                    (Vmm_core.Name.name name)
                                in
                                tr
+                                 ~a:[ a_class [ "border-b border-gray-200" ] ]
                                  [
                                    td
                                      ~a:

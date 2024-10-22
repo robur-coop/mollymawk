@@ -39,24 +39,48 @@ let unikernel_single_layout ~csrf unikernel now console_output =
                           [ txt (Ohex.encode data.digest) ];
                       ];
                     div
+                      ~a:[ a_class [ "flex space-x-2" ] ]
                       [
-                        Utils.csrf_form_input csrf;
-                        button
-                          ~a:
-                            [
-                              a_onclick
-                                ("destroyUnikernel('"
-                                ^ Option.value ~default:""
-                                    (Vmm_core.Name.name u_name)
-                                ^ "')");
-                              a_class
+                        div
+                          [
+                            Utils.csrf_form_input csrf;
+                            button
+                              ~a:
                                 [
-                                  "my-3 py-2 px-3 rounded bg-secondary-500 \
-                                   text-white hover:bg-secondary-700 \
-                                   text-secondary-50 font-semibold";
-                                ];
-                            ]
-                          [ txt "Destroy" ];
+                                  a_onclick
+                                    ("restartUnikernel('"
+                                    ^ Option.value ~default:""
+                                        (Vmm_core.Name.name u_name)
+                                    ^ "')");
+                                  a_class
+                                    [
+                                      "my-3 py-2 px-3 rounded bg-primary-500 \
+                                       text-white hover:bg-primary-700 \
+                                       text-secondary-50 font-semibold";
+                                    ];
+                                ]
+                              [ txt "Restart" ];
+                          ];
+                        div
+                          [
+                            Utils.csrf_form_input csrf;
+                            button
+                              ~a:
+                                [
+                                  a_onclick
+                                    ("destroyUnikernel('"
+                                    ^ Option.value ~default:""
+                                        (Vmm_core.Name.name u_name)
+                                    ^ "')");
+                                  a_class
+                                    [
+                                      "my-3 py-2 px-3 rounded bg-secondary-500 \
+                                       text-white hover:bg-secondary-700 \
+                                       text-secondary-50 font-semibold";
+                                    ];
+                                ]
+                              [ txt "Destroy" ];
+                          ];
                       ];
                   ];
                 div
@@ -183,9 +207,8 @@ let unikernel_single_layout ~csrf unikernel now console_output =
                                            [
                                              a_class
                                                [
-                                                 "px-6 py-1 whitespace-nowrap \
-                                                  text-sm font-medium \
-                                                  text-gray-800";
+                                                 "px-6 py-1 text-sm \
+                                                  font-medium text-gray-800";
                                                ];
                                            ]
                                          [ txt arg ];
