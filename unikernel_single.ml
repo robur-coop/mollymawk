@@ -45,6 +45,26 @@ let unikernel_single_layout ~csrf unikernel now console_output =
                           ~a:
                             [
                               a_onclick
+                                ("restartUnikernel('"
+                                ^ Option.value ~default:""
+                                    (Vmm_core.Name.name u_name)
+                                ^ "')");
+                              a_class
+                                [
+                                  "my-3 py-2 px-3 rounded bg-secondary-500 \
+                                   text-white hover:bg-secondary-700 \
+                                   text-secondary-50 font-semibold";
+                                ];
+                            ]
+                          [ txt "Restart" ];
+                      ];
+                    div
+                      [
+                        Utils.csrf_form_input csrf;
+                        button
+                          ~a:
+                            [
+                              a_onclick
                                 ("destroyUnikernel('"
                                 ^ Option.value ~default:""
                                     (Vmm_core.Name.name u_name)

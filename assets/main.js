@@ -195,6 +195,29 @@ async function deployUnikernel() {
 	}
 }
 
+async function restartUnikernel(name) {
+	try {
+		const molly_csrf = document.getElementById("molly-csrf").value.trim();
+		const response = await fetch(`/unikernel/restart/${name}`, {
+			method: 'POST',
+			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
+			headers: { 'Content-Type': 'application/json' }
+		})
+
+		const data = await response.json();
+		if (data.status === 200) {
+			postAlert("bg-primary-300", `Successful: ${data.data}`);
+			setTimeout(function () {
+				window.location.href = "/dashboard";
+			}, 2000);
+		} else {
+			postAlert("bg-secondary-300", `${name} has been restarted succesfully.`);
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+	}
+}
+
 async function destroyUnikernel(name) {
 	try {
 		const molly_csrf = document.getElementById("molly-csrf").value.trim();

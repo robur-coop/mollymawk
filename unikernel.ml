@@ -707,6 +707,30 @@ struct
               ~data:(Yojson.Safe.to_string (`String res))
               `Internal_server_error)
 
+  let unikernel_restart json albatross reqd (user : User_model.user) =
+    (* TODO use uuid in the future *)
+    let unikernel_name =
+      Yojson.Basic.(to_string (json |> Util.member "name"))
+    in
+    Albatross.query albatross ~domain:user.name ~name:unikernel_name
+      (`Unikernel_cmd `Unikernel_restart)
+    >>= function
+    | Error msg ->
+        Logs.err (fun m -> m "Error querying albatross: %s" msg);
+        Middleware.http_response reqd ~title:"Error"
+          ~data:("Error querying albatross: " ^ msg)
+          `Internal_server_error
+    | Ok (_hdr, res) -> (
+        match Albatross_json.res res with
+        | Ok res ->
+            Middleware.http_response reqd ~title:"Success"
+              ~data:(Yojson.Safe.to_string res)
+              `OK
+        | Error (`String res) ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:(Yojson.Safe.to_string (`String res))
+              `Internal_server_error)
+
   let unikernel_create albatross reqd (user : User_model.user) =
     let response_body = Httpaf.Reqd.request_body reqd in
     let finished, notify_finished = Lwt.wait () in
@@ -1161,6 +1185,15 @@ struct
                 | Ok (form_csrf, json) ->
                     authenticate !store reqd ~form_csrf
                       (unikernel_destroy json !albatross reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
+        | "/unikernel/restart" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, json) ->
+                    authenticate !store reqd ~form_csrf
+                      (unikernel_restart json !albatross reqd)
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
