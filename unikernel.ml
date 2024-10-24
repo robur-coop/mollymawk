@@ -1103,6 +1103,27 @@ struct
         | "/dashboard" ->
             check_meth `GET (fun () ->
                 authenticate !store reqd (dashboard !albatross reqd))
+| "/account" ->
+            check_meth `GET (fun () ->
+                authenticate store reqd (account_page store reqd))
+        | "/account/password/update" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, json) ->
+                    authenticate ~form_csrf store reqd
+                      (update_password json store reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
+        | "/account/sessions/close" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, _) ->
+                    authenticate ~form_csrf store reqd
+                      (close_sessions store reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
         | "/admin/users" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true !store reqd (users !store reqd))

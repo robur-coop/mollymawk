@@ -32,15 +32,15 @@ function getUnikernelName(url) {
 }
 
 function filterData() {
-    const input = document.getElementById("searchQuery").value.toUpperCase();
-    const table = document.getElementById("data-table");
-    const rows = Array.from(table.querySelectorAll("tbody tr"));
+	const input = document.getElementById("searchQuery").value.toUpperCase();
+	const table = document.getElementById("data-table");
+	const rows = Array.from(table.querySelectorAll("tbody tr"));
 
-    rows.forEach(row => {
-        const cells = Array.from(row.getElementsByTagName("td"));
-        const match = cells.some(td => td.textContent.toUpperCase().includes(input));
-        row.style.display = match ? "" : "none";
-    });
+	rows.forEach(row => {
+		const cells = Array.from(row.getElementsByTagName("td"));
+		const match = cells.some(td => td.textContent.toUpperCase().includes(input));
+		row.style.display = match ? "" : "none";
+	});
 }
 
 
@@ -418,3 +418,73 @@ function sort_data() {
 	};
 }
 
+async function updatePassword() {
+	const passwordButton = document.getElementById("password-button");
+	try {
+		buttonLoading(passwordButton, true, "Updating..")
+		const molly_csrf = document.getElementById("molly-csrf").value.trim();
+		const current_password = document.getElementById("current-password").value.trim();
+		const new_password = document.getElementById("new-password").value.trim();
+		const confirm_password = document.getElementById("confirm-password").value.trim();
+		const formAlert = document.getElementById("form-alert");
+		if (!current_password || !new_password || !confirm_password ) {
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = "Please fill in all the required passwords"
+			buttonLoading(passwordButton, false, "Deploy")
+		} else {
+			const response = await fetch('/account/password/update', {
+				method: 'POST',
+				body: JSON.stringify(
+					{
+						molly_csrf,
+						current_password,
+						new_password,
+						confirm_password
+
+					}),
+				headers: { 'Content-Type': 'application/json' }
+			});
+
+			const data = await response.json();
+			if (response.status === 200) {
+				postAlert("bg-primary-300", data.data);
+				setTimeout(() => window.location.reload(), 1000);
+			} else {
+				postAlert("bg-secondary-300", data.data);
+				buttonLoading(passwordButton, false, "Save")
+			}
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		buttonLoading(passwordButton, false, "Save")
+	}
+}
+
+async function closeSessions() {
+	const sessionButton = document.getElementById("session-button");
+	try {
+		buttonLoading(sessionButton, true, "Closing sessions..")
+		const molly_csrf = document.getElementById("molly-csrf").value.trim();
+		const response = await fetch('/account/sessions/close', {
+			method: 'POST',
+			body: JSON.stringify(
+				{
+					molly_csrf,
+				}),
+			headers: { 'Content-Type': 'application/json' }
+		});
+
+		const data = await response.json();
+		if (response.status === 200) {
+			postAlert("bg-primary-300", data.data);
+			setTimeout(() => window.location.reload(), 1000);
+		} else {
+			postAlert("bg-secondary-300", data.data);
+			buttonLoading(sessionButton, false, "Logout all other sessions")
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		buttonLoading(sessionButton, false, "Logout all other sessions")
+	}
+}
