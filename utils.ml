@@ -26,13 +26,15 @@ module TimeHelper = struct
   let string_of_ptime (t : Ptime.t) : string = Ptime.to_rfc3339 t ~frac_s:0
 
   (* calculate the diff between two timestamps *)
-  let diff_in_seconds t1 t2 =
-    let span = Ptime.diff t1 t2 in
+  let diff_in_seconds ~current_time ~check_time =
+    let span = Ptime.diff current_time check_time in
     match Ptime.Span.to_int_s span with Some s -> s | None -> 0
 
   (* print timestamp in human-readable form *)
   let print_human_readable ~now ~timestamp =
-    let duration = diff_in_seconds now timestamp |> Duration.of_sec in
+    let duration =
+      diff_in_seconds ~current_time:now ~check_time:timestamp |> Duration.of_sec
+    in
     Format.asprintf "%a" Duration.pp duration
 
   (* parse Ptime.t option to json *)
@@ -49,8 +51,8 @@ module TimeHelper = struct
     | `Null -> Ok None
     | _ -> Error (`Msg "invalid json for Ptime.t option")
 
-  let time_ago t1 t2 =
-    let diff = diff_in_seconds t1 t2 in
+  let time_ago ~current_time ~check_time =
+    let diff = diff_in_seconds ~current_time ~check_time in
     if diff < 60 then Printf.sprintf "%d s ago" diff
     else if diff < 3600 then Printf.sprintf "%d m ago" (diff / 60)
     else if diff < 86400 then Printf.sprintf "%d h ago" (diff / 3600)

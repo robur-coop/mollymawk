@@ -532,7 +532,9 @@ let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
   }
 
 let is_valid_cookie (cookie : cookie) now =
-  Utils.TimeHelper.diff_in_seconds cookie.created_at now < cookie.expires_in
+  Utils.TimeHelper.diff_in_seconds ~current_time:now
+    ~check_time:cookie.created_at
+  < cookie.expires_in
 
 let is_email_verified user = Option.is_some user.email_verified
 
@@ -553,7 +555,11 @@ let verify_email_token users token timestamp =
       Logs.err (fun m -> m "email verification: Token couldn't be found.");
       Error (`Msg "No token was found.")
   | Some (_, u) -> (
-      match Utils.TimeHelper.diff_in_seconds timestamp u.updated_at < 3600 with
+      match
+        Utils.TimeHelper.diff_in_seconds ~current_time:timestamp
+          ~check_time:u.updated_at
+        < 3600
+      with
       | true ->
           let updated_user =
             update_user u ~email_verified:(Some timestamp) ~updated_at:timestamp
@@ -567,9 +573,11 @@ let verify_email_token users token timestamp =
               "This link has expired. Please sign in to get a new verification \
                link."))
 
-let user_auth_cookie_from_user (user : user) =
+let user_auth_cookie_from_user cookie_value (user : user) =
   List.find_opt
-    (fun (cookie : cookie) -> String.equal cookie.name "molly_session")
+    (fun (cookie : cookie) ->
+      String.equal cookie.name "molly_session"
+      && String.equal cookie_value cookie.value)
     user.cookies
 
 let login_user ~email ~password users now =
