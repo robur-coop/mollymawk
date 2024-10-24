@@ -135,28 +135,33 @@ let user_from_auth_cookie cookie users =
 let user_of_cookie users now reqd =
   match has_cookie "molly_session" reqd with
   | Some auth_cookie -> (
-      match user_from_auth_cookie auth_cookie users with
-      | Ok user -> (
-          match User_model.user_auth_cookie_from_user user with
-          | Some cookie -> (
-              match User_model.is_valid_cookie cookie now with
-              | true -> Ok user
-              | false ->
+      match cookie_value auth_cookie with
+      | Ok cookie_value -> (
+          match user_from_auth_cookie auth_cookie users with
+          | Ok user -> (
+              match User_model.user_auth_cookie_from_user cookie_value user with
+              | Some cookie -> (
+                  match User_model.is_valid_cookie cookie now with
+                  | true -> Ok (user, cookie)
+                  | false ->
+                      Logs.err (fun m ->
+                          m
+                            "auth-middleware: Session value doesn't match user \
+                             session %s"
+                            auth_cookie);
+                      Error (`Msg "User not found"))
+              | None ->
                   Logs.err (fun m ->
-                      m
-                        "auth-middleware: Session value doesn't match user \
-                         session %s"
-                        auth_cookie);
+                      m "auth-middleware: User doesn't have a session cookie.");
                   Error (`Msg "User not found"))
-          | None ->
+          | Error (`Msg s) ->
               Logs.err (fun m ->
-                  m "auth-middleware: User doesn't have a session cookie.");
+                  m "auth-middleware: Failed to find user with key %s: %s"
+                    auth_cookie s);
               Error (`Msg "User not found"))
       | Error (`Msg s) ->
-          Logs.err (fun m ->
-              m "auth-middleware: Failed to find user with key %s: %s"
-                auth_cookie s);
-          Error (`Msg "User not found"))
+          Logs.err (fun m -> m "Error: %s" s);
+          Error (`Msg s))
   | None ->
       Logs.err (fun m ->
           m "auth-middleware: No molly-session in cookie header.");
@@ -173,21 +178,21 @@ let session_cookie_value reqd =
 
 let auth_middleware now users handler reqd =
   match user_of_cookie users now reqd with
-  | Ok user ->
+  | Ok (user, _) ->
       if user.User_model.active then handler reqd
       else redirect_to_login ~msg:"User account is deactivated." reqd ()
   | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
 
 let email_verified_middleware now users handler reqd =
   match user_of_cookie users now reqd with
-  | Ok user ->
+  | Ok (user, _) ->
       if User_model.is_email_verified user then handler reqd
       else redirect_to_verify_email reqd ()
   | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
 
 let is_user_admin_middleware api_meth now users handler reqd =
   match user_of_cookie users now reqd with
-  | Ok user ->
+  | Ok (user, _) ->
       if user.User_model.super_user && user.active then handler reqd
       else
         redirect_to_error ~title:"Unauthorized"
@@ -213,7 +218,7 @@ let csrf_cookie_verification form_csrf reqd =
 
 let csrf_verification users now form_csrf handler reqd =
   match user_of_cookie users now reqd with
-  | Ok user -> (
+  | Ok (user, _) -> (
       let user_csrf_token =
         List.find_opt
           (fun (cookie : User_model.cookie) ->
