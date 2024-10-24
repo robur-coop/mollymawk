@@ -580,6 +580,11 @@ let user_auth_cookie_from_user cookie_value (user : user) =
       && String.equal cookie_value cookie.value)
     user.cookies
 
+let clear_csrfs user =
+  List.filter
+    (fun (cookie : cookie) -> String.equal cookie.name "molly_session")
+    user.cookies
+
 let login_user ~email ~password users now =
   let user = check_if_email_exists email users in
   match user with
@@ -596,7 +601,7 @@ let login_user ~email ~password users now =
               generate_cookie ~name:"molly_session" ~expires_in:week
                 ~uuid:u.uuid ~created_at:now ()
             in
-            let cookies = new_session :: u.cookies in
+            let cookies = new_session :: clear_csrfs u in
             let updated_user = update_user u ~cookies () in
             Ok updated_user
         | false -> Error (`Msg "Invalid email or password."))
