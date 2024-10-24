@@ -360,6 +360,31 @@ let dashboard_layout (user : User_model.user) ~icon
                                [];
                              span [ txt "Activity" ];
                            ];
+                         a
+                           ~a:
+                             [
+                               a_href "/account";
+                               a_class
+                                 [
+                                   "hover:bg-gray-200 hover:text-primary-400 \
+                                    font-semibold hover:font-bold \
+                                    cursor-pointer rounded p-2 w-full flex \
+                                    items-center space-x-1";
+                                 ];
+                             ]
+                           [
+                             i
+                               ~a:
+                                 [
+                                   a_class
+                                     [
+                                       "fa-solid fa-user text-primary-500 \
+                                        text-sm";
+                                     ];
+                                 ]
+                               [];
+                             span [ txt "My Account" ];
+                           ];
                          hr ~a:[ a_class [ "my-4" ] ] ();
                          a
                            ~a:
