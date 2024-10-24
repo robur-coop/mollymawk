@@ -306,8 +306,9 @@ let users_index_layout (users : User_model.user list) current_time =
                                        ]
                                      [
                                        txt
-                                         (Utils.TimeHelper.time_ago current_time
-                                            user.created_at);
+                                         (Utils.TimeHelper.time_ago
+                                            ~current_time
+                                            ~check_time:user.created_at);
                                      ];
                                    td
                                      ~a:
@@ -321,8 +322,9 @@ let users_index_layout (users : User_model.user list) current_time =
                                        ]
                                      [
                                        txt
-                                         (Utils.TimeHelper.time_ago current_time
-                                            user.updated_at);
+                                         (Utils.TimeHelper.time_ago
+                                            ~current_time
+                                            ~check_time:user.updated_at);
                                      ];
                                    td
                                      ~a:

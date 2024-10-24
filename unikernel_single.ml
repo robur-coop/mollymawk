@@ -1,4 +1,4 @@
-let unikernel_single_layout ~csrf unikernel now console_output =
+let unikernel_single_layout ~csrf unikernel current_time console_output =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
@@ -30,8 +30,9 @@ let unikernel_single_layout ~csrf unikernel now console_output =
                               [
                                 txt
                                   ("created "
-                                  ^ Utils.TimeHelper.time_ago now
-                                      data.Vmm_core.Unikernel.started);
+                                  ^ Utils.TimeHelper.time_ago ~current_time
+                                      ~check_time:
+                                        data.Vmm_core.Unikernel.started);
                               ];
                           ];
                         p

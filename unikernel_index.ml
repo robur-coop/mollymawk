@@ -279,8 +279,9 @@ let unikernel_index_layout unikernels current_time =
                                        ]
                                      [
                                        txt
-                                         (Utils.TimeHelper.time_ago current_time
-                                            unikernel.started);
+                                         (Utils.TimeHelper.time_ago
+                                            ~current_time
+                                            ~check_time:unikernel.started);
                                      ];
                                    td
                                      ~a:
