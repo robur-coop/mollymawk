@@ -8,7 +8,7 @@ let current_version = 5
    2 added active
    3 added super_user (but did not serialise it)
    4 properly serialised super_user
-   5 cookie has two new fiels last_access and user_agent
+   5 cookie has two new fields last_access and user_agent
 *)
 
 let t_to_json t =
@@ -46,7 +46,7 @@ let t_of_json json =
                   else if v = 2 || v = 3 then User_model.user_v2_of_json js
                   else if v = 4 then
                     User_model.(user_of_json cookie_v1_of_json) js
-                  else User_model.(user_of_json cookie_v1_of_json) js
+                  else User_model.(user_of_json cookie_of_json) js
                 in
                 Ok (user :: acc))
               (Ok []) users
