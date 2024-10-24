@@ -530,7 +530,132 @@ struct
             ~icon:"/images/robur.png" ())
          `OK)
 
-  let users store reqd user =
+  let account_page store reqd
+      (user_cookie : User_model.user * User_model.cookie) =
+    let user, cookie = user_cookie in
+    let now = Ptime.v (P.now_d_ps ()) in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout user ~page_title:"Account | Mollymawk"
+                ~content:
+                  (User_account.user_account_layout ~csrf user cookie now)
+                ~icon:"/images/robur.png" ())
+             ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+             `OK)
+    | Error err ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+                ~content:(Error_page.error_layout err)
+                ~icon:"/images/robur.png" ())
+             `Internal_server_error)
+
+  let update_password json store reqd
+      (user_cookie : User_model.user * User_model.cookie) =
+    let user, _ = user_cookie in
+    match json with
+    | `Assoc xs -> (
+        match
+          Utils.Json.
+            ( get "current_password" xs,
+              get "new_password" xs,
+              get "confirm_password" xs )
+        with
+        | ( Some (`String current_password),
+            Some (`String new_password),
+            Some (`String confirm_password) ) -> (
+            let now = Ptime.v (P.now_d_ps ()) in
+            let new_password_hash =
+              User_model.hash_password ~password:new_password ~uuid:user.uuid
+            in
+            Logs.err (fun m ->
+                m "%s and %s" user.password
+                  (User_model.hash_password ~password:current_password
+                     ~uuid:user.uuid));
+            Logs.err (fun m ->
+                m "%s" (User_model.user_to_json user |> Yojson.Basic.to_string));
+            Logs.err (fun m ->
+                m "%s"
+                  (User_model.hash_password ~password:current_password
+                     ~uuid:user.uuid));
+            match
+              ( String.equal user.password
+                  (User_model.hash_password ~password:current_password
+                     ~uuid:user.uuid),
+                not (String.equal new_password_hash user.password) )
+            with
+            | true, false -> (
+                match String.equal new_password confirm_password with
+                | true ->
+                    if User_model.password_validation new_password then (
+                      let updated_user =
+                        User_model.update_user user ~password:new_password
+                          ~updated_at:now ()
+                      in
+                      Store.update_user !store updated_user >>= function
+                      | Ok store' ->
+                          store := store';
+                          Middleware.http_response reqd ~title:"OK"
+                            ~data:"Updated password successfully" `OK
+                      | Error (`Msg err) ->
+                          Logs.warn (fun m -> m "Storage error with %s" err);
+                          Middleware.http_response reqd ~title:"Error" ~data:err
+                            `Internal_server_error)
+                    else
+                      Middleware.http_response reqd ~title:"Error"
+                        ~data:"New password must be atleast 8 characters."
+                        `Internal_server_error
+                | false ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:"New password and confirm password do not match"
+                      `Bad_request)
+            | true, true ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:
+                    "Your new password cannot be the same as the previous \
+                     password."
+                  `Bad_request
+            | _ ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:"The current password entered is wrong." `Bad_request)
+        | _ ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:
+                (Fmt.str "Update password: Unexpected fields. Got %s"
+                   (Yojson.Basic.to_string (`Assoc xs)))
+              `Bad_request)
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:"Update password: expected a dictionary" `Bad_request
+
+  let close_sessions store reqd
+      (user_cookie : User_model.user * User_model.cookie) =
+    let user, cookie = user_cookie in
+    let now = Ptime.v (P.now_d_ps ()) in
+    let cookies =
+      cookie
+      :: List.filter
+           (fun (cookie : User_model.cookie) ->
+             not (String.equal cookie.name "molly_session"))
+           user.cookies
+    in
+    let updated_user =
+      User_model.update_user user ~cookies ~updated_at:now ()
+    in
+    Store.update_user !store updated_user >>= function
+    | Ok store' ->
+        store := store';
+        Middleware.http_response reqd ~title:"OK"
+          ~data:"Closed all sessions successfully" `OK
+    | Error (`Msg err) ->
+        Logs.warn (fun m -> m "Storage error with %s" err);
+        Middleware.http_response reqd ~title:"Error" ~data:err
+          `Internal_server_error
+
+  let users store reqd (user_cookie : User_model.user * User_model.cookie) =
+    let user, _ = user_cookie in
     Lwt.return
       (reply reqd ~content_type:"text/html"
          (Dashboard.dashboard_layout user ~page_title:"Users | Mollymawk"
