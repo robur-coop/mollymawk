@@ -549,8 +549,8 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
   in
   (* auth sessions should expire after a week (24hrs * 7days * 60mins * 60secs) *)
   {
-    name = Utils.Json.clean_string name;
-    email = Utils.Json.clean_string email;
+    name;
+    email;
     email_verified = None;
     password;
     uuid;
@@ -564,14 +564,10 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
   }
 
 let check_if_email_exists email users =
-  List.find_opt
-    (fun user -> String.equal user.email (Utils.Json.clean_string email))
-    users
+  List.find_opt (fun user -> String.equal user.email email) users
 
 let check_if_name_exists name users =
-  List.find_opt
-    (fun user -> String.equal user.name (Utils.Json.clean_string name))
-    users
+  List.find_opt (fun user -> String.equal user.name name) users
 
 let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
     ?updated_at ?email_verification_uuid ?active ?super_user () =

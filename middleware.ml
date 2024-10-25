@@ -209,8 +209,7 @@ let is_user_admin_middleware api_meth now users handler reqd =
           `Unauthorized user 401 api_meth reqd ()
   | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
 
-let csrf_match ~input_csrf ~check_csrf =
-  String.equal (Utils.Json.clean_string input_csrf) check_csrf
+let csrf_match ~input_csrf ~check_csrf = String.equal input_csrf check_csrf
 
 let csrf_cookie_verification form_csrf reqd =
   match has_cookie "molly_csrf" reqd with

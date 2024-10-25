@@ -233,98 +233,115 @@ struct
         Middleware.http_response reqd ~title:"Error" ~data:(String.escaped err)
           `Bad_request
     | Ok json -> (
-        let validate_user_input ~name ~email ~password ~form_csrf =
-          if name = "" || email = "" || password = "" then
-            Error "All fields must be filled."
-          else if String.length name < 4 then
-            Error "Name must be at least 3 characters long."
-          else if not (Utils.Email.validate_email email) then
-            Error "Invalid email address."
-          else if not (User_model.password_validation password) then
-            Error "Password must be at least 8 characters long."
-          else if form_csrf = "" then
-            Error "CSRF token mismatch error. Please referesh and try again."
-          else Ok "Validation passed."
-        in
-        let name =
-          json |> Yojson.Basic.Util.member "name" |> Yojson.Basic.to_string
-        in
-        let email =
-          json |> Yojson.Basic.Util.member "email" |> Yojson.Basic.to_string
-        in
-        let password =
-          json |> Yojson.Basic.Util.member "password" |> Yojson.Basic.to_string
-        in
-        let form_csrf =
-          json |> Yojson.Basic.Util.member "form_csrf" |> Yojson.Basic.to_string
-        in
-        match validate_user_input ~name ~email ~password ~form_csrf with
-        | Error err ->
-            Middleware.http_response reqd ~title:"Error"
-              ~data:(String.escaped err) `Bad_request
-        | Ok _ ->
-            if Middleware.csrf_cookie_verification form_csrf reqd then
-              let _, (s : Storage.t) = !store in
-              let users = s.users in
-              let existing_email =
-                User_model.check_if_email_exists email users
-              in
-              let existing_name = User_model.check_if_name_exists name users in
-              match (existing_name, existing_email) with
-              | Some _, None ->
-                  Middleware.http_response reqd ~title:"Error"
-                    ~data:"A user with this name already exist." `Bad_request
-              | None, Some _ ->
-                  Middleware.http_response reqd ~title:"Error"
-                    ~data:"A user with this email already exist." `Bad_request
-              | None, None -> (
-                  let created_at = Ptime.v (P.now_d_ps ()) in
-                  let user =
-                    let active, super_user =
-                      if List.length users = 0 then (true, true)
-                      else (false, false)
-                    in
-                    User_model.create_user ~name ~email ~password ~created_at
-                      ~active ~super_user
-                      ~user_agent:(Middleware.user_agent reqd)
-                  in
-                  Store.add_user !store user >>= function
-                  | Ok store' ->
-                      store := store';
-                      let cookie =
-                        List.find
-                          (fun (c : User_model.cookie) ->
-                            c.name = "molly_session")
-                          user.cookies
-                      in
-                      let cookie_value =
-                        cookie.name ^ "=" ^ cookie.value
-                        ^ ";Path=/;HttpOnly=true"
-                      in
-                      let header_list =
-                        [
-                          ("Set-Cookie", cookie_value);
-                          ("location", "/dashboard");
-                        ]
-                      in
-                      Middleware.http_response reqd ~header_list
-                        ~title:"Success"
-                        ~data:
-                          (Yojson.Basic.to_string
-                             (User_model.user_to_json user))
-                        `OK
-                  | Error (`Msg err) ->
-                      Middleware.http_response reqd ~title:"Error"
-                        ~data:(String.escaped err) `Bad_request)
-              | _ ->
-                  Middleware.http_response reqd ~title:"Error"
-                    ~data:"A user with this name or email already exist."
-                    `Bad_request
-            else
-              Middleware.http_response reqd ~title:"Error"
-                ~data:
+        match json with
+        | `Assoc xs -> (
+            let validate_user_input ~name ~email ~password ~form_csrf =
+              if name = "" || email = "" || password = "" then
+                Error "All fields must be filled."
+              else if String.length name < 4 then
+                Error "Name must be at least 3 characters long."
+              else if not (Utils.Email.validate_email email) then
+                Error "Invalid email address."
+              else if not (User_model.password_validation password) then
+                Error "Password must be at least 8 characters long."
+              else if form_csrf = "" then
+                Error
                   "CSRF token mismatch error. Please referesh and try again."
-                `Bad_request)
+              else Ok "Validation passed."
+            in
+            match
+              Utils.Json.
+                ( get "email" xs,
+                  get "password" xs,
+                  get "name" xs,
+                  get "form_csrf" xs )
+            with
+            | ( Some (`String email),
+                Some (`String password),
+                Some (`String name),
+                Some (`String form_csrf) ) -> (
+                match validate_user_input ~name ~email ~password ~form_csrf with
+                | Error err ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped err) `Bad_request
+                | Ok _ ->
+                    if Middleware.csrf_cookie_verification form_csrf reqd then
+                      let _, (s : Storage.t) = !store in
+                      let users = s.users in
+                      let existing_email =
+                        User_model.check_if_email_exists email users
+                      in
+                      let existing_name =
+                        User_model.check_if_name_exists name users
+                      in
+                      match (existing_name, existing_email) with
+                      | Some _, None ->
+                          Middleware.http_response reqd ~title:"Error"
+                            ~data:"A user with this name already exist."
+                            `Bad_request
+                      | None, Some _ ->
+                          Middleware.http_response reqd ~title:"Error"
+                            ~data:"A user with this email already exist."
+                            `Bad_request
+                      | None, None -> (
+                          let created_at = Ptime.v (P.now_d_ps ()) in
+                          let user =
+                            let active, super_user =
+                              if List.length users = 0 then (true, true)
+                              else (false, false)
+                            in
+                            User_model.create_user ~name ~email ~password
+                              ~created_at ~active ~super_user
+                              ~user_agent:(Middleware.user_agent reqd)
+                          in
+                          Store.add_user !store user >>= function
+                          | Ok store' ->
+                              store := store';
+                              let cookie =
+                                List.find
+                                  (fun (c : User_model.cookie) ->
+                                    c.name = "molly_session")
+                                  user.cookies
+                              in
+                              let cookie_value =
+                                cookie.name ^ "=" ^ cookie.value
+                                ^ ";Path=/;HttpOnly=true"
+                              in
+                              let header_list =
+                                [
+                                  ("Set-Cookie", cookie_value);
+                                  ("location", "/dashboard");
+                                ]
+                              in
+                              Middleware.http_response reqd ~header_list
+                                ~title:"Success"
+                                ~data:
+                                  (Yojson.Basic.to_string
+                                     (User_model.user_to_json user))
+                                `OK
+                          | Error (`Msg err) ->
+                              Middleware.http_response reqd ~title:"Error"
+                                ~data:(String.escaped err) `Bad_request)
+                      | _ ->
+                          Middleware.http_response reqd ~title:"Error"
+                            ~data:
+                              "A user with this name or email already exist."
+                            `Bad_request
+                    else
+                      Middleware.http_response reqd ~title:"Error"
+                        ~data:
+                          "CSRF token mismatch error. Please referesh and try \
+                           again."
+                        `Bad_request)
+            | _ ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:
+                    (Fmt.str "Register: Unexpected fields. Got %s"
+                       (Yojson.Basic.to_string (`Assoc xs)))
+                  `Bad_request)
+        | _ ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:"Register account: expected a dictionary" `Bad_request)
 
   let login store reqd =
     decode_request_body reqd >>= fun data ->
@@ -338,74 +355,83 @@ struct
         Middleware.http_response reqd ~title:"Error" ~data:(String.escaped err)
           `Bad_request
     | Ok json -> (
-        let validate_user_input ~email ~password =
-          if email = "" || password = "" then Error "All fields must be filled."
-          else if not (Utils.Email.validate_email email) then
-            Error "Invalid email address."
-          else if String.length password < 8 then
-            Error "Password must be at least 8 characters long."
-          else Ok "Validation passed."
-        in
-        let email =
-          json |> Yojson.Basic.Util.member "email" |> Yojson.Basic.to_string
-        in
-        let password =
-          json |> Yojson.Basic.Util.member "password" |> Yojson.Basic.to_string
-        in
-        match validate_user_input ~email ~password with
-        | Error err ->
-            Middleware.http_response reqd ~title:"Error"
-              ~data:(String.escaped err) `Bad_request
-        | Ok _ -> (
-            let now = Ptime.v (P.now_d_ps ()) in
-            let _, (t : Storage.t) = !store in
-            let users = t.users in
-            let login =
-              User_model.login_user ~email ~password
-                ~user_agent:(Middleware.user_agent reqd)
-                users now
+        match json with
+        | `Assoc xs -> (
+            let validate_user_input ~email ~password =
+              if email = "" || password = "" then
+                Error "All fields must be filled."
+              else if not (Utils.Email.validate_email email) then
+                Error "Invalid email address."
+              else if String.length password < 8 then
+                Error "Password must be at least 8 characters long."
+              else Ok "Validation passed."
             in
-            match login with
-            | Error (`Msg err) ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:(String.escaped err) `Bad_request
-            | Ok user -> (
-                Store.update_user !store user >>= function
-                | Ok store' -> (
-                    store := store';
-                    let cookie =
-                      List.find_opt
-                        (fun (c : User_model.cookie) ->
-                          c.name = "molly_session")
-                        user.cookies
-                    in
-                    match cookie with
-                    | Some cookie ->
-                        let cookie_value =
-                          cookie.name ^ "=" ^ cookie.value
-                          ^ ";Path=/;HttpOnly=true"
-                        in
-                        let header_list =
-                          [
-                            ("Set-Cookie", cookie_value);
-                            ("location", "/dashboard");
-                          ]
-                        in
-                        Middleware.http_response reqd ~header_list
-                          ~title:"Success"
-                          ~data:
-                            (Yojson.Basic.to_string
-                               (User_model.user_to_json user))
-                          `OK
-                    | None ->
-                        Middleware.http_response reqd ~title:"Error"
-                          ~data:
-                            "Something went wrong. Wait a few seconds and try \
-                             again."
-                          `Internal_server_error)
-                | Error (`Msg err) ->
+            match Utils.Json.(get "email" xs, get "password" xs) with
+            | Some (`String email), Some (`String password) -> (
+                match validate_user_input ~email ~password with
+                | Error err ->
                     Middleware.http_response reqd ~title:"Error"
-                      ~data:(String.escaped err) `Internal_server_error)))
+                      ~data:(String.escaped err) `Bad_request
+                | Ok _ -> (
+                    let now = Ptime.v (P.now_d_ps ()) in
+                    let _, (t : Storage.t) = !store in
+                    let users = t.users in
+                    let login =
+                      User_model.login_user ~email ~password
+                        ~user_agent:(Middleware.user_agent reqd)
+                        users now
+                    in
+                    match login with
+                    | Error (`Msg err) ->
+                        Middleware.http_response reqd ~title:"Error"
+                          ~data:(String.escaped err) `Bad_request
+                    | Ok user -> (
+                        Store.update_user !store user >>= function
+                        | Ok store' -> (
+                            store := store';
+                            let cookie =
+                              List.find_opt
+                                (fun (c : User_model.cookie) ->
+                                  c.name = "molly_session")
+                                user.cookies
+                            in
+                            match cookie with
+                            | Some cookie ->
+                                let cookie_value =
+                                  cookie.name ^ "=" ^ cookie.value
+                                  ^ ";Path=/;HttpOnly=true"
+                                in
+                                let header_list =
+                                  [
+                                    ("Set-Cookie", cookie_value);
+                                    ("location", "/dashboard");
+                                  ]
+                                in
+                                Middleware.http_response reqd ~header_list
+                                  ~title:"Success"
+                                  ~data:
+                                    (Yojson.Basic.to_string
+                                       (User_model.user_to_json user))
+                                  `OK
+                            | None ->
+                                Middleware.http_response reqd ~title:"Error"
+                                  ~data:
+                                    "Something went wrong. Wait a few seconds \
+                                     and try again."
+                                  `Internal_server_error)
+                        | Error (`Msg err) ->
+                            Middleware.http_response reqd ~title:"Error"
+                              ~data:(String.escaped err) `Internal_server_error)
+                    ))
+            | _ ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:
+                    (Fmt.str "Update password: Unexpected fields. Got %s"
+                       (Yojson.Basic.to_string (`Assoc xs)))
+                  `Bad_request)
+        | _ ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:"Update password: expected a dictionary" `Bad_request)
 
   let verify_email store reqd (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
@@ -643,8 +669,6 @@ struct
             in
             match
               ( String.equal user.password
-                  (* TODO: remove concats from current_password and fix all json parsing, remove Utils.clean_string for good*)
-                  (* Changing passwords will break login because of Utils.clean_string*)
                   (User_model.hash_password
                      ~password:("\"" ^ current_password ^ "\"")
                      ~uuid:user.uuid),
@@ -1200,61 +1224,80 @@ struct
              `Not_found)
 
   let update_policy json store albatross reqd _user =
-    let user_uuid =
-      Yojson.Basic.(to_string (json |> Util.member "user_uuid"))
-    in
-    let users = User_model.create_user_uuid_map (snd store).Storage.users in
-    match
-      User_model.find_user_by_key (Utils.Json.clean_string user_uuid) users
-    with
-    | Some u -> (
-        match Albatross_json.policy_of_json json with
-        | Ok policy -> (
-            match Albatross.policy albatross with
-            | Ok (Some root_policy) -> (
-                match
-                  Vmm_core.Policy.is_smaller ~super:root_policy ~sub:policy
-                with
-                | Error (`Msg err) ->
-                    Logs.err (fun m ->
-                        m "policy %a is not smaller than root policy %a: %s"
-                          Vmm_core.Policy.pp policy Vmm_core.Policy.pp
-                          root_policy err);
-                    Middleware.http_response reqd ~title:"Error"
-                      ~data:("policy is not smaller than root policy: " ^ err)
-                      `Internal_server_error
-                | Ok () -> (
-                    Albatross.set_policy albatross ~domain:u.name policy
-                    >>= function
+    match json with
+    | `Assoc xs -> (
+        match Utils.Json.get "user_uuid" xs with
+        | Some (`String user_uuid) -> (
+            let users =
+              User_model.create_user_uuid_map (snd store).Storage.users
+            in
+            match User_model.find_user_by_key user_uuid users with
+            | Some u -> (
+                match Albatross_json.policy_of_json json with
+                | Ok policy -> (
+                    match Albatross.policy albatross with
+                    | Ok (Some root_policy) -> (
+                        match
+                          Vmm_core.Policy.is_smaller ~super:root_policy
+                            ~sub:policy
+                        with
+                        | Error (`Msg err) ->
+                            Logs.err (fun m ->
+                                m
+                                  "policy %a is not smaller than root policy \
+                                   %a: %s"
+                                  Vmm_core.Policy.pp policy Vmm_core.Policy.pp
+                                  root_policy err);
+                            Middleware.http_response reqd ~title:"Error"
+                              ~data:
+                                ("policy is not smaller than root policy: "
+                               ^ err)
+                              `Internal_server_error
+                        | Ok () -> (
+                            Albatross.set_policy albatross ~domain:u.name policy
+                            >>= function
+                            | Error err ->
+                                Logs.err (fun m ->
+                                    m "error setting policy %a for %s: %s"
+                                      Vmm_core.Policy.pp policy u.name err);
+                                Middleware.http_response reqd ~title:"Error"
+                                  ~data:("error setting policy: " ^ err)
+                                  `Internal_server_error
+                            | Ok policy ->
+                                Middleware.http_response reqd ~title:"Success"
+                                  ~data:
+                                    (Yojson.Basic.to_string
+                                       (Albatross_json.policy_info policy))
+                                  `OK))
+                    | Ok None ->
+                        Logs.err (fun m ->
+                            m "policy: root policy can't be null ");
+                        Middleware.http_response reqd ~title:"Error"
+                          ~data:"root policy is null" `Internal_server_error
                     | Error err ->
                         Logs.err (fun m ->
-                            m "error setting policy %a for %s: %s"
-                              Vmm_core.Policy.pp policy u.name err);
+                            m
+                              "policy: an error occured while fetching root \
+                               policy: %s"
+                              err);
                         Middleware.http_response reqd ~title:"Error"
-                          ~data:("error setting policy: " ^ err)
-                          `Internal_server_error
-                    | Ok policy ->
-                        Middleware.http_response reqd ~title:"Success"
-                          ~data:
-                            (Yojson.Basic.to_string
-                               (Albatross_json.policy_info policy))
-                          `OK))
-            | Ok None ->
-                Logs.err (fun m -> m "policy: root policy can't be null ");
+                          ~data:("error with root policy: " ^ err)
+                          `Internal_server_error)
+                | Error (`Msg err) ->
+                    Middleware.http_response reqd ~title:"Error" ~data:err
+                      `Bad_request)
+            | None ->
                 Middleware.http_response reqd ~title:"Error"
-                  ~data:"root policy is null" `Internal_server_error
-            | Error err ->
-                Logs.err (fun m ->
-                    m "policy: an error occured while fetching root policy: %s"
-                      err);
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:("error with root policy: " ^ err)
-                  `Internal_server_error)
-        | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Error" ~data:err `Bad_request)
-    | None ->
-        Middleware.http_response reqd ~title:"Error" ~data:"User not found"
-          `Not_found
+                  ~data:"User not found" `Not_found)
+        | _ ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:
+                (Fmt.str "Update policy: Unexpected fields. Got %s"
+                   (Yojson.Basic.to_string (`Assoc xs)))
+              `Bad_request)
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:"Update policy: expected a dictionary" `Bad_request
 
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
