@@ -46,7 +46,9 @@ let t_of_json json =
                   else if v = 2 || v = 3 then User_model.user_v2_of_json js
                   else if v = 4 then
                     User_model.(user_of_json cookie_v1_of_json) js
-                  else User_model.(user_of_json cookie_of_json) js
+                    (* TODO: the latest version which is 5 should use cookie_of_json but
+                       as of now it breaks functionality*)
+                  else User_model.(user_of_json cookie_v1_of_json) js
                 in
                 Ok (user :: acc))
               (Ok []) users
