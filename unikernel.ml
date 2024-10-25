@@ -144,31 +144,45 @@ struct
       @ [ Middleware.auth_middleware now users ]
     in
     Middleware.apply_middleware middlewares
-      (fun _reqd ->
+      (fun reqd ->
         match Middleware.user_of_cookie users now reqd with
-        | Ok user_cookie -> (
-            let user, cookie = user_cookie in
-            let cookie =
-              { cookie with user_agent = Middleware.user_agent reqd }
-            in
-            let cookies =
-              List.map
-                (fun (cookie' : User_model.cookie) ->
-                  if String.equal cookie.value cookie'.value then cookie
-                  else cookie')
-                user.cookies
-            in
-            let updated_user = User_model.update_user user ~cookies () in
-            Store.update_user !store updated_user >>= function
-            | Ok store' ->
-                store := store';
-                f user_cookie
+        | Ok user -> (
+            match Middleware.get_cookie_from_request reqd with
+            | Ok cookie_value -> (
+                match
+                  User_model.user_auth_cookie_from_user cookie_value user
+                with
+                | Some cookie -> (
+                    let cookie =
+                      { cookie with user_agent = Middleware.user_agent reqd }
+                    in
+                    let cookies =
+                      List.map
+                        (fun (cookie' : User_model.cookie) ->
+                          if String.equal cookie_value cookie'.value then cookie
+                          else cookie')
+                        user.cookies
+                    in
+                    let updated_user =
+                      User_model.update_user user ~cookies ()
+                    in
+                    Store.update_user !store updated_user >>= function
+                    | Ok store' ->
+                        store := store';
+                        f user
+                    | Error (`Msg err) ->
+                        Logs.err (fun m -> m "Error with storage: %s" err);
+                        Middleware.http_response reqd ~title:"Error" ~data:err
+                          `Not_found)
+                | None ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:"Cookie not found" `Not_found)
             | Error (`Msg err) ->
-                Logs.err (fun m -> m "Error with storage: %s" err);
-                assert false)
+                Middleware.http_response reqd ~title:"Error" ~data:err
+                  `Bad_request)
         | Error (`Msg err) ->
             Logs.err (fun m -> m "couldn't find user of cookie: %s" err);
-            assert false)
+            Middleware.http_response reqd ~title:"Error" ~data:err `Not_found)
       reqd
 
   let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status
@@ -393,9 +407,7 @@ struct
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped err) `Internal_server_error)))
 
-  let verify_email store reqd
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let verify_email store reqd (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf -> (
@@ -428,9 +440,8 @@ struct
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
 
-  let verify_email_token store reqd verification_token
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let verify_email_token store reqd verification_token (user : User_model.user)
+      =
     match
       let users =
         User_model.create_user_session_map (snd !store).Storage.users
@@ -531,9 +542,7 @@ struct
            <= 1)
       ~error_message:"Cannot remove last administrator"
 
-  let dashboard albatross reqd
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let dashboard albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
     (Albatross.query albatross ~domain:user.name
        (`Unikernel_cmd `Unikernel_info)
@@ -559,31 +568,64 @@ struct
             ~icon:"/images/robur.png" ())
          `OK)
 
-  let account_page store reqd
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, cookie = user_cookie in
-    let now = Ptime.v (P.now_d_ps ()) in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
+  let account_page store reqd (user : User_model.user) =
+    match Middleware.get_cookie_from_request reqd with
+    | Ok cookie_value -> (
+        match User_model.user_auth_cookie_from_user cookie_value user with
+        | Some cookie -> (
+            let now = Ptime.v (P.now_d_ps ()) in
+            generate_csrf_token store user now reqd >>= function
+            | Ok csrf ->
+                Lwt.return
+                  (reply reqd ~content_type:"text/html"
+                     (Dashboard.dashboard_layout user
+                        ~page_title:"Account | Mollymawk"
+                        ~content:
+                          (User_account.user_account_layout ~csrf user cookie
+                             now)
+                        ~icon:"/images/robur.png" ())
+                     ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                     `OK)
+            | Error err ->
+                Lwt.return
+                  (reply reqd ~content_type:"text/html"
+                     (Dashboard.dashboard_layout user
+                        ~page_title:"500 | Mollymawk"
+                        ~content:(Error_page.error_layout err)
+                        ~icon:"/images/robur.png" ())
+                     `Internal_server_error))
+        | None ->
+            let error =
+              {
+                Utils.Status.code = 401;
+                title = "Unauthenticated";
+                success = false;
+                data = "Auth cookie not found";
+              }
+            in
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+                    ~content:(Error_page.error_layout error)
+                    ~icon:"/images/robur.png" ())
+                 `Unauthorized))
+    | Error (`Msg err) ->
+        let error =
+          {
+            Utils.Status.code = 401;
+            title = "Unauthenticated";
+            success = false;
+            data = err;
+          }
+        in
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"Account | Mollymawk"
-                ~content:
-                  (User_account.user_account_layout ~csrf user cookie now)
+             (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+                ~content:(Error_page.error_layout error)
                 ~icon:"/images/robur.png" ())
-             ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-             `OK)
-    | Error err ->
-        Lwt.return
-          (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
-                ~content:(Error_page.error_layout err)
-                ~icon:"/images/robur.png" ())
-             `Internal_server_error)
+             `Unauthorized)
 
-  let update_password json store reqd
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let update_password json store reqd (user : User_model.user) =
     match json with
     | `Assoc xs -> (
         match
@@ -599,28 +641,21 @@ struct
             let new_password_hash =
               User_model.hash_password ~password:new_password ~uuid:user.uuid
             in
-            Logs.err (fun m ->
-                m "%s and %s" user.password
-                  (User_model.hash_password ~password:current_password
-                     ~uuid:user.uuid));
-            Logs.err (fun m ->
-                m "%s" (User_model.user_to_json user |> Yojson.Basic.to_string));
-            Logs.err (fun m ->
-                m "%s"
-                  (User_model.hash_password ~password:current_password
-                     ~uuid:user.uuid));
             match
               ( String.equal user.password
-                  (User_model.hash_password ~password:current_password
+                  (* TODO: remove concats from current_password and fix all json parsing, remove Utils.clean_string for good*)
+                  (* Changing passwords will break login because of Utils.clean_string*)
+                  (User_model.hash_password
+                     ~password:("\"" ^ current_password ^ "\"")
                      ~uuid:user.uuid),
-                not (String.equal new_password_hash user.password) )
+                String.equal new_password_hash user.password )
             with
             | true, false -> (
                 match String.equal new_password confirm_password with
                 | true ->
                     if User_model.password_validation new_password then (
                       let updated_user =
-                        User_model.update_user user ~password:new_password
+                        User_model.update_user user ~password:new_password_hash
                           ~updated_at:now ()
                       in
                       Store.update_user !store updated_user >>= function
@@ -659,32 +694,63 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:"Update password: expected a dictionary" `Bad_request
 
-  let close_sessions store reqd
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, cookie = user_cookie in
-    let now = Ptime.v (P.now_d_ps ()) in
-    let cookies =
-      cookie
-      :: List.filter
-           (fun (cookie : User_model.cookie) ->
-             not (String.equal cookie.name "molly_session"))
-           user.cookies
-    in
-    let updated_user =
-      User_model.update_user user ~cookies ~updated_at:now ()
-    in
-    Store.update_user !store updated_user >>= function
-    | Ok store' ->
-        store := store';
-        Middleware.http_response reqd ~title:"OK"
-          ~data:"Closed all sessions successfully" `OK
+  let close_sessions store reqd (user : User_model.user) =
+    match Middleware.get_cookie_from_request reqd with
+    | Ok cookie_value -> (
+        match User_model.user_auth_cookie_from_user cookie_value user with
+        | Some cookie -> (
+            let now = Ptime.v (P.now_d_ps ()) in
+            let cookies =
+              cookie
+              :: List.filter
+                   (fun (cookie : User_model.cookie) ->
+                     not (String.equal cookie.name "molly_session"))
+                   user.cookies
+            in
+            let updated_user =
+              User_model.update_user user ~cookies ~updated_at:now ()
+            in
+            Store.update_user !store updated_user >>= function
+            | Ok store' ->
+                store := store';
+                Middleware.http_response reqd ~title:"OK"
+                  ~data:"Closed all sessions successfully" `OK
+            | Error (`Msg err) ->
+                Logs.warn (fun m -> m "Storage error with %s" err);
+                Middleware.http_response reqd ~title:"Error" ~data:err
+                  `Internal_server_error)
+        | None ->
+            let error =
+              {
+                Utils.Status.code = 401;
+                title = "Unauthenticated";
+                success = false;
+                data = "Auth cookie not found";
+              }
+            in
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+                    ~content:(Error_page.error_layout error)
+                    ~icon:"/images/robur.png" ())
+                 `Unauthorized))
     | Error (`Msg err) ->
-        Logs.warn (fun m -> m "Storage error with %s" err);
-        Middleware.http_response reqd ~title:"Error" ~data:err
-          `Internal_server_error
+        let error =
+          {
+            Utils.Status.code = 401;
+            title = "Unauthenticated";
+            success = false;
+            data = err;
+          }
+        in
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+                ~content:(Error_page.error_layout error)
+                ~icon:"/images/robur.png" ())
+             `Unauthorized)
 
-  let users store reqd (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let users store reqd (user : User_model.user) =
     Lwt.return
       (reply reqd ~content_type:"text/html"
          (Dashboard.dashboard_layout user ~page_title:"Users | Mollymawk"
@@ -694,8 +760,7 @@ struct
             ~icon:"/images/robur.png" ())
          `OK)
 
-  let settings store reqd (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let settings store reqd (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
@@ -737,9 +802,7 @@ struct
         Middleware.http_response ~title:"Error" ~data:(String.escaped err) reqd
           `Bad_request
 
-  let deploy_form store reqd (user_cookie : User_model.user * User_model.cookie)
-      =
-    let user, _ = user_cookie in
+  let deploy_form store reqd (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
@@ -759,9 +822,7 @@ struct
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
 
-  let unikernel_info albatross reqd
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let unikernel_info albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
     Albatross.query albatross ~domain:user.name (`Unikernel_cmd `Unikernel_info)
     >>= function
@@ -782,9 +843,7 @@ struct
               ~data:(Yojson.Safe.to_string (`String res))
               `Internal_server_error)
 
-  let unikernel_info_one albatross store name reqd
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let unikernel_info_one albatross store name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
     (Albatross.query albatross ~domain:user.name ~name
        (`Unikernel_cmd `Unikernel_info)
@@ -844,9 +903,7 @@ struct
               ~icon:"/images/robur.png" ())
            `Internal_server_error)
 
-  let unikernel_destroy json albatross reqd
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let unikernel_destroy json albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
     let unikernel_name =
       Yojson.Basic.(to_string (json |> Util.member "name"))
@@ -870,9 +927,7 @@ struct
               ~data:(Yojson.Safe.to_string (`String res))
               `Internal_server_error)
 
-  let unikernel_restart json albatross reqd
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let unikernel_restart json albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
     let unikernel_name =
       Yojson.Basic.(to_string (json |> Util.member "name"))
@@ -896,9 +951,7 @@ struct
               ~data:(Yojson.Safe.to_string (`String res))
               `Internal_server_error)
 
-  let unikernel_create albatross reqd
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let unikernel_create albatross reqd (user : User_model.user) =
     let response_body = Httpaf.Reqd.request_body reqd in
     let finished, notify_finished = Lwt.wait () in
     let wakeup v = Lwt.wakeup_later notify_finished v in
@@ -1003,10 +1056,8 @@ struct
                 Middleware.http_response reqd ~title:"Error"
                   ~data:"Couldn't find fields" `Bad_request))
 
-  let unikernel_console albatross name reqd
-      (user_cookie : User_model.user * User_model.cookie) =
+  let unikernel_console albatross name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
-    let user, _ = user_cookie in
     Albatross.query_console ~domain:user.name albatross ~name >>= function
     | Error err ->
         Logs.warn (fun m -> m "error querying albatross: %s" err);
@@ -1023,9 +1074,7 @@ struct
              (Yojson.Basic.to_string (`List console_output))
              `OK)
 
-  let view_user albatross store uuid reqd
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let view_user albatross store uuid reqd (user : User_model.user) =
     let users = User_model.create_user_uuid_map (snd !store).Storage.users in
     match User_model.find_user_by_key uuid users with
     | Some u -> (
@@ -1085,9 +1134,7 @@ struct
                 ~icon:"/images/robur.png" ())
              `Not_found)
 
-  let edit_policy albatross store uuid reqd
-      (user_cookie : User_model.user * User_model.cookie) =
-    let user, _ = user_cookie in
+  let edit_policy albatross store uuid reqd (user : User_model.user) =
     let users = User_model.create_user_uuid_map (snd !store).Storage.users in
     match User_model.find_user_by_key uuid users with
     | Some u -> (
