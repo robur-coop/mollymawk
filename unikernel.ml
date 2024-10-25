@@ -489,19 +489,11 @@ struct
             ~data:"Logged in user is not the to-be-verified one" `Bad_request
     | Error (`Msg s) -> Middleware.redirect_to_login reqd ~msg:s ()
 
-  let toggle_account_attribute store reqd ~key update_fn error_on_last
+  let toggle_account_attribute json store reqd ~key update_fn error_on_last
       ~error_message =
-    decode_request_body reqd >>= fun data ->
-    let json =
-      try Ok (Yojson.Basic.from_string data)
-      with Yojson.Json_error s -> Error (`Msg s)
-    in
     match json with
-    | Error (`Msg err) ->
-        Logs.warn (fun m -> m "Failed to parse JSON: %s - %s" key err);
-        Middleware.http_response reqd ~title:"Error" ~data:err `Bad_request
-    | Ok (`Assoc json) -> (
-        match Utils.Json.get "uuid" json with
+    | `Assoc xs -> (
+        match Utils.Json.get "uuid" xs with
         | Some (`String uuid) -> (
             let users =
               User_model.create_user_uuid_map (snd !store).Storage.users
@@ -534,12 +526,12 @@ struct
                 m "%s: Failed to parse JSON - no UUID found" key);
             Middleware.http_response reqd ~title:"Error"
               ~data:"Couldn't find a UUID in the JSON." `Not_found)
-    | Ok _ ->
+    | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:"Provided JSON is not a dictionary" `Bad_request
 
-  let toggle_account_activation store reqd _user =
-    toggle_account_attribute store reqd ~key:"toggle-active-account"
+  let toggle_account_activation json store reqd _user =
+    toggle_account_attribute json store reqd ~key:"toggle-active-account"
       (fun user ->
         User_model.update_user user ~active:(not user.active)
           ~updated_at:(Ptime.v (P.now_d_ps ()))
@@ -553,8 +545,8 @@ struct
            <= 1)
       ~error_message:"Cannot deactivate last active user"
 
-  let toggle_admin_activation store reqd _user =
-    toggle_account_attribute store reqd ~key:"toggle-admin-account"
+  let toggle_admin_activation json store reqd _user =
+    toggle_account_attribute json store reqd ~key:"toggle-admin-account"
       (fun user ->
         User_model.update_user user ~super_user:(not user.super_user)
           ~updated_at:(Ptime.v (P.now_d_ps ()))
@@ -1430,20 +1422,20 @@ struct
         | "/api/admin/user/activate/toggle" ->
             check_meth `POST (fun () ->
                 extract_csrf_token reqd >>= function
-                | Ok (form_csrf, _json) ->
+                | Ok (form_csrf, json) ->
                     authenticate ~check_admin:true ~form_csrf ~api_meth:true
                       store reqd
-                      (toggle_account_activation store reqd)
+                      (toggle_account_activation json store reqd)
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
         | "/api/admin/user/admin/toggle" ->
             check_meth `POST (fun () ->
                 extract_csrf_token reqd >>= function
-                | Ok (form_csrf, _json) ->
+                | Ok (form_csrf, json) ->
                     authenticate ~check_admin:true ~form_csrf ~api_meth:true
                       store reqd
-                      (toggle_admin_activation store reqd)
+                      (toggle_admin_activation json store reqd)
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
