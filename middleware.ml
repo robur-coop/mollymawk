@@ -1,11 +1,11 @@
 type handler = Httpaf.Reqd.t -> unit Lwt.t
 type middleware = handler -> handler
 
-let has_header ~header_name reqd =
+let header header_name reqd =
   let headers = (Httpaf.Reqd.request reqd).headers in
   Httpaf.Headers.get headers header_name
 
-let user_agent reqd = has_header ~header_name:"User-Agent" reqd
+let user_agent reqd = header "User-Agent" reqd
 
 let get_csrf now reqd =
   User_model.(
@@ -14,7 +14,7 @@ let get_csrf now reqd =
       ~created_at:now ~expires_in:3600)
 
 let has_cookie cookie_name (reqd : Httpaf.Reqd.t) =
-  match has_header ~header_name:"Cookie" reqd with
+  match header "Cookie" reqd with
   | Some cookies ->
       let cookie_list = String.split_on_char ';' cookies in
       List.find_opt
