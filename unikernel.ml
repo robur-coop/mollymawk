@@ -149,9 +149,7 @@ struct
         | Ok user -> (
             match Middleware.session_cookie_value reqd with
             | Ok cookie_value -> (
-                match
-                  User_model.user_session_cookie cookie_value user
-                with
+                match User_model.user_session_cookie cookie_value user with
                 | Some cookie -> (
                     let cookie =
                       { cookie with user_agent = Middleware.user_agent reqd }
