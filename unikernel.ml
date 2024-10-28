@@ -147,7 +147,7 @@ struct
       (fun reqd ->
         match Middleware.user_of_cookie users now reqd with
         | Ok user -> (
-            match Middleware.session_cookie reqd with
+            match Middleware.session_cookie_value reqd with
             | Ok cookie_value -> (
                 match
                   User_model.user_auth_cookie_from_user cookie_value user
@@ -203,8 +203,8 @@ struct
     let csrf = Middleware.generate_csrf_cookie now reqd in
     let csrf_cookie = csrf.name ^ "=" ^ csrf.value ^ ";Path=/;HttpOnly=true" in
     match Middleware.session_cookie_value reqd with
-    | Ok (Some _x) -> Middleware.redirect_to_dashboard reqd ()
-    | Ok None | Error (`Msg _) ->
+    | Ok x when x <> "" -> Middleware.redirect_to_dashboard reqd ()
+    | Ok _ | Error (`Msg _) ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Sign_up.register_page ~csrf:csrf.value ~icon:"/images/robur.png")
@@ -214,8 +214,8 @@ struct
 
   let sign_in reqd =
     match Middleware.session_cookie_value reqd with
-    | Ok (Some _) -> Middleware.redirect_to_dashboard reqd ()
-    | Ok None | Error (`Msg _) ->
+    | Ok x when x <> "" -> Middleware.redirect_to_dashboard reqd ()
+    | Ok _ | Error (`Msg _) ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Sign_in.login_page ~icon:"/images/robur.png" ())
@@ -587,7 +587,7 @@ struct
          `OK)
 
   let account_page store reqd (user : User_model.user) =
-    match Middleware.session_cookie reqd with
+    match Middleware.session_cookie_value reqd with
     | Ok cookie_value -> (
         match User_model.user_auth_cookie_from_user cookie_value user with
         | Some cookie -> (
@@ -711,7 +711,7 @@ struct
           ~data:"Update password: expected a dictionary" `Bad_request
 
   let close_sessions store reqd (user : User_model.user) =
-    match Middleware.session_cookie reqd with
+    match Middleware.session_cookie_value reqd with
     | Ok cookie_value -> (
         match User_model.user_auth_cookie_from_user cookie_value user with
         | Some cookie -> (

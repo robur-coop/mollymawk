@@ -132,7 +132,7 @@ let user_from_auth_cookie cookie users =
   | Some user -> Ok user
   | None -> Error (`Msg "User not found")
 
-let session_cookie reqd =
+let session_cookie_value reqd =
   match cookie User_model.session_cookie reqd with
   | Some auth_cookie -> (
       match cookie_value auth_cookie with
@@ -146,7 +146,7 @@ let session_cookie reqd =
       Error (`Msg "User not found")
 
 let user_of_cookie users now reqd =
-  match session_cookie reqd with
+  match session_cookie_value reqd with
   | Ok auth_cookie -> (
       match user_from_auth_cookie auth_cookie users with
       | Ok user -> (
@@ -174,15 +174,6 @@ let user_of_cookie users now reqd =
       Logs.err (fun m ->
           m "auth-middleware: No molly-session in cookie header. %s" err);
       Error (`Msg err)
-
-let session_cookie_value reqd =
-  match cookie User_model.session_cookie reqd with
-  | Some cookie -> (
-      match cookie_value cookie with
-      | Ok "" -> Ok None
-      | Ok x -> Ok (Some x)
-      | Error _ as e -> e)
-  | None -> Error (`Msg "no cookie found")
 
 let auth_middleware now users handler reqd =
   match user_of_cookie users now reqd with
