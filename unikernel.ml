@@ -586,45 +586,27 @@ struct
 
   let account_page store reqd (user : User_model.user) =
     match Middleware.session_cookie_value reqd with
-    | Ok cookie_value -> (
-        match User_model.user_session_cookie cookie_value user with
-        | Some cookie -> (
-            let now = Ptime.v (P.now_d_ps ()) in
-            generate_csrf_token store user now reqd >>= function
-            | Ok csrf ->
-                Lwt.return
-                  (reply reqd ~content_type:"text/html"
-                     (Dashboard.dashboard_layout user
-                        ~page_title:"Account | Mollymawk"
-                        ~content:
-                          (User_account.user_account_layout ~csrf user cookie
-                             now)
-                        ~icon:"/images/robur.png" ())
-                     ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-                     `OK)
-            | Error err ->
-                Lwt.return
-                  (reply reqd ~content_type:"text/html"
-                     (Dashboard.dashboard_layout user
-                        ~page_title:"500 | Mollymawk"
-                        ~content:(Error_page.error_layout err)
-                        ~icon:"/images/robur.png" ())
-                     `Internal_server_error))
-        | None ->
-            let error =
-              {
-                Utils.Status.code = 401;
-                title = "Unauthenticated";
-                success = false;
-                data = "Auth cookie not found";
-              }
-            in
+    | Ok active_cookie_value -> (
+        let now = Ptime.v (P.now_d_ps ()) in
+        generate_csrf_token store user now reqd >>= function
+        | Ok csrf ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
-                    ~content:(Error_page.error_layout error)
+                 (Dashboard.dashboard_layout user
+                    ~page_title:"Account | Mollymawk"
+                    ~content:
+                      (User_account.user_account_layout ~csrf user
+                         ~active_cookie_value now)
                     ~icon:"/images/robur.png" ())
-                 `Unauthorized))
+                 ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                 `OK)
+        | Error err ->
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+                    ~content:(Error_page.error_layout err)
+                    ~icon:"/images/robur.png" ())
+                 `Internal_server_error))
     | Error (`Msg err) ->
         let error =
           {

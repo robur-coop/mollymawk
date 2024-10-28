@@ -1,5 +1,5 @@
-let user_account_layout ~csrf (user : User_model.user)
-    (active_cookie : User_model.cookie) current_time =
+let user_account_layout ~csrf (user : User_model.user) ~active_cookie_value
+    current_time =
   Tyxml_html.(
     section
       ~a:[ a_class [ "p-4 bg-gray-50 my-1" ] ]
@@ -248,7 +248,7 @@ let user_account_layout ~csrf (user : User_model.user)
                                        txt "Last active: ";
                                        (if
                                           String.equal cookie.value
-                                            active_cookie.value
+                                            active_cookie_value
                                         then
                                           span
                                             [
