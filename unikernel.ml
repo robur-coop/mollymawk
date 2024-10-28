@@ -50,7 +50,7 @@ struct
   module Map = Map.Make (String)
 
   let generate_csrf_token store user now reqd =
-    let csrf = Middleware.get_csrf now reqd () in
+    let csrf = Middleware.generate_csrf_cookie now reqd in
     let updated_user =
       User_model.update_user user ~updated_at:now
         ~cookies:(csrf :: user.cookies) ()
@@ -200,7 +200,7 @@ struct
 
   let sign_up reqd =
     let now = Ptime.v (P.now_d_ps ()) in
-    let csrf = Middleware.get_csrf now reqd () in
+    let csrf = Middleware.generate_csrf_cookie now reqd in
     let csrf_cookie = csrf.name ^ "=" ^ csrf.value ^ ";Path=/;HttpOnly=true" in
     match Middleware.session_cookie_value reqd with
     | Ok (Some _x) -> Middleware.redirect_to_dashboard reqd ()

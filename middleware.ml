@@ -7,11 +7,10 @@ let header header_name reqd =
 
 let user_agent reqd = header "User-Agent" reqd
 
-let get_csrf now reqd =
-  User_model.(
-    generate_cookie ~name:"molly_csrf" ~user_agent:(user_agent reqd)
-      ~uuid:(Uuidm.to_string (generate_uuid ()))
-      ~created_at:now ~expires_in:3600)
+let generate_csrf_cookie now reqd =
+  User_model.generate_cookie ~name:"molly_csrf" ~user_agent:(user_agent reqd)
+    ~uuid:(Uuidm.to_string (User_model.generate_uuid ()))
+    ~created_at:now ~expires_in:3600 ()
 
 let has_cookie cookie_name (reqd : Httpaf.Reqd.t) =
   match header "Cookie" reqd with
