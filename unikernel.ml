@@ -659,8 +659,7 @@ struct
             in
             match
               ( String.equal user.password
-                  (User_model.hash_password
-                     ~password:current_password
+                  (User_model.hash_password ~password:current_password
                      ~uuid:user.uuid),
                 String.equal new_password_hash user.password )
             with
