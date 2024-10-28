@@ -78,7 +78,7 @@ async function saveConfig() {
 	const pkeyInput = document.getElementById("private-key").value;
 	const formAlert = document.getElementById("form-alert");
 	const formButton = document.getElementById('config-button');
-	const molly_csrf = document.getElementById("molly-csrf").value.trim();
+	const molly_csrf = document.getElementById("molly-csrf").value;
 	formButton.classList.add("disabled");
 	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
 	formButton.disabled = true;
@@ -147,10 +147,10 @@ function postAlert(bg_color, content) {
 
 async function deployUnikernel() {
 	const deployButton = document.getElementById("deploy-button");
-	const name = document.getElementById("unikernel-name").value.trim();
-	const arguments = document.getElementById("unikernel-arguments").value.trim();
+	const name = document.getElementById("unikernel-name").value;
+	const arguments = document.getElementById("unikernel-arguments").value;
 	const binary = document.getElementById("unikernel-binary").files[0];
-	const molly_csrf = document.getElementById("molly-csrf").value.trim();
+	const molly_csrf = document.getElementById("molly-csrf").value;
 	const formAlert = document.getElementById("form-alert");
 	if (!name || !binary) {
 		formAlert.classList.remove("hidden", "text-primary-500");
@@ -197,7 +197,7 @@ async function deployUnikernel() {
 
 async function restartUnikernel(name) {
 	try {
-		const molly_csrf = document.getElementById("molly-csrf").value.trim();
+		const molly_csrf = document.getElementById("molly-csrf").value;
 		const response = await fetch(`/unikernel/restart/${name}`, {
 			method: 'POST',
 			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
@@ -220,7 +220,7 @@ async function restartUnikernel(name) {
 
 async function destroyUnikernel(name) {
 	try {
-		const molly_csrf = document.getElementById("molly-csrf").value.trim();
+		const molly_csrf = document.getElementById("molly-csrf").value;
 		const response = await fetch(`/unikernel/destroy/${name}`, {
 			method: 'POST',
 			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
@@ -257,7 +257,7 @@ function buttonLoading(btn, load, text) {
 
 async function toggleUserStatus(uuid, endpoint) {
 	try {
-		const molly_csrf = document.getElementById("molly-csrf").value.trim();
+		const molly_csrf = document.getElementById("molly-csrf").value;
 		const response = await fetch(endpoint, {
 			method: 'POST',
 			body: JSON.stringify({ uuid, molly_csrf }),
@@ -315,7 +315,7 @@ async function updatePolicy() {
 	const formAlert = document.getElementById("form-alert");
 	const user_id = document.getElementById("user_id").innerText;
 	const policyButton = document.getElementById("set-policy-btn");
-	const molly_csrf = document.getElementById("molly-csrf").value.trim();
+	const molly_csrf = document.getElementById("molly-csrf").value;
 	try {
 		buttonLoading(policyButton, true, "Processing...")
 		const response = await fetch("/api/admin/u/policy/update", {
@@ -422,10 +422,10 @@ async function updatePassword() {
 	const passwordButton = document.getElementById("password-button");
 	try {
 		buttonLoading(passwordButton, true, "Updating..")
-		const molly_csrf = document.getElementById("molly-csrf").value.trim();
-		const current_password = document.getElementById("current-password").value.trim();
-		const new_password = document.getElementById("new-password").value.trim();
-		const confirm_password = document.getElementById("confirm-password").value.trim();
+		const molly_csrf = document.getElementById("molly-csrf").value;
+		const current_password = document.getElementById("current-password").value;
+		const new_password = document.getElementById("new-password").value;
+		const confirm_password = document.getElementById("confirm-password").value;
 		const formAlert = document.getElementById("form-alert");
 		if (!current_password || !new_password || !confirm_password ) {
 			formAlert.classList.remove("hidden", "text-primary-500");
@@ -465,7 +465,7 @@ async function closeSessions() {
 	const sessionButton = document.getElementById("session-button");
 	try {
 		buttonLoading(sessionButton, true, "Closing sessions..")
-		const molly_csrf = document.getElementById("molly-csrf").value.trim();
+		const molly_csrf = document.getElementById("molly-csrf").value;
 		const response = await fetch('/account/sessions/close', {
 			method: 'POST',
 			body: JSON.stringify(
