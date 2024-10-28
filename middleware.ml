@@ -150,7 +150,7 @@ let user_of_cookie users now reqd =
   | Ok auth_cookie -> (
       match user_from_auth_cookie auth_cookie users with
       | Ok user -> (
-          match User_model.user_auth_cookie_from_user auth_cookie user with
+          match User_model.user_session_cookie auth_cookie user with
           | Some cookie -> (
               match User_model.is_valid_cookie cookie now with
               | true -> Ok user

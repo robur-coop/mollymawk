@@ -150,7 +150,7 @@ struct
             match Middleware.session_cookie_value reqd with
             | Ok cookie_value -> (
                 match
-                  User_model.user_auth_cookie_from_user cookie_value user
+                  User_model.user_session_cookie cookie_value user
                 with
                 | Some cookie -> (
                     let cookie =
@@ -589,7 +589,7 @@ struct
   let account_page store reqd (user : User_model.user) =
     match Middleware.session_cookie_value reqd with
     | Ok cookie_value -> (
-        match User_model.user_auth_cookie_from_user cookie_value user with
+        match User_model.user_session_cookie cookie_value user with
         | Some cookie -> (
             let now = Ptime.v (P.now_d_ps ()) in
             generate_csrf_token store user now reqd >>= function
@@ -713,7 +713,7 @@ struct
   let close_sessions store reqd (user : User_model.user) =
     match Middleware.session_cookie_value reqd with
     | Ok cookie_value -> (
-        match User_model.user_auth_cookie_from_user cookie_value user with
+        match User_model.user_session_cookie cookie_value user with
         | Some cookie -> (
             let now = Ptime.v (P.now_d_ps ()) in
             let cookies =

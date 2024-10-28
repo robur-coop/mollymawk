@@ -631,7 +631,7 @@ let verify_email_token users token timestamp =
               "This link has expired. Please sign in to get a new verification \
                link."))
 
-let user_auth_cookie_from_user cookie_value (user : user) =
+let user_session_cookie cookie_value (user : user) =
   List.find_opt
     (fun (cookie : cookie) ->
       String.equal cookie.name session_cookie
