@@ -14,7 +14,7 @@ type cookie = {
   expires_in : int;
   uuid : string option;
   created_at : Ptime.t;
-  last_access : Ptime.t option;
+  last_access : Ptime.t;
   user_agent : string option;
 }
 
@@ -53,14 +53,19 @@ let cookie_to_json (cookie : cookie) : Yojson.Basic.t =
       ( "uuid",
         match cookie.uuid with Some uuid -> `String uuid | None -> `Null );
       ( "last_access",
-        match cookie.last_access with
-        | Some ptime -> `String (Utils.TimeHelper.string_of_ptime ptime)
-        | None -> `Null );
+        `String (Utils.TimeHelper.string_of_ptime cookie.last_access) );
       ( "user_agent",
         match cookie.user_agent with
         | Some agent -> `String agent
         | None -> `Null );
     ]
+
+let string_or_none field = function
+  | None -> Ok None
+  | Some (`String v) -> Ok (Some v)
+  | _ -> Error (`Msg ("invalid json for " ^ field))
+
+let ( let* ) = Result.bind
 
 let cookie_v1_of_json = function
   | `Assoc xs -> (
@@ -74,40 +79,25 @@ let cookie_v1_of_json = function
       | ( Some (`String name),
           Some (`String value),
           Some (`Int expires_in),
-          Some (`String uuid),
+          uuid,
           Some (`String created_at_str) ) ->
           let created_at =
             match Utils.TimeHelper.ptime_of_string created_at_str with
-            | Ok ptime -> Some ptime
-            | Error _ -> None
+            | Ok ptime -> ptime
+            | Error (`Msg msg) ->
+                Logs.warn (fun m ->
+                    m "couldn't parse created_at %s: value %S" msg
+                      created_at_str);
+                Ptime.epoch
           in
+          let* uuid = string_or_none "uuid" uuid in
           Ok
             {
               name;
               value;
               expires_in;
-              uuid = Some uuid;
-              created_at = Option.get created_at;
-              last_access = created_at;
-              user_agent = None;
-            }
-      | ( Some (`String name),
-          Some (`String value),
-          Some (`Int expires_in),
-          None,
-          Some (`String created_at_str) ) ->
-          let created_at =
-            match Utils.TimeHelper.ptime_of_string created_at_str with
-            | Ok ptime -> Some ptime
-            | Error _ -> None
-          in
-          Ok
-            {
-              name;
-              value;
-              expires_in;
-              uuid = None;
-              created_at = Option.get created_at;
+              uuid;
+              created_at;
               last_access = created_at;
               user_agent = None;
             }
@@ -128,51 +118,39 @@ let cookie_of_json = function
       | ( Some (`String name),
           Some (`String value),
           Some (`Int expires_in),
-          Some (`String uuid),
+          uuid,
           Some (`String created_at_str),
           Some (`String last_access_str),
-          Some (`String user_agent) ) ->
+          user_agent ) ->
           let created_at =
             match Utils.TimeHelper.ptime_of_string created_at_str with
-            | Ok ptime -> Some ptime
-            | Error _ -> None
+            | Ok ptime -> ptime
+            | Error (`Msg msg) ->
+                Logs.warn (fun m ->
+                    m "couldn't parse created_at %s: value %S" msg
+                      created_at_str);
+                Ptime.epoch
           in
           let last_access =
             match Utils.TimeHelper.ptime_of_string last_access_str with
-            | Ok ptime -> Some ptime
-            | Error _ -> None
+            | Ok ptime -> ptime
+            | Error (`Msg msg) ->
+                Logs.warn (fun m ->
+                    m "couldn't parse last_access %s: value %S" msg
+                      last_access_str);
+                created_at
           in
+          let* uuid = string_or_none "uuid" uuid in
+          let* user_agent = string_or_none "user-agent" user_agent in
           Ok
             {
               name;
               value;
               expires_in;
-              uuid = Some uuid;
-              created_at = Option.get created_at;
+              uuid;
+              created_at;
               last_access;
-              user_agent = Some user_agent;
-            }
-      | ( Some (`String name),
-          Some (`String value),
-          Some (`Int expires_in),
-          None,
-          Some (`String created_at_str),
-          None,
-          None ) ->
-          let created_at =
-            match Utils.TimeHelper.ptime_of_string created_at_str with
-            | Ok ptime -> Some ptime
-            | Error _ -> None
-          in
-          Ok
-            {
-              name;
-              value;
-              expires_in;
-              uuid = None;
-              created_at = Option.get created_at;
-              last_access = created_at;
-              user_agent = None;
+              user_agent;
             }
       | _ -> Error (`Msg "invalid json for cookie"))
   | _ -> Error (`Msg "invalid json for cookie")
@@ -239,7 +217,6 @@ let user_to_json (u : user) : Yojson.Basic.t =
 
 let user_v1_of_json = function
   | `Assoc xs -> (
-      let ( let* ) = Result.bind in
       match
         ( get "name" xs,
           get "email" xs,
@@ -321,7 +298,6 @@ let user_v1_of_json = function
 
 let user_v2_of_json = function
   | `Assoc xs -> (
-      let ( let* ) = Result.bind in
       match
         ( get "name" xs,
           get "email" xs,
@@ -405,7 +381,6 @@ let user_v2_of_json = function
 
 let user_of_json cookie_fn = function
   | `Assoc xs -> (
-      let ( let* ) = Result.bind in
       match
         ( get "name" xs,
           get "email" xs,
@@ -517,7 +492,7 @@ let generate_cookie ~name ~uuid ?(expires_in = 3600) ~created_at ~user_agent ()
     expires_in;
     uuid = Some uuid;
     created_at;
-    last_access = Some created_at;
+    last_access = created_at;
     user_agent;
   }
 
@@ -597,7 +572,6 @@ let is_email_verified user = Option.is_some user.email_verified
 let password_validation password = String.length password > 8
 
 let verify_email_token users token timestamp =
-  let ( let* ) = Result.bind in
   let* uuid =
     Option.to_result ~none:(`Msg "invalid UUID") (Uuidm.of_string token)
   in

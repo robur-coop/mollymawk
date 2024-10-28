@@ -265,24 +265,14 @@ let user_account_layout ~csrf (user : User_model.user)
                                                 [ txt " This device" ];
                                             ]
                                         else
-                                          match cookie.last_access with
-                                          | Some ptime ->
-                                              span
-                                                [
-                                                  txt
-                                                    (Utils.TimeHelper.time_ago
-                                                       ~current_time
-                                                       ~check_time:ptime);
-                                                ]
-                                          | None ->
-                                              span
-                                                [
-                                                  txt
-                                                    (Utils.TimeHelper.time_ago
-                                                       ~current_time
-                                                       ~check_time:
-                                                         cookie.created_at);
-                                                ]);
+                                          span
+                                            [
+                                              txt
+                                                (Utils.TimeHelper.time_ago
+                                                   ~current_time
+                                                   ~check_time:
+                                                     cookie.last_access);
+                                            ]);
                                      ];
                                    p
                                      ~a:[ a_class [ "text-sm text-gray-600" ] ]
