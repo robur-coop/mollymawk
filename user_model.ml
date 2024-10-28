@@ -34,6 +34,8 @@ type user = {
 }
 
 let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
+let session_cookie = "molly_session"
+let csrf_cookie = "molly_csrf"
 
 let get key assoc =
   match List.find_opt (fun (k, _) -> String.equal k key) assoc with
@@ -525,7 +527,7 @@ let create_user_session_map (users : user list) : (string * user) list =
        (fun user ->
          let session_cookies =
            List.filter
-             (fun (cookie : cookie) -> String.equal cookie.name "molly_session")
+             (fun (cookie : cookie) -> String.equal cookie.name session_cookie)
              user.cookies
          in
          List.map (fun c -> (c.value, user)) session_cookies)
@@ -544,7 +546,7 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
   let password = hash_password ~password ~uuid in
   let auth_token = generate_token ~created_at () in
   let session =
-    generate_cookie ~name:"molly_session" ~expires_in:week ~uuid ~created_at
+    generate_cookie ~name:session_cookie ~expires_in:week ~uuid ~created_at
       ~user_agent ()
   in
   (* auth sessions should expire after a week (24hrs * 7days * 60mins * 60secs) *)
@@ -632,13 +634,13 @@ let verify_email_token users token timestamp =
 let user_auth_cookie_from_user cookie_value (user : user) =
   List.find_opt
     (fun (cookie : cookie) ->
-      String.equal cookie.name "molly_session"
+      String.equal cookie.name session_cookie
       && String.equal cookie_value cookie.value)
     user.cookies
 
 let clear_csrfs user =
   List.filter
-    (fun (cookie : cookie) -> String.equal cookie.name "molly_session")
+    (fun (cookie : cookie) -> String.equal cookie.name session_cookie)
     user.cookies
 
 let login_user ~email ~password ~user_agent users now =
@@ -654,8 +656,8 @@ let login_user ~email ~password ~user_agent users now =
         match String.equal u.password pass with
         | true ->
             let new_session =
-              generate_cookie ~name:"molly_session" ~expires_in:week
-                ~uuid:u.uuid ~created_at:now ~user_agent ()
+              generate_cookie ~name:session_cookie ~expires_in:week ~uuid:u.uuid
+                ~created_at:now ~user_agent ()
             in
             let cookies = new_session :: clear_csrfs u in
             let updated_user = update_user u ~cookies () in

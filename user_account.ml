@@ -320,7 +320,7 @@ let user_account_layout ~csrf (user : User_model.user)
                              ])
                          (List.filter
                             (fun (cookie : User_model.cookie) ->
-                              String.equal cookie.name "molly_session")
+                              String.equal cookie.name User_model.session_cookie)
                             user.cookies));
                     div
                       ~a:[ a_class [ "my-4 w-1/2 text-center" ] ]

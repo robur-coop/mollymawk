@@ -8,11 +8,12 @@ let header header_name reqd =
 let user_agent reqd = header "User-Agent" reqd
 
 let generate_csrf_cookie now reqd =
-  User_model.generate_cookie ~name:"molly_csrf" ~user_agent:(user_agent reqd)
+  User_model.generate_cookie ~name:User_model.csrf_cookie
+    ~user_agent:(user_agent reqd)
     ~uuid:(Uuidm.to_string (User_model.generate_uuid ()))
     ~created_at:now ~expires_in:3600 ()
 
-let has_cookie cookie_name (reqd : Httpaf.Reqd.t) =
+let cookie cookie_name (reqd : Httpaf.Reqd.t) =
   match header "Cookie" reqd with
   | Some cookies ->
       let cookie_list = String.split_on_char ';' cookies in
@@ -32,8 +33,8 @@ let redirect_to_login reqd ?(msg = "") () =
   let header_list =
     [
       ( "Set-Cookie",
-        "molly_session=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z"
-      );
+        User_model.session_cookie
+        ^ "=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z" );
       ("location", "/sign-in");
       ("Content-Length", string_of_int (String.length msg));
     ]
@@ -47,8 +48,8 @@ let redirect_to_register reqd ?(msg = "") () =
   let header_list =
     [
       ( "Set-Cookie",
-        "molly_session=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z"
-      );
+        User_model.session_cookie
+        ^ "=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z" );
       ("location", "/sign-up");
       ("Content-Length", string_of_int (String.length msg));
     ]
@@ -132,7 +133,7 @@ let user_from_auth_cookie cookie users =
   | None -> Error (`Msg "User not found")
 
 let get_cookie_from_request reqd =
-  match has_cookie "molly_session" reqd with
+  match cookie User_model.session_cookie reqd with
   | Some auth_cookie -> (
       match cookie_value auth_cookie with
       | Ok cookie_value -> Ok cookie_value
@@ -175,7 +176,7 @@ let user_of_cookie users now reqd =
       Error (`Msg err)
 
 let session_cookie_value reqd =
-  match has_cookie "molly_session" reqd with
+  match cookie User_model.session_cookie reqd with
   | Some cookie -> (
       match cookie_value cookie with
       | Ok "" -> Ok None
@@ -211,7 +212,7 @@ let is_user_admin_middleware api_meth now users handler reqd =
 let csrf_match ~input_csrf ~check_csrf = String.equal input_csrf check_csrf
 
 let csrf_cookie_verification form_csrf reqd =
-  match has_cookie "molly_csrf" reqd with
+  match cookie User_model.csrf_cookie reqd with
   | Some cookie -> (
       match cookie_value cookie with
       | Ok token -> csrf_match ~input_csrf:form_csrf ~check_csrf:token
@@ -228,7 +229,7 @@ let csrf_verification users now form_csrf handler reqd =
       let user_csrf_token =
         List.find_opt
           (fun (cookie : User_model.cookie) ->
-            String.equal cookie.name "molly_csrf")
+            String.equal cookie.name User_model.csrf_cookie)
           user.User_model.cookies
       in
       match user_csrf_token with

@@ -97,7 +97,7 @@ struct
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
         Lwt.return (Error (`Msg err))
     | Ok json -> (
-        match Yojson.Basic.Util.member "molly_csrf" json with
+        match Yojson.Basic.Util.member User_model.csrf_cookie json with
         | `String token -> Lwt.return (Ok (token, json))
         | _ -> Lwt.return (Error (`Msg "Couldn't find CSRF token")))
 
@@ -300,7 +300,7 @@ struct
                               let cookie =
                                 List.find
                                   (fun (c : User_model.cookie) ->
-                                    c.name = "molly_session")
+                                    c.name = User_model.session_cookie)
                                   user.cookies
                               in
                               let cookie_value =
@@ -392,7 +392,7 @@ struct
                             let cookie =
                               List.find_opt
                                 (fun (c : User_model.cookie) ->
-                                  c.name = "molly_session")
+                                  c.name = User_model.session_cookie)
                                 user.cookies
                             in
                             match cookie with
@@ -720,7 +720,7 @@ struct
               cookie
               :: List.filter
                    (fun (cookie : User_model.cookie) ->
-                     not (String.equal cookie.name "molly_session"))
+                     not (String.equal cookie.name User_model.session_cookie))
                    user.cookies
             in
             let updated_user =
@@ -1018,7 +1018,7 @@ struct
                 let user_csrf_token =
                   List.find_opt
                     (fun (cookie : User_model.cookie) ->
-                      String.equal cookie.name "molly_csrf")
+                      String.equal cookie.name User_model.csrf_cookie)
                     user.User_model.cookies
                 in
                 match user_csrf_token with
