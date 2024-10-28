@@ -657,46 +657,36 @@ struct
             let new_password_hash =
               User_model.hash_password ~password:new_password ~uuid:user.uuid
             in
-            match
-              ( String.equal user.password
-                  (User_model.hash_password ~password:current_password
-                     ~uuid:user.uuid),
-                String.equal new_password_hash user.password )
-            with
-            | true, false -> (
-                match String.equal new_password confirm_password with
-                | true ->
-                    if User_model.password_validation new_password then (
-                      let updated_user =
-                        User_model.update_user user ~password:new_password_hash
-                          ~updated_at:now ()
-                      in
-                      Store.update_user !store updated_user >>= function
-                      | Ok store' ->
-                          store := store';
-                          Middleware.http_response reqd ~title:"OK"
-                            ~data:"Updated password successfully" `OK
-                      | Error (`Msg err) ->
-                          Logs.warn (fun m -> m "Storage error with %s" err);
-                          Middleware.http_response reqd ~title:"Error" ~data:err
-                            `Internal_server_error)
-                    else
-                      Middleware.http_response reqd ~title:"Error"
-                        ~data:"New password must be atleast 8 characters."
-                        `Internal_server_error
-                | false ->
-                    Middleware.http_response reqd ~title:"Error"
-                      ~data:"New password and confirm password do not match"
-                      `Bad_request)
-            | true, true ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:
-                    "Your new password cannot be the same as the previous \
-                     password."
-                  `Bad_request
-            | _ ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:"The current password entered is wrong." `Bad_request)
+            if
+              not
+                (String.equal user.password
+                   (User_model.hash_password ~password:current_password
+                      ~uuid:user.uuid))
+            then
+              Middleware.http_response reqd ~title:"Error"
+                ~data:"The current password entered is wrong." `Bad_request
+            else if not (String.equal new_password confirm_password) then
+              Middleware.http_response reqd ~title:"Error"
+                ~data:"New password and confirm password do not match"
+                `Bad_request
+            else if not (User_model.password_validation new_password) then
+              Middleware.http_response reqd ~title:"Error"
+                ~data:"New password must be atleast 8 characters."
+                `Internal_server_error
+            else
+              let updated_user =
+                User_model.update_user user ~password:new_password_hash
+                  ~updated_at:now ()
+              in
+              Store.update_user !store updated_user >>= function
+              | Ok store' ->
+                  store := store';
+                  Middleware.http_response reqd ~title:"OK"
+                    ~data:"Updated password successfully" `OK
+              | Error (`Msg err) ->
+                  Logs.warn (fun m -> m "Storage error with %s" err);
+                  Middleware.http_response reqd ~title:"Error" ~data:err
+                    `Internal_server_error)
         | _ ->
             Middleware.http_response reqd ~title:"Error"
               ~data:
