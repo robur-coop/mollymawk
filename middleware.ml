@@ -132,7 +132,7 @@ let user_from_auth_cookie cookie users =
   | Some user -> Ok user
   | None -> Error (`Msg "User not found")
 
-let get_cookie_from_request reqd =
+let session_cookie reqd =
   match cookie User_model.session_cookie reqd with
   | Some auth_cookie -> (
       match cookie_value auth_cookie with
@@ -146,7 +146,7 @@ let get_cookie_from_request reqd =
       Error (`Msg "User not found")
 
 let user_of_cookie users now reqd =
-  match get_cookie_from_request reqd with
+  match session_cookie reqd with
   | Ok auth_cookie -> (
       match user_from_auth_cookie auth_cookie users with
       | Ok user -> (

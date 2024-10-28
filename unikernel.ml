@@ -147,7 +147,7 @@ struct
       (fun reqd ->
         match Middleware.user_of_cookie users now reqd with
         | Ok user -> (
-            match Middleware.get_cookie_from_request reqd with
+            match Middleware.session_cookie reqd with
             | Ok cookie_value -> (
                 match
                   User_model.user_auth_cookie_from_user cookie_value user
@@ -587,7 +587,7 @@ struct
          `OK)
 
   let account_page store reqd (user : User_model.user) =
-    match Middleware.get_cookie_from_request reqd with
+    match Middleware.session_cookie reqd with
     | Ok cookie_value -> (
         match User_model.user_auth_cookie_from_user cookie_value user with
         | Some cookie -> (
@@ -711,7 +711,7 @@ struct
           ~data:"Update password: expected a dictionary" `Bad_request
 
   let close_sessions store reqd (user : User_model.user) =
-    match Middleware.get_cookie_from_request reqd with
+    match Middleware.session_cookie reqd with
     | Ok cookie_value -> (
         match User_model.user_auth_cookie_from_user cookie_value user with
         | Some cookie -> (
