@@ -19,7 +19,7 @@ let cookie cookie_name (reqd : Httpaf.Reqd.t) =
       let cookie_list = String.split_on_char ';' cookies in
       List.find_opt
         (fun cookie ->
-          let parts = String.trim cookie |> String.split_on_char '=' in
+          let parts = cookie |> String.split_on_char '=' in
           match parts with
           | [ name; _ ] -> String.equal name cookie_name
           | _ -> false)
@@ -123,8 +123,8 @@ let http_response ~title ?(header_list = []) ?(data = "") reqd http_status =
   Lwt.return_unit
 
 let cookie_value cookie =
-  match String.split_on_char '=' (String.trim cookie) with
-  | _ :: s :: _ -> Ok (String.trim s)
+  match String.split_on_char '=' cookie with
+  | _ :: s :: _ -> Ok s
   | _ -> Error (`Msg "Bad cookie")
 
 let user_from_auth_cookie cookie users =
