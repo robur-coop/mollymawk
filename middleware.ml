@@ -1,15 +1,20 @@
 type handler = Httpaf.Reqd.t -> unit Lwt.t
 type middleware = handler -> handler
 
-let get_csrf now =
-  User_model.(
-    generate_cookie ~name:"molly_csrf"
-      ~uuid:(Uuidm.to_string (generate_uuid ()))
-      ~created_at:now ~expires_in:3600)
-
-let has_cookie cookie_name (reqd : Httpaf.Reqd.t) =
+let header header_name reqd =
   let headers = (Httpaf.Reqd.request reqd).headers in
-  match Httpaf.Headers.get headers "Cookie" with
+  Httpaf.Headers.get headers header_name
+
+let user_agent reqd = header "User-Agent" reqd
+
+let generate_csrf_cookie now reqd =
+  User_model.generate_cookie ~name:User_model.csrf_cookie
+    ~user_agent:(user_agent reqd)
+    ~uuid:(Uuidm.to_string (User_model.generate_uuid ()))
+    ~created_at:now ~expires_in:3600 ()
+
+let cookie cookie_name (reqd : Httpaf.Reqd.t) =
+  match header "Cookie" reqd with
   | Some cookies ->
       let cookie_list = String.split_on_char ';' cookies in
       List.find_opt
@@ -28,8 +33,8 @@ let redirect_to_login reqd ?(msg = "") () =
   let header_list =
     [
       ( "Set-Cookie",
-        "molly_session=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z"
-      );
+        User_model.session_cookie
+        ^ "=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z" );
       ("location", "/sign-in");
       ("Content-Length", string_of_int (String.length msg));
     ]
@@ -43,8 +48,8 @@ let redirect_to_register reqd ?(msg = "") () =
   let header_list =
     [
       ( "Set-Cookie",
-        "molly_session=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z"
-      );
+        User_model.session_cookie
+        ^ "=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z" );
       ("location", "/sign-up");
       ("Content-Length", string_of_int (String.length msg));
     ]
@@ -123,21 +128,29 @@ let cookie_value cookie =
   | _ -> Error (`Msg "Bad cookie")
 
 let user_from_auth_cookie cookie users =
-  match cookie_value cookie with
-  | Ok cookie_value -> (
-      match User_model.find_user_by_key cookie_value users with
-      | Some user -> Ok user
-      | None -> Error (`Msg "User not found"))
-  | Error (`Msg s) ->
-      Logs.err (fun m -> m "Error: %s" s);
-      Error (`Msg s)
+  match User_model.find_user_by_key cookie users with
+  | Some user -> Ok user
+  | None -> Error (`Msg "User not found")
+
+let session_cookie_value reqd =
+  match cookie User_model.session_cookie reqd with
+  | Some auth_cookie -> (
+      match cookie_value auth_cookie with
+      | Ok cookie_value -> Ok cookie_value
+      | Error (`Msg s) ->
+          Logs.err (fun m -> m "Error: %s" s);
+          Error (`Msg s))
+  | None ->
+      Logs.err (fun m ->
+          m "auth-middleware: No molly-session in cookie header.");
+      Error (`Msg "User not found")
 
 let user_of_cookie users now reqd =
-  match has_cookie "molly_session" reqd with
-  | Some auth_cookie -> (
+  match session_cookie_value reqd with
+  | Ok auth_cookie -> (
       match user_from_auth_cookie auth_cookie users with
       | Ok user -> (
-          match User_model.user_auth_cookie_from_user user with
+          match User_model.user_session_cookie auth_cookie user with
           | Some cookie -> (
               match User_model.is_valid_cookie cookie now with
               | true -> Ok user
@@ -157,19 +170,10 @@ let user_of_cookie users now reqd =
               m "auth-middleware: Failed to find user with key %s: %s"
                 auth_cookie s);
           Error (`Msg "User not found"))
-  | None ->
+  | Error (`Msg err) ->
       Logs.err (fun m ->
-          m "auth-middleware: No molly-session in cookie header.");
-      Error (`Msg "User not found")
-
-let session_cookie_value reqd =
-  match has_cookie "molly_session" reqd with
-  | Some cookie -> (
-      match cookie_value cookie with
-      | Ok "" -> Ok None
-      | Ok x -> Ok (Some x)
-      | Error _ as e -> e)
-  | None -> Error (`Msg "no cookie found")
+          m "auth-middleware: No molly-session in cookie header. %s" err);
+      Error (`Msg err)
 
 let auth_middleware now users handler reqd =
   match user_of_cookie users now reqd with
@@ -196,11 +200,10 @@ let is_user_admin_middleware api_meth now users handler reqd =
           `Unauthorized user 401 api_meth reqd ()
   | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
 
-let csrf_match ~input_csrf ~check_csrf =
-  String.equal (Utils.Json.clean_string input_csrf) check_csrf
+let csrf_match ~input_csrf ~check_csrf = String.equal input_csrf check_csrf
 
 let csrf_cookie_verification form_csrf reqd =
-  match has_cookie "molly_csrf" reqd with
+  match cookie User_model.csrf_cookie reqd with
   | Some cookie -> (
       match cookie_value cookie with
       | Ok token -> csrf_match ~input_csrf:form_csrf ~check_csrf:token
@@ -217,7 +220,7 @@ let csrf_verification users now form_csrf handler reqd =
       let user_csrf_token =
         List.find_opt
           (fun (cookie : User_model.cookie) ->
-            String.equal cookie.name "molly_csrf")
+            String.equal cookie.name User_model.csrf_cookie)
           user.User_model.cookies
       in
       match user_csrf_token with

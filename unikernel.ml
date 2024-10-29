@@ -49,8 +49,8 @@ struct
   module Store = Storage.Make (BLOCK)
   module Map = Map.Make (String)
 
-  let generate_csrf_token store user now =
-    let csrf = Middleware.get_csrf now () in
+  let generate_csrf_token store user now reqd =
+    let csrf = Middleware.generate_csrf_cookie now reqd in
     let updated_user =
       User_model.update_user user ~updated_at:now
         ~cookies:(csrf :: user.cookies) ()
@@ -97,7 +97,7 @@ struct
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
         Lwt.return (Error (`Msg err))
     | Ok json -> (
-        match Yojson.Basic.Util.member "molly_csrf" json with
+        match Yojson.Basic.Util.member User_model.csrf_cookie json with
         | `String token -> Lwt.return (Ok (token, json))
         | _ -> Lwt.return (Error (`Msg "Couldn't find CSRF token")))
 
@@ -129,7 +129,7 @@ struct
   let authenticate ?(email_verified = true) ?(check_admin = false)
       ?(api_meth = false) ?form_csrf store reqd f =
     let now = Ptime.v (P.now_d_ps ()) in
-    let _, (t : Storage.t) = store in
+    let _, (t : Storage.t) = !store in
     let users = User_model.create_user_session_map t.users in
     let middlewares =
       (if check_admin then
@@ -144,12 +144,43 @@ struct
       @ [ Middleware.auth_middleware now users ]
     in
     Middleware.apply_middleware middlewares
-      (fun _reqd ->
+      (fun reqd ->
         match Middleware.user_of_cookie users now reqd with
-        | Ok user -> f user
-        | Error (`Msg msg) ->
-            Logs.err (fun m -> m "couldn't find user of cookie: %s" msg);
-            assert false)
+        | Ok user -> (
+            match Middleware.session_cookie_value reqd with
+            | Ok cookie_value -> (
+                match User_model.user_session_cookie cookie_value user with
+                | Some cookie -> (
+                    let cookie =
+                      { cookie with user_agent = Middleware.user_agent reqd }
+                    in
+                    let cookies =
+                      List.map
+                        (fun (cookie' : User_model.cookie) ->
+                          if String.equal cookie_value cookie'.value then cookie
+                          else cookie')
+                        user.cookies
+                    in
+                    let updated_user =
+                      User_model.update_user user ~cookies ()
+                    in
+                    Store.update_user !store updated_user >>= function
+                    | Ok store' ->
+                        store := store';
+                        f user
+                    | Error (`Msg err) ->
+                        Logs.err (fun m -> m "Error with storage: %s" err);
+                        Middleware.http_response reqd ~title:"Error" ~data:err
+                          `Not_found)
+                | None ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:"Cookie not found" `Not_found)
+            | Error (`Msg err) ->
+                Middleware.http_response reqd ~title:"Error" ~data:err
+                  `Bad_request)
+        | Error (`Msg err) ->
+            Logs.err (fun m -> m "couldn't find user of cookie: %s" err);
+            Middleware.http_response reqd ~title:"Error" ~data:err `Not_found)
       reqd
 
   let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status
@@ -167,11 +198,11 @@ struct
 
   let sign_up reqd =
     let now = Ptime.v (P.now_d_ps ()) in
-    let csrf = Middleware.get_csrf now () in
+    let csrf = Middleware.generate_csrf_cookie now reqd in
     let csrf_cookie = csrf.name ^ "=" ^ csrf.value ^ ";Path=/;HttpOnly=true" in
     match Middleware.session_cookie_value reqd with
-    | Ok (Some _x) -> Middleware.redirect_to_dashboard reqd ()
-    | Ok None | Error (`Msg _) ->
+    | Ok x when x <> "" -> Middleware.redirect_to_dashboard reqd ()
+    | Ok _ | Error (`Msg _) ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Sign_up.register_page ~csrf:csrf.value ~icon:"/images/robur.png")
@@ -181,8 +212,8 @@ struct
 
   let sign_in reqd =
     match Middleware.session_cookie_value reqd with
-    | Ok (Some _) -> Middleware.redirect_to_dashboard reqd ()
-    | Ok None | Error (`Msg _) ->
+    | Ok x when x <> "" -> Middleware.redirect_to_dashboard reqd ()
+    | Ok _ | Error (`Msg _) ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Sign_in.login_page ~icon:"/images/robur.png" ())
@@ -200,97 +231,115 @@ struct
         Middleware.http_response reqd ~title:"Error" ~data:(String.escaped err)
           `Bad_request
     | Ok json -> (
-        let validate_user_input ~name ~email ~password ~form_csrf =
-          if name = "" || email = "" || password = "" then
-            Error "All fields must be filled."
-          else if String.length name < 4 then
-            Error "Name must be at least 3 characters long."
-          else if not (Utils.Email.validate_email email) then
-            Error "Invalid email address."
-          else if String.length password < 8 then
-            Error "Password must be at least 8 characters long."
-          else if form_csrf = "" then
-            Error "CSRF token mismatch error. Please referesh and try again."
-          else Ok "Validation passed."
-        in
-        let name =
-          json |> Yojson.Basic.Util.member "name" |> Yojson.Basic.to_string
-        in
-        let email =
-          json |> Yojson.Basic.Util.member "email" |> Yojson.Basic.to_string
-        in
-        let password =
-          json |> Yojson.Basic.Util.member "password" |> Yojson.Basic.to_string
-        in
-        let form_csrf =
-          json |> Yojson.Basic.Util.member "form_csrf" |> Yojson.Basic.to_string
-        in
-        match validate_user_input ~name ~email ~password ~form_csrf with
-        | Error err ->
-            Middleware.http_response reqd ~title:"Error"
-              ~data:(String.escaped err) `Bad_request
-        | Ok _ ->
-            if Middleware.csrf_cookie_verification form_csrf reqd then
-              let _, (s : Storage.t) = !store in
-              let users = s.users in
-              let existing_email =
-                User_model.check_if_email_exists email users
-              in
-              let existing_name = User_model.check_if_name_exists name users in
-              match (existing_name, existing_email) with
-              | Some _, None ->
-                  Middleware.http_response reqd ~title:"Error"
-                    ~data:"A user with this name already exist." `Bad_request
-              | None, Some _ ->
-                  Middleware.http_response reqd ~title:"Error"
-                    ~data:"A user with this email already exist." `Bad_request
-              | None, None -> (
-                  let created_at = Ptime.v (P.now_d_ps ()) in
-                  let user =
-                    let active, super_user =
-                      if List.length users = 0 then (true, true)
-                      else (false, false)
-                    in
-                    User_model.create_user ~name ~email ~password ~created_at
-                      ~active ~super_user
-                  in
-                  Store.add_user !store user >>= function
-                  | Ok store' ->
-                      store := store';
-                      let cookie =
-                        List.find
-                          (fun (c : User_model.cookie) ->
-                            c.name = "molly_session")
-                          user.cookies
-                      in
-                      let cookie_value =
-                        cookie.name ^ "=" ^ cookie.value
-                        ^ ";Path=/;HttpOnly=true"
-                      in
-                      let header_list =
-                        [
-                          ("Set-Cookie", cookie_value);
-                          ("location", "/dashboard");
-                        ]
-                      in
-                      Middleware.http_response reqd ~header_list
-                        ~title:"Success"
-                        ~data:
-                          (Yojson.Basic.to_string
-                             (User_model.user_to_json user))
-                        `OK
-                  | Error (`Msg err) ->
-                      Middleware.http_response reqd ~title:"Error"
-                        ~data:(String.escaped err) `Bad_request)
-              | _ ->
-                  Middleware.http_response reqd ~title:"Error"
-                    ~data:"A user with this name or email already exist."
-                    `Bad_request
-            else
-              Middleware.http_response reqd ~title:"Error"
-                ~data:
+        match json with
+        | `Assoc xs -> (
+            let validate_user_input ~name ~email ~password ~form_csrf =
+              if name = "" || email = "" || password = "" then
+                Error "All fields must be filled."
+              else if String.length name < 4 then
+                Error "Name must be at least 3 characters long."
+              else if not (Utils.Email.validate_email email) then
+                Error "Invalid email address."
+              else if not (User_model.password_validation password) then
+                Error "Password must be at least 8 characters long."
+              else if form_csrf = "" then
+                Error
                   "CSRF token mismatch error. Please referesh and try again."
-                `Bad_request)
+              else Ok "Validation passed."
+            in
+            match
+              Utils.Json.
+                ( get "email" xs,
+                  get "password" xs,
+                  get "name" xs,
+                  get "form_csrf" xs )
+            with
+            | ( Some (`String email),
+                Some (`String password),
+                Some (`String name),
+                Some (`String form_csrf) ) -> (
+                match validate_user_input ~name ~email ~password ~form_csrf with
+                | Error err ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped err) `Bad_request
+                | Ok _ ->
+                    if Middleware.csrf_cookie_verification form_csrf reqd then
+                      let _, (s : Storage.t) = !store in
+                      let users = s.users in
+                      let existing_email =
+                        User_model.check_if_email_exists email users
+                      in
+                      let existing_name =
+                        User_model.check_if_name_exists name users
+                      in
+                      match (existing_name, existing_email) with
+                      | Some _, None ->
+                          Middleware.http_response reqd ~title:"Error"
+                            ~data:"A user with this name already exist."
+                            `Bad_request
+                      | None, Some _ ->
+                          Middleware.http_response reqd ~title:"Error"
+                            ~data:"A user with this email already exist."
+                            `Bad_request
+                      | None, None -> (
+                          let created_at = Ptime.v (P.now_d_ps ()) in
+                          let user =
+                            let active, super_user =
+                              if List.length users = 0 then (true, true)
+                              else (false, false)
+                            in
+                            User_model.create_user ~name ~email ~password
+                              ~created_at ~active ~super_user
+                              ~user_agent:(Middleware.user_agent reqd)
+                          in
+                          Store.add_user !store user >>= function
+                          | Ok store' ->
+                              store := store';
+                              let cookie =
+                                List.find
+                                  (fun (c : User_model.cookie) ->
+                                    c.name = User_model.session_cookie)
+                                  user.cookies
+                              in
+                              let cookie_value =
+                                cookie.name ^ "=" ^ cookie.value
+                                ^ ";Path=/;HttpOnly=true"
+                              in
+                              let header_list =
+                                [
+                                  ("Set-Cookie", cookie_value);
+                                  ("location", "/dashboard");
+                                ]
+                              in
+                              Middleware.http_response reqd ~header_list
+                                ~title:"Success"
+                                ~data:
+                                  (Yojson.Basic.to_string
+                                     (User_model.user_to_json user))
+                                `OK
+                          | Error (`Msg err) ->
+                              Middleware.http_response reqd ~title:"Error"
+                                ~data:(String.escaped err) `Bad_request)
+                      | _ ->
+                          Middleware.http_response reqd ~title:"Error"
+                            ~data:
+                              "A user with this name or email already exist."
+                            `Bad_request
+                    else
+                      Middleware.http_response reqd ~title:"Error"
+                        ~data:
+                          "CSRF token mismatch error. Please referesh and try \
+                           again."
+                        `Bad_request)
+            | _ ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:
+                    (Fmt.str "Register: Unexpected fields. Got %s"
+                       (Yojson.Basic.to_string (`Assoc xs)))
+                  `Bad_request)
+        | _ ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:"Register account: expected a dictionary" `Bad_request)
 
   let login store reqd =
     decode_request_body reqd >>= fun data ->
@@ -304,74 +353,87 @@ struct
         Middleware.http_response reqd ~title:"Error" ~data:(String.escaped err)
           `Bad_request
     | Ok json -> (
-        let validate_user_input ~email ~password =
-          if email = "" || password = "" then Error "All fields must be filled."
-          else if not (Utils.Email.validate_email email) then
-            Error "Invalid email address."
-          else if String.length password < 8 then
-            Error "Password must be at least 8 characters long."
-          else Ok "Validation passed."
-        in
-        let email =
-          json |> Yojson.Basic.Util.member "email" |> Yojson.Basic.to_string
-        in
-        let password =
-          json |> Yojson.Basic.Util.member "password" |> Yojson.Basic.to_string
-        in
-        match validate_user_input ~email ~password with
-        | Error err ->
-            Middleware.http_response reqd ~title:"Error"
-              ~data:(String.escaped err) `Bad_request
-        | Ok _ -> (
-            let now = Ptime.v (P.now_d_ps ()) in
-            let _, (t : Storage.t) = !store in
-            let users = t.users in
-            let login = User_model.login_user ~email ~password users now in
-            match login with
-            | Error (`Msg err) ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:(String.escaped err) `Bad_request
-            | Ok user -> (
-                Store.update_user !store user >>= function
-                | Ok store' -> (
-                    store := store';
-                    let cookie =
-                      List.find_opt
-                        (fun (c : User_model.cookie) ->
-                          c.name = "molly_session")
-                        user.cookies
-                    in
-                    match cookie with
-                    | Some cookie ->
-                        let cookie_value =
-                          cookie.name ^ "=" ^ cookie.value
-                          ^ ";Path=/;HttpOnly=true"
-                        in
-                        let header_list =
-                          [
-                            ("Set-Cookie", cookie_value);
-                            ("location", "/dashboard");
-                          ]
-                        in
-                        Middleware.http_response reqd ~header_list
-                          ~title:"Success"
-                          ~data:
-                            (Yojson.Basic.to_string
-                               (User_model.user_to_json user))
-                          `OK
-                    | None ->
-                        Middleware.http_response reqd ~title:"Error"
-                          ~data:
-                            "Something went wrong. Wait a few seconds and try \
-                             again."
-                          `Internal_server_error)
-                | Error (`Msg err) ->
+        match json with
+        | `Assoc xs -> (
+            let validate_user_input ~email ~password =
+              if email = "" || password = "" then
+                Error "All fields must be filled."
+              else if not (Utils.Email.validate_email email) then
+                Error "Invalid email address."
+              else if String.length password < 8 then
+                Error "Password must be at least 8 characters long."
+              else Ok "Validation passed."
+            in
+            match Utils.Json.(get "email" xs, get "password" xs) with
+            | Some (`String email), Some (`String password) -> (
+                match validate_user_input ~email ~password with
+                | Error err ->
                     Middleware.http_response reqd ~title:"Error"
-                      ~data:(String.escaped err) `Internal_server_error)))
+                      ~data:(String.escaped err) `Bad_request
+                | Ok _ -> (
+                    let now = Ptime.v (P.now_d_ps ()) in
+                    let _, (t : Storage.t) = !store in
+                    let users = t.users in
+                    let login =
+                      User_model.login_user ~email ~password
+                        ~user_agent:(Middleware.user_agent reqd)
+                        users now
+                    in
+                    match login with
+                    | Error (`Msg err) ->
+                        Middleware.http_response reqd ~title:"Error"
+                          ~data:(String.escaped err) `Bad_request
+                    | Ok user -> (
+                        Store.update_user !store user >>= function
+                        | Ok store' -> (
+                            store := store';
+                            let cookie =
+                              List.find_opt
+                                (fun (c : User_model.cookie) ->
+                                  c.name = User_model.session_cookie)
+                                user.cookies
+                            in
+                            match cookie with
+                            | Some cookie ->
+                                let cookie_value =
+                                  cookie.name ^ "=" ^ cookie.value
+                                  ^ ";Path=/;HttpOnly=true"
+                                in
+                                let header_list =
+                                  [
+                                    ("Set-Cookie", cookie_value);
+                                    ("location", "/dashboard");
+                                  ]
+                                in
+                                Middleware.http_response reqd ~header_list
+                                  ~title:"Success"
+                                  ~data:
+                                    (Yojson.Basic.to_string
+                                       (User_model.user_to_json user))
+                                  `OK
+                            | None ->
+                                Middleware.http_response reqd ~title:"Error"
+                                  ~data:
+                                    "Something went wrong. Wait a few seconds \
+                                     and try again."
+                                  `Internal_server_error)
+                        | Error (`Msg err) ->
+                            Middleware.http_response reqd ~title:"Error"
+                              ~data:(String.escaped err) `Internal_server_error)
+                    ))
+            | _ ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:
+                    (Fmt.str "Update password: Unexpected fields. Got %s"
+                       (Yojson.Basic.to_string (`Assoc xs)))
+                  `Bad_request)
+        | _ ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:"Update password: expected a dictionary" `Bad_request)
 
-  let verify_email store reqd user =
+  let verify_email store reqd (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
-    generate_csrf_token store user now >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf -> (
         let email_verification_uuid = User_model.generate_uuid () in
         let updated_user =
@@ -425,19 +487,11 @@ struct
             ~data:"Logged in user is not the to-be-verified one" `Bad_request
     | Error (`Msg s) -> Middleware.redirect_to_login reqd ~msg:s ()
 
-  let toggle_account_attribute store reqd ~key update_fn error_on_last
+  let toggle_account_attribute json store reqd ~key update_fn error_on_last
       ~error_message =
-    decode_request_body reqd >>= fun data ->
-    let json =
-      try Ok (Yojson.Basic.from_string data)
-      with Yojson.Json_error s -> Error (`Msg s)
-    in
     match json with
-    | Error (`Msg err) ->
-        Logs.warn (fun m -> m "Failed to parse JSON: %s - %s" key err);
-        Middleware.http_response reqd ~title:"Error" ~data:err `Bad_request
-    | Ok (`Assoc json) -> (
-        match Utils.Json.get "uuid" json with
+    | `Assoc xs -> (
+        match Utils.Json.get "uuid" xs with
         | Some (`String uuid) -> (
             let users =
               User_model.create_user_uuid_map (snd !store).Storage.users
@@ -470,12 +524,12 @@ struct
                 m "%s: Failed to parse JSON - no UUID found" key);
             Middleware.http_response reqd ~title:"Error"
               ~data:"Couldn't find a UUID in the JSON." `Not_found)
-    | Ok _ ->
+    | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:"Provided JSON is not a dictionary" `Bad_request
 
-  let toggle_account_activation store reqd _user =
-    toggle_account_attribute store reqd ~key:"toggle-active-account"
+  let toggle_account_activation json store reqd _user =
+    toggle_account_attribute json store reqd ~key:"toggle-active-account"
       (fun user ->
         User_model.update_user user ~active:(not user.active)
           ~updated_at:(Ptime.v (P.now_d_ps ()))
@@ -489,8 +543,8 @@ struct
            <= 1)
       ~error_message:"Cannot deactivate last active user"
 
-  let toggle_admin_activation store reqd _user =
-    toggle_account_attribute store reqd ~key:"toggle-admin-account"
+  let toggle_admin_activation json store reqd _user =
+    toggle_account_attribute json store reqd ~key:"toggle-admin-account"
       (fun user ->
         User_model.update_user user ~super_user:(not user.super_user)
           ~updated_at:(Ptime.v (P.now_d_ps ()))
@@ -530,7 +584,158 @@ struct
             ~icon:"/images/robur.png" ())
          `OK)
 
-  let users store reqd user =
+  let account_page store reqd (user : User_model.user) =
+    match Middleware.session_cookie_value reqd with
+    | Ok active_cookie_value -> (
+        let now = Ptime.v (P.now_d_ps ()) in
+        generate_csrf_token store user now reqd >>= function
+        | Ok csrf ->
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user
+                    ~page_title:"Account | Mollymawk"
+                    ~content:
+                      (User_account.user_account_layout ~csrf user
+                         ~active_cookie_value now)
+                    ~icon:"/images/robur.png" ())
+                 ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                 `OK)
+        | Error err ->
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+                    ~content:(Error_page.error_layout err)
+                    ~icon:"/images/robur.png" ())
+                 `Internal_server_error))
+    | Error (`Msg err) ->
+        let error =
+          {
+            Utils.Status.code = 401;
+            title = "Unauthenticated";
+            success = false;
+            data = err;
+          }
+        in
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+                ~content:(Error_page.error_layout error)
+                ~icon:"/images/robur.png" ())
+             `Unauthorized)
+
+  let update_password json store reqd (user : User_model.user) =
+    match json with
+    | `Assoc xs -> (
+        match
+          Utils.Json.
+            ( get "current_password" xs,
+              get "new_password" xs,
+              get "confirm_password" xs )
+        with
+        | ( Some (`String current_password),
+            Some (`String new_password),
+            Some (`String confirm_password) ) -> (
+            let now = Ptime.v (P.now_d_ps ()) in
+            let new_password_hash =
+              User_model.hash_password ~password:new_password ~uuid:user.uuid
+            in
+            if
+              not
+                (String.equal user.password
+                   (User_model.hash_password ~password:current_password
+                      ~uuid:user.uuid))
+            then
+              Middleware.http_response reqd ~title:"Error"
+                ~data:"The current password entered is wrong." `Bad_request
+            else if not (String.equal new_password confirm_password) then
+              Middleware.http_response reqd ~title:"Error"
+                ~data:"New password and confirm password do not match"
+                `Bad_request
+            else if not (User_model.password_validation new_password) then
+              Middleware.http_response reqd ~title:"Error"
+                ~data:"New password must be atleast 8 characters."
+                `Internal_server_error
+            else
+              let updated_user =
+                User_model.update_user user ~password:new_password_hash
+                  ~updated_at:now ()
+              in
+              Store.update_user !store updated_user >>= function
+              | Ok store' ->
+                  store := store';
+                  Middleware.http_response reqd ~title:"OK"
+                    ~data:"Updated password successfully" `OK
+              | Error (`Msg err) ->
+                  Logs.warn (fun m -> m "Storage error with %s" err);
+                  Middleware.http_response reqd ~title:"Error" ~data:err
+                    `Internal_server_error)
+        | _ ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:
+                (Fmt.str "Update password: Unexpected fields. Got %s"
+                   (Yojson.Basic.to_string (`Assoc xs)))
+              `Bad_request)
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:"Update password: expected a dictionary" `Bad_request
+
+  let close_sessions store reqd (user : User_model.user) =
+    match Middleware.session_cookie_value reqd with
+    | Ok cookie_value -> (
+        match User_model.user_session_cookie cookie_value user with
+        | Some cookie -> (
+            let now = Ptime.v (P.now_d_ps ()) in
+            let cookies =
+              cookie
+              :: List.filter
+                   (fun (cookie : User_model.cookie) ->
+                     not (String.equal cookie.name User_model.session_cookie))
+                   user.cookies
+            in
+            let updated_user =
+              User_model.update_user user ~cookies ~updated_at:now ()
+            in
+            Store.update_user !store updated_user >>= function
+            | Ok store' ->
+                store := store';
+                Middleware.http_response reqd ~title:"OK"
+                  ~data:"Closed all sessions successfully" `OK
+            | Error (`Msg err) ->
+                Logs.warn (fun m -> m "Storage error with %s" err);
+                Middleware.http_response reqd ~title:"Error" ~data:err
+                  `Internal_server_error)
+        | None ->
+            let error =
+              {
+                Utils.Status.code = 401;
+                title = "Unauthenticated";
+                success = false;
+                data = "Auth cookie not found";
+              }
+            in
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+                    ~content:(Error_page.error_layout error)
+                    ~icon:"/images/robur.png" ())
+                 `Unauthorized))
+    | Error (`Msg err) ->
+        let error =
+          {
+            Utils.Status.code = 401;
+            title = "Unauthenticated";
+            success = false;
+            data = err;
+          }
+        in
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+                ~content:(Error_page.error_layout error)
+                ~icon:"/images/robur.png" ())
+             `Unauthorized)
+
+  let users store reqd (user : User_model.user) =
     Lwt.return
       (reply reqd ~content_type:"text/html"
          (Dashboard.dashboard_layout user ~page_title:"Users | Mollymawk"
@@ -540,9 +745,9 @@ struct
             ~icon:"/images/robur.png" ())
          `OK)
 
-  let settings store reqd user =
+  let settings store reqd (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
-    generate_csrf_token store user now >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
@@ -584,7 +789,7 @@ struct
 
   let deploy_form store reqd (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
-    generate_csrf_token store user now >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
@@ -648,7 +853,7 @@ struct
        | Ok (_, console_output) -> console_output)
       >>= fun console_output ->
       let now = Ptime.v (P.now_d_ps ()) in
-      generate_csrf_token store user now >>= function
+      generate_csrf_token store user now reqd >>= function
       | Ok csrf ->
           Lwt.return
             (reply reqd ~content_type:"text/html"
@@ -782,7 +987,7 @@ struct
                 let user_csrf_token =
                   List.find_opt
                     (fun (cookie : User_model.cookie) ->
-                      String.equal cookie.name "molly_csrf")
+                      String.equal cookie.name User_model.csrf_cookie)
                     user.User_model.cookies
                 in
                 match user_csrf_token with
@@ -879,7 +1084,7 @@ struct
           | Error _ -> None
         in
         let now = Ptime.v (P.now_d_ps ()) in
-        generate_csrf_token store user now >>= function
+        generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
@@ -927,7 +1132,7 @@ struct
         match Albatross.policy_resource_avalaible albatross with
         | Ok unallocated_resources -> (
             let now = Ptime.v (P.now_d_ps ()) in
-            generate_csrf_token store user now >>= function
+            generate_csrf_token store user now reqd >>= function
             | Ok csrf ->
                 Lwt.return
                   (reply reqd ~content_type:"text/html"
@@ -980,61 +1185,80 @@ struct
              `Not_found)
 
   let update_policy json store albatross reqd _user =
-    let user_uuid =
-      Yojson.Basic.(to_string (json |> Util.member "user_uuid"))
-    in
-    let users = User_model.create_user_uuid_map (snd store).Storage.users in
-    match
-      User_model.find_user_by_key (Utils.Json.clean_string user_uuid) users
-    with
-    | Some u -> (
-        match Albatross_json.policy_of_json json with
-        | Ok policy -> (
-            match Albatross.policy albatross with
-            | Ok (Some root_policy) -> (
-                match
-                  Vmm_core.Policy.is_smaller ~super:root_policy ~sub:policy
-                with
-                | Error (`Msg err) ->
-                    Logs.err (fun m ->
-                        m "policy %a is not smaller than root policy %a: %s"
-                          Vmm_core.Policy.pp policy Vmm_core.Policy.pp
-                          root_policy err);
-                    Middleware.http_response reqd ~title:"Error"
-                      ~data:("policy is not smaller than root policy: " ^ err)
-                      `Internal_server_error
-                | Ok () -> (
-                    Albatross.set_policy albatross ~domain:u.name policy
-                    >>= function
+    match json with
+    | `Assoc xs -> (
+        match Utils.Json.get "user_uuid" xs with
+        | Some (`String user_uuid) -> (
+            let users =
+              User_model.create_user_uuid_map (snd store).Storage.users
+            in
+            match User_model.find_user_by_key user_uuid users with
+            | Some u -> (
+                match Albatross_json.policy_of_json json with
+                | Ok policy -> (
+                    match Albatross.policy albatross with
+                    | Ok (Some root_policy) -> (
+                        match
+                          Vmm_core.Policy.is_smaller ~super:root_policy
+                            ~sub:policy
+                        with
+                        | Error (`Msg err) ->
+                            Logs.err (fun m ->
+                                m
+                                  "policy %a is not smaller than root policy \
+                                   %a: %s"
+                                  Vmm_core.Policy.pp policy Vmm_core.Policy.pp
+                                  root_policy err);
+                            Middleware.http_response reqd ~title:"Error"
+                              ~data:
+                                ("policy is not smaller than root policy: "
+                               ^ err)
+                              `Internal_server_error
+                        | Ok () -> (
+                            Albatross.set_policy albatross ~domain:u.name policy
+                            >>= function
+                            | Error err ->
+                                Logs.err (fun m ->
+                                    m "error setting policy %a for %s: %s"
+                                      Vmm_core.Policy.pp policy u.name err);
+                                Middleware.http_response reqd ~title:"Error"
+                                  ~data:("error setting policy: " ^ err)
+                                  `Internal_server_error
+                            | Ok policy ->
+                                Middleware.http_response reqd ~title:"Success"
+                                  ~data:
+                                    (Yojson.Basic.to_string
+                                       (Albatross_json.policy_info policy))
+                                  `OK))
+                    | Ok None ->
+                        Logs.err (fun m ->
+                            m "policy: root policy can't be null ");
+                        Middleware.http_response reqd ~title:"Error"
+                          ~data:"root policy is null" `Internal_server_error
                     | Error err ->
                         Logs.err (fun m ->
-                            m "error setting policy %a for %s: %s"
-                              Vmm_core.Policy.pp policy u.name err);
+                            m
+                              "policy: an error occured while fetching root \
+                               policy: %s"
+                              err);
                         Middleware.http_response reqd ~title:"Error"
-                          ~data:("error setting policy: " ^ err)
-                          `Internal_server_error
-                    | Ok policy ->
-                        Middleware.http_response reqd ~title:"Success"
-                          ~data:
-                            (Yojson.Basic.to_string
-                               (Albatross_json.policy_info policy))
-                          `OK))
-            | Ok None ->
-                Logs.err (fun m -> m "policy: root policy can't be null ");
+                          ~data:("error with root policy: " ^ err)
+                          `Internal_server_error)
+                | Error (`Msg err) ->
+                    Middleware.http_response reqd ~title:"Error" ~data:err
+                      `Bad_request)
+            | None ->
                 Middleware.http_response reqd ~title:"Error"
-                  ~data:"root policy is null" `Internal_server_error
-            | Error err ->
-                Logs.err (fun m ->
-                    m "policy: an error occured while fetching root policy: %s"
-                      err);
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:("error with root policy: " ^ err)
-                  `Internal_server_error)
-        | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Error" ~data:err `Bad_request)
-    | None ->
-        Middleware.http_response reqd ~title:"Error" ~data:"User not found"
-          `Not_found
+                  ~data:"User not found" `Not_found)
+        | _ ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:
+                (Fmt.str "Update policy: Unexpected fields. Got %s"
+                   (Yojson.Basic.to_string (`Assoc xs)))
+              `Bad_request)
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:"Update policy: expected a dictionary" `Bad_request
 
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
@@ -1091,26 +1315,47 @@ struct
         | "/api/login" -> check_meth `POST (fun () -> login store reqd)
         | "/verify-email" ->
             check_meth `GET (fun () ->
-                authenticate ~email_verified:false !store reqd
+                authenticate ~email_verified:false store reqd
                   (verify_email store reqd))
         | path
           when String.(
                  length path >= 19 && sub path 0 19 = "/auth/verify/token=") ->
             check_meth `GET (fun () ->
                 let token = String.sub path 19 (String.length path - 19) in
-                authenticate ~email_verified:false !store reqd
+                authenticate ~email_verified:false store reqd
                   (verify_email_token store reqd token))
         | "/dashboard" ->
             check_meth `GET (fun () ->
-                authenticate !store reqd (dashboard !albatross reqd))
+                authenticate store reqd (dashboard !albatross reqd))
+        | "/account" ->
+            check_meth `GET (fun () ->
+                authenticate store reqd (account_page store reqd))
+        | "/account/password/update" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, json) ->
+                    authenticate ~form_csrf store reqd
+                      (update_password json store reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
+        | "/account/sessions/close" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, _) ->
+                    authenticate ~form_csrf store reqd
+                      (close_sessions store reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
         | "/admin/users" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true !store reqd (users !store reqd))
+                authenticate ~check_admin:true store reqd (users !store reqd))
         | path when String.(length path >= 12 && sub path 0 12 = "/admin/user/")
           ->
             check_meth `GET (fun () ->
                 let uuid = String.sub path 12 (String.length path - 12) in
-                authenticate ~check_admin:true !store reqd
+                authenticate ~check_admin:true store reqd
                   (view_user !albatross store uuid reqd))
         | path
           when String.(
@@ -1118,17 +1363,17 @@ struct
           ->
             check_meth `GET (fun () ->
                 let uuid = String.sub path 21 (String.length path - 21) in
-                authenticate ~check_admin:true !store reqd
+                authenticate ~check_admin:true store reqd
                   (edit_policy !albatross store uuid reqd))
         | "/admin/settings" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true !store reqd (settings store reqd))
+                authenticate ~check_admin:true store reqd (settings store reqd))
         | "/api/admin/settings/update" ->
             check_meth `POST (fun () ->
                 extract_csrf_token reqd >>= function
                 | Ok (form_csrf, json) ->
                     authenticate ~check_admin:true ~form_csrf ~api_meth:true
-                      !store reqd
+                      store reqd
                       (update_settings json stack store albatross reqd)
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
@@ -1138,7 +1383,7 @@ struct
                 extract_csrf_token reqd >>= function
                 | Ok (form_csrf, json) ->
                     authenticate ~check_admin:true ~form_csrf ~api_meth:true
-                      !store reqd
+                      store reqd
                       (update_policy json !store !albatross reqd)
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
@@ -1146,26 +1391,26 @@ struct
         | "/api/admin/user/activate/toggle" ->
             check_meth `POST (fun () ->
                 extract_csrf_token reqd >>= function
-                | Ok (form_csrf, _json) ->
+                | Ok (form_csrf, json) ->
                     authenticate ~check_admin:true ~form_csrf ~api_meth:true
-                      !store reqd
-                      (toggle_account_activation store reqd)
+                      store reqd
+                      (toggle_account_activation json store reqd)
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
         | "/api/admin/user/admin/toggle" ->
             check_meth `POST (fun () ->
                 extract_csrf_token reqd >>= function
-                | Ok (form_csrf, _json) ->
+                | Ok (form_csrf, json) ->
                     authenticate ~check_admin:true ~form_csrf ~api_meth:true
-                      !store reqd
-                      (toggle_admin_activation store reqd)
+                      store reqd
+                      (toggle_admin_activation json store reqd)
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
         | "/api/unikernels" ->
             check_meth `GET (fun () ->
-                authenticate ~api_meth:true !store reqd
+                authenticate ~api_meth:true store reqd
                   (unikernel_info !albatross reqd))
         | path
           when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
@@ -1174,16 +1419,16 @@ struct
                 let unikernel_name =
                   String.sub path 16 (String.length path - 16)
                 in
-                authenticate !store reqd
+                authenticate store reqd
                   (unikernel_info_one !albatross store unikernel_name reqd))
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
-                authenticate !store reqd (deploy_form store reqd))
+                authenticate store reqd (deploy_form store reqd))
         | "/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 extract_csrf_token reqd >>= function
                 | Ok (form_csrf, json) ->
-                    authenticate !store reqd ~form_csrf
+                    authenticate store reqd ~form_csrf
                       (unikernel_destroy json !albatross reqd)
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
@@ -1192,7 +1437,7 @@ struct
             check_meth `POST (fun () ->
                 extract_csrf_token reqd >>= function
                 | Ok (form_csrf, json) ->
-                    authenticate !store reqd ~form_csrf
+                    authenticate store reqd ~form_csrf
                       (unikernel_restart json !albatross reqd)
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
@@ -1204,11 +1449,11 @@ struct
                 let unikernel_name =
                   String.sub path 19 (String.length path - 19)
                 in
-                authenticate !store reqd
+                authenticate store reqd
                   (unikernel_console !albatross unikernel_name reqd))
         | "/unikernel/create" ->
             check_meth `POST (fun () ->
-                authenticate !store reqd (unikernel_create !albatross reqd))
+                authenticate store reqd (unikernel_create !albatross reqd))
         | _ ->
             let error =
               {
