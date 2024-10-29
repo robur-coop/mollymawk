@@ -798,18 +798,18 @@ struct
     | Error msg ->
         Middleware.http_response reqd ~title:"Error"
           ~data:
-            (Yojson.Safe.to_string
+            (Yojson.Basic.to_string
                (`String ("Error while querying albatross: " ^ msg)))
           `Internal_server_error
     | Ok (_hdr, res) -> (
         match Albatross_json.res res with
         | Ok res ->
             Middleware.http_response reqd ~title:"Success"
-              ~data:(Yojson.Safe.to_string res)
+              ~data:(Yojson.Basic.to_string res)
               `OK
         | Error (`String res) ->
             Middleware.http_response reqd ~title:"Error"
-              ~data:(Yojson.Safe.to_string (`String res))
+              ~data:(Yojson.Basic.to_string (`String res))
               `Internal_server_error)
 
   let unikernel_info_one albatross store name reqd (user : User_model.user) =
@@ -888,11 +888,11 @@ struct
             match Albatross_json.res res with
             | Ok res ->
                 Middleware.http_response reqd ~title:"Success"
-                  ~data:(Yojson.Safe.to_string res)
+                  ~data:(Yojson.Basic.to_string res)
                   `OK
             | Error (`String res) ->
                 Middleware.http_response reqd ~title:"Error"
-                  ~data:(Yojson.Safe.to_string (`String res))
+                  ~data:(Yojson.Basic.to_string (`String res))
                   `Internal_server_error))
     | _ ->
         Middleware.http_response reqd ~title:"Error"
@@ -914,11 +914,11 @@ struct
             match Albatross_json.res res with
             | Ok res ->
                 Middleware.http_response reqd ~title:"Success"
-                  ~data:(Yojson.Safe.to_string res)
+                  ~data:(Yojson.Basic.to_string res)
                   `OK
             | Error (`String res) ->
                 Middleware.http_response reqd ~title:"Error"
-                  ~data:(Yojson.Safe.to_string (`String res))
+                  ~data:(Yojson.Basic.to_string (`String res))
                   `Internal_server_error))
     | _ ->
         Middleware.http_response reqd ~title:"Error"
@@ -1001,11 +1001,11 @@ struct
                               match Albatross_json.res res with
                               | Ok res ->
                                   Middleware.http_response reqd ~title:"Success"
-                                    ~data:(Yojson.Safe.to_string res)
+                                    ~data:(Yojson.Basic.to_string res)
                                     `OK
                               | Error (`String res) ->
                                   Middleware.http_response reqd ~title:"Error"
-                                    ~data:(Yojson.Safe.to_string (`String res))
+                                    ~data:(Yojson.Basic.to_string (`String res))
                                     `Internal_server_error))
                       | Error (`Msg err) ->
                           Logs.warn (fun m -> m "couldn't decode data %s" err);

@@ -83,7 +83,7 @@ module Status = struct
         ("success", `Bool status.success);
         ("data", `String status.data);
       ]
-    |> Yojson.Safe.to_string
+    |> Yojson.Basic.to_string
 end
 
 let csrf_form_input csrf =
