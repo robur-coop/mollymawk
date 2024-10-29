@@ -177,53 +177,49 @@ let block_device_of_json js =
       | _, _, _ -> Error (`Msg "couldn't decode json"))
   | _ -> Error (`Msg "bad json, either string or assoc")
 
-let policy_of_json js =
-  match js with
-  | `Assoc xs -> (
-      match
-        Utils.Json.
-          ( get "unikernels" xs,
-            get "memory" xs,
-            get "block" xs,
-            get "cpuids" xs,
-            get "bridges" xs )
-      with
-      | ( Some (`Int unikernels),
-          Some (`Int memory),
-          Some (`Int block),
-          Some (`String cpuids),
-          Some (`String bridges) ) ->
-          let policy =
-            {
-              Vmm_core.Policy.unikernels;
-              memory;
-              block = (if block = 0 then None else Some block);
-              cpuids =
-                (let parsed_cpuids =
-                   List.filter_map
-                     (fun s ->
-                       match int_of_string_opt s with
-                       | Some i -> Some i
-                       | None ->
-                           Logs.warn (fun m ->
-                               m "Ignoring invalid CPU id: %s" s);
-                           None)
-                     (String.split_on_char ',' cpuids)
-                 in
-                 Vmm_core.IS.of_list parsed_cpuids);
-              bridges =
-                Vmm_core.String_set.of_list (String.split_on_char ',' bridges);
-            }
-          in
-          let ( let* ) = Result.bind in
-          let* () = Vmm_core.Policy.usable policy in
-          Ok policy
-      | _ ->
-          Error
-            (`Msg
-              (Fmt.str "policy: unexpected types, got %s"
-                 (Yojson.Basic.to_string (`Assoc xs)))))
-  | _ -> Error (`Msg "policy: Expected a dictionary")
+let policy_of_json json_dict =
+  match
+    Utils.Json.
+      ( get "unikernels" json_dict,
+        get "memory" json_dict,
+        get "block" json_dict,
+        get "cpuids" json_dict,
+        get "bridges" json_dict )
+  with
+  | ( Some (`Int unikernels),
+      Some (`Int memory),
+      Some (`Int block),
+      Some (`String cpuids),
+      Some (`String bridges) ) ->
+      let policy =
+        {
+          Vmm_core.Policy.unikernels;
+          memory;
+          block = (if block = 0 then None else Some block);
+          cpuids =
+            (let parsed_cpuids =
+               List.filter_map
+                 (fun s ->
+                   match int_of_string_opt s with
+                   | Some i -> Some i
+                   | None ->
+                       Logs.warn (fun m -> m "Ignoring invalid CPU id: %s" s);
+                       None)
+                 (String.split_on_char ',' cpuids)
+             in
+             Vmm_core.IS.of_list parsed_cpuids);
+          bridges =
+            Vmm_core.String_set.of_list (String.split_on_char ',' bridges);
+        }
+      in
+      let ( let* ) = Result.bind in
+      let* () = Vmm_core.Policy.usable policy in
+      Ok policy
+  | _ ->
+      Error
+        (`Msg
+          (Fmt.str "policy: unexpected types, got %s"
+             (Yojson.Basic.to_string (`Assoc json_dict))))
 
 let config_of_json str =
   let ( let* ) = Result.bind in
