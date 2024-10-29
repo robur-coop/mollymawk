@@ -46,49 +46,38 @@ let to_json t =
       ("updated_at", `String (Utils.TimeHelper.string_of_ptime t.updated_at));
     ]
 
-let of_json_from_http json now =
-  match json with
-  | `Assoc xs -> (
-      match
-        ( get "certificate" xs,
-          get "private_key" xs,
-          get "server_ip" xs,
-          get "server_port" xs )
-      with
-      | ( Some (`String cert),
-          Some (`String key),
-          Some (`String server_ip),
-          Some (`Int server_port) ) ->
-          let ( let* ) = Result.bind in
-          let* certificate = X509.Certificate.decode_pem cert in
-          let* private_key = X509.Private_key.decode_pem key in
-          let* () =
-            if
-              not
-                (String.equal
-                   (X509.Public_key.fingerprint
-                      (X509.Certificate.public_key certificate))
-                   (X509.Public_key.fingerprint
-                      (X509.Private_key.public private_key)))
-            then Error (`Msg "certificate and private key do not match")
-            else Ok ()
-          in
-          let* server_ip = Ipaddr.of_string server_ip in
-
-          Ok
-            {
-              certificate;
-              private_key;
-              server_ip;
-              server_port;
-              updated_at = now;
-            }
-      | _ ->
-          Error
-            (`Msg
-              (Fmt.str "configuration: unexpected types, got %s"
-                 (Yojson.Basic.to_string (`Assoc xs)))))
-  | _ -> Error (`Msg "configuration: expected a dictionary")
+let of_json_from_http json_dict now =
+  match
+    ( get "certificate" json_dict,
+      get "private_key" json_dict,
+      get "server_ip" json_dict,
+      get "server_port" json_dict )
+  with
+  | ( Some (`String cert),
+      Some (`String key),
+      Some (`String server_ip),
+      Some (`Int server_port) ) ->
+      let ( let* ) = Result.bind in
+      let* certificate = X509.Certificate.decode_pem cert in
+      let* private_key = X509.Private_key.decode_pem key in
+      let* () =
+        if
+          not
+            (String.equal
+               (X509.Public_key.fingerprint
+                  (X509.Certificate.public_key certificate))
+               (X509.Public_key.fingerprint
+                  (X509.Private_key.public private_key)))
+        then Error (`Msg "certificate and private key do not match")
+        else Ok ()
+      in
+      let* server_ip = Ipaddr.of_string server_ip in
+      Ok { certificate; private_key; server_ip; server_port; updated_at = now }
+  | _ ->
+      Error
+        (`Msg
+          (Fmt.str "configuration: unexpected types, got %s"
+             (Yojson.Basic.to_string (`Assoc json_dict))))
 
 let of_json json =
   match json with
