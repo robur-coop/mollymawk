@@ -663,31 +663,42 @@ struct
                (Yojson.Basic.to_string (`Assoc json_dict)))
           `Bad_request
 
-  let close_sessions store reqd (user : User_model.user) =
+  let new_user_cookies ~user ~filter ~redirect store reqd =
+    let now = Ptime.v (P.now_d_ps ()) in
+    let cookies = List.filter filter user.User_model.cookies in
+    let updated_user =
+      User_model.update_user user ~cookies ~updated_at:now ()
+    in
+    Store.update_user !store updated_user >>= function
+    | Ok store' ->
+        store := store';
+        redirect
+    | Error (`Msg err) ->
+        Logs.warn (fun m -> m "Storage error with %s" err);
+        Middleware.http_response reqd ~title:"Error" ~data:err
+          `Internal_server_error
+
+  let close_sessions ?(single_cookie_value = "") store reqd
+      (user : User_model.user) =
     match Middleware.session_cookie_value reqd with
     | Ok cookie_value -> (
         match User_model.user_session_cookie cookie_value user with
-        | Some cookie -> (
-            let now = Ptime.v (P.now_d_ps ()) in
-            let cookies =
-              cookie
-              :: List.filter
-                   (fun (cookie : User_model.cookie) ->
-                     not (String.equal cookie.name User_model.session_cookie))
-                   user.cookies
+        | Some cookie ->
+            let filter, redirect =
+              if String.equal single_cookie_value "" then
+                ( (fun (c : User_model.cookie) ->
+                    not
+                      (String.equal c.name User_model.session_cookie
+                      && c.value <> cookie.value)),
+                  Middleware.http_response reqd ~title:"OK"
+                    ~data:"Closed all sessions succesfully" `OK )
+              else
+                ( (fun (c : User_model.cookie) ->
+                    not (String.equal single_cookie_value c.value)),
+                  Middleware.redirect_to_page ~path:"/account"
+                    ~msg:"Closed session succesfully" reqd () )
             in
-            let updated_user =
-              User_model.update_user user ~cookies ~updated_at:now ()
-            in
-            Store.update_user !store updated_user >>= function
-            | Ok store' ->
-                store := store';
-                Middleware.http_response reqd ~title:"OK"
-                  ~data:"Closed all sessions successfully" `OK
-            | Error (`Msg err) ->
-                Logs.warn (fun m -> m "Storage error with %s" err);
-                Middleware.http_response reqd ~title:"Error" ~data:err
-                  `Internal_server_error)
+            new_user_cookies ~user ~filter ~redirect store reqd
         | None ->
             let error =
               {
@@ -1326,6 +1337,22 @@ struct
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
+        | path
+          when String.(
+                 length path >= 21 && sub path 0 23 = "/account/session/close/")
+          ->
+            check_meth `GET (fun () ->
+                match
+                  String.split_on_char '/'
+                    (String.sub path 23 (String.length path - 23))
+                with
+                | [ single_cookie_value; form_csrf ] ->
+                    authenticate ~form_csrf store reqd
+                      (close_sessions ~single_cookie_value store reqd)
+                | _ ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:"An error occured. Please refresh and try again"
+                      `Bad_request)
         | "/admin/users" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (users !store reqd))
