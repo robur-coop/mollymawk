@@ -39,6 +39,17 @@ let login_page ~icon () =
                      ]
                    [
                      div
+                       ~a:
+                         [
+                           a_id "alert-container";
+                           a_class
+                             [
+                               "absolute top-1/4 rounded-md right-4 z-50 w-fit \
+                                space-y-2 p-4 shadow text-wrap hidden";
+                             ];
+                         ]
+                       [];
+                     div
                        ~a:[ a_class [ "w-full max-w-lg mt-16 pb-16 mx-auto" ] ]
                        [
                          h1
