@@ -29,8 +29,12 @@ let cookie cookie_name (reqd : Httpaf.Reqd.t) =
 let apply_middleware middlewares handler =
   List.fold_right (fun middleware acc -> middleware acc) middlewares handler
 
-let redirect_to_page ~path ?(clear_session = false) reqd ?(msg = "") () =
-  let msg_cookie = "flash_msg=" ^ Uri.pct_encode msg ^ ";" in
+let redirect_to_page ~path ?(clear_session = false) ?(with_error = false) reqd
+    ?(msg = "") () =
+  let msg_cookie =
+    if with_error then "flash_msg=error: " ^ Uri.pct_encode msg ^ ";"
+    else "flash_msg=" ^ Uri.pct_encode msg ^ ";"
+  in
   let header_list =
     let session_header =
       if clear_session then
@@ -174,10 +178,10 @@ let auth_middleware now users handler reqd =
   | Ok user ->
       if user.User_model.active then handler reqd
       else
-        redirect_to_page ~path:"/sign-in" ~clear_session:true
+        redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true
           ~msg:"User account is deactivated." reqd ()
   | Error (`Msg msg) ->
-      redirect_to_page ~path:"/sign-in" ~clear_session:true ~msg reqd ()
+      redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true ~msg reqd ()
 
 let email_verified_middleware now users handler reqd =
   match user_of_cookie users now reqd with
@@ -185,7 +189,7 @@ let email_verified_middleware now users handler reqd =
       if User_model.is_email_verified user then handler reqd
       else redirect_to_verify_email reqd ()
   | Error (`Msg msg) ->
-      redirect_to_page ~path:"/sign-in" ~clear_session:true ~msg reqd ()
+      redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true ~msg reqd ()
 
 let is_user_admin_middleware api_meth now users handler reqd =
   match user_of_cookie users now reqd with
@@ -196,8 +200,8 @@ let is_user_admin_middleware api_meth now users handler reqd =
           ~data:
             "You don't have the necessary permissions to access this service."
           `Unauthorized user 401 api_meth reqd ()
-  | Error (`Msg msg) ->
-      redirect_to_page ~path:"/sign-in" ~clear_session:true ~msg reqd ()
+  | Error (`Msg err) ->
+      redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true ~msg:err reqd ()
 
 let csrf_match ~input_csrf ~check_csrf = String.equal input_csrf check_csrf
 
@@ -237,4 +241,4 @@ let csrf_verification users now form_csrf handler reqd =
             ~data:"Missing CSRF token. Please referesh and try again."
             ~title:"Missing CSRF Token" reqd `Bad_request)
   | Error (`Msg err) ->
-      redirect_to_page ~path:"/sign-in" ~clear_session:true ~msg:err reqd ()
+      redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true ~msg:err reqd ()

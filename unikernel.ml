@@ -480,7 +480,9 @@ struct
         else
           Middleware.http_response reqd ~title:"Error"
             ~data:"Logged in user is not the to-be-verified one" `Bad_request
-    | Error (`Msg s) -> Middleware.redirect_to_login reqd ~msg:s ()
+    | Error (`Msg s) ->
+        Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
+          ~with_error:true reqd ~msg:s ()
 
   let toggle_account_attribute json_dict store reqd ~key update_fn error_on_last
       ~error_message =
