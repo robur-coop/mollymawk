@@ -569,7 +569,7 @@ let is_valid_cookie (cookie : cookie) now =
   < cookie.expires_in
 
 let is_email_verified user = Option.is_some user.email_verified
-let password_validation password = String.length password > 8
+let password_validation password = String.length password >= 8
 
 let verify_email_token users token timestamp =
   let* uuid =
