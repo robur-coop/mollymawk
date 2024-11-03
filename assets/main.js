@@ -163,7 +163,7 @@ function postAlert(bg_color, content) {
 		alertContainer.classList.remove("block", `${bg_color}`)
 		alertContainer.classList.add("hidden")
 		alertContainer.removeChild(alert);
-	}, 1600);
+	}, 2500);
 }
 
 async function deployUnikernel() {
