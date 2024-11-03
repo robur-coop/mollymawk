@@ -30,11 +30,13 @@ let apply_middleware middlewares handler =
   List.fold_right (fun middleware acc -> middleware acc) middlewares handler
 
 let redirect_to_login reqd ?(msg = "") () =
+  let msg_cookie = "flash_msg=" ^ Uri.pct_encode msg ^ ";" in
   let header_list =
     [
       ( "Set-Cookie",
         User_model.session_cookie
         ^ "=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z" );
+      ("Set-Cookie", msg_cookie);
       ("location", "/sign-in");
       ("Content-Length", string_of_int (String.length msg));
     ]
@@ -45,11 +47,13 @@ let redirect_to_login reqd ?(msg = "") () =
   Lwt.return_unit
 
 let redirect_to_register reqd ?(msg = "") () =
+  let msg_cookie = "flash_msg=" ^ Uri.pct_encode msg ^ ";" in
   let header_list =
     [
       ( "Set-Cookie",
         User_model.session_cookie
         ^ "=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z" );
+      ("Set-Cookie", msg_cookie);
       ("location", "/sign-up");
       ("Content-Length", string_of_int (String.length msg));
     ]

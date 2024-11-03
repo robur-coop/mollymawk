@@ -1,5 +1,15 @@
 document.addEventListener('DOMContentLoaded', function () {
 	AOS.init();
+
+	const flashMessage = getCookie('flash_msg');
+	if (flashMessage) {
+		const alert = document.getElementById("form-alert");
+		alert.classList.remove("hidden", "text-primary-500");
+		alert.classList.add("text-secondary-500");
+		alert.textContent = flashMessage;
+		document.cookie = "flash_msg=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+	}
+
 	if (window.location.pathname.startsWith("/admin/user/")) {
 		const tabs = document.querySelectorAll(".tab-link");
 		const tabPanes = document.querySelectorAll(".tab-pane");
@@ -24,6 +34,16 @@ document.addEventListener('DOMContentLoaded', function () {
 		});
 	}
 });
+
+function getCookie(name) {
+	const cookies = document.cookie.split(";");
+	for (let cookie of cookies) {
+		const [cookieName, cookieValue] = cookie.split("=");
+		if (cookieName === name) {
+			return decodeURIComponent(cookieValue);
+		}
+	}
+}
 
 function getUnikernelName(url) {
 	const urlObj = new URL(url);
@@ -427,7 +447,7 @@ async function updatePassword() {
 		const new_password = document.getElementById("new-password").value;
 		const confirm_password = document.getElementById("confirm-password").value;
 		const formAlert = document.getElementById("form-alert");
-		if (!current_password || !new_password || !confirm_password ) {
+		if (!current_password || !new_password || !confirm_password) {
 			formAlert.classList.remove("hidden", "text-primary-500");
 			formAlert.classList.add("text-secondary-500");
 			formAlert.textContent = "Please fill in all the required passwords"
