@@ -544,6 +544,19 @@ let dashboard_layout (user : User_model.user) ~icon
                                   ];
                               ]
                           else div []);
+                         button
+                           ~a:
+                             [
+                               a_id "logout-button";
+                               a_onclick "logout()";
+                               a_class
+                                 [
+                                   "my-3 py-3 rounded bg-secondary-500 \
+                                    hover:bg-secondary-800 w-full text-gray-50 \
+                                    font-semibold";
+                                 ];
+                             ]
+                           [ txt "Logout" ];
                        ];
                    ];
                  section

@@ -1337,6 +1337,16 @@ struct
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
+        | "/logout" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, _) ->
+                    authenticate ~form_csrf store reqd (fun _ ->
+                        Middleware.redirect_to_page ~path:"/sign-in"
+                          ~clear_session:true reqd ())
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
         | path
           when String.(
                  length path >= 21 && sub path 0 23 = "/account/session/close/")

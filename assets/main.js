@@ -509,3 +509,23 @@ async function closeSessions() {
 		buttonLoading(sessionButton, false, "Logout all other sessions")
 	}
 }
+
+async function logout() {
+	const logoutButton = document.getElementById("logout-button");
+	try {
+		buttonLoading(logoutButton, true, "Closing session..")
+		const molly_csrf = document.getElementById("molly-csrf").value;
+		fetch('/logout', {
+			method: 'POST',
+			body: JSON.stringify(
+				{
+					molly_csrf,
+				}),
+			headers: { 'Content-Type': 'application/json' }
+		});
+		setTimeout(() => window.location.reload(), 1000);
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		buttonLoading(logoutButton, false, "Logout")
+	}
+}
