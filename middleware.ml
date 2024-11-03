@@ -21,7 +21,7 @@ let cookie cookie_name (reqd : Httpaf.Reqd.t) =
         (fun cookie ->
           let parts = cookie |> String.split_on_char '=' in
           match parts with
-          | [ name; _ ] -> String.equal name cookie_name
+          | [ name; _ ] -> String.equal (String.trim name) cookie_name
           | _ -> false)
         cookie_list
   | _ -> None
