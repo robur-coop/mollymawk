@@ -3,10 +3,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
 	const flashMessage = getCookie('flash_msg');
 	if (flashMessage) {
-		const alert = document.getElementById("form-alert");
-		alert.classList.remove("hidden", "text-primary-500");
-		alert.classList.add("text-secondary-500");
-		alert.textContent = flashMessage;
+		if (flashMessage.startsWith("error:")) {
+			postAlert("bg-secondary-300", flashMessage);
+		} else {
+			postAlert("bg-primary-300", flashMessage);
+		}
 		document.cookie = "flash_msg=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 UTC;";
 	}
 
