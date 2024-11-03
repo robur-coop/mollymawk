@@ -29,34 +29,24 @@ let cookie cookie_name (reqd : Httpaf.Reqd.t) =
 let apply_middleware middlewares handler =
   List.fold_right (fun middleware acc -> middleware acc) middlewares handler
 
-let redirect_to_login reqd ?(msg = "") () =
+let redirect_to_page ~path ?(clear_session = false) reqd ?(msg = "") () =
   let msg_cookie = "flash_msg=" ^ Uri.pct_encode msg ^ ";" in
   let header_list =
-    [
-      ( "Set-Cookie",
-        User_model.session_cookie
-        ^ "=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z" );
-      ("Set-Cookie", msg_cookie);
-      ("location", "/sign-in");
-      ("Content-Length", string_of_int (String.length msg));
-    ]
-  in
-  let headers = Httpaf.Headers.of_list header_list in
-  let response = Httpaf.Response.create ~headers `Found in
-  Httpaf.Reqd.respond_with_string reqd response msg;
-  Lwt.return_unit
-
-let redirect_to_register reqd ?(msg = "") () =
-  let msg_cookie = "flash_msg=" ^ Uri.pct_encode msg ^ ";" in
-  let header_list =
-    [
-      ( "Set-Cookie",
-        User_model.session_cookie
-        ^ "=;Path=/;HttpOnly=true;Expires=2023-10-27T11:00:00.778Z" );
-      ("Set-Cookie", msg_cookie);
-      ("location", "/sign-up");
-      ("Content-Length", string_of_int (String.length msg));
-    ]
+    let session_header =
+      if clear_session then
+        [
+          ( "Set-Cookie",
+            User_model.session_cookie
+            ^ "=; Path=/; HttpOnly=true; Expires=2023-10-27T11:00:00.778Z" );
+        ]
+      else []
+    in
+    session_header
+    @ [
+        ("Set-Cookie", msg_cookie);
+        ("location", path);
+        ("Content-Length", string_of_int (String.length msg));
+      ]
   in
   let headers = Httpaf.Headers.of_list header_list in
   let response = Httpaf.Response.create ~headers `Found in
@@ -183,15 +173,19 @@ let auth_middleware now users handler reqd =
   match user_of_cookie users now reqd with
   | Ok user ->
       if user.User_model.active then handler reqd
-      else redirect_to_login ~msg:"User account is deactivated." reqd ()
-  | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
+      else
+        redirect_to_page ~path:"/sign-in" ~clear_session:true
+          ~msg:"User account is deactivated." reqd ()
+  | Error (`Msg msg) ->
+      redirect_to_page ~path:"/sign-in" ~clear_session:true ~msg reqd ()
 
 let email_verified_middleware now users handler reqd =
   match user_of_cookie users now reqd with
   | Ok user ->
       if User_model.is_email_verified user then handler reqd
       else redirect_to_verify_email reqd ()
-  | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
+  | Error (`Msg msg) ->
+      redirect_to_page ~path:"/sign-in" ~clear_session:true ~msg reqd ()
 
 let is_user_admin_middleware api_meth now users handler reqd =
   match user_of_cookie users now reqd with
@@ -202,7 +196,8 @@ let is_user_admin_middleware api_meth now users handler reqd =
           ~data:
             "You don't have the necessary permissions to access this service."
           `Unauthorized user 401 api_meth reqd ()
-  | Error (`Msg msg) -> redirect_to_login ~msg reqd ()
+  | Error (`Msg msg) ->
+      redirect_to_page ~path:"/sign-in" ~clear_session:true ~msg reqd ()
 
 let csrf_match ~input_csrf ~check_csrf = String.equal input_csrf check_csrf
 
@@ -241,4 +236,5 @@ let csrf_verification users now form_csrf handler reqd =
           http_response
             ~data:"Missing CSRF token. Please referesh and try again."
             ~title:"Missing CSRF Token" reqd `Bad_request)
-  | Error (`Msg err) -> redirect_to_login ~msg:err reqd ()
+  | Error (`Msg err) ->
+      redirect_to_page ~path:"/sign-in" ~clear_session:true ~msg:err reqd ()
