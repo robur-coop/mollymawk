@@ -688,25 +688,31 @@ struct
         Middleware.http_response reqd ~title:"Error" ~data:err
           `Internal_server_error
 
-  let close_sessions ?(single_cookie_value = "") store reqd
+  let close_sessions ?(single_cookie_value = "") ?(logout = false) store reqd
       (user : User_model.user) =
     match Middleware.session_cookie_value reqd with
     | Ok cookie_value -> (
         match User_model.user_session_cookie cookie_value user with
         | Some cookie ->
             let filter, redirect =
-              if String.equal single_cookie_value "" then
-                ( (fun (c : User_model.cookie) ->
-                    not
-                      (String.equal c.name User_model.session_cookie
-                      && c.value <> cookie.value)),
-                  Middleware.http_response reqd ~title:"OK"
-                    ~data:"Closed all sessions succesfully" `OK )
-              else
-                ( (fun (c : User_model.cookie) ->
-                    not (String.equal single_cookie_value c.value)),
-                  Middleware.redirect_to_page ~path:"/account"
-                    ~msg:"Closed session succesfully" reqd () )
+              match (String.equal single_cookie_value "", logout) with
+              | true, false ->
+                  ( (fun (c : User_model.cookie) ->
+                      not
+                        (String.equal c.name User_model.session_cookie
+                        && c.value <> cookie.value)),
+                    Middleware.http_response reqd ~title:"OK"
+                      ~data:"Closed all sessions succesfully" `OK )
+              | _, true ->
+                  ( (fun (c : User_model.cookie) ->
+                      not (String.equal c.value cookie.value)),
+                    Middleware.http_response reqd ~title:"OK"
+                      ~data:"Logout succesful" `OK )
+              | _ ->
+                  ( (fun (c : User_model.cookie) ->
+                      not (String.equal single_cookie_value c.value)),
+                    Middleware.redirect_to_page ~path:"/account"
+                      ~msg:"Closed session succesfully" reqd () )
             in
             new_user_cookies ~user ~filter ~redirect store reqd
         | None ->
@@ -1360,9 +1366,8 @@ struct
             check_meth `POST (fun () ->
                 extract_csrf_token reqd >>= function
                 | Ok (form_csrf, _) ->
-                    authenticate ~form_csrf store reqd (fun _ ->
-                        Middleware.redirect_to_page ~path:"/sign-in"
-                          ~clear_session:true reqd ())
+                    authenticate ~form_csrf store reqd
+                      (close_sessions ~logout:true store reqd)
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
