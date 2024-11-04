@@ -324,7 +324,7 @@ let user_account_layout ~csrf (user : User_model.user) ~active_cookie_value
                                                  cursor-pointer";
                                               ];
                                           ]
-                                        [ txt "Logout this session" ]
+                                        [ txt "Close session" ]
                                     else div []);
                                  ];
                              ])
