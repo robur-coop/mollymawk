@@ -688,7 +688,7 @@ struct
         Middleware.http_response reqd ~title:"Error" ~data:err
           `Internal_server_error
 
-  let close_sessions ?single_cookie_value ?(logout = false) store reqd
+  let close_sessions ?to_close_cookie ?(logout = false) store reqd
       (user : User_model.user) =
     match Middleware.session_cookie_value reqd with
     | Ok cookie_value -> (
