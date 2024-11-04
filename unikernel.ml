@@ -695,7 +695,7 @@ struct
         match User_model.user_session_cookie cookie_value user with
         | Some cookie ->
             let filter, redirect =
-              match (single_cookie_value, logout) with
+              match (to_logout_cookie, logout) with
               | None, false ->
                   ( (fun (c : User_model.cookie) ->
                       not
