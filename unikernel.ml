@@ -1382,7 +1382,7 @@ struct
                 with
                 | [ single_cookie_value; form_csrf ] ->
                     authenticate ~form_csrf store reqd
-                      (close_sessions ~single_cookie_value store reqd)
+                      (close_sessions ~to_logout_cookie store reqd)
                 | _ ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:"An error occured. Please refresh and try again"
