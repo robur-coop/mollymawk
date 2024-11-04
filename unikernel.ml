@@ -1373,7 +1373,7 @@ struct
                       ~data:(String.escaped msg) `Bad_request)
         | path
           when String.(
-                 length path >= 21 && sub path 0 23 = "/account/session/close/")
+                 length path >= 23 && sub path 0 23 = "/account/session/close/")
           ->
             check_meth `GET (fun () ->
                 match
