@@ -695,8 +695,8 @@ struct
         match User_model.user_session_cookie cookie_value user with
         | Some cookie ->
             let filter, redirect =
-              match (String.equal single_cookie_value "", logout) with
-              | true, false ->
+              match (single_cookie_value, logout) with
+              | None, false ->
                   ( (fun (c : User_model.cookie) ->
                       not
                         (String.equal c.name User_model.session_cookie
