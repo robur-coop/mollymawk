@@ -708,9 +708,9 @@ struct
                       not (String.equal c.value cookie.value)),
                     Middleware.http_response reqd ~title:"OK"
                       ~data:"Logout succesful" `OK )
-              | _ ->
+              | Some to_logout_cookie_value, false ->
                   ( (fun (c : User_model.cookie) ->
-                      not (String.equal single_cookie_value c.value)),
+                      not (String.equal to_logout_cookie_value c.value)),
                     Middleware.redirect_to_page ~path:"/account"
                       ~msg:"Closed session succesfully" reqd () )
             in
