@@ -1380,7 +1380,7 @@ struct
                   String.split_on_char '/'
                     (String.sub path 23 (String.length path - 23))
                 with
-                | [ single_cookie_value; form_csrf ] ->
+                | [ to_logout_cookie; form_csrf ] ->
                     authenticate ~form_csrf store reqd
                       (close_sessions ~to_logout_cookie store reqd)
                 | _ ->
