@@ -454,7 +454,7 @@ struct
     | Error err ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                 ~content:(Error_page.error_layout err)
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
@@ -548,31 +548,41 @@ struct
            <= 1)
       ~error_message:"Cannot remove last administrator"
 
-  let dashboard albatross reqd (user : User_model.user) =
-    (* TODO use uuid in the future *)
-    (Albatross.query albatross ~domain:user.name
-       (`Unikernel_cmd `Unikernel_info)
-     >|= function
-     | Error msg ->
-         Logs.err (fun m ->
-             m "error while communicating with albatross: %s" msg);
-         []
-     | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
-     | Ok reply ->
-         Logs.err (fun m ->
-             m "expected a unikernel info reply, received %a"
-               (Vmm_commands.pp_wire ~verbose:false)
-               reply);
-         [])
-    >>= fun unikernels ->
-    Lwt.return
-      (reply reqd ~content_type:"text/html"
-         (Dashboard.dashboard_layout user
-            ~content:
-              (Unikernel_index.unikernel_index_layout unikernels
-                 (Ptime.v (P.now_d_ps ())))
-            ~icon:"/images/robur.png" ())
-         `OK)
+  let dashboard store albatross reqd (user : User_model.user) =
+    let now = Ptime.v (P.now_d_ps ()) in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        (* TODO use uuid in the future *)
+        (Albatross.query albatross ~domain:user.name
+           (`Unikernel_cmd `Unikernel_info)
+         >|= function
+         | Error msg ->
+             Logs.err (fun m ->
+                 m "error while communicating with albatross: %s" msg);
+             []
+         | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
+         | Ok reply ->
+             Logs.err (fun m ->
+                 m "expected a unikernel info reply, received %a"
+                   (Vmm_commands.pp_wire ~verbose:false)
+                   reply);
+             [])
+        >>= fun unikernels ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout ~csrf user
+                ~content:
+                  (Unikernel_index.unikernel_index_layout unikernels
+                     (Ptime.v (P.now_d_ps ())))
+                ~icon:"/images/robur.png" ())
+             `OK)
+    | Error err ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                ~content:(Error_page.error_layout err)
+                ~icon:"/images/robur.png" ())
+             `Internal_server_error)
 
   let account_page store reqd (user : User_model.user) =
     match Middleware.session_cookie_value reqd with
@@ -582,7 +592,7 @@ struct
         | Ok csrf ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Dashboard.dashboard_layout user
+                 (Dashboard.dashboard_layout ~csrf user
                     ~page_title:"Account | Mollymawk"
                     ~content:
                       (User_account.user_account_layout ~csrf user
@@ -593,7 +603,7 @@ struct
         | Error err ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+                 (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                     ~content:(Error_page.error_layout err)
                     ~icon:"/images/robur.png" ())
                  `Internal_server_error))
@@ -608,7 +618,7 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+             (Guest_layout.guest_layout ~page_title:"401 | Mollymawk"
                 ~content:(Error_page.error_layout error)
                 ~icon:"/images/robur.png" ())
              `Unauthorized)
@@ -710,7 +720,7 @@ struct
             in
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+                 (Guest_layout.guest_layout ~page_title:"401 | Mollymawk"
                     ~content:(Error_page.error_layout error)
                     ~icon:"/images/robur.png" ())
                  `Unauthorized))
@@ -725,20 +735,31 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+             (Guest_layout.guest_layout ~page_title:"401 | Mollymawk"
                 ~content:(Error_page.error_layout error)
                 ~icon:"/images/robur.png" ())
              `Unauthorized)
 
   let users store reqd (user : User_model.user) =
-    Lwt.return
-      (reply reqd ~content_type:"text/html"
-         (Dashboard.dashboard_layout user ~page_title:"Users | Mollymawk"
-            ~content:
-              (Users_index.users_index_layout (snd store).Storage.users
-                 (Ptime.v (P.now_d_ps ())))
-            ~icon:"/images/robur.png" ())
-         `OK)
+    let now = Ptime.v (P.now_d_ps ()) in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout ~csrf user
+                ~page_title:"Users | Mollymawk"
+                ~content:
+                  (Users_index.users_index_layout (snd !store).Storage.users
+                     (Ptime.v (P.now_d_ps ())))
+                ~icon:"/images/robur.png" ())
+             `OK)
+    | Error err ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                ~content:(Error_page.error_layout err)
+                ~icon:"/images/robur.png" ())
+             `Internal_server_error)
 
   let settings store reqd (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
@@ -746,9 +767,10 @@ struct
     | Ok csrf ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"Settings | Mollymawk"
+             (Dashboard.dashboard_layout ~csrf user
+                ~page_title:"Settings | Mollymawk"
                 ~content:
-                  (Settings_page.settings_layout ~csrf
+                  (Settings_page.settings_layout
                      (snd !store).Storage.configuration)
                 ~icon:"/images/robur.png" ())
              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
@@ -756,7 +778,7 @@ struct
     | Error err ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                 ~content:(Error_page.error_layout err)
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
@@ -790,16 +812,16 @@ struct
     | Ok csrf ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user
+             (Dashboard.dashboard_layout ~csrf user
                 ~page_title:"Deploy a Unikernel | Mollymawk"
-                ~content:(Unikernel_create.unikernel_create_layout ~csrf)
+                ~content:Unikernel_create.unikernel_create_layout
                 ~icon:"/images/robur.png" ())
              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
              `OK)
     | Error err ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                 ~content:(Error_page.error_layout err)
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
@@ -854,9 +876,9 @@ struct
       | Ok csrf ->
           Lwt.return
             (reply reqd ~content_type:"text/html"
-               (Dashboard.dashboard_layout user
+               (Dashboard.dashboard_layout ~csrf user
                   ~content:
-                    (Unikernel_single.unikernel_single_layout ~csrf
+                    (Unikernel_single.unikernel_single_layout
                        (List.hd unikernels) now console_output)
                   ~icon:"/images/robur.png" ())
                ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
@@ -864,7 +886,7 @@ struct
       | Error err ->
           Lwt.return
             (reply reqd ~content_type:"text/html"
-               (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+               (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                   ~content:(Error_page.error_layout err)
                   ~icon:"/images/robur.png" ())
                `Internal_server_error)
@@ -879,8 +901,7 @@ struct
       in
       Lwt.return
         (reply reqd ~content_type:"text/html"
-           (Dashboard.dashboard_layout user
-              ~page_title:"An Error Occured | Mollymawk"
+           (Guest_layout.guest_layout ~page_title:"An Error Occured | Mollymawk"
               ~content:(Error_page.error_layout error)
               ~icon:"/images/robur.png" ())
            `Internal_server_error)
@@ -1089,18 +1110,17 @@ struct
         | Ok csrf ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Dashboard.dashboard_layout user
+                 (Dashboard.dashboard_layout ~csrf user
                     ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
                     ~content:
-                      (User_single.user_single_layout ~csrf u unikernels policy
-                         now)
+                      (User_single.user_single_layout u unikernels policy now)
                     ~icon:"/images/robur.png" ())
                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                  `OK)
         | Error err ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+                 (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                     ~content:(Error_page.error_layout err)
                     ~icon:"/images/robur.png" ())
                  `Internal_server_error))
@@ -1115,7 +1135,7 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"404 | Mollymawk"
+             (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
                 ~content:(Error_page.error_layout status)
                 ~icon:"/images/robur.png" ())
              `Not_found)
@@ -1137,20 +1157,19 @@ struct
             | Ok csrf ->
                 Lwt.return
                   (reply reqd ~content_type:"text/html"
-                     (Dashboard.dashboard_layout user
+                     (Dashboard.dashboard_layout ~csrf user
                         ~page_title:
                           (String.capitalize_ascii u.name ^ " | Mollymawk")
                         ~content:
-                          (Update_policy.update_policy_layout ~csrf u
-                             ~user_policy ~unallocated_resources)
+                          (Update_policy.update_policy_layout u ~user_policy
+                             ~unallocated_resources)
                         ~icon:"/images/robur.png" ())
                      ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                      `OK)
             | Error err ->
                 Lwt.return
                   (reply reqd ~content_type:"text/html"
-                     (Dashboard.dashboard_layout user
-                        ~page_title:"500 | Mollymawk"
+                     (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                         ~content:(Error_page.error_layout err)
                         ~icon:"/images/robur.png" ())
                      `Internal_server_error))
@@ -1315,7 +1334,7 @@ struct
                   (verify_email_token store reqd token))
         | "/dashboard" ->
             check_meth `GET (fun () ->
-                authenticate store reqd (dashboard !albatross reqd))
+                authenticate store reqd (dashboard store !albatross reqd))
         | "/account" ->
             check_meth `GET (fun () ->
                 authenticate store reqd (account_page store reqd))
@@ -1365,7 +1384,7 @@ struct
                       `Bad_request)
         | "/admin/users" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true store reqd (users !store reqd))
+                authenticate ~check_admin:true store reqd (users store reqd))
         | path when String.(length path >= 12 && sub path 0 12 = "/admin/user/")
           ->
             check_meth `GET (fun () ->

@@ -1,4 +1,4 @@
-let unikernel_create_layout ~csrf =
+let unikernel_create_layout =
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -14,7 +14,6 @@ let unikernel_create_layout ~csrf =
         div
           ~a:[ a_class [ "space-y-6 mt-8 p-6 max-w-5xl mx-auto" ] ]
           [
-            Utils.csrf_form_input csrf;
             p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
             div
               [

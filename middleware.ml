@@ -57,12 +57,12 @@ let redirect_to_page ~path ?(clear_session = false) ?(with_error = false) reqd
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
-let redirect_to_error ~title ~data status user code api_meth reqd () =
+let redirect_to_error ~title ~data status code api_meth reqd () =
   let error = { Utils.Status.code; title; success = false; data } in
   let data =
     if api_meth then Utils.Status.to_json error
     else
-      Dashboard.dashboard_layout user ~page_title:(title ^ " | Mollymawk")
+      Guest_layout.guest_layout ~page_title:(title ^ " | Mollymawk")
         ~content:(Error_page.error_layout error)
         ~icon:"/images/robur.png" ()
   in
@@ -201,7 +201,7 @@ let is_user_admin_middleware api_meth now users handler reqd =
         redirect_to_error ~title:"Unauthorized"
           ~data:
             "You don't have the necessary permissions to access this service."
-          `Unauthorized user 401 api_meth reqd ()
+          `Unauthorized 401 api_meth reqd ()
   | Error (`Msg err) ->
       redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true
         ~msg:err reqd ()

@@ -7,7 +7,6 @@ let user_account_layout ~csrf (user : User_model.user) ~active_cookie_value
         p
           ~a:[ a_class [ "text-3xl font-semibold uppercase" ] ]
           [ txt (user.name ^ " - Account") ];
-        Utils.csrf_form_input csrf;
         section
           ~a:[ a_class [ "my-5" ] ]
           [

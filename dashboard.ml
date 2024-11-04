@@ -1,6 +1,6 @@
 open Tyxml
 
-let dashboard_layout (user : User_model.user) ~icon
+let dashboard_layout ~csrf (user : User_model.user) ~icon
     ?(page_title = "Dashboard | Mollymawk") ?message ~content () =
   let page =
     Html.(
@@ -18,6 +18,7 @@ let dashboard_layout (user : User_model.user) ~icon
                      ];
                  ]
                [
+                 Utils.csrf_form_input csrf;
                  div
                    ~a:
                      [
