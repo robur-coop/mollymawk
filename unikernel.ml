@@ -1331,9 +1331,7 @@ struct
             check_meth `GET (fun () ->
                 authenticate ~email_verified:false store reqd
                   (verify_email store reqd))
-        | path
-          when String.(
-                 length path >= 19 && sub path 0 19 = "/auth/verify/token=") ->
+        | path when String.starts_with ~prefix:"/auth/verify/token=" path ->
             check_meth `GET (fun () ->
                 let token = String.sub path 19 (String.length path - 19) in
                 authenticate ~email_verified:false store reqd
@@ -1371,10 +1369,7 @@ struct
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
-        | path
-          when String.(
-                 length path >= 23 && sub path 0 23 = "/account/session/close/")
-          ->
+        | path when String.starts_with ~prefix:"/account/session/close/" path ->
             check_meth `GET (fun () ->
                 match
                   String.split_on_char '/'
@@ -1390,16 +1385,12 @@ struct
         | "/admin/users" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (users store reqd))
-        | path when String.(length path >= 12 && sub path 0 12 = "/admin/user/")
-          ->
+        | path when String.starts_with ~prefix:"/admin/user/" path ->
             check_meth `GET (fun () ->
                 let uuid = String.sub path 12 (String.length path - 12) in
                 authenticate ~check_admin:true store reqd
                   (view_user !albatross store uuid reqd))
-        | path
-          when String.(
-                 length path >= 21 && sub path 0 21 = "/admin/u/policy/edit/")
-          ->
+        | path when String.starts_with ~prefix:"/admin/u/policy/edit/" path ->
             check_meth `GET (fun () ->
                 let uuid = String.sub path 21 (String.length path - 21) in
                 authenticate ~check_admin:true store reqd
@@ -1451,9 +1442,7 @@ struct
             check_meth `GET (fun () ->
                 authenticate ~api_meth:true store reqd
                   (unikernel_info !albatross reqd))
-        | path
-          when String.(length path >= 16 && sub path 0 16 = "/unikernel/info/")
-          ->
+        | path when String.starts_with ~prefix:"/unikernel/info/" path ->
             check_meth `GET (fun () ->
                 let unikernel_name =
                   String.sub path 16 (String.length path - 16)
@@ -1481,9 +1470,7 @@ struct
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
-        | path
-          when String.(
-                 length path >= 19 && sub path 0 19 = "/unikernel/console/") ->
+        | path when String.starts_with ~prefix:"/unikernel/console/" path ->
             check_meth `GET (fun () ->
                 let unikernel_name =
                   String.sub path 19 (String.length path - 19)
