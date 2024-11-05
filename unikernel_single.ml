@@ -1,4 +1,4 @@
-let unikernel_single_layout ~csrf unikernel current_time console_output =
+let unikernel_single_layout unikernel current_time console_output =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
@@ -44,7 +44,6 @@ let unikernel_single_layout ~csrf unikernel current_time console_output =
                       [
                         div
                           [
-                            Utils.csrf_form_input csrf;
                             button
                               ~a:
                                 [
@@ -64,7 +63,6 @@ let unikernel_single_layout ~csrf unikernel current_time console_output =
                           ];
                         div
                           [
-                            Utils.csrf_form_input csrf;
                             button
                               ~a:
                                 [

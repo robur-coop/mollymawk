@@ -1,6 +1,6 @@
 open Tyxml
 
-let dashboard_layout (user : User_model.user) ~icon
+let dashboard_layout ~csrf (user : User_model.user) ~icon
     ?(page_title = "Dashboard | Mollymawk") ?message ~content () =
   let page =
     Html.(
@@ -18,6 +18,7 @@ let dashboard_layout (user : User_model.user) ~icon
                      ];
                  ]
                [
+                 Utils.csrf_form_input csrf;
                  div
                    ~a:
                      [
@@ -154,7 +155,7 @@ let dashboard_layout (user : User_model.user) ~icon
                            a_class
                              [
                                "absolute top-1/4 rounded-md right-4 z-50 w-fit \
-                                space-y-2 p-4 shadow border text-wrap hidden";
+                                space-y-2 p-4 shadow text-wrap hidden";
                              ];
                          ]
                        [];
@@ -544,6 +545,19 @@ let dashboard_layout (user : User_model.user) ~icon
                                   ];
                               ]
                           else div []);
+                         button
+                           ~a:
+                             [
+                               a_id "logout-button";
+                               a_onclick "logout()";
+                               a_class
+                                 [
+                                   "my-3 py-3 rounded bg-secondary-500 \
+                                    hover:bg-secondary-800 w-full text-gray-50 \
+                                    font-semibold";
+                                 ];
+                             ]
+                           [ txt "Logout" ];
                        ];
                    ];
                  section

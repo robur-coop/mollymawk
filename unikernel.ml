@@ -454,7 +454,7 @@ struct
     | Error err ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                 ~content:(Error_page.error_layout err)
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
@@ -480,7 +480,9 @@ struct
         else
           Middleware.http_response reqd ~title:"Error"
             ~data:"Logged in user is not the to-be-verified one" `Bad_request
-    | Error (`Msg s) -> Middleware.redirect_to_login reqd ~msg:s ()
+    | Error (`Msg s) ->
+        Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
+          ~with_error:true reqd ~msg:s ()
 
   let toggle_account_attribute json_dict store reqd ~key update_fn error_on_last
       ~error_message =
@@ -546,31 +548,41 @@ struct
            <= 1)
       ~error_message:"Cannot remove last administrator"
 
-  let dashboard albatross reqd (user : User_model.user) =
-    (* TODO use uuid in the future *)
-    (Albatross.query albatross ~domain:user.name
-       (`Unikernel_cmd `Unikernel_info)
-     >|= function
-     | Error msg ->
-         Logs.err (fun m ->
-             m "error while communicating with albatross: %s" msg);
-         []
-     | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
-     | Ok reply ->
-         Logs.err (fun m ->
-             m "expected a unikernel info reply, received %a"
-               (Vmm_commands.pp_wire ~verbose:false)
-               reply);
-         [])
-    >>= fun unikernels ->
-    Lwt.return
-      (reply reqd ~content_type:"text/html"
-         (Dashboard.dashboard_layout user
-            ~content:
-              (Unikernel_index.unikernel_index_layout unikernels
-                 (Ptime.v (P.now_d_ps ())))
-            ~icon:"/images/robur.png" ())
-         `OK)
+  let dashboard store albatross reqd (user : User_model.user) =
+    let now = Ptime.v (P.now_d_ps ()) in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        (* TODO use uuid in the future *)
+        (Albatross.query albatross ~domain:user.name
+           (`Unikernel_cmd `Unikernel_info)
+         >|= function
+         | Error msg ->
+             Logs.err (fun m ->
+                 m "error while communicating with albatross: %s" msg);
+             []
+         | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
+         | Ok reply ->
+             Logs.err (fun m ->
+                 m "expected a unikernel info reply, received %a"
+                   (Vmm_commands.pp_wire ~verbose:false)
+                   reply);
+             [])
+        >>= fun unikernels ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout ~csrf user
+                ~content:
+                  (Unikernel_index.unikernel_index_layout unikernels
+                     (Ptime.v (P.now_d_ps ())))
+                ~icon:"/images/robur.png" ())
+             `OK)
+    | Error err ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                ~content:(Error_page.error_layout err)
+                ~icon:"/images/robur.png" ())
+             `Internal_server_error)
 
   let account_page store reqd (user : User_model.user) =
     match Middleware.session_cookie_value reqd with
@@ -580,7 +592,7 @@ struct
         | Ok csrf ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Dashboard.dashboard_layout user
+                 (Dashboard.dashboard_layout ~csrf user
                     ~page_title:"Account | Mollymawk"
                     ~content:
                       (User_account.user_account_layout ~csrf user
@@ -591,7 +603,7 @@ struct
         | Error err ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+                 (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                     ~content:(Error_page.error_layout err)
                     ~icon:"/images/robur.png" ())
                  `Internal_server_error))
@@ -606,7 +618,7 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+             (Guest_layout.guest_layout ~page_title:"401 | Mollymawk"
                 ~content:(Error_page.error_layout error)
                 ~icon:"/images/robur.png" ())
              `Unauthorized)
@@ -661,31 +673,48 @@ struct
                (Yojson.Basic.to_string (`Assoc json_dict)))
           `Bad_request
 
-  let close_sessions store reqd (user : User_model.user) =
+  let new_user_cookies ~user ~filter ~redirect store reqd =
+    let now = Ptime.v (P.now_d_ps ()) in
+    let cookies = List.filter filter user.User_model.cookies in
+    let updated_user =
+      User_model.update_user user ~cookies ~updated_at:now ()
+    in
+    Store.update_user !store updated_user >>= function
+    | Ok store' ->
+        store := store';
+        redirect
+    | Error (`Msg err) ->
+        Logs.warn (fun m -> m "Storage error with %s" err);
+        Middleware.http_response reqd ~title:"Error" ~data:err
+          `Internal_server_error
+
+  let close_sessions ?to_logout_cookie ?(logout = false) store reqd
+      (user : User_model.user) =
     match Middleware.session_cookie_value reqd with
     | Ok cookie_value -> (
         match User_model.user_session_cookie cookie_value user with
-        | Some cookie -> (
-            let now = Ptime.v (P.now_d_ps ()) in
-            let cookies =
-              cookie
-              :: List.filter
-                   (fun (cookie : User_model.cookie) ->
-                     not (String.equal cookie.name User_model.session_cookie))
-                   user.cookies
+        | Some cookie ->
+            let filter, redirect =
+              match (to_logout_cookie, logout) with
+              | None, false ->
+                  ( (fun (c : User_model.cookie) ->
+                      not
+                        (String.equal c.name User_model.session_cookie
+                        && c.value <> cookie.value)),
+                    Middleware.http_response reqd ~title:"OK"
+                      ~data:"Closed all sessions succesfully" `OK )
+              | _, true ->
+                  ( (fun (c : User_model.cookie) ->
+                      not (String.equal c.value cookie.value)),
+                    Middleware.http_response reqd ~title:"OK"
+                      ~data:"Logout succesful" `OK )
+              | Some to_logout_cookie_value, false ->
+                  ( (fun (c : User_model.cookie) ->
+                      not (String.equal to_logout_cookie_value c.value)),
+                    Middleware.redirect_to_page ~path:"/account"
+                      ~msg:"Closed session succesfully" reqd () )
             in
-            let updated_user =
-              User_model.update_user user ~cookies ~updated_at:now ()
-            in
-            Store.update_user !store updated_user >>= function
-            | Ok store' ->
-                store := store';
-                Middleware.http_response reqd ~title:"OK"
-                  ~data:"Closed all sessions successfully" `OK
-            | Error (`Msg err) ->
-                Logs.warn (fun m -> m "Storage error with %s" err);
-                Middleware.http_response reqd ~title:"Error" ~data:err
-                  `Internal_server_error)
+            new_user_cookies ~user ~filter ~redirect store reqd
         | None ->
             let error =
               {
@@ -697,7 +726,7 @@ struct
             in
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+                 (Guest_layout.guest_layout ~page_title:"401 | Mollymawk"
                     ~content:(Error_page.error_layout error)
                     ~icon:"/images/robur.png" ())
                  `Unauthorized))
@@ -712,20 +741,31 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"401 | Mollymawk"
+             (Guest_layout.guest_layout ~page_title:"401 | Mollymawk"
                 ~content:(Error_page.error_layout error)
                 ~icon:"/images/robur.png" ())
              `Unauthorized)
 
   let users store reqd (user : User_model.user) =
-    Lwt.return
-      (reply reqd ~content_type:"text/html"
-         (Dashboard.dashboard_layout user ~page_title:"Users | Mollymawk"
-            ~content:
-              (Users_index.users_index_layout (snd store).Storage.users
-                 (Ptime.v (P.now_d_ps ())))
-            ~icon:"/images/robur.png" ())
-         `OK)
+    let now = Ptime.v (P.now_d_ps ()) in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout ~csrf user
+                ~page_title:"Users | Mollymawk"
+                ~content:
+                  (Users_index.users_index_layout (snd !store).Storage.users
+                     (Ptime.v (P.now_d_ps ())))
+                ~icon:"/images/robur.png" ())
+             `OK)
+    | Error err ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                ~content:(Error_page.error_layout err)
+                ~icon:"/images/robur.png" ())
+             `Internal_server_error)
 
   let settings store reqd (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
@@ -733,9 +773,10 @@ struct
     | Ok csrf ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"Settings | Mollymawk"
+             (Dashboard.dashboard_layout ~csrf user
+                ~page_title:"Settings | Mollymawk"
                 ~content:
-                  (Settings_page.settings_layout ~csrf
+                  (Settings_page.settings_layout
                      (snd !store).Storage.configuration)
                 ~icon:"/images/robur.png" ())
              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
@@ -743,7 +784,7 @@ struct
     | Error err ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                 ~content:(Error_page.error_layout err)
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
@@ -777,16 +818,16 @@ struct
     | Ok csrf ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user
+             (Dashboard.dashboard_layout ~csrf user
                 ~page_title:"Deploy a Unikernel | Mollymawk"
-                ~content:(Unikernel_create.unikernel_create_layout ~csrf)
+                ~content:Unikernel_create.unikernel_create_layout
                 ~icon:"/images/robur.png" ())
              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
              `OK)
     | Error err ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                 ~content:(Error_page.error_layout err)
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
@@ -841,9 +882,9 @@ struct
       | Ok csrf ->
           Lwt.return
             (reply reqd ~content_type:"text/html"
-               (Dashboard.dashboard_layout user
+               (Dashboard.dashboard_layout ~csrf user
                   ~content:
-                    (Unikernel_single.unikernel_single_layout ~csrf
+                    (Unikernel_single.unikernel_single_layout
                        (List.hd unikernels) now console_output)
                   ~icon:"/images/robur.png" ())
                ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
@@ -851,7 +892,7 @@ struct
       | Error err ->
           Lwt.return
             (reply reqd ~content_type:"text/html"
-               (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+               (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                   ~content:(Error_page.error_layout err)
                   ~icon:"/images/robur.png" ())
                `Internal_server_error)
@@ -866,8 +907,7 @@ struct
       in
       Lwt.return
         (reply reqd ~content_type:"text/html"
-           (Dashboard.dashboard_layout user
-              ~page_title:"An Error Occured | Mollymawk"
+           (Guest_layout.guest_layout ~page_title:"An Error Occured | Mollymawk"
               ~content:(Error_page.error_layout error)
               ~icon:"/images/robur.png" ())
            `Internal_server_error)
@@ -1076,18 +1116,17 @@ struct
         | Ok csrf ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Dashboard.dashboard_layout user
+                 (Dashboard.dashboard_layout ~csrf user
                     ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
                     ~content:
-                      (User_single.user_single_layout ~csrf u unikernels policy
-                         now)
+                      (User_single.user_single_layout u unikernels policy now)
                     ~icon:"/images/robur.png" ())
                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                  `OK)
         | Error err ->
             Lwt.return
               (reply reqd ~content_type:"text/html"
-                 (Dashboard.dashboard_layout user ~page_title:"500 | Mollymawk"
+                 (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                     ~content:(Error_page.error_layout err)
                     ~icon:"/images/robur.png" ())
                  `Internal_server_error))
@@ -1102,7 +1141,7 @@ struct
         in
         Lwt.return
           (reply reqd ~content_type:"text/html"
-             (Dashboard.dashboard_layout user ~page_title:"404 | Mollymawk"
+             (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
                 ~content:(Error_page.error_layout status)
                 ~icon:"/images/robur.png" ())
              `Not_found)
@@ -1124,20 +1163,19 @@ struct
             | Ok csrf ->
                 Lwt.return
                   (reply reqd ~content_type:"text/html"
-                     (Dashboard.dashboard_layout user
+                     (Dashboard.dashboard_layout ~csrf user
                         ~page_title:
                           (String.capitalize_ascii u.name ^ " | Mollymawk")
                         ~content:
-                          (Update_policy.update_policy_layout ~csrf u
-                             ~user_policy ~unallocated_resources)
+                          (Update_policy.update_policy_layout u ~user_policy
+                             ~unallocated_resources)
                         ~icon:"/images/robur.png" ())
                      ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                      `OK)
             | Error err ->
                 Lwt.return
                   (reply reqd ~content_type:"text/html"
-                     (Dashboard.dashboard_layout user
-                        ~page_title:"500 | Mollymawk"
+                     (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
                         ~content:(Error_page.error_layout err)
                         ~icon:"/images/robur.png" ())
                      `Internal_server_error))
@@ -1302,7 +1340,7 @@ struct
                   (verify_email_token store reqd token))
         | "/dashboard" ->
             check_meth `GET (fun () ->
-                authenticate store reqd (dashboard !albatross reqd))
+                authenticate store reqd (dashboard store !albatross reqd))
         | "/account" ->
             check_meth `GET (fun () ->
                 authenticate store reqd (account_page store reqd))
@@ -1324,9 +1362,34 @@ struct
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
+        | "/logout" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, _) ->
+                    authenticate ~form_csrf store reqd
+                      (close_sessions ~logout:true store reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
+        | path
+          when String.(
+                 length path >= 23 && sub path 0 23 = "/account/session/close/")
+          ->
+            check_meth `GET (fun () ->
+                match
+                  String.split_on_char '/'
+                    (String.sub path 23 (String.length path - 23))
+                with
+                | [ to_logout_cookie; form_csrf ] ->
+                    authenticate ~form_csrf store reqd
+                      (close_sessions ~to_logout_cookie store reqd)
+                | _ ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:"An error occured. Please refresh and try again"
+                      `Bad_request)
         | "/admin/users" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true store reqd (users !store reqd))
+                authenticate ~check_admin:true store reqd (users store reqd))
         | path when String.(length path >= 12 && sub path 0 12 = "/admin/user/")
           ->
             check_meth `GET (fun () ->

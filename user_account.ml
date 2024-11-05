@@ -7,7 +7,6 @@ let user_account_layout ~csrf (user : User_model.user) ~active_cookie_value
         p
           ~a:[ a_class [ "text-3xl font-semibold uppercase" ] ]
           [ txt (user.name ^ " - Account") ];
-        Utils.csrf_form_input csrf;
         section
           ~a:[ a_class [ "my-5" ] ]
           [
@@ -306,6 +305,27 @@ let user_account_layout ~csrf (user : User_model.user) ~active_cookie_value
                                            span
                                              [ txt "Expiry time not available" ]);
                                      ];
+                                   (if
+                                      not
+                                        (String.equal cookie.value
+                                           active_cookie_value)
+                                    then
+                                      a
+                                        ~a:
+                                          [
+                                            a_href
+                                              ("account/session/close/"
+                                             ^ cookie.value ^ "/" ^ csrf);
+                                            a_class
+                                              [
+                                                "hover:text-secondary-800 \
+                                                 text-secondary-500 \
+                                                 transition-colors \
+                                                 cursor-pointer";
+                                              ];
+                                          ]
+                                        [ txt "Close session" ]
+                                    else div []);
                                  ];
                              ])
                          (List.filter

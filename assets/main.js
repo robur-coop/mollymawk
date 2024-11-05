@@ -1,5 +1,16 @@
 document.addEventListener('DOMContentLoaded', function () {
 	AOS.init();
+
+	const flashMessage = getCookie('flash_msg');
+	if (flashMessage) {
+		if (flashMessage.startsWith("error:")) {
+			postAlert("bg-secondary-300", flashMessage);
+		} else {
+			postAlert("bg-primary-300", flashMessage);
+		}
+		document.cookie = "flash_msg=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+	}
+
 	if (window.location.pathname.startsWith("/admin/user/")) {
 		const tabs = document.querySelectorAll(".tab-link");
 		const tabPanes = document.querySelectorAll(".tab-pane");
@@ -24,6 +35,16 @@ document.addEventListener('DOMContentLoaded', function () {
 		});
 	}
 });
+
+function getCookie(name) {
+	const cookies = document.cookie.split(";");
+	for (let cookie of cookies) {
+		const [cookieName, cookieValue] = cookie.split("=");
+		if (cookieName === name) {
+			return decodeURIComponent(cookieValue);
+		}
+	}
+}
 
 function getUnikernelName(url) {
 	const urlObj = new URL(url);
@@ -142,7 +163,7 @@ function postAlert(bg_color, content) {
 		alertContainer.classList.remove("block", `${bg_color}`)
 		alertContainer.classList.add("hidden")
 		alertContainer.removeChild(alert);
-	}, 1600);
+	}, 2500);
 }
 
 async function deployUnikernel() {
@@ -427,7 +448,7 @@ async function updatePassword() {
 		const new_password = document.getElementById("new-password").value;
 		const confirm_password = document.getElementById("confirm-password").value;
 		const formAlert = document.getElementById("form-alert");
-		if (!current_password || !new_password || !confirm_password ) {
+		if (!current_password || !new_password || !confirm_password) {
 			formAlert.classList.remove("hidden", "text-primary-500");
 			formAlert.classList.add("text-secondary-500");
 			formAlert.textContent = "Please fill in all the required passwords"
@@ -486,5 +507,25 @@ async function closeSessions() {
 	} catch (error) {
 		postAlert("bg-secondary-300", error);
 		buttonLoading(sessionButton, false, "Logout all other sessions")
+	}
+}
+
+async function logout() {
+	const logoutButton = document.getElementById("logout-button");
+	try {
+		buttonLoading(logoutButton, true, "Closing session..")
+		const molly_csrf = document.getElementById("molly-csrf").value;
+		fetch('/logout', {
+			method: 'POST',
+			body: JSON.stringify(
+				{
+					molly_csrf,
+				}),
+			headers: { 'Content-Type': 'application/json' }
+		});
+		setTimeout(() => window.location.reload(), 1000);
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		buttonLoading(logoutButton, false, "Logout")
 	}
 }
