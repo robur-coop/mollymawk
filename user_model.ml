@@ -37,11 +37,6 @@ let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
 let session_cookie = "molly_session"
 let csrf_cookie = "molly_csrf"
 
-let get key assoc =
-  match List.find_opt (fun (k, _) -> String.equal k key) assoc with
-  | None -> None
-  | Some (_, f) -> Some f
-
 let cookie_to_json (cookie : cookie) : Yojson.Basic.t =
   `Assoc
     [
@@ -70,11 +65,12 @@ let ( let* ) = Result.bind
 let cookie_v1_of_json = function
   | `Assoc xs -> (
       match
-        ( get "name" xs,
-          get "value" xs,
-          get "expires_in" xs,
-          get "uuid" xs,
-          get "created_at" xs )
+        Utils.Json.
+          ( get "name" xs,
+            get "value" xs,
+            get "expires_in" xs,
+            get "uuid" xs,
+            get "created_at" xs )
       with
       | ( Some (`String name),
           Some (`String value),
@@ -107,13 +103,14 @@ let cookie_v1_of_json = function
 let cookie_of_json = function
   | `Assoc xs -> (
       match
-        ( get "name" xs,
-          get "value" xs,
-          get "expires_in" xs,
-          get "uuid" xs,
-          get "created_at" xs,
-          get "last_access" xs,
-          get "user_agent" xs )
+        Utils.Json.
+          ( get "name" xs,
+            get "value" xs,
+            get "expires_in" xs,
+            get "uuid" xs,
+            get "created_at" xs,
+            get "last_access" xs,
+            get "user_agent" xs )
       with
       | ( Some (`String name),
           Some (`String value),
@@ -167,10 +164,11 @@ let token_to_json t : Yojson.Basic.t =
 let token_of_json = function
   | `Assoc xs -> (
       match
-        ( get "token_type" xs,
-          get "value" xs,
-          get "expires_in" xs,
-          get "created_at" xs )
+        Utils.Json.
+          ( get "token_type" xs,
+            get "value" xs,
+            get "expires_in" xs,
+            get "created_at" xs )
       with
       | ( Some (`String token_type),
           Some (`String value),
@@ -218,16 +216,17 @@ let user_to_json (u : user) : Yojson.Basic.t =
 let user_v1_of_json = function
   | `Assoc xs -> (
       match
-        ( get "name" xs,
-          get "email" xs,
-          get "email_verified" xs,
-          get "password" xs,
-          get "uuid" xs,
-          get "tokens" xs,
-          get "cookies" xs,
-          get "created_at" xs,
-          get "updated_at" xs,
-          get "email_verification_uuid" xs )
+        Utils.Json.
+          ( get "name" xs,
+            get "email" xs,
+            get "email_verified" xs,
+            get "password" xs,
+            get "uuid" xs,
+            get "tokens" xs,
+            get "cookies" xs,
+            get "created_at" xs,
+            get "updated_at" xs,
+            get "email_verification_uuid" xs )
       with
       | ( Some (`String name),
           Some (`String email),
@@ -299,17 +298,18 @@ let user_v1_of_json = function
 let user_v2_of_json = function
   | `Assoc xs -> (
       match
-        ( get "name" xs,
-          get "email" xs,
-          get "email_verified" xs,
-          get "password" xs,
-          get "uuid" xs,
-          get "tokens" xs,
-          get "cookies" xs,
-          get "created_at" xs,
-          get "updated_at" xs,
-          get "email_verification_uuid" xs,
-          get "active" xs )
+        Utils.Json.
+          ( get "name" xs,
+            get "email" xs,
+            get "email_verified" xs,
+            get "password" xs,
+            get "uuid" xs,
+            get "tokens" xs,
+            get "cookies" xs,
+            get "created_at" xs,
+            get "updated_at" xs,
+            get "email_verification_uuid" xs,
+            get "active" xs )
       with
       | ( Some (`String name),
           Some (`String email),
@@ -382,18 +382,19 @@ let user_v2_of_json = function
 let user_of_json cookie_fn = function
   | `Assoc xs -> (
       match
-        ( get "name" xs,
-          get "email" xs,
-          get "email_verified" xs,
-          get "password" xs,
-          get "uuid" xs,
-          get "tokens" xs,
-          get "cookies" xs,
-          get "created_at" xs,
-          get "updated_at" xs,
-          get "email_verification_uuid" xs,
-          get "active" xs,
-          get "super_user" xs )
+        Utils.Json.
+          ( get "name" xs,
+            get "email" xs,
+            get "email_verified" xs,
+            get "password" xs,
+            get "uuid" xs,
+            get "tokens" xs,
+            get "cookies" xs,
+            get "created_at" xs,
+            get "updated_at" xs,
+            get "email_verification_uuid" xs,
+            get "active" xs,
+            get "super_user" xs )
       with
       | ( Some (`String name),
           Some (`String email),
