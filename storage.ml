@@ -1,7 +1,5 @@
 open Utils.Json
 
-type t = { users : User_model.user list; configuration : Configuration.t }
-
 let current_version = 5
 (* version history:
    1 was initial (fields until email_verification_uuid)
@@ -11,12 +9,12 @@ let current_version = 5
    5 cookie has two new fields last_access and user_agent
 *)
 
-let t_to_json t =
+let t_to_json users configuration =
   `Assoc
     [
       ("version", `Int current_version);
-      ("users", `List (List.map User_model.user_to_json t.users));
-      ("configuration", Configuration.to_json t.configuration);
+      ("users", `List (List.map User_model.user_to_json users));
+      ("configuration", Configuration.to_json configuration);
     ]
 
 let t_of_json json =
@@ -52,7 +50,7 @@ let t_of_json json =
               (Ok []) users
           in
           let* configuration = Configuration.of_json configuration in
-          Ok { users; configuration }
+          Ok (users, configuration)
       | _ -> Error (`Msg "invalid data: no version and users field"))
   | _ -> Error (`Msg "invalid data: not an assoc")
 
@@ -60,13 +58,17 @@ let error_msgf fmt = Fmt.kstr (fun msg -> Error (`Msg msg)) fmt
 
 module Make (BLOCK : Mirage_block.S) = struct
   module Stored_data = OneFFS.Make (BLOCK)
-
-  type store = t * BLOCK.t
-
   open Lwt.Infix
 
-  let write_data (disk, t) =
-    Stored_data.write disk (Yojson.Basic.to_string (t_to_json t))
+  type t = {
+    disk : Stored_data.t;
+    mutable users : User_model.user list;
+    mutable configuration : Configuration.t;
+  }
+
+  let write_data t =
+    Stored_data.write t.disk
+      (Yojson.Basic.to_string (t_to_json t.users t.configuration))
 
   let read_data disk =
     Stored_data.read disk >|= function
@@ -77,39 +79,102 @@ module Make (BLOCK : Mirage_block.S) = struct
           with Yojson.Json_error msg -> Error (`Msg ("Invalid json: " ^ msg))
         in
         let* t = t_of_json json in
-        Ok (disk, t)
-    | Ok None ->
-        Ok (disk, { users = []; configuration = Configuration.empty () })
+        Ok t
+    | Ok None -> Ok ([], Configuration.empty ())
     | Error e ->
         error_msgf "error while reading storage: %a" Stored_data.pp_error e
 
-  let add_user (disk, t) user =
-    let t = { t with users = user :: t.users } in
-    write_data (disk, t) >|= function
-    | Ok () -> Ok (disk, t)
+  let connect block =
+    Stored_data.connect block >>= fun disk ->
+    read_data disk >|= function
+    | Error _ as e -> e
+    | Ok (users, configuration) -> Ok { disk; users; configuration }
+
+  let configuration { configuration; _ } = configuration
+
+  let update_configuration t (configuration : Configuration.t) =
+    let t' = { t with configuration } in
+    write_data t' >|= function
+    | Ok () ->
+        t.configuration <- configuration;
+        Ok ()
     | Error we ->
         error_msgf "error while writing storage: %a" Stored_data.pp_write_error
           we
 
-  let update_user (disk, t) (user : User_model.user) =
+  let add_user t user =
+    let t' = { t with users = user :: t.users } in
+    write_data t' >|= function
+    | Ok () ->
+        t.users <- user :: t.users;
+        Ok ()
+    | Error we ->
+        error_msgf "error while writing storage: %a" Stored_data.pp_write_error
+          we
+
+  let update_user t (user : User_model.user) =
     let users =
       List.map
         (fun (u : User_model.user) ->
           match u.uuid = user.uuid with true -> user | false -> u)
         t.users
     in
-    let t = { t with users } in
-    write_data (disk, t) >|= function
-    | Ok () -> Ok (disk, t)
+    let t' = { t with users } in
+    write_data t' >|= function
+    | Ok () ->
+        t.users <- users;
+        Ok ()
     | Error we ->
         error_msgf "error while writing storage: %a" Stored_data.pp_write_error
           we
 
-  let update_configuration (disk, t) (configuration : Configuration.t) =
-    let t = { t with configuration } in
-    write_data (disk, t) >|= function
-    | Ok () -> Ok (disk, t)
-    | Error we ->
-        error_msgf "error while writing storage: %a" Stored_data.pp_write_error
-          we
+  let users { users; _ } = users
+
+  let find_by_email store email =
+    List.find_opt
+      (fun user -> String.equal user.User_model.email email)
+      store.users
+
+  let find_by_name store name =
+    List.find_opt
+      (fun user -> String.equal user.User_model.name name)
+      store.users
+
+  let find_by_uuid store uuid =
+    List.find_opt
+      (fun user -> String.equal user.User_model.uuid uuid)
+      store.users
+
+  let find_by_cookie store cookie_value =
+    List.fold_left
+      (fun acc user ->
+        match acc with
+        | Some _ as s -> s
+        | None -> (
+            match
+              List.find_opt
+                (fun (cookie : User_model.cookie) ->
+                  String.equal User_model.session_cookie cookie.User_model.name
+                  && String.equal cookie_value cookie.value)
+                user.User_model.cookies
+            with
+            | None -> None
+            | Some c -> Some (user, c)))
+      None store.users
+
+  let count_users store = List.length store.users
+
+  let find_email_verification_token store uuid =
+    List.find_opt
+      (fun user ->
+        Option.fold ~none:false
+          ~some:(fun uu -> Uuidm.equal uu uuid)
+          user.User_model.email_verification_uuid)
+      store.users
+
+  let count_active store =
+    List.length (List.filter (fun u -> u.User_model.active) store.users)
+
+  let count_superusers store =
+    List.length (List.filter (fun u -> u.User_model.super_user) store.users)
 end

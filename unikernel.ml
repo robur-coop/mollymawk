@@ -55,10 +55,8 @@ struct
       User_model.update_user user ~updated_at:now
         ~cookies:(csrf :: user.cookies) ()
     in
-    Store.update_user !store updated_user >>= function
-    | Ok store' ->
-        store := store';
-        Lwt.return (Ok csrf.value)
+    Store.update_user store updated_user >>= function
+    | Ok () -> Lwt.return (Ok csrf.value)
     | Error (`Msg err) ->
         let error =
           {
@@ -132,59 +130,62 @@ struct
   let authenticate ?(email_verified = true) ?(check_admin = false)
       ?(api_meth = false) ?form_csrf store reqd f =
     let now = Ptime.v (P.now_d_ps ()) in
-    let _, (t : Storage.t) = !store in
-    let users = User_model.create_user_session_map t.users in
-    let middlewares =
-      (if check_admin then
-         [ Middleware.is_user_admin_middleware api_meth now users ]
-       else [])
-      @ (if email_verified && false (* TODO *) then
-           [ Middleware.email_verified_middleware now users ]
-         else [])
-      @ Option.fold ~none:[]
-          ~some:(fun csrf -> [ Middleware.csrf_verification users now csrf ])
-          form_csrf
-      @ [ Middleware.auth_middleware now users ]
-    in
-    Middleware.apply_middleware middlewares
-      (fun reqd ->
-        match Middleware.user_of_cookie users now reqd with
-        | Ok user -> (
-            match Middleware.session_cookie_value reqd with
-            | Ok cookie_value -> (
-                match User_model.user_session_cookie cookie_value user with
-                | Some cookie -> (
-                    let cookie =
-                      { cookie with user_agent = Middleware.user_agent reqd }
-                    in
-                    let cookies =
-                      List.map
-                        (fun (cookie' : User_model.cookie) ->
-                          if String.equal cookie_value cookie'.value then cookie
-                          else cookie')
-                        user.cookies
-                    in
-                    let updated_user =
-                      User_model.update_user user ~cookies ()
-                    in
-                    Store.update_user !store updated_user >>= function
-                    | Ok store' ->
-                        store := store';
-                        f user
-                    | Error (`Msg err) ->
-                        Logs.err (fun m -> m "Error with storage: %s" err);
-                        Middleware.http_response reqd ~title:"Error" ~data:err
-                          `Not_found)
-                | None ->
-                    Middleware.http_response reqd ~title:"Error"
-                      ~data:"Cookie not found" `Not_found)
-            | Error (`Msg err) ->
-                Middleware.http_response reqd ~title:"Error" ~data:err
-                  `Bad_request)
-        | Error (`Msg err) ->
-            Logs.err (fun m -> m "couldn't find user of cookie: %s" err);
-            Middleware.http_response reqd ~title:"Error" ~data:err `Not_found)
-      reqd
+    match Middleware.session_cookie_value reqd with
+    | Error (`Msg err) ->
+        Logs.err (fun m ->
+            m "auth-middleware: No molly-session in cookie header. %s" err);
+        Middleware.http_response reqd ~title:"Error" ~data:err `Bad_request
+    | Ok cookie_value -> (
+        match Store.find_by_cookie store cookie_value with
+        | None ->
+            Logs.err (fun m ->
+                m "auth-middleware: Failed to find user with key %s"
+                  cookie_value);
+            Middleware.http_response reqd ~title:"Error" ~data:"User not found"
+              `Bad_request
+        | Some (user, cookie) ->
+            if not (User_model.is_valid_cookie cookie now) then (
+              Logs.err (fun m ->
+                  m
+                    "auth-middleware: Session value doesn't match user session \
+                     %s"
+                    cookie_value);
+              Middleware.http_response reqd ~title:"Error"
+                ~data:"User not found" `Bad_request)
+            else
+              let middlewares =
+                (if check_admin then
+                   [ Middleware.is_user_admin_middleware api_meth user ]
+                 else [])
+                @ (if email_verified && false (* TODO *) then
+                     [ Middleware.email_verified_middleware user ]
+                   else [])
+                @ Option.fold ~none:[]
+                    ~some:(fun csrf ->
+                      [ Middleware.csrf_verification user now csrf ])
+                    form_csrf
+                @ [ Middleware.auth_middleware user ]
+              in
+              Middleware.apply_middleware middlewares
+                (fun reqd ->
+                  let cookie =
+                    { cookie with user_agent = Middleware.user_agent reqd }
+                  in
+                  let cookies =
+                    List.map
+                      (fun (cookie' : User_model.cookie) ->
+                        if String.equal cookie_value cookie'.value then cookie
+                        else cookie')
+                      user.cookies
+                  in
+                  let updated_user = User_model.update_user user ~cookies () in
+                  Store.update_user store updated_user >>= function
+                  | Ok () -> f user
+                  | Error (`Msg err) ->
+                      Logs.err (fun m -> m "Error with storage: %s" err);
+                      Middleware.http_response reqd ~title:"Error" ~data:err
+                        `Not_found)
+                reqd)
 
   let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status
       =
@@ -264,14 +265,8 @@ struct
                   ~data:(String.escaped err) `Bad_request
             | Ok _ ->
                 if Middleware.csrf_cookie_verification form_csrf reqd then
-                  let _, (s : Storage.t) = !store in
-                  let users = s.users in
-                  let existing_email =
-                    User_model.check_if_email_exists email users
-                  in
-                  let existing_name =
-                    User_model.check_if_name_exists name users
-                  in
+                  let existing_email = Store.find_by_email store email in
+                  let existing_name = Store.find_by_name store name in
                   match (existing_name, existing_email) with
                   | Some _, None ->
                       Middleware.http_response reqd ~title:"Error"
@@ -285,16 +280,15 @@ struct
                       let created_at = Ptime.v (P.now_d_ps ()) in
                       let user =
                         let active, super_user =
-                          if List.length users = 0 then (true, true)
+                          if Store.count_users store = 0 then (true, true)
                           else (false, false)
                         in
                         User_model.create_user ~name ~email ~password
                           ~created_at ~active ~super_user
                           ~user_agent:(Middleware.user_agent reqd)
                       in
-                      Store.add_user !store user >>= function
-                      | Ok store' ->
-                          store := store';
+                      Store.add_user store user >>= function
+                      | Ok () ->
                           let cookie =
                             List.find
                               (fun (c : User_model.cookie) ->
@@ -368,21 +362,19 @@ struct
                   ~data:(String.escaped err) `Bad_request
             | Ok _ -> (
                 let now = Ptime.v (P.now_d_ps ()) in
-                let _, (t : Storage.t) = !store in
-                let users = t.users in
+                let user = Store.find_by_email store email in
                 let login =
                   User_model.login_user ~email ~password
                     ~user_agent:(Middleware.user_agent reqd)
-                    users now
+                    user now
                 in
                 match login with
                 | Error (`Msg err) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped err) `Bad_request
                 | Ok user -> (
-                    Store.update_user !store user >>= function
-                    | Ok store' -> (
-                        store := store';
+                    Store.update_user store user >>= function
+                    | Ok () -> (
                         let cookie =
                           List.find_opt
                             (fun (c : User_model.cookie) ->
@@ -436,9 +428,8 @@ struct
             ~updated_at:(Ptime.v (P.now_d_ps ()))
             ~email_verification_uuid:(Some email_verification_uuid) ()
         in
-        Store.update_user !store updated_user >>= function
-        | Ok store' ->
-            store := store';
+        Store.update_user store updated_user >>= function
+        | Ok () ->
             let verification_link =
               Utils.Email.generate_verification_link email_verification_uuid
             in
@@ -462,18 +453,19 @@ struct
   let verify_email_token store reqd verification_token (user : User_model.user)
       =
     match
-      let users =
-        User_model.create_user_session_map (snd !store).Storage.users
+      let ( let* ) = Result.bind in
+      let* uuid =
+        Option.to_result ~none:(`Msg "invalid UUID")
+          (Uuidm.of_string verification_token)
       in
-      User_model.verify_email_token users verification_token
+      let u = Store.find_email_verification_token store uuid in
+      User_model.verify_email_token u verification_token
         (Ptime.v (P.now_d_ps ()))
     with
     | Ok user' ->
         if String.equal user.uuid user'.uuid then
-          Store.update_user !store user >>= function
-          | Ok store' ->
-              store := store';
-              Middleware.redirect_to_dashboard reqd ()
+          Store.update_user store user >>= function
+          | Ok () -> Middleware.redirect_to_dashboard reqd ()
           | Error (`Msg msg) ->
               Middleware.http_response reqd ~title:"Error"
                 ~data:(String.escaped msg) `Internal_server_error
@@ -488,10 +480,7 @@ struct
       ~error_message =
     match Utils.Json.get "uuid" json_dict with
     | Some (`String uuid) -> (
-        let users =
-          User_model.create_user_uuid_map (snd !store).Storage.users
-        in
-        match List.assoc_opt uuid users with
+        match Store.find_by_uuid store uuid with
         | None ->
             Logs.warn (fun m -> m "%s : Account not found" key);
             Middleware.http_response reqd ~title:"Error"
@@ -504,9 +493,8 @@ struct
                 `Forbidden)
             else
               let updated_user = update_fn user in
-              Store.update_user !store updated_user >>= function
-              | Ok store' ->
-                  store := store';
+              Store.update_user store updated_user >>= function
+              | Ok () ->
                   Middleware.http_response reqd ~title:"OK"
                     ~data:"Updated user successfully" `OK
               | Error (`Msg msg) ->
@@ -524,13 +512,7 @@ struct
         User_model.update_user user ~active:(not user.active)
           ~updated_at:(Ptime.v (P.now_d_ps ()))
           ())
-      (fun user ->
-        user.active
-        && List.length
-             (List.filter
-                (fun u -> u.User_model.active)
-                (snd !store).Storage.users)
-           <= 1)
+      (fun user -> user.active && Store.count_active store <= 1)
       ~error_message:"Cannot deactivate last active user"
 
   let toggle_admin_activation json_dict store reqd _user =
@@ -539,13 +521,7 @@ struct
         User_model.update_user user ~super_user:(not user.super_user)
           ~updated_at:(Ptime.v (P.now_d_ps ()))
           ())
-      (fun user ->
-        user.super_user
-        && List.length
-             (List.filter
-                (fun u -> u.User_model.super_user)
-                (snd !store).Storage.users)
-           <= 1)
+      (fun user -> user.super_user && Store.count_superusers store <= 1)
       ~error_message:"Cannot remove last administrator"
 
   let dashboard store albatross reqd (user : User_model.user) =
@@ -657,9 +633,8 @@ struct
             User_model.update_user user ~password:new_password_hash
               ~updated_at:now ()
           in
-          Store.update_user !store updated_user >>= function
-          | Ok store' ->
-              store := store';
+          Store.update_user store updated_user >>= function
+          | Ok () ->
               Middleware.http_response reqd ~title:"OK"
                 ~data:"Updated password successfully" `OK
           | Error (`Msg err) ->
@@ -679,10 +654,8 @@ struct
     let updated_user =
       User_model.update_user user ~cookies ~updated_at:now ()
     in
-    Store.update_user !store updated_user >>= function
-    | Ok store' ->
-        store := store';
-        redirect
+    Store.update_user store updated_user >>= function
+    | Ok () -> redirect
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Storage error with %s" err);
         Middleware.http_response reqd ~title:"Error" ~data:err
@@ -755,7 +728,7 @@ struct
              (Dashboard.dashboard_layout ~csrf user
                 ~page_title:"Users | Mollymawk"
                 ~content:
-                  (Users_index.users_index_layout (snd !store).Storage.users
+                  (Users_index.users_index_layout (Store.users store)
                      (Ptime.v (P.now_d_ps ())))
                 ~icon:"/images/robur.png" ())
              `OK)
@@ -776,8 +749,7 @@ struct
              (Dashboard.dashboard_layout ~csrf user
                 ~page_title:"Settings | Mollymawk"
                 ~content:
-                  (Settings_page.settings_layout
-                     (snd !store).Storage.configuration)
+                  (Settings_page.settings_layout (Store.configuration store))
                 ~icon:"/images/robur.png" ())
              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
              `OK)
@@ -794,9 +766,8 @@ struct
       Configuration.of_json_from_http json_dict (Ptime.v (P.now_d_ps ()))
     with
     | Ok configuration_settings -> (
-        Store.update_configuration !store configuration_settings >>= function
-        | Ok store' ->
-            store := store';
+        Store.update_configuration store configuration_settings >>= function
+        | Ok () ->
             Albatross.init stack configuration_settings.server_ip
               ~port:configuration_settings.server_port
               configuration_settings.certificate
@@ -1016,7 +987,7 @@ struct
                   List.find_opt
                     (fun (cookie : User_model.cookie) ->
                       String.equal cookie.name User_model.csrf_cookie)
-                    user.User_model.cookies
+                    user.cookies
                 in
                 match user_csrf_token with
                 | Some csrf_token ->
@@ -1088,8 +1059,7 @@ struct
              `OK)
 
   let view_user albatross store uuid reqd (user : User_model.user) =
-    let users = User_model.create_user_uuid_map (snd !store).Storage.users in
-    match User_model.find_user_by_key uuid users with
+    match Store.find_by_uuid store uuid with
     | Some u -> (
         (Albatross.query albatross ~domain:u.name
            (`Unikernel_cmd `Unikernel_info)
@@ -1147,8 +1117,7 @@ struct
              `Not_found)
 
   let edit_policy albatross store uuid reqd (user : User_model.user) =
-    let users = User_model.create_user_uuid_map (snd !store).Storage.users in
-    match User_model.find_user_by_key uuid users with
+    match Store.find_by_uuid store uuid with
     | Some u -> (
         let user_policy =
           match Albatross.policy albatross ~domain:u.name with
@@ -1213,8 +1182,7 @@ struct
   let update_policy json_dict store albatross reqd _user =
     match Utils.Json.get "user_uuid" json_dict with
     | Some (`String user_uuid) -> (
-        let users = User_model.create_user_uuid_map (snd store).Storage.users in
-        match User_model.find_user_by_key user_uuid users with
+        match Store.find_by_uuid store user_uuid with
         | Some u -> (
             match Albatross_json.policy_of_json json_dict with
             | Ok policy -> (
@@ -1414,7 +1382,7 @@ struct
                 | Ok (form_csrf, json_dict) ->
                     authenticate ~check_admin:true ~form_csrf ~api_meth:true
                       store reqd
-                      (update_policy json_dict !store !albatross reqd)
+                      (update_policy json_dict store !albatross reqd)
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
@@ -1510,12 +1478,10 @@ struct
     js_contents assets >>= fun js_file ->
     css_contents assets >>= fun css_file ->
     images assets >>= fun imgs ->
-    Store.Stored_data.connect storage >>= fun stored_data ->
-    Store.read_data stored_data >>= function
+    Store.connect storage >>= function
     | Error (`Msg msg) -> failwith msg
-    | Ok data ->
-        let store = ref data in
-        let c = (snd data).Storage.configuration in
+    | Ok store ->
+        let c = Store.configuration store in
         Albatross.init stack c.Configuration.server_ip ~port:c.server_port
           c.certificate c.private_key
         >>= fun albatross ->

@@ -497,25 +497,6 @@ let generate_cookie ~name ~uuid ?(expires_in = 3600) ~created_at ~user_agent ()
     user_agent;
   }
 
-let create_user_session_map (users : user list) : (string * user) list =
-  List.flatten
-    (List.map
-       (fun user ->
-         let session_cookies =
-           List.filter
-             (fun (cookie : cookie) -> String.equal cookie.name session_cookie)
-             user.cookies
-         in
-         List.map (fun c -> (c.value, user)) session_cookies)
-       users)
-
-let create_user_uuid_map (users : user list) : (string * user) list =
-  List.map (fun user -> (user.uuid, user)) users
-
-let find_user_by_key (uuid : string) (user_map : (string * user) list) :
-    user option =
-  List.assoc_opt uuid user_map
-
 let create_user ~name ~email ~password ~created_at ~active ~super_user
     ~user_agent =
   let uuid = Uuidm.to_string (generate_uuid ()) in
@@ -540,12 +521,6 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
     active;
     super_user;
   }
-
-let check_if_email_exists email users =
-  List.find_opt (fun user -> String.equal user.email email) users
-
-let check_if_name_exists name users =
-  List.find_opt (fun user -> String.equal user.name name) users
 
 let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
     ?updated_at ?email_verification_uuid ?active ?super_user () =
@@ -572,22 +547,12 @@ let is_valid_cookie (cookie : cookie) now =
 let is_email_verified user = Option.is_some user.email_verified
 let password_validation password = String.length password >= 8
 
-let verify_email_token users token timestamp =
-  let* uuid =
-    Option.to_result ~none:(`Msg "invalid UUID") (Uuidm.of_string token)
-  in
-  match
-    List.find_opt
-      (fun (_, user) ->
-        match user.email_verification_uuid with
-        | Some uu -> Uuidm.equal uu uuid
-        | None -> false)
-      users
-  with
+let verify_email_token u uuid timestamp =
+  match u with
   | None ->
       Logs.err (fun m -> m "email verification: Token couldn't be found.");
       Error (`Msg "No token was found.")
-  | Some (_, u) -> (
+  | Some u -> (
       match
         Utils.TimeHelper.diff_in_seconds ~current_time:timestamp
           ~check_time:u.updated_at
@@ -618,8 +583,7 @@ let keep_session_cookies user =
     (fun (cookie : cookie) -> String.equal cookie.name session_cookie)
     user.cookies
 
-let login_user ~email ~password ~user_agent users now =
-  let user = check_if_email_exists email users in
+let login_user ~email ~password ~user_agent user now =
   match user with
   | None -> Error (`Msg "This account does not exist.")
   | Some u -> (
