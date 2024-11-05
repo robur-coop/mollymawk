@@ -278,7 +278,7 @@ struct
                         `Bad_request
                   | None, None -> (
                       let created_at = Ptime.v (P.now_d_ps ()) in
-                      let user =
+                      let user, cookie =
                         let active, super_user =
                           if Store.count_users store = 0 then (true, true)
                           else (false, false)
@@ -289,12 +289,6 @@ struct
                       in
                       Store.add_user store user >>= function
                       | Ok () ->
-                          let cookie =
-                            List.find
-                              (fun (c : User_model.cookie) ->
-                                c.name = User_model.session_cookie)
-                              user.cookies
-                          in
                           let cookie_value =
                             cookie.name ^ "=" ^ cookie.value
                             ^ ";Path=/;HttpOnly=true"
@@ -363,48 +357,33 @@ struct
             | Ok _ -> (
                 let now = Ptime.v (P.now_d_ps ()) in
                 let user = Store.find_by_email store email in
-                let login =
+                match
                   User_model.login_user ~email ~password
                     ~user_agent:(Middleware.user_agent reqd)
                     user now
-                in
-                match login with
+                with
                 | Error (`Msg err) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped err) `Bad_request
-                | Ok user -> (
+                | Ok (user, cookie) -> (
                     Store.update_user store user >>= function
-                    | Ok () -> (
-                        let cookie =
-                          List.find_opt
-                            (fun (c : User_model.cookie) ->
-                              c.name = User_model.session_cookie)
-                            user.cookies
+                    | Ok () ->
+                        let cookie_value =
+                          cookie.name ^ "=" ^ cookie.value
+                          ^ ";Path=/;HttpOnly=true"
                         in
-                        match cookie with
-                        | Some cookie ->
-                            let cookie_value =
-                              cookie.name ^ "=" ^ cookie.value
-                              ^ ";Path=/;HttpOnly=true"
-                            in
-                            let header_list =
-                              [
-                                ("Set-Cookie", cookie_value);
-                                ("location", "/dashboard");
-                              ]
-                            in
-                            Middleware.http_response reqd ~header_list
-                              ~title:"Success"
-                              ~data:
-                                (Yojson.Basic.to_string
-                                   (User_model.user_to_json user))
-                              `OK
-                        | None ->
-                            Middleware.http_response reqd ~title:"Error"
-                              ~data:
-                                "Something went wrong. Wait a few seconds and \
-                                 try again."
-                              `Internal_server_error)
+                        let header_list =
+                          [
+                            ("Set-Cookie", cookie_value);
+                            ("location", "/dashboard");
+                          ]
+                        in
+                        Middleware.http_response reqd ~header_list
+                          ~title:"Success"
+                          ~data:
+                            (Yojson.Basic.to_string
+                               (User_model.user_to_json user))
+                          `OK
                     | Error (`Msg err) ->
                         Middleware.http_response reqd ~title:"Error"
                           ~data:(String.escaped err) `Internal_server_error)))
@@ -665,7 +644,7 @@ struct
       (user : User_model.user) =
     match Middleware.session_cookie_value reqd with
     | Ok cookie_value -> (
-        match User_model.user_session_cookie cookie_value user with
+        match User_model.user_session_cookie user cookie_value with
         | Some cookie ->
             let filter, redirect =
               match (to_logout_cookie, logout) with
@@ -981,60 +960,38 @@ struct
             | ( Some (_, args),
                 Some (_, name),
                 Some (_, binary),
-                Some (_, form_csrf_token) ) -> (
-                Logs.info (fun m -> m "args %s" args);
-                let user_csrf_token =
-                  List.find_opt
-                    (fun (cookie : User_model.cookie) ->
-                      String.equal cookie.name User_model.csrf_cookie)
-                    user.cookies
-                in
-                match user_csrf_token with
-                | Some csrf_token ->
-                    if
-                      Middleware.csrf_match ~input_csrf:form_csrf_token
-                        ~check_csrf:csrf_token.value
-                    then (
-                      match Albatross_json.config_of_json args with
-                      | Ok cfg -> (
-                          let config = { cfg with image = binary } in
-                          (* TODO use uuid in the future *)
-                          Albatross.query albatross ~domain:user.name ~name
-                            (`Unikernel_cmd (`Unikernel_create config))
-                          >>= function
-                          | Error err ->
-                              Logs.warn (fun m ->
-                                  m "Error querying albatross: %s" err);
-                              Middleware.http_response reqd ~title:"Error"
-                                ~data:("Error while querying Albatross: " ^ err)
-                                `Internal_server_error
-                          | Ok (_hdr, res) -> (
-                              match Albatross_json.res res with
-                              | Ok res ->
-                                  Middleware.http_response reqd ~title:"Success"
-                                    ~data:(Yojson.Basic.to_string res)
-                                    `OK
-                              | Error (`String res) ->
-                                  Middleware.http_response reqd ~title:"Error"
-                                    ~data:(Yojson.Basic.to_string (`String res))
-                                    `Internal_server_error))
-                      | Error (`Msg err) ->
-                          Logs.warn (fun m -> m "couldn't decode data %s" err);
-
-                          Middleware.http_response reqd ~title:"Error" ~data:err
-                            `Internal_server_error)
-                    else
-                      Middleware.http_response reqd ~title:"Error"
-                        ~data:
-                          "CSRF token mismatch error. Please referesh and try \
-                           again."
-                        `Internal_server_error
-                | None ->
-                    Middleware.http_response reqd ~title:"Error"
-                      ~data:
-                        "CSRF token mismatch error. Please referesh and try \
-                         again."
-                      `Internal_server_error)
+                Some (_, form_csrf_token) ) ->
+                let now = Ptime.v (P.now_d_ps ()) in
+                Middleware.csrf_verification user now form_csrf_token
+                  (fun reqd ->
+                    match Albatross_json.config_of_json args with
+                    | Ok cfg -> (
+                        let config = { cfg with image = binary } in
+                        (* TODO use uuid in the future *)
+                        Albatross.query albatross ~domain:user.name ~name
+                          (`Unikernel_cmd (`Unikernel_create config))
+                        >>= function
+                        | Error err ->
+                            Logs.warn (fun m ->
+                                m "Error querying albatross: %s" err);
+                            Middleware.http_response reqd ~title:"Error"
+                              ~data:("Error while querying Albatross: " ^ err)
+                              `Internal_server_error
+                        | Ok (_hdr, res) -> (
+                            match Albatross_json.res res with
+                            | Ok res ->
+                                Middleware.http_response reqd ~title:"Success"
+                                  ~data:(Yojson.Basic.to_string res)
+                                  `OK
+                            | Error (`String res) ->
+                                Middleware.http_response reqd ~title:"Error"
+                                  ~data:(Yojson.Basic.to_string (`String res))
+                                  `Internal_server_error))
+                    | Error (`Msg err) ->
+                        Logs.warn (fun m -> m "couldn't decode data %s" err);
+                        Middleware.http_response reqd ~title:"Error" ~data:err
+                          `Internal_server_error)
+                  reqd
             | _ ->
                 Logs.warn (fun m -> m "couldn't find fields");
                 Middleware.http_response reqd ~title:"Error"

@@ -506,21 +506,21 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
     generate_cookie ~name:session_cookie ~expires_in:week ~uuid ~created_at
       ~user_agent ()
   in
-  (* auth sessions should expire after a week (24hrs * 7days * 60mins * 60secs) *)
-  {
-    name;
-    email;
-    email_verified = None;
-    password;
-    uuid;
-    tokens = [ auth_token ];
-    cookies = [ session ];
-    created_at;
-    updated_at = created_at;
-    email_verification_uuid = None;
-    active;
-    super_user;
-  }
+  ( {
+      name;
+      email;
+      email_verified = None;
+      password;
+      uuid;
+      tokens = [ auth_token ];
+      cookies = [ session ];
+      created_at;
+      updated_at = created_at;
+      email_verification_uuid = None;
+      active;
+      super_user;
+    },
+    session )
 
 let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
     ?updated_at ?email_verification_uuid ?active ?super_user () =
@@ -571,10 +571,17 @@ let verify_email_token u uuid timestamp =
               "This link has expired. Please sign in to get a new verification \
                link."))
 
-let user_session_cookie cookie_value (user : user) =
+let user_session_cookie (user : user) cookie_value =
   List.find_opt
     (fun (cookie : cookie) ->
       String.equal cookie.name session_cookie
+      && String.equal cookie_value cookie.value)
+    user.cookies
+
+let user_csrf_token (user : user) cookie_value =
+  List.find_opt
+    (fun (cookie : cookie) ->
+      String.equal cookie.name csrf_cookie
       && String.equal cookie_value cookie.value)
     user.cookies
 
@@ -600,6 +607,6 @@ let login_user ~email ~password ~user_agent user now =
             in
             let cookies = new_session :: keep_session_cookies u in
             let updated_user = update_user u ~cookies () in
-            Ok updated_user
+            Ok (updated_user, new_session)
         | false -> Error (`Msg "Invalid email or password."))
 (* Invalid email or password is a trick error message to at least prevent malicious users from guessing login details :).*)

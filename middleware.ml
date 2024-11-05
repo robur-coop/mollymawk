@@ -155,13 +155,11 @@ let is_user_admin_middleware api_meth user handler reqd =
       ~data:"You don't have the necessary permissions to access this service."
       `Unauthorized 401 api_meth reqd ()
 
-let csrf_match ~input_csrf ~check_csrf = String.equal input_csrf check_csrf
-
 let csrf_cookie_verification form_csrf reqd =
   match cookie User_model.csrf_cookie reqd with
   | Some cookie -> (
       match cookie_value cookie with
-      | Ok token -> csrf_match ~input_csrf:form_csrf ~check_csrf:token
+      | Ok token -> String.equal form_csrf token
       | Error (`Msg err) ->
           Logs.err (fun m -> m "Error retrieving csrf value from cookie %s" err);
           false)
@@ -170,22 +168,13 @@ let csrf_cookie_verification form_csrf reqd =
       false
 
 let csrf_verification user now form_csrf handler reqd =
-  let user_csrf_token =
-    List.find_opt
-      (fun (cookie : User_model.cookie) ->
-        String.equal cookie.name User_model.csrf_cookie)
-      user.User_model.cookies
-  in
-  match user_csrf_token with
+  match User_model.user_csrf_token user form_csrf with
   | Some csrf_token ->
-      if
-        User_model.is_valid_cookie csrf_token now
-        && csrf_match ~check_csrf:csrf_token.value ~input_csrf:form_csrf
-      then handler reqd
+      if User_model.is_valid_cookie csrf_token now then handler reqd
       else
         http_response ~title:"CSRF Token Mismatch"
-          ~data:"CSRF token mismatch error. Please referesh and try again." reqd
+          ~data:"Invalid CSRF token error. Please refresh and try again." reqd
           `Bad_request
   | None ->
-      http_response ~data:"Missing CSRF token. Please referesh and try again."
+      http_response ~data:"Missing CSRF token. Please refresh and try again."
         ~title:"Missing CSRF Token" reqd `Bad_request
