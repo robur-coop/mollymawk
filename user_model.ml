@@ -599,7 +599,7 @@ let login_user ~email ~password ~user_agent user now =
         Error (`Msg "This account is not active")
       else
         let pass = hash_password ~password ~uuid:u.uuid in
-        match String.equal u.password pass with
+        match String.equal u.password pass && String.equal u.email email with
         | true ->
             let new_session =
               generate_cookie ~name:session_cookie ~expires_in:week ~uuid:u.uuid
