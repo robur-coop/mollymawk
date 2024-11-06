@@ -125,11 +125,6 @@ let cookie_value cookie =
   | _ :: s :: _ -> Ok s
   | _ -> Error (`Msg "Bad cookie")
 
-let user_from_auth_cookie cookie users =
-  match User_model.find_user_by_key cookie users with
-  | Some user -> Ok user
-  | None -> Error (`Msg "User not found")
-
 let session_cookie_value reqd =
   match cookie User_model.session_cookie reqd with
   | Some auth_cookie -> (
@@ -143,76 +138,28 @@ let session_cookie_value reqd =
           m "auth-middleware: No molly-session in cookie header.");
       Error (`Msg "User not found")
 
-let user_of_cookie users now reqd =
-  match session_cookie_value reqd with
-  | Ok auth_cookie -> (
-      match user_from_auth_cookie auth_cookie users with
-      | Ok user -> (
-          match User_model.user_session_cookie auth_cookie user with
-          | Some cookie -> (
-              match User_model.is_valid_cookie cookie now with
-              | true -> Ok user
-              | false ->
-                  Logs.err (fun m ->
-                      m
-                        "auth-middleware: Session value doesn't match user \
-                         session %s"
-                        auth_cookie);
-                  Error (`Msg "User not found"))
-          | None ->
-              Logs.err (fun m ->
-                  m "auth-middleware: User doesn't have a session cookie.");
-              Error (`Msg "User not found"))
-      | Error (`Msg s) ->
-          Logs.err (fun m ->
-              m "auth-middleware: Failed to find user with key %s: %s"
-                auth_cookie s);
-          Error (`Msg "User not found"))
-  | Error (`Msg err) ->
-      Logs.err (fun m ->
-          m "auth-middleware: No molly-session in cookie header. %s" err);
-      Error (`Msg err)
+let auth_middleware user handler reqd =
+  if user.User_model.active then handler reqd
+  else
+    redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true
+      ~msg:"User account is deactivated." reqd ()
 
-let auth_middleware now users handler reqd =
-  match user_of_cookie users now reqd with
-  | Ok user ->
-      if user.User_model.active then handler reqd
-      else
-        redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true
-          ~msg:"User account is deactivated." reqd ()
-  | Error (`Msg msg) ->
-      redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true
-        ~msg reqd ()
+let email_verified_middleware user handler reqd =
+  if User_model.is_email_verified user then handler reqd
+  else redirect_to_verify_email reqd ()
 
-let email_verified_middleware now users handler reqd =
-  match user_of_cookie users now reqd with
-  | Ok user ->
-      if User_model.is_email_verified user then handler reqd
-      else redirect_to_verify_email reqd ()
-  | Error (`Msg msg) ->
-      redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true
-        ~msg reqd ()
-
-let is_user_admin_middleware api_meth now users handler reqd =
-  match user_of_cookie users now reqd with
-  | Ok user ->
-      if user.User_model.super_user && user.active then handler reqd
-      else
-        redirect_to_error ~title:"Unauthorized"
-          ~data:
-            "You don't have the necessary permissions to access this service."
-          `Unauthorized 401 api_meth reqd ()
-  | Error (`Msg err) ->
-      redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true
-        ~msg:err reqd ()
-
-let csrf_match ~input_csrf ~check_csrf = String.equal input_csrf check_csrf
+let is_user_admin_middleware api_meth user handler reqd =
+  if user.User_model.super_user && user.active then handler reqd
+  else
+    redirect_to_error ~title:"Unauthorized"
+      ~data:"You don't have the necessary permissions to access this service."
+      `Unauthorized 401 api_meth reqd ()
 
 let csrf_cookie_verification form_csrf reqd =
   match cookie User_model.csrf_cookie reqd with
   | Some cookie -> (
       match cookie_value cookie with
-      | Ok token -> csrf_match ~input_csrf:form_csrf ~check_csrf:token
+      | Ok token -> String.equal form_csrf token
       | Error (`Msg err) ->
           Logs.err (fun m -> m "Error retrieving csrf value from cookie %s" err);
           false)
@@ -220,29 +167,14 @@ let csrf_cookie_verification form_csrf reqd =
       Logs.err (fun m -> m "Couldn't find csrf cookie.");
       false
 
-let csrf_verification users now form_csrf handler reqd =
-  match user_of_cookie users now reqd with
-  | Ok user -> (
-      let user_csrf_token =
-        List.find_opt
-          (fun (cookie : User_model.cookie) ->
-            String.equal cookie.name User_model.csrf_cookie)
-          user.User_model.cookies
-      in
-      match user_csrf_token with
-      | Some csrf_token ->
-          if
-            User_model.is_valid_cookie csrf_token now
-            && csrf_match ~check_csrf:csrf_token.value ~input_csrf:form_csrf
-          then handler reqd
-          else
-            http_response ~title:"CSRF Token Mismatch"
-              ~data:"CSRF token mismatch error. Please referesh and try again."
-              reqd `Bad_request
-      | None ->
-          http_response
-            ~data:"Missing CSRF token. Please referesh and try again."
-            ~title:"Missing CSRF Token" reqd `Bad_request)
-  | Error (`Msg err) ->
-      redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true
-        ~msg:err reqd ()
+let csrf_verification user now form_csrf handler reqd =
+  match User_model.user_csrf_token user form_csrf with
+  | Some csrf_token ->
+      if User_model.is_valid_cookie csrf_token now then handler reqd
+      else
+        http_response ~title:"CSRF Token Mismatch"
+          ~data:"Invalid CSRF token error. Please refresh and try again." reqd
+          `Bad_request
+  | None ->
+      http_response ~data:"Missing CSRF token. Please refresh and try again."
+        ~title:"Missing CSRF Token" reqd `Bad_request

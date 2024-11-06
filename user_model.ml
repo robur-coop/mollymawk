@@ -37,11 +37,6 @@ let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
 let session_cookie = "molly_session"
 let csrf_cookie = "molly_csrf"
 
-let get key assoc =
-  match List.find_opt (fun (k, _) -> String.equal k key) assoc with
-  | None -> None
-  | Some (_, f) -> Some f
-
 let cookie_to_json (cookie : cookie) : Yojson.Basic.t =
   `Assoc
     [
@@ -70,11 +65,12 @@ let ( let* ) = Result.bind
 let cookie_v1_of_json = function
   | `Assoc xs -> (
       match
-        ( get "name" xs,
-          get "value" xs,
-          get "expires_in" xs,
-          get "uuid" xs,
-          get "created_at" xs )
+        Utils.Json.
+          ( get "name" xs,
+            get "value" xs,
+            get "expires_in" xs,
+            get "uuid" xs,
+            get "created_at" xs )
       with
       | ( Some (`String name),
           Some (`String value),
@@ -107,13 +103,14 @@ let cookie_v1_of_json = function
 let cookie_of_json = function
   | `Assoc xs -> (
       match
-        ( get "name" xs,
-          get "value" xs,
-          get "expires_in" xs,
-          get "uuid" xs,
-          get "created_at" xs,
-          get "last_access" xs,
-          get "user_agent" xs )
+        Utils.Json.
+          ( get "name" xs,
+            get "value" xs,
+            get "expires_in" xs,
+            get "uuid" xs,
+            get "created_at" xs,
+            get "last_access" xs,
+            get "user_agent" xs )
       with
       | ( Some (`String name),
           Some (`String value),
@@ -167,10 +164,11 @@ let token_to_json t : Yojson.Basic.t =
 let token_of_json = function
   | `Assoc xs -> (
       match
-        ( get "token_type" xs,
-          get "value" xs,
-          get "expires_in" xs,
-          get "created_at" xs )
+        Utils.Json.
+          ( get "token_type" xs,
+            get "value" xs,
+            get "expires_in" xs,
+            get "created_at" xs )
       with
       | ( Some (`String token_type),
           Some (`String value),
@@ -218,16 +216,17 @@ let user_to_json (u : user) : Yojson.Basic.t =
 let user_v1_of_json = function
   | `Assoc xs -> (
       match
-        ( get "name" xs,
-          get "email" xs,
-          get "email_verified" xs,
-          get "password" xs,
-          get "uuid" xs,
-          get "tokens" xs,
-          get "cookies" xs,
-          get "created_at" xs,
-          get "updated_at" xs,
-          get "email_verification_uuid" xs )
+        Utils.Json.
+          ( get "name" xs,
+            get "email" xs,
+            get "email_verified" xs,
+            get "password" xs,
+            get "uuid" xs,
+            get "tokens" xs,
+            get "cookies" xs,
+            get "created_at" xs,
+            get "updated_at" xs,
+            get "email_verification_uuid" xs )
       with
       | ( Some (`String name),
           Some (`String email),
@@ -299,17 +298,18 @@ let user_v1_of_json = function
 let user_v2_of_json = function
   | `Assoc xs -> (
       match
-        ( get "name" xs,
-          get "email" xs,
-          get "email_verified" xs,
-          get "password" xs,
-          get "uuid" xs,
-          get "tokens" xs,
-          get "cookies" xs,
-          get "created_at" xs,
-          get "updated_at" xs,
-          get "email_verification_uuid" xs,
-          get "active" xs )
+        Utils.Json.
+          ( get "name" xs,
+            get "email" xs,
+            get "email_verified" xs,
+            get "password" xs,
+            get "uuid" xs,
+            get "tokens" xs,
+            get "cookies" xs,
+            get "created_at" xs,
+            get "updated_at" xs,
+            get "email_verification_uuid" xs,
+            get "active" xs )
       with
       | ( Some (`String name),
           Some (`String email),
@@ -382,18 +382,19 @@ let user_v2_of_json = function
 let user_of_json cookie_fn = function
   | `Assoc xs -> (
       match
-        ( get "name" xs,
-          get "email" xs,
-          get "email_verified" xs,
-          get "password" xs,
-          get "uuid" xs,
-          get "tokens" xs,
-          get "cookies" xs,
-          get "created_at" xs,
-          get "updated_at" xs,
-          get "email_verification_uuid" xs,
-          get "active" xs,
-          get "super_user" xs )
+        Utils.Json.
+          ( get "name" xs,
+            get "email" xs,
+            get "email_verified" xs,
+            get "password" xs,
+            get "uuid" xs,
+            get "tokens" xs,
+            get "cookies" xs,
+            get "created_at" xs,
+            get "updated_at" xs,
+            get "email_verification_uuid" xs,
+            get "active" xs,
+            get "super_user" xs )
       with
       | ( Some (`String name),
           Some (`String email),
@@ -496,25 +497,6 @@ let generate_cookie ~name ~uuid ?(expires_in = 3600) ~created_at ~user_agent ()
     user_agent;
   }
 
-let create_user_session_map (users : user list) : (string * user) list =
-  List.flatten
-    (List.map
-       (fun user ->
-         let session_cookies =
-           List.filter
-             (fun (cookie : cookie) -> String.equal cookie.name session_cookie)
-             user.cookies
-         in
-         List.map (fun c -> (c.value, user)) session_cookies)
-       users)
-
-let create_user_uuid_map (users : user list) : (string * user) list =
-  List.map (fun user -> (user.uuid, user)) users
-
-let find_user_by_key (uuid : string) (user_map : (string * user) list) :
-    user option =
-  List.assoc_opt uuid user_map
-
 let create_user ~name ~email ~password ~created_at ~active ~super_user
     ~user_agent =
   let uuid = Uuidm.to_string (generate_uuid ()) in
@@ -524,27 +506,21 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
     generate_cookie ~name:session_cookie ~expires_in:week ~uuid ~created_at
       ~user_agent ()
   in
-  (* auth sessions should expire after a week (24hrs * 7days * 60mins * 60secs) *)
-  {
-    name;
-    email;
-    email_verified = None;
-    password;
-    uuid;
-    tokens = [ auth_token ];
-    cookies = [ session ];
-    created_at;
-    updated_at = created_at;
-    email_verification_uuid = None;
-    active;
-    super_user;
-  }
-
-let check_if_email_exists email users =
-  List.find_opt (fun user -> String.equal user.email email) users
-
-let check_if_name_exists name users =
-  List.find_opt (fun user -> String.equal user.name name) users
+  ( {
+      name;
+      email;
+      email_verified = None;
+      password;
+      uuid;
+      tokens = [ auth_token ];
+      cookies = [ session ];
+      created_at;
+      updated_at = created_at;
+      email_verification_uuid = None;
+      active;
+      super_user;
+    },
+    session )
 
 let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
     ?updated_at ?email_verification_uuid ?active ?super_user () =
@@ -571,22 +547,12 @@ let is_valid_cookie (cookie : cookie) now =
 let is_email_verified user = Option.is_some user.email_verified
 let password_validation password = String.length password >= 8
 
-let verify_email_token users token timestamp =
-  let* uuid =
-    Option.to_result ~none:(`Msg "invalid UUID") (Uuidm.of_string token)
-  in
-  match
-    List.find_opt
-      (fun (_, user) ->
-        match user.email_verification_uuid with
-        | Some uu -> Uuidm.equal uu uuid
-        | None -> false)
-      users
-  with
+let verify_email_token u uuid timestamp =
+  match u with
   | None ->
       Logs.err (fun m -> m "email verification: Token couldn't be found.");
       Error (`Msg "No token was found.")
-  | Some (_, u) -> (
+  | Some u -> (
       match
         Utils.TimeHelper.diff_in_seconds ~current_time:timestamp
           ~check_time:u.updated_at
@@ -605,10 +571,17 @@ let verify_email_token users token timestamp =
               "This link has expired. Please sign in to get a new verification \
                link."))
 
-let user_session_cookie cookie_value (user : user) =
+let user_session_cookie (user : user) cookie_value =
   List.find_opt
     (fun (cookie : cookie) ->
       String.equal cookie.name session_cookie
+      && String.equal cookie_value cookie.value)
+    user.cookies
+
+let user_csrf_token (user : user) cookie_value =
+  List.find_opt
+    (fun (cookie : cookie) ->
+      String.equal cookie.name csrf_cookie
       && String.equal cookie_value cookie.value)
     user.cookies
 
@@ -617,8 +590,7 @@ let keep_session_cookies user =
     (fun (cookie : cookie) -> String.equal cookie.name session_cookie)
     user.cookies
 
-let login_user ~email ~password ~user_agent users now =
-  let user = check_if_email_exists email users in
+let login_user ~email ~password ~user_agent user now =
   match user with
   | None -> Error (`Msg "This account does not exist.")
   | Some u -> (
@@ -627,7 +599,7 @@ let login_user ~email ~password ~user_agent users now =
         Error (`Msg "This account is not active")
       else
         let pass = hash_password ~password ~uuid:u.uuid in
-        match String.equal u.password pass with
+        match String.equal u.password pass && String.equal u.email email with
         | true ->
             let new_session =
               generate_cookie ~name:session_cookie ~expires_in:week ~uuid:u.uuid
@@ -635,6 +607,6 @@ let login_user ~email ~password ~user_agent users now =
             in
             let cookies = new_session :: keep_session_cookies u in
             let updated_user = update_user u ~cookies () in
-            Ok updated_user
+            Ok (updated_user, new_session)
         | false -> Error (`Msg "Invalid email or password."))
 (* Invalid email or password is a trick error message to at least prevent malicious users from guessing login details :).*)
