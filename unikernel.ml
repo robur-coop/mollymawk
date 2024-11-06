@@ -134,15 +134,16 @@ struct
     | Error (`Msg err) ->
         Logs.err (fun m ->
             m "auth-middleware: No molly-session in cookie header. %s" err);
-        Middleware.http_response reqd ~title:"Error" ~data:err `Bad_request
+        Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
+          ~with_error:true ~msg:"No session cookie found in request." reqd ()
     | Ok cookie_value -> (
         match Store.find_by_cookie store cookie_value with
         | None ->
             Logs.err (fun m ->
                 m "auth-middleware: Failed to find user with key %s"
                   cookie_value);
-            Middleware.http_response reqd ~title:"Error" ~data:"User not found"
-              `Bad_request
+            Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
+              ~with_error:true ~msg:"No user account found." reqd ()
         | Some (user, cookie) ->
             if not (User_model.is_valid_cookie cookie now) then (
               Logs.err (fun m ->
@@ -150,8 +151,9 @@ struct
                     "auth-middleware: Session value doesn't match user session \
                      %s"
                     cookie_value);
-              Middleware.http_response reqd ~title:"Error"
-                ~data:"User not found" `Bad_request)
+              Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
+                ~with_error:true ~msg:"Session cookie is no longer valid." reqd
+                ())
             else
               let middlewares =
                 (if check_admin then
