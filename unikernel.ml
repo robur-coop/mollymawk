@@ -1282,43 +1282,60 @@ struct
           `Bad_request
     | Ok (m, assoc) -> (
         let m, _r = to_map ~assoc m in
-        match
-          ( Map.find_opt "block_name" m,
-            Map.find_opt "block_size" m,
-            Map.find_opt "block_data" m,
-            Map.find_opt "block_compressed" m,
-            Map.find_opt "molly_csrf" m )
-        with
-        | ( Some (_, block_name),
-            Some (_, block_size),
-            Some (_, block_data),
-            Some (_, block_compressed),
-            Some (_, form_csrf_token) ) ->
-            (let now = Ptime.v (P.now_d_ps ()) in
-             Middleware.csrf_verification user now form_csrf_token (fun reqd ->
-                 Albatross.query albatross ~domain:user.name ~name:block_name
-                   (`Block_cmd
-                     (`Block_add
-                       ( int_of_string block_size,
-                         bool_of_string block_compressed,
-                         Some block_data )))
-                 >>= function
-                 | Error msg ->
-                     Logs.err (fun m -> m "Error querying albatross: %s" msg);
-                     Middleware.http_response reqd ~title:"Error"
-                       ~data:("Error querying albatross: " ^ msg)
-                       `Internal_server_error
-                 | Ok (_hdr, res) -> (
-                     match Albatross_json.res res with
-                     | Ok res ->
-                         Middleware.http_response reqd ~title:"Success"
-                           ~data:(Yojson.Basic.to_string res)
-                           `OK
-                     | Error (`String res) ->
-                         Middleware.http_response reqd ~title:"Error"
-                           ~data:(Yojson.Basic.to_string (`String res))
-                           `Internal_server_error)))
-              reqd
+        match (Map.find_opt "json_data" m, Map.find_opt "block_data" m) with
+        | Some (_, json_data), Some (_, block_data) -> (
+            let json =
+              try Ok (Yojson.Basic.from_string json_data)
+              with Yojson.Json_error s -> Error (`Msg s)
+            in
+            match json with
+            | Ok (`Assoc json_dict) -> (
+                match
+                  Utils.Json.
+                    ( get "block_name" json_dict,
+                      get "block_size" json_dict,
+                      get "block_compressed" json_dict,
+                      get "molly_csrf" json_dict )
+                with
+                | ( Some (`String block_name),
+                    Some (`Int block_size),
+                    Some (`Bool block_compressed),
+                    Some (`String form_csrf) ) ->
+                    let now = Ptime.v (P.now_d_ps ()) in
+                    Middleware.csrf_verification user now form_csrf
+                      (fun reqd ->
+                        Albatross.query albatross ~domain:user.name
+                          ~name:block_name
+                          (`Block_cmd
+                            (`Block_add
+                              (block_size, block_compressed, Some block_data)))
+                        >>= function
+                        | Error msg ->
+                            Logs.err (fun m ->
+                                m "Error querying albatross: %s" msg);
+                            Middleware.http_response reqd ~title:"Error"
+                              ~data:("Error querying albatross: " ^ msg)
+                              `Internal_server_error
+                        | Ok (_hdr, res) -> (
+                            match Albatross_json.res res with
+                            | Ok res ->
+                                Middleware.http_response reqd ~title:"Success"
+                                  ~data:(Yojson.Basic.to_string res)
+                                  `OK
+                            | Error (`String res) ->
+                                Middleware.http_response reqd ~title:"Error"
+                                  ~data:(Yojson.Basic.to_string (`String res))
+                                  `Internal_server_error))
+                      reqd
+                | _ ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:
+                        (Fmt.str "Register: Unexpected fields. Got %s"
+                           (Yojson.Basic.to_string (`Assoc json_dict)))
+                      `Bad_request)
+            | _ ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:"Register account: expected a dictionary" `Bad_request)
         | _ ->
             Logs.warn (fun m -> m "couldn't find fields");
             Middleware.http_response reqd ~title:"Error"
