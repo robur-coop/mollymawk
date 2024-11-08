@@ -529,3 +529,42 @@ async function logout() {
 		buttonLoading(logoutButton, false, "Logout")
 	}
 }
+async function deleteVolume(block_name) {
+	const deleteButton = document.getElementById(`delete-block-button-${block_name}`);
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	const formAlert = document.getElementById("form-alert");
+	try {
+		buttonLoading(deleteButton, true, "Deleting...")
+		const response = await fetch("/api/volume/delete", {
+			method: 'POST',
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(
+				{
+					"block_name": block_name,
+					"molly_csrf": molly_csrf
+				})
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			formAlert.classList.remove("hidden", "text-secondary-500");
+			formAlert.classList.add("text-primary-500");
+			formAlert.textContent = "Succesfully deleted";
+			postAlert("bg-primary-300", "Volume deleted succesfully");
+			setTimeout(() => window.location.reload(), 1000);
+			buttonLoading(deleteButton, false, "Delete")
+		} else {
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = data.data
+			buttonLoading(deleteButton, false, "Delete")
+		}
+	} catch (error) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = error
+		buttonLoading(deleteButton, false, "Delete")
+	}
+}
+

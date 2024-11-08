@@ -1201,6 +1201,69 @@ struct
                (Yojson.Basic.to_string (`Assoc json_dict)))
           `Bad_request
 
+  let volumes store albatross reqd (user : User_model.user) =
+    (Albatross.query albatross ~domain:user.name (`Block_cmd `Block_info)
+     >|= function
+     | Error msg ->
+         Logs.err (fun m ->
+             m "error while communicating with albatross: %s" msg);
+         []
+     | Ok (_hdr, `Success (`Block_devices blocks)) -> blocks
+     | Ok reply ->
+         Logs.err (fun m ->
+             m "expected a block info reply, received %a"
+               (Vmm_commands.pp_wire ~verbose:false)
+               reply);
+         [])
+    >>= fun blocks ->
+    let policy =
+      match Albatross.policy ~domain:user.name albatross with
+      | Ok p -> p
+      | Error _ -> None
+    in
+    let now = Ptime.v (P.now_d_ps ()) in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout ~csrf user
+                ~page_title:(String.capitalize_ascii user.name ^ " | Mollymawk")
+                ~content:(Volume_index.volume_index_layout blocks policy)
+                ~icon:"/images/robur.png" ())
+             ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+             `OK)
+    | Error err ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                ~content:(Error_page.error_layout err)
+                ~icon:"/images/robur.png" ())
+             `Internal_server_error)
+
+  let delete_volume json_dict albatross reqd (user : User_model.user) =
+    match Utils.Json.get "block_name" json_dict with
+    | Some (`String block_name) -> (
+        Albatross.query albatross ~domain:user.name ~name:block_name
+          (`Block_cmd `Block_remove)
+        >>= function
+        | Error msg ->
+            Logs.err (fun m -> m "Error querying albatross: %s" msg);
+            Middleware.http_response reqd ~title:"Error"
+              ~data:("Error querying albatross: " ^ msg)
+              `Internal_server_error
+        | Ok (_hdr, res) -> (
+            match Albatross_json.res res with
+            | Ok res ->
+                Middleware.http_response reqd ~title:"Success"
+                  ~data:(Yojson.Basic.to_string res)
+                  `OK
+            | Error (`String res) ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:(Yojson.Basic.to_string (`String res))
+                  `Internal_server_error))
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:"Couldn't find block name in json" `Bad_request
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
@@ -1309,6 +1372,18 @@ struct
                     Middleware.http_response reqd ~title:"Error"
                       ~data:"An error occured. Please refresh and try again"
                       `Bad_request)
+        | "/volumes" ->
+            check_meth `GET (fun () ->
+                authenticate store reqd (volumes store !albatross reqd))
+        | "/api/volume/delete" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, json_dict) ->
+                    authenticate ~form_csrf ~api_meth:true store reqd
+                      (delete_volume json_dict !albatross reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
         | "/admin/users" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (users store reqd))
