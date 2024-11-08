@@ -226,13 +226,17 @@ struct
     let ct = Multipart_form.Content_type.of_string (content_type ^ "\r\n") in
     match ct with
     | Error (`Msg msg) ->
-        Logs.warn (fun m -> m "couldn't parse content-type %s: %S" content_type msg);
-        Error (`Msg ("couldn't parse content-type " ^ content_type ^ ": " ^ msg)) |> Lwt.return
+        Logs.warn (fun m ->
+            m "couldn't parse content-type %s: %S" content_type msg);
+        Error
+          (`Msg ("couldn't parse content-type " ^ content_type ^ ": " ^ msg))
+        |> Lwt.return
     | Ok ct -> (
         match Multipart_form.of_string_to_list data ct with
         | Error (`Msg msg) ->
             Logs.warn (fun m -> m "couldn't decode multipart data: %s" msg);
-            Error (`Msg ("Couldn't decode multipart data: " ^ msg)) |> Lwt.return
+            Error (`Msg ("Couldn't decode multipart data: " ^ msg))
+            |> Lwt.return
         | Ok (m, assoc) -> Ok (m, assoc) |> Lwt.return)
 
   let sign_up reqd =
