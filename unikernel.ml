@@ -231,8 +231,8 @@ struct
     | Ok ct -> (
         match Multipart_form.of_string_to_list data ct with
         | Error (`Msg msg) ->
-            Logs.warn (fun m -> m "couldn't multipart: %s" msg);
-            Error (`Msg ("Couldn't multipart: " ^ msg)) |> Lwt.return
+            Logs.warn (fun m -> m "couldn't decode multipart data: %s" msg);
+            Error (`Msg ("Couldn't decode multipart data: " ^ msg)) |> Lwt.return
         | Ok (m, assoc) -> Ok (m, assoc) |> Lwt.return)
 
   let sign_up reqd =
