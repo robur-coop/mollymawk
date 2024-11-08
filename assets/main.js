@@ -173,7 +173,7 @@ async function deployUnikernel() {
 	const binary = document.getElementById("unikernel-binary").files[0];
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	const formAlert = document.getElementById("form-alert");
-	if (!name || !binary) {
+	if (!isValidName(name) || !binary) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = "Please fill in the required data"
@@ -579,7 +579,7 @@ async function createVolume() {
 	const block_compressed = document.getElementById("block_compressed").checked;
 	const block_data = document.getElementById("block_data").files[0];
 	try {
-		if (block_name === "") {
+		if (!isValidName(block_name)) {
 			formAlert.classList.remove("hidden", "text-primary-500");
 			formAlert.classList.add("text-secondary-500");
 			formAlert.textContent = "Please enter a name for this volume"
@@ -614,9 +614,9 @@ async function createVolume() {
 			if (data.status === 200) {
 				formAlert.classList.remove("hidden", "text-secondary-500");
 				formAlert.classList.add("text-primary-500");
-				formAlert.textContent = "Succesfully deleted";
+				formAlert.textContent = "Succesfully created";
 				postAlert("bg-primary-300", "Volume created succesfully");
-				setTimeout(() => window.location.reload(), 000);
+				setTimeout(() => window.location.reload(), 1000);
 				buttonLoading(createButton, false, "Create volume")
 			} else {
 				formAlert.classList.remove("hidden", "text-primary-500");
@@ -632,3 +632,17 @@ async function createVolume() {
 		buttonLoading(createButton, false, "Create volume")
 	}
 }
+
+function isValidName(s) {
+    const length = s.length;
+    if (length === 0 || length >= 64) return false;
+    if (s[0] === '-') return false;
+    for (let i = 0; i < length; i++) {
+        const char = s[i];
+        if (!(/[a-zA-Z0-9.-]/).test(char)) {
+            return false;
+        }
+    }
+    return true;
+}
+
