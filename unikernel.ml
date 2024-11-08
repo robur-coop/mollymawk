@@ -1224,7 +1224,9 @@ struct
                reply);
          [])
     >>= fun blocks ->
-    let policy = Result.to_option (Albatross.policy ~domain:user.name albatross) in
+    let policy =
+      Result.to_option (Albatross.policy ~domain:user.name albatross)
+    in
     let now = Ptime.v (P.now_d_ps ()) in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
