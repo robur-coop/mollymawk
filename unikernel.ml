@@ -226,8 +226,8 @@ struct
     let ct = Multipart_form.Content_type.of_string (content_type ^ "\r\n") in
     match ct with
     | Error (`Msg msg) ->
-        Logs.warn (fun m -> m "couldn't content-type: %S" msg);
-        Error (`Msg ("couldn't content-type:" ^ msg)) |> Lwt.return
+        Logs.warn (fun m -> m "couldn't parse content-type %s: %S" content_type msg);
+        Error (`Msg ("couldn't parse content-type " ^ content_type ^ ": " ^ msg)) |> Lwt.return
     | Ok ct -> (
         match Multipart_form.of_string_to_list data ct with
         | Error (`Msg msg) ->
