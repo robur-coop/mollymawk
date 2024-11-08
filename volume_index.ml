@@ -387,13 +387,26 @@ let volume_index_layout volumes policy =
                                                   ]
                                                 [ txt "View" ]
                                             else
-                                              span
+                                              button
                                                 ~a:
                                                   [
+                                                    a_disabled ();
                                                     a_class
-                                                      [ "gap-x-2 py-1 px-2" ];
+                                                      [
+                                                        "inline-flex \
+                                                         cursor-not-allowed \
+                                                         items-center gap-x-2 \
+                                                         text-sm font-semibold \
+                                                         rounded border \
+                                                         disabled border-1 \
+                                                         py-1 px-2 \
+                                                         border-gray-400 \
+                                                         text-gray-300 \
+                                                         disabled:opacity-50 \
+                                                         disabled:pointer-events-none";
+                                                      ];
                                                   ]
-                                                []);
+                                                [ txt "View" ]);
                                            button
                                              ~a:
                                                [
