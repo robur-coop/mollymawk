@@ -950,8 +950,7 @@ struct
           ~data:"Couldn't find unikernel name in json" `Bad_request
 
   let unikernel_create albatross reqd (user : User_model.user) =
-    read_multipart_data reqd >>= fun result ->
-    match result with
+    read_multipart_data reqd >>= function
     | Error (`Msg msg) ->
         Middleware.http_response reqd ~title:"Error"
           ~data:("Couldn't multipart: " ^ msg)
