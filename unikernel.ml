@@ -1225,7 +1225,7 @@ struct
          [])
     >>= fun blocks ->
     let policy =
-      Result.to_option (Albatross.policy ~domain:user.name albatross)
+      Result.fold ~ok:Fun.id ~error:(fun _ -> None) (Albatross.policy ~domain:user.name albatross)
     in
     let now = Ptime.v (P.now_d_ps ()) in
     generate_csrf_token store user now reqd >>= function
