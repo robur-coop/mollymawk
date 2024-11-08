@@ -202,6 +202,39 @@ struct
     let resp = Httpaf.Response.create ~headers status in
     Httpaf.Reqd.respond_with_string reqd resp data
 
+  let read_multipart_data reqd =
+    let response_body = Httpaf.Reqd.request_body reqd in
+    let finished, notify_finished = Lwt.wait () in
+    let wakeup v = Lwt.wakeup_later notify_finished v in
+    let on_eof data () = wakeup data in
+    let f acc s = acc ^ s in
+    let rec on_read on_eof acc bs ~off ~len =
+      let str = Bigstringaf.substring ~off ~len bs in
+      let acc = acc >>= fun acc -> Lwt.return (f acc str) in
+      Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof acc)
+        ~on_eof:(on_eof acc)
+    in
+    let f_init = Lwt.return "" in
+    Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof f_init)
+      ~on_eof:(on_eof f_init);
+    finished >>= fun data ->
+    data >>= fun data ->
+    let content_type =
+      Httpaf.(
+        Headers.get_exn (Reqd.request reqd).Request.headers "content-type")
+    in
+    let ct = Multipart_form.Content_type.of_string (content_type ^ "\r\n") in
+    match ct with
+    | Error (`Msg msg) ->
+        Logs.warn (fun m -> m "couldn't content-type: %S" msg);
+        Error (`Msg ("couldn't content-type:" ^ msg)) |> Lwt.return
+    | Ok ct -> (
+        match Multipart_form.of_string_to_list data ct with
+        | Error (`Msg msg) ->
+            Logs.warn (fun m -> m "couldn't multipart: %s" msg);
+            Error (`Msg ("Couldn't multipart: " ^ msg)) |> Lwt.return
+        | Ok (m, assoc) -> Ok (m, assoc) |> Lwt.return)
+
   let sign_up reqd =
     let now = Ptime.v (P.now_d_ps ()) in
     let csrf = Middleware.generate_csrf_cookie now reqd in
@@ -917,28 +950,8 @@ struct
           ~data:"Couldn't find unikernel name in json" `Bad_request
 
   let unikernel_create albatross reqd (user : User_model.user) =
-    let response_body = Httpaf.Reqd.request_body reqd in
-    let finished, notify_finished = Lwt.wait () in
-    let wakeup v = Lwt.wakeup_later notify_finished v in
-    let on_eof data () = wakeup data in
-    let f acc s = acc ^ s in
-    let rec on_read on_eof acc bs ~off ~len =
-      let str = Bigstringaf.substring ~off ~len bs in
-      let acc = acc >>= fun acc -> Lwt.return (f acc str) in
-      Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof acc)
-        ~on_eof:(on_eof acc)
-    in
-    let f_init = Lwt.return "" in
-    Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof f_init)
-      ~on_eof:(on_eof f_init);
-    finished >>= fun data ->
-    data >>= fun data ->
-    let content_type =
-      Httpaf.(
-        Headers.get_exn (Reqd.request reqd).Request.headers "content-type")
-    in
-    let ct = Multipart_form.Content_type.of_string (content_type ^ "\r\n") in
-    match ct with
+    read_multipart_data reqd >>= fun result ->
+    match result with
     | Error (`Msg msg) ->
         Logs.warn (fun m -> m "couldn't content-type: %S" msg);
         Middleware.http_response reqd ~title:"Error"
@@ -997,7 +1010,7 @@ struct
             | _ ->
                 Logs.warn (fun m -> m "couldn't find fields");
                 Middleware.http_response reqd ~title:"Error"
-                  ~data:"Couldn't find fields" `Bad_request))
+              ~data:"Couldn't find fields" `Bad_request)
 
   let unikernel_console albatross name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
