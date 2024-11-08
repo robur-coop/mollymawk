@@ -551,7 +551,7 @@ async function deleteVolume(block_name) {
 		if (data.status === 200) {
 			formAlert.classList.remove("hidden", "text-secondary-500");
 			formAlert.classList.add("text-primary-500");
-			formAlert.textContent = "Succesfully deleted";
+			formAlert.textContent = "Successfully deleted";
 			postAlert("bg-primary-300", "Volume deleted succesfully");
 			setTimeout(() => window.location.reload(), 1000);
 			buttonLoading(deleteButton, false, "Delete")
