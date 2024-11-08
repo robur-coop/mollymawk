@@ -32,4 +32,6 @@ let header ?(page_title = "Mollymawk") ~icon () =
                 "https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js";
             ]
           (txt "");
+        (* chart.js is used for chart elements like pie charts. We use this to visualize usage data of policies*)
+        script ~a:[ a_src "https://cdn.jsdelivr.net/npm/chart.js" ] (txt "");
       ])
