@@ -1330,12 +1330,12 @@ struct
                 | _ ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:
-                        (Fmt.str "Register: Unexpected fields. Got %s"
+                        (Fmt.str "Create volume: Unexpected fields. Got %s"
                            (Yojson.Basic.to_string (`Assoc json_dict)))
                       `Bad_request)
             | _ ->
                 Middleware.http_response reqd ~title:"Error"
-                  ~data:"Register account: expected a dictionary" `Bad_request)
+                  ~data:"Create volume: expected a dictionary" `Bad_request)
         | _ ->
             Logs.warn (fun m -> m "couldn't find fields");
             Middleware.http_response reqd ~title:"Error"
