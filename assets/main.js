@@ -529,6 +529,7 @@ async function logout() {
 		buttonLoading(logoutButton, false, "Logout")
 	}
 }
+
 async function deleteVolume(block_name) {
 	const deleteButton = document.getElementById(`delete-block-button-${block_name}`);
 	const molly_csrf = document.getElementById("molly-csrf").value;
@@ -568,3 +569,66 @@ async function deleteVolume(block_name) {
 	}
 }
 
+async function createVolume() {
+	const createButton = document.getElementById("create-block-button");
+	const block_name = document.getElementById("block_name").value;
+	const block_size = document.getElementById("block_size").innerText;
+	const data_toggle = document.getElementById("dataToggle").checked;
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	const formAlert = document.getElementById("form-alert");
+	const block_compressed = document.getElementById("block_compressed").checked;
+	const block_data = document.getElementById("block_data").files[0];
+	try {
+		if (block_name === "") {
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = "Please enter a name for this volume"
+			buttonLoading(createButton, false, "Create volume")
+		}
+		else if (Number(block_size) < 1) {
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = "Volume size must be 1MB or greater."
+			buttonLoading(createButton, false, "Create volume")
+		}
+		else {
+			buttonLoading(createButton, true, "Creating...")
+			let formData = new FormData();
+			formData.append("block_name", block_name);
+			formData.append("block_size", Number(block_size))
+			if (data_toggle && !block_data) {
+				formAlert.classList.remove("hidden", "text-primary-500");
+				formAlert.classList.add("text-secondary-500");
+				formAlert.textContent = "You must upload a file else switch 'Dumb data to this volume' off"
+				buttonLoading(createButton, false, "Create volume")
+				return;
+			}
+			formData.append("block_compressed", block_compressed)
+			formData.append("block_data", block_data)
+			formData.append("molly_csrf", molly_csrf)
+			const response = await fetch("/api/volume/create", {
+				method: 'POST',
+				body: formData
+			})
+			const data = await response.json();
+			if (data.status === 200) {
+				formAlert.classList.remove("hidden", "text-secondary-500");
+				formAlert.classList.add("text-primary-500");
+				formAlert.textContent = "Succesfully deleted";
+				postAlert("bg-primary-300", "Volume created succesfully");
+				setTimeout(() => window.location.reload(), 000);
+				buttonLoading(createButton, false, "Create volume")
+			} else {
+				formAlert.classList.remove("hidden", "text-primary-500");
+				formAlert.classList.add("text-secondary-500");
+				formAlert.textContent = data.data
+				buttonLoading(createButton, false, "Create volume")
+			}
+		}
+	} catch (error) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = error
+		buttonLoading(createButton, false, "Create volume")
+	}
+}
