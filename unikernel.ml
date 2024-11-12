@@ -202,6 +202,43 @@ struct
     let resp = Httpaf.Response.create ~headers status in
     Httpaf.Reqd.respond_with_string reqd resp data
 
+  let read_multipart_data reqd =
+    let response_body = Httpaf.Reqd.request_body reqd in
+    let finished, notify_finished = Lwt.wait () in
+    let wakeup v = Lwt.wakeup_later notify_finished v in
+    let on_eof data () = wakeup data in
+    let f acc s = acc ^ s in
+    let rec on_read on_eof acc bs ~off ~len =
+      let str = Bigstringaf.substring ~off ~len bs in
+      let acc = acc >>= fun acc -> Lwt.return (f acc str) in
+      Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof acc)
+        ~on_eof:(on_eof acc)
+    in
+    let f_init = Lwt.return "" in
+    Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof f_init)
+      ~on_eof:(on_eof f_init);
+    finished >>= fun data ->
+    data >>= fun data ->
+    let content_type =
+      Httpaf.(
+        Headers.get_exn (Reqd.request reqd).Request.headers "content-type")
+    in
+    let ct = Multipart_form.Content_type.of_string (content_type ^ "\r\n") in
+    match ct with
+    | Error (`Msg msg) ->
+        Logs.warn (fun m ->
+            m "couldn't parse content-type %s: %S" content_type msg);
+        Error
+          (`Msg ("couldn't parse content-type " ^ content_type ^ ": " ^ msg))
+        |> Lwt.return
+    | Ok ct -> (
+        match Multipart_form.of_string_to_list data ct with
+        | Error (`Msg msg) ->
+            Logs.warn (fun m -> m "couldn't decode multipart data: %s" msg);
+            Error (`Msg ("Couldn't decode multipart data: " ^ msg))
+            |> Lwt.return
+        | Ok (m, assoc) -> Ok (m, assoc) |> Lwt.return)
+
   let sign_up reqd =
     let now = Ptime.v (P.now_d_ps ()) in
     let csrf = Middleware.generate_csrf_cookie now reqd in
@@ -917,87 +954,58 @@ struct
           ~data:"Couldn't find unikernel name in json" `Bad_request
 
   let unikernel_create albatross reqd (user : User_model.user) =
-    let response_body = Httpaf.Reqd.request_body reqd in
-    let finished, notify_finished = Lwt.wait () in
-    let wakeup v = Lwt.wakeup_later notify_finished v in
-    let on_eof data () = wakeup data in
-    let f acc s = acc ^ s in
-    let rec on_read on_eof acc bs ~off ~len =
-      let str = Bigstringaf.substring ~off ~len bs in
-      let acc = acc >>= fun acc -> Lwt.return (f acc str) in
-      Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof acc)
-        ~on_eof:(on_eof acc)
-    in
-    let f_init = Lwt.return "" in
-    Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof f_init)
-      ~on_eof:(on_eof f_init);
-    finished >>= fun data ->
-    data >>= fun data ->
-    let content_type =
-      Httpaf.(
-        Headers.get_exn (Reqd.request reqd).Request.headers "content-type")
-    in
-    let ct = Multipart_form.Content_type.of_string (content_type ^ "\r\n") in
-    match ct with
+    read_multipart_data reqd >>= function
     | Error (`Msg msg) ->
-        Logs.warn (fun m -> m "couldn't content-type: %S" msg);
         Middleware.http_response reqd ~title:"Error"
-          ~data:("Couldn't content-type: " ^ msg)
+          ~data:("Couldn't multipart: " ^ msg)
           `Bad_request
-    | Ok ct -> (
-        match Multipart_form.of_string_to_list data ct with
-        | Error (`Msg msg) ->
-            Logs.warn (fun m -> m "couldn't multipart: %s" msg);
-            Middleware.http_response reqd ~title:"Error"
-              ~data:("Couldn't multipart: " ^ msg)
-              `Bad_request
-        | Ok (m, assoc) -> (
-            let m, _r = to_map ~assoc m in
-            match
-              ( Map.find_opt "arguments" m,
-                Map.find_opt "name" m,
-                Map.find_opt "binary" m,
-                Map.find_opt "molly_csrf" m )
-            with
-            | ( Some (_, args),
-                Some (_, name),
-                Some (_, binary),
-                Some (_, form_csrf_token) ) ->
-                let now = Ptime.v (P.now_d_ps ()) in
-                Middleware.csrf_verification user now form_csrf_token
-                  (fun reqd ->
-                    match Albatross_json.config_of_json args with
-                    | Ok cfg -> (
-                        let config = { cfg with image = binary } in
-                        (* TODO use uuid in the future *)
-                        Albatross.query albatross ~domain:user.name ~name
-                          (`Unikernel_cmd (`Unikernel_create config))
-                        >>= function
-                        | Error err ->
-                            Logs.warn (fun m ->
-                                m "Error querying albatross: %s" err);
+    | Ok (m, assoc) -> (
+        let m, _r = to_map ~assoc m in
+        match
+          ( Map.find_opt "arguments" m,
+            Map.find_opt "name" m,
+            Map.find_opt "binary" m,
+            Map.find_opt "molly_csrf" m )
+        with
+        | ( Some (_, args),
+            Some (_, name),
+            Some (_, binary),
+            Some (_, form_csrf_token) ) ->
+            let now = Ptime.v (P.now_d_ps ()) in
+            Middleware.csrf_verification user now form_csrf_token
+              (fun reqd ->
+                match Albatross_json.config_of_json args with
+                | Ok cfg -> (
+                    let config = { cfg with image = binary } in
+                    (* TODO use uuid in the future *)
+                    Albatross.query albatross ~domain:user.name ~name
+                      (`Unikernel_cmd (`Unikernel_create config))
+                    >>= function
+                    | Error err ->
+                        Logs.warn (fun m ->
+                            m "Error querying albatross: %s" err);
+                        Middleware.http_response reqd ~title:"Error"
+                          ~data:("Error while querying Albatross: " ^ err)
+                          `Internal_server_error
+                    | Ok (_hdr, res) -> (
+                        match Albatross_json.res res with
+                        | Ok res ->
+                            Middleware.http_response reqd ~title:"Success"
+                              ~data:(Yojson.Basic.to_string res)
+                              `OK
+                        | Error (`String res) ->
                             Middleware.http_response reqd ~title:"Error"
-                              ~data:("Error while querying Albatross: " ^ err)
-                              `Internal_server_error
-                        | Ok (_hdr, res) -> (
-                            match Albatross_json.res res with
-                            | Ok res ->
-                                Middleware.http_response reqd ~title:"Success"
-                                  ~data:(Yojson.Basic.to_string res)
-                                  `OK
-                            | Error (`String res) ->
-                                Middleware.http_response reqd ~title:"Error"
-                                  ~data:(Yojson.Basic.to_string (`String res))
-                                  `Internal_server_error))
-                    | Error (`Msg err) ->
-                        Logs.warn (fun m -> m "couldn't decode data %s" err);
-                        Middleware.http_response reqd ~title:"Error" ~data:err
-                          `Internal_server_error)
-                  reqd
-            | _ ->
-                Logs.warn (fun m -> m "couldn't find fields");
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:"Couldn't find fields" `Bad_request))
+                              ~data:(Yojson.Basic.to_string (`String res))
+                              `Internal_server_error))
+                | Error (`Msg err) ->
+                    Logs.warn (fun m -> m "couldn't decode data %s" err);
+                    Middleware.http_response reqd ~title:"Error" ~data:err
+                      `Internal_server_error)
+              reqd
+        | _ ->
+            Logs.warn (fun m -> m "couldn't find fields");
+            Middleware.http_response reqd ~title:"Error"
+              ~data:"Couldn't find fields" `Bad_request)
 
   let unikernel_console albatross name reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
@@ -1201,6 +1209,138 @@ struct
                (Yojson.Basic.to_string (`Assoc json_dict)))
           `Bad_request
 
+  let volumes store albatross reqd (user : User_model.user) =
+    (Albatross.query albatross ~domain:user.name (`Block_cmd `Block_info)
+     >|= function
+     | Error msg ->
+         Logs.err (fun m ->
+             m "error while communicating with albatross: %s" msg);
+         []
+     | Ok (_hdr, `Success (`Block_devices blocks)) -> blocks
+     | Ok reply ->
+         Logs.err (fun m ->
+             m "expected a block info reply, received %a"
+               (Vmm_commands.pp_wire ~verbose:false)
+               reply);
+         [])
+    >>= fun blocks ->
+    let policy =
+      Result.fold ~ok:Fun.id
+        ~error:(fun _ -> None)
+        (Albatross.policy ~domain:user.name albatross)
+    in
+    let now = Ptime.v (P.now_d_ps ()) in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout ~csrf user
+                ~page_title:(String.capitalize_ascii user.name ^ " | Mollymawk")
+                ~content:(Volume_index.volume_index_layout blocks policy)
+                ~icon:"/images/robur.png" ())
+             ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+             `OK)
+    | Error err ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                ~content:(Error_page.error_layout err)
+                ~icon:"/images/robur.png" ())
+             `Internal_server_error)
+
+  let delete_volume json_dict albatross reqd (user : User_model.user) =
+    match Utils.Json.get "block_name" json_dict with
+    | Some (`String block_name) -> (
+        Albatross.query albatross ~domain:user.name ~name:block_name
+          (`Block_cmd `Block_remove)
+        >>= function
+        | Error msg ->
+            Logs.err (fun m -> m "Error querying albatross: %s" msg);
+            Middleware.http_response reqd ~title:"Error"
+              ~data:("Error querying albatross: " ^ msg)
+              `Internal_server_error
+        | Ok (_hdr, res) -> (
+            match Albatross_json.res res with
+            | Ok res ->
+                Middleware.http_response reqd ~title:"Success"
+                  ~data:(Yojson.Basic.to_string res)
+                  `OK
+            | Error (`String res) ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:(Yojson.Basic.to_string (`String res))
+                  `Internal_server_error))
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:"Couldn't find block name in json" `Bad_request
+
+  let create_volume albatross reqd (user : User_model.user) =
+    read_multipart_data reqd >>= fun result ->
+    match result with
+    | Error (`Msg msg) ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:("Couldn't multipart: " ^ msg)
+          `Bad_request
+    | Ok (m, assoc) -> (
+        let m, _r = to_map ~assoc m in
+        match (Map.find_opt "json_data" m, Map.find_opt "block_data" m) with
+        | Some (_, json_data), Some (_, block_data) -> (
+            let json =
+              try Ok (Yojson.Basic.from_string json_data)
+              with Yojson.Json_error s -> Error (`Msg s)
+            in
+            match json with
+            | Ok (`Assoc json_dict) -> (
+                match
+                  Utils.Json.
+                    ( get "block_name" json_dict,
+                      get "block_size" json_dict,
+                      get "block_compressed" json_dict,
+                      get "molly_csrf" json_dict )
+                with
+                | ( Some (`String block_name),
+                    Some (`Int block_size),
+                    Some (`Bool block_compressed),
+                    Some (`String form_csrf) ) ->
+                    let now = Ptime.v (P.now_d_ps ()) in
+                    Middleware.csrf_verification user now form_csrf
+                      (fun reqd ->
+                        Albatross.query albatross ~domain:user.name
+                          ~name:block_name
+                          (`Block_cmd
+                            (`Block_add
+                              (block_size, block_compressed, Some block_data)))
+                        >>= function
+                        | Error msg ->
+                            Logs.err (fun m ->
+                                m "Error querying albatross: %s" msg);
+                            Middleware.http_response reqd ~title:"Error"
+                              ~data:("Error querying albatross: " ^ msg)
+                              `Internal_server_error
+                        | Ok (_hdr, res) -> (
+                            match Albatross_json.res res with
+                            | Ok res ->
+                                Middleware.http_response reqd ~title:"Success"
+                                  ~data:(Yojson.Basic.to_string res)
+                                  `OK
+                            | Error (`String res) ->
+                                Middleware.http_response reqd ~title:"Error"
+                                  ~data:(Yojson.Basic.to_string (`String res))
+                                  `Internal_server_error))
+                      reqd
+                | _ ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:
+                        (Fmt.str "Create volume: Unexpected fields. Got %s"
+                           (Yojson.Basic.to_string (`Assoc json_dict)))
+                      `Bad_request)
+            | _ ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:"Create volume: expected a dictionary" `Bad_request)
+        | _ ->
+            Logs.warn (fun m -> m "couldn't find fields");
+            Middleware.http_response reqd ~title:"Error"
+              ~data:"Couldn't find fields" `Bad_request)
+
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
@@ -1309,6 +1449,21 @@ struct
                     Middleware.http_response reqd ~title:"Error"
                       ~data:"An error occured. Please refresh and try again"
                       `Bad_request)
+        | "/volumes" ->
+            check_meth `GET (fun () ->
+                authenticate store reqd (volumes store !albatross reqd))
+        | "/api/volume/delete" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, json_dict) ->
+                    authenticate ~form_csrf ~api_meth:true store reqd
+                      (delete_volume json_dict !albatross reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
+        | "/api/volume/create" ->
+            check_meth `POST (fun () ->
+                authenticate store reqd (create_volume !albatross reqd))
         | "/admin/users" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (users store reqd))

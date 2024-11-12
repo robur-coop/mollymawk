@@ -547,7 +547,7 @@ let is_valid_cookie (cookie : cookie) now =
 let is_email_verified user = Option.is_some user.email_verified
 let password_validation password = String.length password >= 8
 
-let verify_email_token u uuid timestamp =
+let verify_email_token u _uuid timestamp =
   match u with
   | None ->
       Logs.err (fun m -> m "email verification: Token couldn't be found.");
