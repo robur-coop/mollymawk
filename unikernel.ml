@@ -202,6 +202,34 @@ struct
     let resp = Httpaf.Response.create ~headers status in
     Httpaf.Reqd.respond_with_string reqd resp data
 
+  let user_volumes albatross user_name =
+    Albatross.query albatross ~domain:user_name (`Block_cmd `Block_info)
+    >|= function
+    | Error msg ->
+        Logs.err (fun m -> m "error while communicating with albatross: %s" msg);
+        []
+    | Ok (_hdr, `Success (`Block_devices blocks)) -> blocks
+    | Ok reply ->
+        Logs.err (fun m ->
+            m "expected a block info reply, received %a"
+              (Vmm_commands.pp_wire ~verbose:false)
+              reply);
+        []
+
+  let user_unikernels albatross user_name =
+    Albatross.query albatross ~domain:user_name (`Unikernel_cmd `Unikernel_info)
+    >|= function
+    | Error msg ->
+        Logs.err (fun m -> m "error while communicating with albatross: %s" msg);
+        []
+    | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
+    | Ok reply ->
+        Logs.err (fun m ->
+            m "expected a unikernel info reply, received %a"
+              (Vmm_commands.pp_wire ~verbose:false)
+              reply);
+        []
+
   let read_multipart_data reqd =
     let response_body = Httpaf.Reqd.request_body reqd in
     let finished, notify_finished = Lwt.wait () in
@@ -547,21 +575,7 @@ struct
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         (* TODO use uuid in the future *)
-        (Albatross.query albatross ~domain:user.name
-           (`Unikernel_cmd `Unikernel_info)
-         >|= function
-         | Error msg ->
-             Logs.err (fun m ->
-                 m "error while communicating with albatross: %s" msg);
-             []
-         | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
-         | Ok reply ->
-             Logs.err (fun m ->
-                 m "expected a unikernel info reply, received %a"
-                   (Vmm_commands.pp_wire ~verbose:false)
-                   reply);
-             [])
-        >>= fun unikernels ->
+        user_unikernels albatross user.name >>= fun unikernels ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Dashboard.dashboard_layout ~csrf user
@@ -1028,21 +1042,7 @@ struct
   let view_user albatross store uuid reqd (user : User_model.user) =
     match Store.find_by_uuid store uuid with
     | Some u -> (
-        (Albatross.query albatross ~domain:u.name
-           (`Unikernel_cmd `Unikernel_info)
-         >|= function
-         | Error msg ->
-             Logs.err (fun m ->
-                 m "error while communicating with albatross: %s" msg);
-             []
-         | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
-         | Ok reply ->
-             Logs.err (fun m ->
-                 m "expected a unikernel info reply, received %a"
-                   (Vmm_commands.pp_wire ~verbose:false)
-                   reply);
-             [])
-        >>= fun unikernels ->
+        user_unikernels albatross user.name >>= fun unikernels ->
         let policy =
           match Albatross.policy ~domain:u.name albatross with
           | Ok p -> p
@@ -1210,20 +1210,7 @@ struct
           `Bad_request
 
   let volumes store albatross reqd (user : User_model.user) =
-    (Albatross.query albatross ~domain:user.name (`Block_cmd `Block_info)
-     >|= function
-     | Error msg ->
-         Logs.err (fun m ->
-             m "error while communicating with albatross: %s" msg);
-         []
-     | Ok (_hdr, `Success (`Block_devices blocks)) -> blocks
-     | Ok reply ->
-         Logs.err (fun m ->
-             m "expected a block info reply, received %a"
-               (Vmm_commands.pp_wire ~verbose:false)
-               reply);
-         [])
-    >>= fun blocks ->
+    user_volumes albatross user.name >>= fun blocks ->
     let policy =
       Result.fold ~ok:Fun.id
         ~error:(fun _ -> None)
@@ -1340,6 +1327,35 @@ struct
             Logs.warn (fun m -> m "couldn't find fields");
             Middleware.http_response reqd ~title:"Error"
               ~data:"Couldn't find fields" `Bad_request)
+
+  let account_usage store albatross reqd (user : User_model.user) =
+    let now = Ptime.v (P.now_d_ps ()) in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        user_volumes albatross user.name >>= fun blocks ->
+        user_unikernels albatross user.name >>= fun unikernels ->
+        let policy =
+          match Albatross.policy albatross ~domain:user.name with
+          | Ok p -> (
+              match p with Some p -> p | None -> Albatross.empty_policy)
+          | Error _ -> Albatross.empty_policy
+        in
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout ~csrf user
+                ~page_title:"Usage | Mollymawk"
+                ~content:
+                  (Account_usage.account_usage_layout policy unikernels blocks)
+                ~icon:"/images/robur.png" ())
+             ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+             `OK)
+    | Error err ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                ~content:(Error_page.error_layout err)
+                ~icon:"/images/robur.png" ())
+             `Internal_server_error)
 
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
@@ -1467,6 +1483,9 @@ struct
         | "/admin/users" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (users store reqd))
+        | "/usage" ->
+            check_meth `GET (fun () ->
+                authenticate store reqd (account_usage store !albatross reqd))
         | path when String.starts_with ~prefix:"/admin/user/" path ->
             check_meth `GET (fun () ->
                 let uuid = String.sub path 12 (String.length path - 12) in
