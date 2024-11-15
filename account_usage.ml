@@ -202,7 +202,9 @@ let account_usage_layout policy unikernels blocks =
             div
               ~a:[ a_class [ "mx-auto text-center my-4 mx-4" ] ]
               [
-                h1 ~a:[ a_class [ "text-xl font-bold" ] ] [ txt "CPU ID usage in Unikernels" ];
+                h1
+                  ~a:[ a_class [ "text-xl font-bold" ] ]
+                  [ txt "CPU ID usage in Unikernels" ];
                 div
                   ~a:
                     [
@@ -249,7 +251,8 @@ let account_usage_layout policy unikernels blocks =
                           \                                y: {\n\
                           \                                  title: {\n\
                           \                                    display: true,\n\
-                          \                                    text: 'Number of Unikernels'\n\
+                          \                                    text: 'Number \
+                           of Unikernels'\n\
                           \                                  },\n\
                           \                                  ticks: {\n\
                           \                                    stepSize: 1,\n\
@@ -283,7 +286,9 @@ let account_usage_layout policy unikernels blocks =
             div
               ~a:[ a_class [ "mx-auto text-center my-4 mx-4" ] ]
               [
-                h1 ~a:[ a_class [ "text-xl font-bold" ] ] [ txt "Bridge usage in Unikernels" ];
+                h1
+                  ~a:[ a_class [ "text-xl font-bold" ] ]
+                  [ txt "Bridge usage in Unikernels" ];
                 div
                   ~a:
                     [
