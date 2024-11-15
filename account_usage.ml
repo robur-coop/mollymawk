@@ -219,7 +219,7 @@ let account_usage_layout policy unikernels blocks =
                         ^ String.concat ", "
                             (List.map
                                (fun id -> "\"" ^ string_of_int id ^ "\"")
-                               (Vmm_core.IS.to_list policy.cpuids))
+                               (Vmm_core.IS.elements policy.cpuids))
                         ^ "\n\
                           \                              ],\n\
                           \                              datasets: [{\n\
