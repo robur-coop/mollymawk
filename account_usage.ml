@@ -24,7 +24,7 @@ let account_usage_layout policy unikernels blocks =
         Hashtbl.replace cpuid_count cpuid (count + 1))
       unikernels;
     (* Prepare list of all cpuids from policy *)
-    let policy_cpuids = Vmm_core.IS.to_list policy.cpuids in
+    let policy_cpuids = Vmm_core.IS.elements policy.cpuids in
     (* Generate the list with all policy.cpuids and their respective counts *)
     List.map
       (fun cpuid ->
