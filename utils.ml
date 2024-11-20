@@ -121,7 +121,7 @@ let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
             | `Danger_full ->
                 a_class
                   [
-                    "py-3 px-3 rounded bg-secondary-500 hover:bg-secondary-800 \
+                    "py-2 px-2 rounded bg-secondary-500 hover:bg-secondary-800 \
                      text-gray-50 font-semibold " ^ extra_css;
                   ]
             | `Danger_outlined ->
