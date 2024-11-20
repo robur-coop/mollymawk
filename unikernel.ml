@@ -1360,8 +1360,7 @@ struct
           ~data:"Couldn't find block name in json" `Bad_request
 
   let upload_to_volume albatross reqd (user : User_model.user) =
-    read_multipart_data reqd >>= fun result ->
-    match result with
+    read_multipart_data reqd >>= function
     | Error (`Msg msg) ->
         Middleware.http_response reqd ~title:"Error"
           ~data:("Couldn't multipart: " ^ msg)
