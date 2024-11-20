@@ -30,92 +30,10 @@ let volume_index_layout volumes policy =
                       ];
                   ];
                 div
-                  ~a:[ Unsafe.string_attrib "x-data" "{modalIsOpen: false}" ]
                   [
-                    button
-                      ~a:
-                        [
-                          Unsafe.string_attrib "x-on:click" "modalIsOpen = true";
-                          a_class
-                            [
-                              "py-3 px-3 rounded bg-primary-500 \
-                               hover:bg-primary-800 w-full text-gray-50 \
-                               font-semibold";
-                            ];
-                        ]
-                      [ txt "Create block device" ];
-                    div
-                      ~a:
-                        [
-                          Unsafe.string_attrib "x-cloak" "";
-                          Unsafe.string_attrib "x-show" "modalIsOpen";
-                          Unsafe.string_attrib
-                            "x-transition.opacity.duration.200ms" "";
-                          Unsafe.string_attrib "x-trap.inert.noscroll"
-                            "modalIsOpen";
-                          Unsafe.string_attrib "x-on:keydown.esc.window"
-                            "modalIsOpen = false";
-                          Unsafe.string_attrib "x-on:click.self"
-                            "modalIsOpen = false";
-                          a_class
-                            [
-                              "fixed inset-0 z-30 flex items-end \
-                               justify-center bg-black/20 p-4 backdrop-blur-md \
-                               sm:items-center";
-                            ];
-                          a_role [ "dialog" ];
-                          a_aria "modal" [ "true" ];
-                        ]
-                      [
-                        div
-                          ~a:
-                            [
-                              Unsafe.string_attrib "x-show" "modalIsOpen";
-                              Unsafe.string_attrib "x-transition:enter"
-                                "transition ease-out duration-200 delay-100 \
-                                 motion-reduce:transition-opacity";
-                              Unsafe.string_attrib "x-transition:enter-start"
-                                "opacity-0 scale-50";
-                              Unsafe.string_attrib "x-transition:enter-end"
-                                "opacity-100 scale-100";
-                              a_class
-                                [
-                                  "flex max-w-xl flex-col gap-4 \
-                                   overflow-hidden rounded-md border \
-                                   border-neutral-300 bg-gray-50";
-                                ];
-                            ]
-                          [
-                            div
-                              ~a:
-                                [
-                                  a_class
-                                    [
-                                      "flex items-center justify-between \
-                                       border-b p-4";
-                                    ];
-                                ]
-                              [
-                                h3
-                                  ~a:[ a_class [ "font-bold text-gray-700" ] ]
-                                  [ txt "Create a volume" ];
-                                i
-                                  ~a:
-                                    [
-                                      a_class
-                                        [
-                                          "fa-solid fa-x text-sm cursor-pointer";
-                                        ];
-                                      Unsafe.string_attrib "x-on:click"
-                                        "modalIsOpen = false";
-                                    ]
-                                  [];
-                              ];
-                            div
-                              ~a:[ a_class [ "px-4" ] ]
-                              [ Volume_create.create_volume total_free_space ];
-                          ];
-                      ];
+                    Modal_dialog.modal_dialog ~modal_title:"Create a volume"
+                      ~button_content:(txt "Create block device")
+                      ~content:(Volume_create.create_volume total_free_space);
                   ];
               ];
             div
