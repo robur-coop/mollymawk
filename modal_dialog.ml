@@ -1,4 +1,5 @@
-let modal_dialog ~modal_title ~button_content ~content =
+let modal_dialog ~modal_title ~button_content ?(button_type = `Primary_full)
+    ~content () =
   Tyxml_html.(
     section
       ~a:[ a_id "modal-dialog"; a_class [ "mx-auto" ] ]
@@ -6,10 +7,10 @@ let modal_dialog ~modal_title ~button_content ~content =
         div
           ~a:[ Unsafe.string_attrib "x-data" "{modalIsOpen: false}" ]
           [
-            Utils.button_component ~content:button_content
-              ~btn_type:`Primary_full ()
+            Utils.button_component ~content:button_content ~btn_type:button_type
               ~attribs:
-                [ Unsafe.string_attrib "x-on:click" "modalIsOpen = true" ];
+                [ Unsafe.string_attrib "x-on:click" "modalIsOpen = true" ]
+              ();
             div
               ~a:
                 [
