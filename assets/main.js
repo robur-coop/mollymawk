@@ -579,10 +579,32 @@ async function createVolume() {
 	const block_compressed = document.getElementById("block_compressed").checked;
 	const block_data = document.getElementById("block_data").files[0];
 
-	if (!isValidName(block_name)) {
+	if (!block_name || block_name === '') {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please enter a name for this volume"
+		formAlert.textContent = "Please enter a name"
+		buttonLoading(createButton, false, "Create volume")
+		return;
+	}
+	if (!isLengthValid(block_name)) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "The name must have at least 1 character and must not exceed 63 characters."
+		buttonLoading(createButton, false, "Create volume")
+		return;
+	}
+	if (!isStartingCharacterValid(block_name)) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "The name cannot start with a hyphen (-)."
+		buttonLoading(createButton, false, "Create volume")
+		return;
+	}
+	if (!areCharactersValid(block_name)) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Only letters (a-z, A-Z), digits (0-9), hyphens (-), and periods (.) are permitted.\
+		 Special characters, spaces, and symbols other than the specified ones are not allowed"
 		buttonLoading(createButton, false, "Create volume")
 		return;
 	}
@@ -652,3 +674,21 @@ function isValidName(s) {
 	return true;
 }
 
+function isLengthValid(s) {
+	const length = s.length;
+	return length > 0 && length < 64;
+}
+
+function isStartingCharacterValid(s) {
+	return s[0] !== '-';
+}
+
+function areCharactersValid(s) {
+	for (let i = 0; i < s.length; i++) {
+		const char = s[i];
+		if (!(/[a-zA-Z0-9.-]/).test(char)) {
+			return false;
+		}
+	}
+	return true;
+}
