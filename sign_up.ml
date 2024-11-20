@@ -48,7 +48,7 @@ let register_page ~csrf ~icon =
                                a_id "alert-container";
                                a_class
                                  [
-                                   "absolute top-1/4 rounded-md right-4 z-50 \
+                                   "fixed top-1/4 rounded-md right-4 z-50 \
                                     w-fit space-y-2 p-4 shadow text-wrap \
                                     hidden";
                                  ];
