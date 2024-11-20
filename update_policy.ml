@@ -35,17 +35,10 @@ let update_policy_layout (user : User_model.user) ~user_policy
                     ^ "}");
                 ]
               [
-                button
-                  ~a:
-                    [
-                      a_class
-                        [
-                          "border py-2 px-3 border-primary-500 \
-                           hover:bg-primary-100 rounded-md";
-                        ];
-                      Unsafe.string_attrib "x-on:click" "count++";
-                    ]
-                  [ i ~a:[ a_class [ "fa-solid fa-plus" ] ] [] ];
+                Utils.button_component
+                  ~attribs:[ Unsafe.string_attrib "x-on:click" "count++" ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                  ~btn_type:`Primary_outlined ();
                 span
                   ~a:
                     [
@@ -65,17 +58,13 @@ let update_policy_layout (user : User_model.user) ~user_policy
                         "$event.target.innerText = count;";
                     ]
                   [];
-                button
-                  ~a:
+                Utils.button_component
+                  ~attribs:
                     [
-                      a_class
-                        [
-                          "border py-2 px-3 border-secondary-500 \
-                           hover:bg-secondary-100 rounded-md";
-                        ];
                       Unsafe.string_attrib "x-on:click" "if (count > 0) count--";
                     ]
-                  [ i ~a:[ a_class [ "fa-solid fa-minus" ] ] [] ];
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+                  ~btn_type:`Danger_outlined ();
               ];
           ];
         hr ();
@@ -105,17 +94,11 @@ let update_policy_layout (user : User_model.user) ~user_policy
                     ^ "}");
                 ]
               [
-                button
-                  ~a:
-                    [
-                      a_class
-                        [
-                          "border py-2 px-3 border-primary-500 \
-                           hover:bg-primary-100 rounded-md";
-                        ];
-                      Unsafe.string_attrib "x-on:click" "count = count + 50";
-                    ]
-                  [ i ~a:[ a_class [ "fa-solid fa-plus" ] ] [] ];
+                Utils.button_component
+                  ~attribs:
+                    [ Unsafe.string_attrib "x-on:click" "count = count + 50" ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                  ~btn_type:`Primary_outlined ();
                 span
                   ~a:
                     [
@@ -136,18 +119,14 @@ let update_policy_layout (user : User_model.user) ~user_policy
                     ]
                   [];
                 span ~a:[ a_class [ "text-4xl" ] ] [ txt " MB" ];
-                button
-                  ~a:
+                Utils.button_component
+                  ~attribs:
                     [
-                      a_class
-                        [
-                          "border py-2 px-3 border-secondary-500 \
-                           hover:bg-secondary-100 rounded-md";
-                        ];
                       Unsafe.string_attrib "x-on:click"
                         "if (count > 0) count = count - 50";
                     ]
-                  [ i ~a:[ a_class [ "fa-solid fa-minus" ] ] [] ];
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+                  ~btn_type:`Danger_outlined ();
               ];
           ];
         hr ();
@@ -185,17 +164,11 @@ let update_policy_layout (user : User_model.user) ~user_policy
                     ^ "}");
                 ]
               [
-                button
-                  ~a:
-                    [
-                      a_class
-                        [
-                          "border py-2 px-3 border-primary-500 \
-                           hover:bg-primary-100 rounded-md";
-                        ];
-                      Unsafe.string_attrib "x-on:click" "count = count + 50";
-                    ]
-                  [ i ~a:[ a_class [ "fa-solid fa-plus" ] ] [] ];
+                Utils.button_component
+                  ~attribs:
+                    [ Unsafe.string_attrib "x-on:click" "count = count + 50" ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                  ~btn_type:`Primary_outlined ();
                 span
                   ~a:
                     [
@@ -216,18 +189,14 @@ let update_policy_layout (user : User_model.user) ~user_policy
                     ]
                   [];
                 span ~a:[ a_class [ "text-4xl" ] ] [ txt "MB" ];
-                button
-                  ~a:
+                Utils.button_component
+                  ~attribs:
                     [
-                      a_class
-                        [
-                          "border py-2 px-3 border-secondary-500 \
-                           hover:bg-secondary-100 rounded-md";
-                        ];
                       Unsafe.string_attrib "x-on:click"
                         "if (count > 0) count = count - 50";
                     ]
-                  [ i ~a:[ a_class [ "fa-solid fa-minus" ] ] [] ];
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+                  ~btn_type:`Danger_outlined ();
               ];
           ];
         div
@@ -277,18 +246,18 @@ let update_policy_layout (user : User_model.user) ~user_policy
                             ]
                           [
                             span ~a:[ Unsafe.string_attrib "x-text" "item" ] [];
-                            button
-                              ~a:
+                            (*This button should be rounded-full w-6 h-6 text-center bg-secondary-300*)
+                            Utils.button_component
+                              ~attribs:
                                 [
                                   Unsafe.string_attrib "x-on:click"
                                     "removeItem(index)";
-                                  a_class
-                                    [
-                                      "rounded-full bg-secondary-300 \
-                                       text-secondary-700 w-6 h-6 text-center";
-                                    ];
                                 ]
-                              [ txt "x" ];
+                              ~content:(txt "x")
+                              ~extra_css:
+                                "rounded-full w-6 h-6 text-center \
+                                 justify-center inline-flex items-center"
+                              ~btn_type:`Danger_full ();
                           ];
                       ];
                   ];
@@ -299,16 +268,20 @@ let update_policy_layout (user : User_model.user) ~user_policy
                       a_class [ "dropdown my-3" ];
                     ]
                   [
-                    button
-                      ~a:
+                    Utils.button_component
+                      ~attribs:
                         [
-                          a_class
-                            [ "dropdown-button flex justify-between space-x-4" ];
+                          Unsafe.string_attrib "x-on:click" "removeItem(index)";
                         ]
-                      [
-                        span [ txt "Assign CPUs" ];
-                        i ~a:[ a_class [ "fa-solid fa-caret-down" ] ] [];
-                      ];
+                      ~content:
+                        (span
+                           [
+                             span
+                               ~a:[ a_class [ "px-2" ] ]
+                               [ txt "Assign CPUs" ];
+                             i ~a:[ a_class [ "fa-solid fa-caret-down" ] ] [];
+                           ])
+                      ~btn_type:`Primary_outlined ();
                   ];
                 div
                   ~a:
@@ -404,18 +377,16 @@ let update_policy_layout (user : User_model.user) ~user_policy
                             ]
                           [
                             span ~a:[ Unsafe.string_attrib "x-text" "item" ] [];
-                            button
-                              ~a:
+                            Utils.button_component
+                              ~attribs:
                                 [
                                   Unsafe.string_attrib "x-on:click"
                                     "removeItem(index)";
-                                  a_class
-                                    [
-                                      "rounded-full bg-secondary-300 \
-                                       text-secondary-700 w-6 h-6 text-center";
-                                    ];
                                 ]
-                              [ txt "x" ];
+                              ~extra_css:
+                                "rounded-full w-6 h-6 text-center \
+                                 justify-center inline-flex items-center"
+                              ~content:(txt "x") ~btn_type:`Danger_full ();
                           ];
                       ];
                   ];
@@ -426,16 +397,16 @@ let update_policy_layout (user : User_model.user) ~user_policy
                       a_class [ "dropdown my-3" ];
                     ]
                   [
-                    button
-                      ~a:
-                        [
-                          a_class
-                            [ "dropdown-button flex justify-between space-x-4" ];
-                        ]
-                      [
-                        span [ txt "Assign Bridges" ];
-                        i ~a:[ a_class [ "fa-solid fa-caret-down" ] ] [];
-                      ];
+                    Utils.button_component ~attribs:[]
+                      ~content:
+                        (span
+                           [
+                             span
+                               ~a:[ a_class [ "px-2" ] ]
+                               [ txt "Assign Bridges" ];
+                             i ~a:[ a_class [ "fa-solid fa-caret-down" ] ] [];
+                           ])
+                      ~btn_type:`Primary_outlined ();
                   ];
                 div
                   ~a:
@@ -487,13 +458,8 @@ let update_policy_layout (user : User_model.user) ~user_policy
         div
           ~a:[ a_class [ "my-3" ] ]
           [
-            button
-              ~a:
-                [
-                  a_onclick "updatePolicy()";
-                  a_id "set-policy-btn";
-                  a_class [ "bg-primary-500 py-1 px-2 text-primary-50 rounded" ];
-                ]
-              [ txt "Set Policy" ];
+            Utils.button_component
+              ~attribs:[ a_onclick "updatePolicy()"; a_id "set-policy-btn" ]
+              ~content:(txt "Set Policy") ~btn_type:`Primary_full ();
           ];
       ])

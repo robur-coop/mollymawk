@@ -44,41 +44,31 @@ let unikernel_single_layout unikernel current_time console_output =
                       [
                         div
                           [
-                            button
-                              ~a:
+                            Utils.button_component
+                              ~attribs:
                                 [
                                   a_onclick
                                     ("restartUnikernel('"
                                     ^ Option.value ~default:""
                                         (Vmm_core.Name.name u_name)
                                     ^ "')");
-                                  a_class
-                                    [
-                                      "my-3 py-2 px-3 rounded bg-primary-500 \
-                                       text-white hover:bg-primary-700 \
-                                       text-secondary-50 font-semibold";
-                                    ];
                                 ]
-                              [ txt "Restart" ];
+                              ~content:(txt "Restart") ~btn_type:`Primary_full
+                              ();
                           ];
                         div
                           [
-                            button
-                              ~a:
+                            Utils.button_component
+                              ~attribs:
                                 [
                                   a_onclick
                                     ("destroyUnikernel('"
                                     ^ Option.value ~default:""
                                         (Vmm_core.Name.name u_name)
                                     ^ "')");
-                                  a_class
-                                    [
-                                      "my-3 py-2 px-3 rounded bg-secondary-500 \
-                                       text-white hover:bg-secondary-700 \
-                                       text-secondary-50 font-semibold";
-                                    ];
                                 ]
-                              [ txt "Destroy" ];
+                              ~content:(txt "Destroy") ~btn_type:`Primary_full
+                              ();
                           ];
                       ];
                   ];

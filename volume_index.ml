@@ -363,52 +363,32 @@ let volume_index_layout volumes policy =
                                                ];
                                            ]
                                          [
-                                           (if used then
-                                              a
-                                                ~a:
-                                                  [
-                                                    a_href
-                                                      ("/unikernel/info/" ^ name);
-                                                    a_class
-                                                      [
-                                                        "inline-flex \
-                                                         items-center gap-x-2 \
-                                                         text-sm font-semibold \
-                                                         rounded border \
-                                                         border-1 py-1 px-2 \
-                                                         border-primary-400 \
-                                                         text-primary-600 \
-                                                         hover:text-primary-500 \
-                                                         focus:outline-none \
-                                                         focus:text-primary-800 \
-                                                         disabled:opacity-50 \
-                                                         disabled:pointer-events-none";
-                                                      ];
-                                                  ]
-                                                [ txt "View" ]
-                                            else
-                                              button
-                                                ~a:
-                                                  [
-                                                    a_disabled ();
-                                                    a_class
-                                                      [
-                                                        "inline-flex \
-                                                         cursor-not-allowed \
-                                                         items-center gap-x-2 \
-                                                         text-sm font-semibold \
-                                                         rounded border \
-                                                         disabled border-1 \
-                                                         py-1 px-2 \
-                                                         border-gray-400 \
-                                                         text-gray-300 \
-                                                         disabled:opacity-50 \
-                                                         disabled:pointer-events-none";
-                                                      ];
-                                                  ]
-                                                [ txt "View" ]);
-                                           button
-                                             ~a:
+                                           Utils.button_component
+                                             ~attribs:
+                                               [
+                                                 a_id
+                                                   ("upload-block-button-"
+                                                  ^ name);
+                                                 a_onclick
+                                                   ("uploadVolume('" ^ name
+                                                  ^ "')");
+                                               ]
+                                             ~content:(txt "Upload")
+                                             ~btn_type:`Primary_outlined ();
+                                           Utils.button_component
+                                             ~attribs:
+                                               [
+                                                 a_id
+                                                   ("download-block-button-"
+                                                  ^ name);
+                                                 a_onclick
+                                                   ("deleteVolume('" ^ name
+                                                  ^ "')");
+                                               ]
+                                             ~content:(txt "Download")
+                                             ~btn_type:`Primary_full ();
+                                           Utils.button_component
+                                             ~attribs:
                                                [
                                                  a_id
                                                    ("delete-block-button-"
@@ -416,16 +396,9 @@ let volume_index_layout volumes policy =
                                                  a_onclick
                                                    ("deleteVolume('" ^ name
                                                   ^ "')");
-                                                 a_class
-                                                   [
-                                                     "py-1 px-2 mx-2 rounded \
-                                                      bg-secondary-500 \
-                                                      hover:bg-secondary-800 \
-                                                      text-gray-50 \
-                                                      font-semibold";
-                                                   ];
                                                ]
-                                             [ txt "Delete" ];
+                                             ~content:(txt "Delete")
+                                             ~btn_type:`Danger_full ();
                                          ];
                                      ])
                                  volumes);

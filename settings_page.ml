@@ -20,21 +20,10 @@ let settings_layout (configuration : Configuration.t) =
             div
               ~a:[ a_id "add-config" ]
               [
-                button
-                  ~a:
-                    [
-                      a_onclick "openConfigForm('','','','')";
-                      a_class
-                        [
-                          "inline-flex items-center gap-x-2 text-sm \
-                           font-semibold rounded-lg border border-1 py-1 px-2 \
-                           border-primary-400 text-primary-600 \
-                           hover:text-primary-500 focus:outline-none \
-                           focus:text-primary-800 disabled:opacity-50 \
-                           disabled:pointer-events-none";
-                        ];
-                    ]
-                  [ i ~a:[ a_class [ "fa-solid fa-plus" ] ] [] ];
+                Utils.button_component
+                  ~attribs:[ a_onclick "openConfigForm('','','','')" ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                  ~btn_type:`Primary_outlined ();
               ];
           ];
         hr ~a:[ a_class [ "border border-primary-500 my-5" ] ] ();
@@ -199,18 +188,10 @@ let settings_layout (configuration : Configuration.t) =
                 div
                   ~a:[ a_class [ "mx-auto my-4 flex justify-center" ] ]
                   [
-                    button
-                      ~a:
-                        [
-                          a_onclick "saveConfig()";
-                          a_id "config-button";
-                          a_class
-                            [
-                              "py-3 px-3 rounded bg-primary-500 \
-                               hover:bg-primary-800 text-gray-50 font-semibold";
-                            ];
-                        ]
-                      [ txt "" ];
+                    Utils.button_component
+                      ~attribs:
+                        [ a_onclick "saveConfig()"; a_id "config-button" ]
+                      ~content:(txt "") ~btn_type:`Primary_full ();
                   ];
               ];
           ];
@@ -373,33 +354,20 @@ let settings_layout (configuration : Configuration.t) =
                                         ];
                                     ]
                                   [
-                                    button
-                                      ~a:
+                                    Utils.button_component
+                                      ~attribs:
                                         [
                                           a_onclick
                                             ("openConfigForm('" ^ ip ^ "','"
                                            ^ port ^ "','"
                                            ^ String.escaped certificate ^ "','"
                                            ^ String.escaped private_key ^ "')");
-                                          a_class
-                                            [
-                                              "inline-flex items-center \
-                                               gap-x-2 text-sm font-semibold \
-                                               rounded-lg border border-1 py-1 \
-                                               px-2 border-primary-400 \
-                                               text-primary-600 \
-                                               hover:text-primary-500 \
-                                               focus:outline-none \
-                                               focus:text-primary-800 \
-                                               disabled:opacity-50 \
-                                               disabled:pointer-events-none";
-                                            ];
                                         ]
-                                      [
-                                        i
-                                          ~a:[ a_class [ "fa-solid fa-pen" ] ]
-                                          [];
-                                      ];
+                                      ~content:
+                                        (i
+                                           ~a:[ a_class [ "fa-solid fa-pen" ] ]
+                                           [])
+                                      ~btn_type:`Primary_outlined ();
                                   ];
                               ];
                           ];

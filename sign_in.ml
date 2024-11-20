@@ -172,18 +172,10 @@ let login_page ~icon () =
                                ];
                              div
                                [
-                                 button
-                                   ~a:
-                                     [
-                                       a_id "login-button";
-                                       a_class
-                                         [
-                                           "py-3 rounded bg-primary-500 \
-                                            hover:bg-primary-800 w-full \
-                                            text-gray-50 font-semibold";
-                                         ];
-                                     ]
-                                   [ txt "Sign In" ];
+                                 Utils.button_component
+                                   ~attribs:[ a_id "login-button" ]
+                                   ~content:(txt "Sign In")
+                                   ~btn_type:`Primary_full ();
                                ];
                            ];
                        ];

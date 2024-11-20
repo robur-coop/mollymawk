@@ -59,17 +59,11 @@ let create_volume total_free_space =
                   Unsafe.string_attrib "x-data" "{count : 50}";
                 ]
               [
-                button
-                  ~a:
-                    [
-                      a_class
-                        [
-                          "border py-2 px-3 border-primary-500 \
-                           hover:bg-primary-100 rounded-md";
-                        ];
-                      Unsafe.string_attrib "x-on:click" "count = count + 50";
-                    ]
-                  [ i ~a:[ a_class [ "fa-solid fa-plus" ] ] [] ];
+                Utils.button_component
+                  ~attribs:
+                    [ Unsafe.string_attrib "x-on:click" "count = count + 50" ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                  ~btn_type:`Primary_outlined ();
                 span
                   ~a:
                     [
@@ -90,18 +84,14 @@ let create_volume total_free_space =
                     ]
                   [];
                 span ~a:[ a_class [ "text-4xl" ] ] [ txt "MB" ];
-                button
-                  ~a:
+                Utils.button_component
+                  ~attribs:
                     [
-                      a_class
-                        [
-                          "border py-2 px-3 border-secondary-500 \
-                           hover:bg-secondary-100 rounded-md";
-                        ];
                       Unsafe.string_attrib "x-on:click"
                         "if (count > 1) count = count - 50";
                     ]
-                  [ i ~a:[ a_class [ "fa-solid fa-minus" ] ] [] ];
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+                  ~btn_type:`Danger_outlined ();
               ];
           ];
         div
@@ -234,17 +224,9 @@ let create_volume total_free_space =
         div
           ~a:[ a_class [ "my-6" ] ]
           [
-            button
-              ~a:
-                [
-                  a_id "create-block-button";
-                  a_onclick "createVolume()";
-                  a_class
-                    [
-                      "py-3 px-3 rounded bg-primary-500 hover:bg-primary-800 \
-                       w-full text-gray-50 font-semibold";
-                    ];
-                ]
-              [ txt "Create Volume" ];
+            Utils.button_component
+              ~attribs:
+                [ a_id "create-block-button"; a_onclick "createVolume()" ]
+              ~content:(txt "Create Volume") ~btn_type:`Primary_full ();
           ];
       ])

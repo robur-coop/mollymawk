@@ -170,19 +170,13 @@ let user_account_layout ~csrf (user : User_model.user) ~active_cookie_value
                     div
                       ~a:[ a_class [ "my-4 w-1/2 text-center" ] ]
                       [
-                        button
-                          ~a:
+                        Utils.button_component
+                          ~attribs:
                             [
                               a_id "password-button";
                               a_onclick "updatePassword()";
-                              a_class
-                                [
-                                  "py-3 rounded bg-primary-500 \
-                                   hover:bg-primary-800 w-full text-gray-50 \
-                                   font-semibold";
-                                ];
                             ]
-                          [ txt "Save" ];
+                          ~content:(txt "Save") ~btn_type:`Primary_full ();
                       ];
                   ];
               ];
@@ -335,19 +329,13 @@ let user_account_layout ~csrf (user : User_model.user) ~active_cookie_value
                     div
                       ~a:[ a_class [ "my-4 w-1/2 text-center" ] ]
                       [
-                        button
-                          ~a:
+                        Utils.button_component
+                          ~attribs:
                             [
-                              a_id "session-button";
-                              a_onclick "closeSessions()";
-                              a_class
-                                [
-                                  "py-3 rounded bg-secondary-500 \
-                                   hover:bg-secondary-800 w-full text-gray-50 \
-                                   font-semibold";
-                                ];
+                              a_id "session-button"; a_onclick "closeSessions()";
                             ]
-                          [ txt "Logout all other sessions" ];
+                          ~content:(txt "Logout all other sessions")
+                          ~btn_type:`Danger_full ();
                       ];
                   ];
               ];

@@ -212,18 +212,10 @@ let register_page ~csrf ~icon =
                                ];
                              div
                                [
-                                 button
-                                   ~a:
-                                     [
-                                       a_id "register-button";
-                                       a_class
-                                         [
-                                           "py-3 rounded bg-primary-500 \
-                                            hover:bg-primary-800 w-full \
-                                            text-gray-50 font-semibold";
-                                         ];
-                                     ]
-                                   [ txt "Create Account" ];
+                                 Utils.button_component
+                                   ~attribs:[ a_id "register-button" ]
+                                   ~content:(txt "Create Account")
+                                   ~btn_type:`Primary_full ();
                                ];
                            ];
                        ];
