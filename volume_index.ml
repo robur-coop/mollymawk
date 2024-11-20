@@ -282,18 +282,14 @@ let volume_index_layout volumes policy =
                                                ];
                                            ]
                                          [
-                                           Utils.button_component
-                                             ~attribs:
-                                               [
-                                                 a_id
-                                                   ("upload-block-button-"
-                                                  ^ name);
-                                                 a_onclick
-                                                   ("uploadVolume('" ^ name
-                                                  ^ "')");
-                                               ]
-                                             ~content:(txt "Upload")
-                                             ~btn_type:`Primary_outlined ();
+                                           Modal_dialog.modal_dialog
+                                             ~modal_title:
+                                               ("Upload data to " ^ name)
+                                             ~button_content:(txt "Upload")
+                                             ~button_type:`Primary_outlined
+                                             ~content:
+                                               (Volume_ui.upload_to_volume name)
+                                             ();
                                            Modal_dialog.modal_dialog
                                              ~modal_title:"Download volume"
                                              ~button_content:(txt "Download")

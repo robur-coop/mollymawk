@@ -307,3 +307,65 @@ let download_volume name =
               ~btn_type:`Primary_full ();
           ];
       ])
+
+let upload_to_volume name =
+  Tyxml_html.(
+    section
+      ~a:[ a_id "block-upload"; a_class [ "w-full mx-auto" ] ]
+      [
+        div
+          ~a:[ a_class [ "my-4" ] ]
+          [
+            label
+              ~a:[ a_class [ "block text-sm font-medium" ]; a_label_for "data" ]
+              [ txt "Select a file to dump to the volume" ];
+            input
+              ~a:
+                [
+                  a_input_type `File;
+                  a_name "block_data";
+                  a_id "block_data";
+                  a_class
+                    [
+                      "ring-primary-100 mt-1.5 transition appearance-none \
+                       block w-full px-3 py-3 rounded-xl shadow-sm border \
+                       hover:border-primary-200\n\
+                      \                                           \
+                       focus:border-primary-300 bg-primary-50 bg-opacity-0 \
+                       hover:bg-opacity-50 focus:bg-opacity-50 \
+                       ring-primary-200 focus:ring-primary-200\n\
+                      \                                           \
+                       focus:ring-[1px] focus:outline-none";
+                    ];
+                ]
+              ();
+          ];
+        div
+          ~a:[ a_class [ "my-4 flex items-center" ] ]
+          [
+            input
+              ~a:
+                [
+                  a_input_type `Checkbox;
+                  a_name "block_compressed";
+                  a_id "block_compressed";
+                  a_class [ "accent-primary-500 mr-2 w-6 h-6" ];
+                ]
+              ();
+            label
+              ~a:[ a_class [ "text-sm font-medium" ]; a_label_for "data" ]
+              [ txt "Is this file compressed?" ];
+          ];
+        div
+          ~a:[ a_class [ "my-6" ] ]
+          [
+            Utils.button_component
+              ~attribs:
+                [
+                  a_id ("upload-block-button-" ^ name);
+                  a_onclick ("uploadToVolume('" ^ name ^ "')");
+                ]
+              ~extra_css:"w-full" ~content:(txt "Upload data")
+              ~btn_type:`Primary_full ();
+          ];
+      ])

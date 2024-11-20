@@ -1359,6 +1359,71 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:"Couldn't find block name in json" `Bad_request
 
+  let upload_to_volume albatross reqd (user : User_model.user) =
+    read_multipart_data reqd >>= fun result ->
+    match result with
+    | Error (`Msg msg) ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:("Couldn't multipart: " ^ msg)
+          `Bad_request
+    | Ok (m, assoc) -> (
+        let m, _r = to_map ~assoc m in
+        match (Map.find_opt "json_data" m, Map.find_opt "block_data" m) with
+        | Some (_, json_data), Some (_, block_data) -> (
+            let json =
+              try Ok (Yojson.Basic.from_string json_data)
+              with Yojson.Json_error s -> Error (`Msg s)
+            in
+            match json with
+            | Ok (`Assoc json_dict) -> (
+                match
+                  Utils.Json.
+                    ( get "block_name" json_dict,
+                      get "block_compressed" json_dict,
+                      get "molly_csrf" json_dict )
+                with
+                | ( Some (`String block_name),
+                    Some (`Bool block_compressed),
+                    Some (`String form_csrf) ) ->
+                    let now = Ptime.v (P.now_d_ps ()) in
+                    Middleware.csrf_verification user now form_csrf
+                      (fun reqd ->
+                        Albatross.query albatross ~domain:user.name
+                          ~name:block_name
+                          (`Block_cmd
+                            (`Block_set (block_compressed, block_data)))
+                        >>= function
+                        | Error msg ->
+                            Logs.err (fun m ->
+                                m "Error querying albatross: %s" msg);
+                            Middleware.http_response reqd ~title:"Error"
+                              ~data:("Error querying albatross: " ^ msg)
+                              `Internal_server_error
+                        | Ok (_hdr, res) -> (
+                            match Albatross_json.res res with
+                            | Ok res ->
+                                Middleware.http_response reqd ~title:"Success"
+                                  ~data:(Yojson.Basic.to_string res)
+                                  `OK
+                            | Error (`String res) ->
+                                Middleware.http_response reqd ~title:"Error"
+                                  ~data:(Yojson.Basic.to_string (`String res))
+                                  `Internal_server_error))
+                      reqd
+                | _ ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:
+                        (Fmt.str "Upload to volume: Unexpected fields. Got %s"
+                           (Yojson.Basic.to_string (`Assoc json_dict)))
+                      `Bad_request)
+            | _ ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:"Upload to volume: expected a dictionary" `Bad_request)
+        | _ ->
+            Logs.warn (fun m -> m "couldn't find fields");
+            Middleware.http_response reqd ~title:"Error"
+              ~data:"Couldn't find fields" `Bad_request)
+
   let account_usage store albatross reqd (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
     generate_csrf_token store user now reqd >>= function
@@ -1520,6 +1585,9 @@ struct
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)
+        | "/api/volume/upload" ->
+            check_meth `POST (fun () ->
+                authenticate store reqd (upload_to_volume !albatross reqd))
         | "/admin/users" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (users store reqd))

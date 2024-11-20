@@ -702,6 +702,48 @@ async function downloadVolume(block_name) {
 	}
 }
 
+async function uploadToVolume(block_name) {
+	const uploadButton = document.getElementById(`upload-block-button-${block_name}`);
+	const block_compressed = document.getElementById("block_compressed").checked;
+	const block_data = document.getElementById("block_data").files[0];
+	const molly_csrf = document.getElementById("molly-csrf").value;
+
+	if (!block_data) {
+		postAlert("bg-secondary-300", "Please select a file to be uploaded");
+		buttonLoading(uploadButton, false, "Upload data")
+		return;
+	}
+
+	try {
+		buttonLoading(uploadButton, true, "Uploading...")
+		let formData = new FormData();
+		let json_data = JSON.stringify(
+			{
+				"block_name": block_name,
+				"block_compressed": block_compressed,
+				"molly_csrf": molly_csrf
+			})
+		formData.append("block_data", block_data)
+		formData.append("json_data", json_data)
+		const response = await fetch("/api/volume/upload", {
+			method: 'POST',
+			body: formData
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			postAlert("bg-primary-300", `Upload is succesful: ${data.data}`);
+			setTimeout(() => window.location.reload(), 1000);
+			buttonLoading(uploadButton, false, "Upload data")
+		} else {
+			postAlert("bg-secondary-300", data.data);
+			buttonLoading(uploadButton, false, "Upload data")
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		buttonLoading(uploadButton, false, "Upload data")
+	}
+}
+
 function isValidName(s) {
 	const length = s.length;
 	if (length === 0 || length >= 64) return false;
