@@ -33,7 +33,8 @@ let volume_index_layout volumes policy =
                   [
                     Modal_dialog.modal_dialog ~modal_title:"Create a volume"
                       ~button_content:(txt "Create block device")
-                      ~content:(Volume_create.create_volume total_free_space);
+                      ~content:(Volume_ui.create_volume total_free_space)
+                      ();
                   ];
               ];
             div
@@ -277,7 +278,7 @@ let volume_index_layout volumes policy =
                                                [
                                                  "px-6 py-4 whitespace-nowrap \
                                                   text-sm font-medium \
-                                                  text-gray-800 space-x-5";
+                                                  text-gray-800 flex space-x-5";
                                                ];
                                            ]
                                          [
@@ -293,18 +294,12 @@ let volume_index_layout volumes policy =
                                                ]
                                              ~content:(txt "Upload")
                                              ~btn_type:`Primary_outlined ();
-                                           Utils.button_component
-                                             ~attribs:
-                                               [
-                                                 a_id
-                                                   ("download-block-button-"
-                                                  ^ name);
-                                                 a_onclick
-                                                   ("deleteVolume('" ^ name
-                                                  ^ "')");
-                                               ]
-                                             ~content:(txt "Download")
-                                             ~btn_type:`Primary_full ();
+                                           Modal_dialog.modal_dialog
+                                             ~modal_title:"Download volume"
+                                             ~button_content:(txt "Download")
+                                             ~content:
+                                               (Volume_ui.download_volume name)
+                                             ();
                                            Utils.button_component
                                              ~attribs:
                                                [

@@ -1328,6 +1328,37 @@ struct
             Middleware.http_response reqd ~title:"Error"
               ~data:"Couldn't find fields" `Bad_request)
 
+  let download_volume json_dict albatross reqd (user : User_model.user) =
+    match
+      Utils.Json.(get "block_name" json_dict, get "compression_level" json_dict)
+    with
+    | Some (`String block_name), Some (`Int compression_level) -> (
+        Albatross.query albatross ~domain:user.name ~name:block_name
+          (`Block_cmd (`Block_dump compression_level))
+        >>= function
+        | Error msg ->
+            Logs.err (fun m -> m "Error querying albatross: %s" msg);
+            Middleware.http_response reqd ~title:"Error"
+              ~data:("Error querying albatross: " ^ msg)
+              `Internal_server_error
+        | Ok (_hdr, res) -> (
+            match Albatross_json.res res with
+            | Ok res ->
+                let file_content = Yojson.Basic.to_string res in
+                let filename = block_name ^ "_dump" in
+                let disposition = "attachment; filename=\"" ^ filename ^ "\"" in
+                reply reqd ~content_type:"application/octet-stream"
+                  ~header_list:[ ("Content-Disposition", disposition) ]
+                  file_content `OK
+                |> Lwt.return
+            | Error (`String res) ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:(Yojson.Basic.to_string (`String res))
+                  `Internal_server_error))
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:"Couldn't find block name in json" `Bad_request
+
   let account_usage store albatross reqd (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
     generate_csrf_token store user now reqd >>= function
@@ -1480,6 +1511,15 @@ struct
         | "/api/volume/create" ->
             check_meth `POST (fun () ->
                 authenticate store reqd (create_volume !albatross reqd))
+        | "/api/volume/download" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, json_dict) ->
+                    authenticate ~form_csrf ~api_meth:true store reqd
+                      (download_volume json_dict !albatross reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
         | "/admin/users" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (users store reqd))

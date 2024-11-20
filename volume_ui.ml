@@ -3,7 +3,6 @@ let create_volume total_free_space =
     section
       ~a:[ a_id "block-create"; a_class [ "w-full mx-auto" ] ]
       [
-        p ~a:[ a_id "form-alert" ] [];
         div
           ~a:[ a_class [ "my-6" ] ]
           [
@@ -227,6 +226,84 @@ let create_volume total_free_space =
             Utils.button_component
               ~attribs:
                 [ a_id "create-block-button"; a_onclick "createVolume()" ]
-              ~content:(txt "Create Volume") ~btn_type:`Primary_full ();
+              ~extra_css:"w-full" ~content:(txt "Create Volume")
+              ~btn_type:`Primary_full ();
+          ];
+      ])
+
+let download_volume name =
+  Tyxml_html.(
+    section
+      ~a:[ a_id "block-download"; a_class [ "w-full mx-auto" ] ]
+      [
+        div
+          [
+            label
+              ~a:
+                [
+                  a_class [ "block my-2 font-medium" ]; a_label_for "block name";
+                ]
+              [ txt name ];
+            p ~a:[ a_id "download-alert"; a_class [ "my-2 hidden" ] ] [];
+            label
+              ~a:
+                [
+                  a_class [ "block text-sm font-medium" ];
+                  a_label_for "compression_level";
+                ]
+              [ txt "Set Compression level" ];
+            div
+              ~a:
+                [
+                  a_class [ "space-x-5 my-4" ];
+                  Unsafe.string_attrib "x-data" "{level : 1}";
+                ]
+              [
+                Utils.button_component
+                  ~attribs:
+                    [
+                      Unsafe.string_attrib "x-on:click"
+                        "if (level < 9) level = level + 1";
+                    ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                  ~btn_type:`Primary_outlined ();
+                span
+                  ~a:
+                    [
+                      a_id "compression-level";
+                      a_contenteditable true;
+                      a_class [ "text-4xl border px-4" ];
+                      a_user_data "x-on:keydown.enter.prevent" "";
+                      Unsafe.string_attrib "x-on:input"
+                        "let value =\n\
+                        \                                                                  \
+                         $event.target.innerText.replace(/[^0-9]/g,'');\n\
+                        \                                                                  \
+                         $event.target.innerText = value;\n\
+                        \                                                                  \
+                         level = parseInt(value) || 1;";
+                      Unsafe.string_attrib "x-text" "level";
+                      Unsafe.string_attrib "x-on:blur"
+                        "$event.target.innerText = level;";
+                    ]
+                  [];
+                Utils.button_component
+                  ~attribs:
+                    [
+                      Unsafe.string_attrib "x-on:click"
+                        "if (level > 1) level = level - 1";
+                    ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+                  ~btn_type:`Danger_outlined ();
+              ];
+            Utils.button_component
+              ~attribs:
+                [
+                  a_id ("download-block-button-" ^ name);
+                  a_onclick ("downloadVolume('" ^ name ^ "')");
+                ]
+              ~extra_css:"my-4"
+              ~content:(txt ("Download " ^ name))
+              ~btn_type:`Primary_full ();
           ];
       ])
