@@ -1,8 +1,7 @@
 let modal_dialog ~modal_title ~button_content ?(button_type = `Primary_full)
     ~content () =
   Tyxml_html.(
-    section
-      ~a:[ a_id "modal-dialog"; a_class [ "mx-auto" ] ]
+    section ~a:[]
       [
         div
           ~a:[ Unsafe.string_attrib "x-data" "{modalIsOpen: false}" ]
