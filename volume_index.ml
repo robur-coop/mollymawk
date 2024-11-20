@@ -30,92 +30,11 @@ let volume_index_layout volumes policy =
                       ];
                   ];
                 div
-                  ~a:[ Unsafe.string_attrib "x-data" "{modalIsOpen: false}" ]
                   [
-                    button
-                      ~a:
-                        [
-                          Unsafe.string_attrib "x-on:click" "modalIsOpen = true";
-                          a_class
-                            [
-                              "py-3 px-3 rounded bg-primary-500 \
-                               hover:bg-primary-800 w-full text-gray-50 \
-                               font-semibold";
-                            ];
-                        ]
-                      [ txt "Create block device" ];
-                    div
-                      ~a:
-                        [
-                          Unsafe.string_attrib "x-cloak" "";
-                          Unsafe.string_attrib "x-show" "modalIsOpen";
-                          Unsafe.string_attrib
-                            "x-transition.opacity.duration.200ms" "";
-                          Unsafe.string_attrib "x-trap.inert.noscroll"
-                            "modalIsOpen";
-                          Unsafe.string_attrib "x-on:keydown.esc.window"
-                            "modalIsOpen = false";
-                          Unsafe.string_attrib "x-on:click.self"
-                            "modalIsOpen = false";
-                          a_class
-                            [
-                              "fixed inset-0 z-30 flex items-end \
-                               justify-center bg-black/20 p-4 backdrop-blur-md \
-                               sm:items-center";
-                            ];
-                          a_role [ "dialog" ];
-                          a_aria "modal" [ "true" ];
-                        ]
-                      [
-                        div
-                          ~a:
-                            [
-                              Unsafe.string_attrib "x-show" "modalIsOpen";
-                              Unsafe.string_attrib "x-transition:enter"
-                                "transition ease-out duration-200 delay-100 \
-                                 motion-reduce:transition-opacity";
-                              Unsafe.string_attrib "x-transition:enter-start"
-                                "opacity-0 scale-50";
-                              Unsafe.string_attrib "x-transition:enter-end"
-                                "opacity-100 scale-100";
-                              a_class
-                                [
-                                  "flex max-w-xl flex-col gap-4 \
-                                   overflow-hidden rounded-md border \
-                                   border-neutral-300 bg-gray-50";
-                                ];
-                            ]
-                          [
-                            div
-                              ~a:
-                                [
-                                  a_class
-                                    [
-                                      "flex items-center justify-between \
-                                       border-b p-4";
-                                    ];
-                                ]
-                              [
-                                h3
-                                  ~a:[ a_class [ "font-bold text-gray-700" ] ]
-                                  [ txt "Create a volume" ];
-                                i
-                                  ~a:
-                                    [
-                                      a_class
-                                        [
-                                          "fa-solid fa-x text-sm cursor-pointer";
-                                        ];
-                                      Unsafe.string_attrib "x-on:click"
-                                        "modalIsOpen = false";
-                                    ]
-                                  [];
-                              ];
-                            div
-                              ~a:[ a_class [ "px-4" ] ]
-                              [ Volume_create.create_volume total_free_space ];
-                          ];
-                      ];
+                    Modal_dialog.modal_dialog ~modal_title:"Create a volume"
+                      ~button_content:(txt "Create block device")
+                      ~content:(Volume_ui.create_volume total_free_space)
+                      ();
                   ];
               ];
             div
@@ -359,56 +278,26 @@ let volume_index_layout volumes policy =
                                                [
                                                  "px-6 py-4 whitespace-nowrap \
                                                   text-sm font-medium \
-                                                  text-gray-800 space-x-5";
+                                                  text-gray-800 flex space-x-5";
                                                ];
                                            ]
                                          [
-                                           (if used then
-                                              a
-                                                ~a:
-                                                  [
-                                                    a_href
-                                                      ("/unikernel/info/" ^ name);
-                                                    a_class
-                                                      [
-                                                        "inline-flex \
-                                                         items-center gap-x-2 \
-                                                         text-sm font-semibold \
-                                                         rounded border \
-                                                         border-1 py-1 px-2 \
-                                                         border-primary-400 \
-                                                         text-primary-600 \
-                                                         hover:text-primary-500 \
-                                                         focus:outline-none \
-                                                         focus:text-primary-800 \
-                                                         disabled:opacity-50 \
-                                                         disabled:pointer-events-none";
-                                                      ];
-                                                  ]
-                                                [ txt "View" ]
-                                            else
-                                              button
-                                                ~a:
-                                                  [
-                                                    a_disabled ();
-                                                    a_class
-                                                      [
-                                                        "inline-flex \
-                                                         cursor-not-allowed \
-                                                         items-center gap-x-2 \
-                                                         text-sm font-semibold \
-                                                         rounded border \
-                                                         disabled border-1 \
-                                                         py-1 px-2 \
-                                                         border-gray-400 \
-                                                         text-gray-300 \
-                                                         disabled:opacity-50 \
-                                                         disabled:pointer-events-none";
-                                                      ];
-                                                  ]
-                                                [ txt "View" ]);
-                                           button
-                                             ~a:
+                                           Modal_dialog.modal_dialog
+                                             ~modal_title:
+                                               ("Upload data to " ^ name)
+                                             ~button_content:(txt "Upload")
+                                             ~button_type:`Primary_outlined
+                                             ~content:
+                                               (Volume_ui.upload_to_volume name)
+                                             ();
+                                           Modal_dialog.modal_dialog
+                                             ~modal_title:"Download volume"
+                                             ~button_content:(txt "Download")
+                                             ~content:
+                                               (Volume_ui.download_volume name)
+                                             ();
+                                           Utils.button_component
+                                             ~attribs:
                                                [
                                                  a_id
                                                    ("delete-block-button-"
@@ -416,16 +305,9 @@ let volume_index_layout volumes policy =
                                                  a_onclick
                                                    ("deleteVolume('" ^ name
                                                   ^ "')");
-                                                 a_class
-                                                   [
-                                                     "py-1 px-2 mx-2 rounded \
-                                                      bg-secondary-500 \
-                                                      hover:bg-secondary-800 \
-                                                      text-gray-50 \
-                                                      font-semibold";
-                                                   ];
                                                ]
-                                             [ txt "Delete" ];
+                                             ~content:(txt "Delete")
+                                             ~btn_type:`Danger_full ();
                                          ];
                                      ])
                                  volumes);

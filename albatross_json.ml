@@ -102,7 +102,7 @@ let success = function
   | `Block_devices bs -> block_infos bs
   | `Old_unikernels _ -> `String "old unikernels not supported"
   | `Unikernel_image _ -> `String "unikernel image not supported"
-  | `Block_device_image _ -> `String "block device image not supported"
+  | `Block_device_image (_, bd) -> `String bd
 
 let console_data_to_json (ts, data) =
   `Assoc

@@ -48,7 +48,7 @@ let register_page ~csrf ~icon =
                                a_id "alert-container";
                                a_class
                                  [
-                                   "absolute top-1/4 rounded-md right-4 z-50 \
+                                   "fixed top-1/4 rounded-md right-4 z-50 \
                                     w-fit space-y-2 p-4 shadow text-wrap \
                                     hidden";
                                  ];
@@ -212,18 +212,10 @@ let register_page ~csrf ~icon =
                                ];
                              div
                                [
-                                 button
-                                   ~a:
-                                     [
-                                       a_id "register-button";
-                                       a_class
-                                         [
-                                           "py-3 rounded bg-primary-500 \
-                                            hover:bg-primary-800 w-full \
-                                            text-gray-50 font-semibold";
-                                         ];
-                                     ]
-                                   [ txt "Create Account" ];
+                                 Utils.button_component
+                                   ~attribs:[ a_id "register-button" ]
+                                   ~content:(txt "Create Account")
+                                   ~btn_type:`Primary_full ();
                                ];
                            ];
                        ];

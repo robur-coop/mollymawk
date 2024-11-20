@@ -98,6 +98,42 @@ let csrf_form_input csrf =
         ]
       ())
 
+let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
+  Tyxml_html.(
+    button
+      ~a:
+        (List.fold_left (fun acc attrib -> acc @ [ attrib ]) [] attribs
+        @ [
+            (match btn_type with
+            | `Primary_full ->
+                a_class
+                  [
+                    "py-2 px-2 rounded bg-primary-500 hover:bg-primary-800 \
+                     text-gray-50 font-semibold " ^ extra_css;
+                  ]
+            | `Primary_outlined ->
+                a_class
+                  [
+                    "py-2 px-2 rounded border border-1 border-primary-400 \
+                     text-primary-600 hover:text-gray-50 focus:outline-none \
+                     hover:bg-primary-800 font-semibold " ^ extra_css;
+                  ]
+            | `Danger_full ->
+                a_class
+                  [
+                    "py-2 px-2 rounded bg-secondary-500 hover:bg-secondary-800 \
+                     text-gray-50 font-semibold " ^ extra_css;
+                  ]
+            | `Danger_outlined ->
+                a_class
+                  [
+                    "py-2 px-2 rounded border border-1 border-secondary-400 \
+                     text-secondary-600 hover:text-gray-50 focus:outline-none \
+                     hover:bg-secondary-800 font-semibold " ^ extra_css;
+                  ]);
+          ])
+      [ content ])
+
 let display_banner = function
   | Some message ->
       Tyxml_html.(
@@ -114,8 +150,9 @@ let display_banner = function
             ]
           [
             p [ txt message ];
-            button
-              ~a:[ a_id "close-banner-btn"; a_onclick "closeBanner()" ]
-              [ i ~a:[ a_class [ "fa-solid fa-x text-sm" ] ] [] ];
+            button_component
+              ~attribs:[ a_id "close-banner-btn"; a_onclick "closeBanner()" ]
+              ~content:(i ~a:[ a_class [ "fa-solid fa-x text-sm" ] ] [])
+              ~btn_type:`Primary_outlined ();
           ])
   | None -> Tyxml_html.div []

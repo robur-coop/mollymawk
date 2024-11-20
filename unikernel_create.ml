@@ -99,18 +99,10 @@ let unikernel_create_layout =
             div
               ~a:[ a_class [ "flex justify-items-center mx-auto w-60" ] ]
               [
-                button
-                  ~a:
-                    [
-                      a_id "deploy-button";
-                      a_onclick "deployUnikernel()";
-                      a_class
-                        [
-                          "py-3 rounded bg-primary-500 hover:bg-primary-800 \
-                           w-full text-gray-50 font-semibold";
-                        ];
-                    ]
-                  [ txt "Deploy" ];
+                Utils.button_component
+                  ~attribs:
+                    [ a_id "deploy-button"; a_onclick "deployUnikernel()" ]
+                  ~content:(txt "Deploy") ~btn_type:`Primary_full ();
               ];
           ];
       ])

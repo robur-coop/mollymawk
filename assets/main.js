@@ -163,7 +163,7 @@ function postAlert(bg_color, content) {
 		alertContainer.classList.remove("block", `${bg_color}`)
 		alertContainer.classList.add("hidden")
 		alertContainer.removeChild(alert);
-	}, 2500);
+	}, 4000);
 }
 
 async function deployUnikernel() {
@@ -579,10 +579,32 @@ async function createVolume() {
 	const block_compressed = document.getElementById("block_compressed").checked;
 	const block_data = document.getElementById("block_data").files[0];
 
-	if (!isValidName(block_name)) {
+	if (!block_name || block_name === '') {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please enter a name for this volume"
+		formAlert.textContent = "Please enter a name"
+		buttonLoading(createButton, false, "Create volume")
+		return;
+	}
+	if (!isLengthValid(block_name)) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "The name must have at least 1 character and must not exceed 63 characters."
+		buttonLoading(createButton, false, "Create volume")
+		return;
+	}
+	if (!isStartingCharacterValid(block_name)) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "The name cannot start with a hyphen (-)."
+		buttonLoading(createButton, false, "Create volume")
+		return;
+	}
+	if (!areCharactersValid(block_name)) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Only letters (a-z, A-Z), digits (0-9), hyphens (-), and periods (.) are permitted.\
+		 Special characters, spaces, and symbols other than the specified ones are not allowed"
 		buttonLoading(createButton, false, "Create volume")
 		return;
 	}
@@ -639,6 +661,89 @@ async function createVolume() {
 	}
 }
 
+async function downloadVolume(block_name) {
+	const downloadButton = document.getElementById(`download-block-button-${block_name}`);
+	const compression_level = document.getElementById("compression-level").innerText;
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	try {
+		buttonLoading(downloadButton, true, "Downloading...")
+		const response = await fetch("/api/volume/download", {
+			method: 'POST',
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(
+				{
+					"block_name": block_name,
+					"compression_level": Number(compression_level),
+					"molly_csrf": molly_csrf
+				})
+		})
+		if (!response.ok) {
+			const data = await response.json();
+			postAlert("bg-secondary-300", data.data);
+			buttonLoading(downloadButton, false, `Download ${block_name}`)
+		} else {
+			// trigger a download
+			const filename = response.headers.get('content-disposition')
+				.split(';')[1].split('=')[1].replace(/"/g, '');
+			const blob = await response.blob();
+			const downloadLink = document.createElement('a');
+			downloadLink.href = URL.createObjectURL(blob);
+			downloadLink.download = filename;
+			downloadLink.click();
+			URL.revokeObjectURL(downloadLink.href);
+			postAlert("bg-primary-300", "Download in progress");
+			buttonLoading(downloadButton, false, `Download ${block_name}`)
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		buttonLoading(downloadButton, false, `Download ${block_name}`)
+	}
+}
+
+async function uploadToVolume(block_name) {
+	const uploadButton = document.getElementById(`upload-block-button-${block_name}`);
+	const block_compressed = document.getElementById("block_compressed").checked;
+	const block_data = document.getElementById("block_data").files[0];
+	const molly_csrf = document.getElementById("molly-csrf").value;
+
+	if (!block_data) {
+		postAlert("bg-secondary-300", "Please select a file to be uploaded");
+		buttonLoading(uploadButton, false, "Upload data")
+		return;
+	}
+
+	try {
+		buttonLoading(uploadButton, true, "Uploading...")
+		let formData = new FormData();
+		let json_data = JSON.stringify(
+			{
+				"block_name": block_name,
+				"block_compressed": block_compressed,
+				"molly_csrf": molly_csrf
+			})
+		formData.append("block_data", block_data)
+		formData.append("json_data", json_data)
+		const response = await fetch("/api/volume/upload", {
+			method: 'POST',
+			body: formData
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			postAlert("bg-primary-300", `Upload is succesful: ${data.data}`);
+			setTimeout(() => window.location.reload(), 1000);
+			buttonLoading(uploadButton, false, "Upload data")
+		} else {
+			postAlert("bg-secondary-300", data.data);
+			buttonLoading(uploadButton, false, "Upload data")
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		buttonLoading(uploadButton, false, "Upload data")
+	}
+}
+
 function isValidName(s) {
 	const length = s.length;
 	if (length === 0 || length >= 64) return false;
@@ -652,3 +757,21 @@ function isValidName(s) {
 	return true;
 }
 
+function isLengthValid(s) {
+	const length = s.length;
+	return length > 0 && length < 64;
+}
+
+function isStartingCharacterValid(s) {
+	return s[0] !== '-';
+}
+
+function areCharactersValid(s) {
+	for (let i = 0; i < s.length; i++) {
+		const char = s[i];
+		if (!(/[a-zA-Z0-9.-]/).test(char)) {
+			return false;
+		}
+	}
+	return true;
+}

@@ -167,63 +167,43 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                       ~a:[ a_class [ "flex justify-center space-x-4 my-4" ] ]
                       [
                         (if user.active then
-                           button
-                             ~a:
+                           Utils.button_component
+                             ~attribs:
                                [
                                  a_onclick
                                    ("toggleUserActiveStatus('" ^ user.uuid
                                   ^ "')");
-                                 a_class
-                                   [
-                                     "px-3 py-2 rounded bg-secondary-500 \
-                                      text-secondary-50 hover:bg-secondary-700 \
-                                      font-semibold";
-                                   ];
                                ]
-                             [ txt "Deactivate" ]
+                             ~content:(txt "Deactivate") ~btn_type:`Danger_full
+                             ()
                          else
-                           button
-                             ~a:
+                           Utils.button_component
+                             ~attribs:
                                [
                                  a_onclick
                                    ("toggleUserActiveStatus('" ^ user.uuid
                                   ^ "')");
-                                 a_class
-                                   [
-                                     "px-3 py-2 rounded bg-primary-500 \
-                                      text-primary-50 hover:bg-primary-700 \
-                                      font-semibold";
-                                   ];
                                ]
-                             [ txt "Activate" ]);
+                             ~content:(txt "Activate") ~btn_type:`Primary_full
+                             ());
                         (if user.super_user then
-                           button
-                             ~a:
+                           Utils.button_component
+                             ~attribs:
                                [
                                  a_onclick
                                    ("toggleUserAdminStatus('" ^ user.uuid ^ "')");
-                                 a_class
-                                   [
-                                     "px-3 py-2 rounded bg-secondary-500 \
-                                      text-secondary-50 hover:bg-secondary-700 \
-                                      font-semibold";
-                                   ];
                                ]
-                             [ txt "Remove Admin" ]
+                             ~content:(txt "Remove Admin")
+                             ~btn_type:`Danger_full ()
                          else
-                           button
-                             ~a:
+                           Utils.button_component
+                             ~attribs:
                                [
                                  a_onclick
                                    ("toggleUserAdminStatus('" ^ user.uuid ^ "')");
-                                 a_class
-                                   [
-                                     "px-3 py-2 rounded bg-primary-500 \
-                                      text-primary-50 hover:bg-primary-700 \
-                                      font-semibold";
-                                   ];
                                ]
-                             [ txt "Make Admin" ]);
+                             ~content:(txt "Make Admin") ~btn_type:`Primary_full
+                             ());
                       ];
                   ];
               ];

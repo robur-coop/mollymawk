@@ -154,7 +154,7 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                            a_id "alert-container";
                            a_class
                              [
-                               "absolute top-1/4 rounded-md right-4 z-50 w-fit \
+                               "fixed top-1/4 rounded-md right-4 z-50 w-fit \
                                 space-y-2 p-4 shadow text-wrap hidden";
                              ];
                          ]
@@ -545,19 +545,11 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                                   ];
                               ]
                           else div []);
-                         button
-                           ~a:
-                             [
-                               a_id "logout-button";
-                               a_onclick "logout()";
-                               a_class
-                                 [
-                                   "my-3 py-3 rounded bg-secondary-500 \
-                                    hover:bg-secondary-800 w-full text-gray-50 \
-                                    font-semibold";
-                                 ];
-                             ]
-                           [ txt "Logout" ];
+                         Utils.button_component
+                           ~attribs:
+                             [ a_id "logout-button"; a_onclick "logout()" ]
+                           ~content:(txt "Logout") ~extra_css:"w-full my-2"
+                           ~btn_type:`Danger_full ();
                        ];
                    ];
                  section

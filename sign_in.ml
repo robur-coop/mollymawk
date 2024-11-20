@@ -44,7 +44,7 @@ let login_page ~icon () =
                            a_id "alert-container";
                            a_class
                              [
-                               "absolute top-1/4 rounded-md right-4 z-50 w-fit \
+                               "fixed top-1/4 rounded-md right-4 z-50 w-fit \
                                 space-y-2 p-4 shadow text-wrap hidden";
                              ];
                          ]
@@ -172,18 +172,10 @@ let login_page ~icon () =
                                ];
                              div
                                [
-                                 button
-                                   ~a:
-                                     [
-                                       a_id "login-button";
-                                       a_class
-                                         [
-                                           "py-3 rounded bg-primary-500 \
-                                            hover:bg-primary-800 w-full \
-                                            text-gray-50 font-semibold";
-                                         ];
-                                     ]
-                                   [ txt "Sign In" ];
+                                 Utils.button_component
+                                   ~attribs:[ a_id "login-button" ]
+                                   ~content:(txt "Sign In")
+                                   ~btn_type:`Primary_full ();
                                ];
                            ];
                        ];
