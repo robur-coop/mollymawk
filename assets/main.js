@@ -265,13 +265,9 @@ async function destroyUnikernel(name) {
 function buttonLoading(btn, load, text) {
 	if (load) {
 		btn.disabled = true;
-		btn.classList.remove("bg-primary-500", "text-gray-50");
-		btn.classList.add("bg-primary-50", "text-primary-950");
 		btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-2"></i> ${text}`;
 	} else {
 		btn.disabled = false;
-		btn.classList.remove("bg-primary-50", "text-primary-950");
-		btn.classList.add("bg-primary-500", "text-gray-50");
 		btn.innerHTML = text;
 	}
 }
@@ -741,6 +737,139 @@ async function uploadToVolume(block_name) {
 	} catch (error) {
 		postAlert("bg-secondary-300", error);
 		buttonLoading(uploadButton, false, "Upload data")
+	}
+}
+
+
+async function createToken() {
+	const tokenButton = document.getElementById('create-token-button');
+	const token_name = document.getElementById("token_name").value;
+	const token_expiry = document.getElementById("token_expiry").value;
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	const formAlert = document.getElementById("tokens-form-alert");
+
+	if (!token_name || token_name == "") {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Please enter a name"
+		buttonLoading(tokenButton, false, "Create Token")
+		return;
+	}
+	if (!token_expiry || token_expiry == "") {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Please select a validity period"
+		buttonLoading(tokenButton, false, "Create Token")
+		return;
+	}
+	try {
+		buttonLoading(tokenButton, true, "Creating...")
+		const response = await fetch("/api/tokens/create", {
+			method: 'POST',
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(
+				{
+					"token_name": token_name,
+					"token_expiry": Number(token_expiry),
+					"molly_csrf": molly_csrf
+				})
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			postAlert("bg-primary-300", "Token created succesfully");
+			setTimeout(() => window.location.reload(), 1000);
+			buttonLoading(tokenButton, false, "Create Token")
+		} else {
+			postAlert("bg-secondary-300", data.data);
+			buttonLoading(tokenButton, false, "Create Token")
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		buttonLoading(tokenButton, false, "Create Token")
+	}
+}
+
+async function deleteToken(value) {
+	const tokenButton = document.getElementById(`delete-token-button-${value}`);
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	try {
+		buttonLoading(tokenButton, true, "Deleting...")
+		const response = await fetch("/api/tokens/delete", {
+			method: 'POST',
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(
+				{
+					"token_value": value,
+					"molly_csrf": molly_csrf
+				})
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			postAlert("bg-primary-300", "Token deleted succesfully");
+			setTimeout(() => window.location.reload(), 1000);
+			buttonLoading(tokenButton, false, "Delete")
+		} else {
+			postAlert("bg-secondary-300", data.data);
+			buttonLoading(tokenButton, false, "Delete")
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		buttonLoading(tokenButton, false, "Delete")
+	}
+}
+
+async function updateToken(value) {
+	const tokenButton = document.getElementById("update-token-button");
+	const token_name = document.getElementById("token_name").value;
+	const token_expiry = document.getElementById("token_expiry").value;
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	const formAlert = document.getElementById("tokens-form-alert");
+
+	if (!token_name || token_name == "") {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Please enter a name"
+		buttonLoading(tokenButton, false, "Update Token")
+		return;
+	}
+	if (!token_expiry || token_expiry == "") {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Please select a validity period"
+		buttonLoading(tokenButton, false, "Update Token")
+		return;
+	}
+	try {
+		buttonLoading(tokenButton, true, "Updating...")
+		const response = await fetch("/api/tokens/update", {
+			method: 'POST',
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(
+				{
+					"token_value": value,
+					"token_name": token_name,
+					"token_expiry": Number(token_expiry),
+					"molly_csrf": molly_csrf
+				})
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			postAlert("bg-primary-300", "Token updated succesfully");
+			setTimeout(() => window.location.reload(), 1000);
+			buttonLoading(tokenButton, false, "Update Token")
+		} else {
+			postAlert("bg-secondary-300", data.data);
+			buttonLoading(tokenButton, false, "Update Token")
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", data.data);
+		buttonLoading(tokenButton, false, "Update Token")
 	}
 }
 
