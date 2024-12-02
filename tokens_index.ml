@@ -112,7 +112,20 @@ let tokens_index_layout tokens current_time =
                                                 select-none";
                                              ];
                                          ]
-                                       [ txt "Type" ];
+                                       [
+                                         txt "Key";
+                                         span
+                                           ~a:[ a_class [ "px-2" ] ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   a_class
+                                                     [ "fa-solid fa-sort" ];
+                                                 ]
+                                               [];
+                                           ];
+                                       ];
                                      th
                                        ~a:
                                          [
@@ -127,7 +140,7 @@ let tokens_index_layout tokens current_time =
                                              ];
                                          ]
                                        [
-                                         txt "Key";
+                                         txt "Usage";
                                          span
                                            ~a:[ a_class [ "px-2" ] ]
                                            [
@@ -261,7 +274,9 @@ let tokens_index_layout tokens current_time =
                                               text-gray-800";
                                            ];
                                        ]
-                                     [ txt token.token_type ];
+                                     [
+                                       txt (token.token_type ^ " " ^ token.value);
+                                     ];
                                    td
                                      ~a:
                                        [
@@ -272,7 +287,7 @@ let tokens_index_layout tokens current_time =
                                               text-gray-800";
                                            ];
                                        ]
-                                     [ txt token.value ];
+                                     [ txt (string_of_int token.usage_count) ];
                                    td
                                      ~a:
                                        [
