@@ -14,7 +14,8 @@ module TimeHelper = struct
             (Format.asprintf "invalid created_at format: %a"
                Ptime.pp_rfc3339_error err))
 
-  let string_of_ptime (t : Ptime.t) : string = Ptime.to_rfc3339 t ~frac_s:0
+  let string_of_ptime (t : Ptime.t) : string =
+    Ptime.to_rfc3339 ~space:true t ~frac_s:0
 
   (* calculate the diff between two timestamps *)
   let diff_in_seconds ~current_time ~check_time =
@@ -41,6 +42,12 @@ module TimeHelper = struct
         | Error _ -> Error (`Msg "invalid date string"))
     | `Null -> Ok None
     | _ -> Error (`Msg "invalid json for Ptime.t option")
+
+  let future_time ptime seconds =
+    let created_span = Ptime.to_span ptime in
+    let expiry = Ptime.Span.of_int_s seconds in
+    let future_span = Ptime.Span.add created_span expiry in
+    Ptime.of_span future_span
 
   let time_ago ~current_time ~check_time =
     let diff = diff_in_seconds ~current_time ~check_time in

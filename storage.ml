@@ -1,12 +1,13 @@
 open Utils.Json
 
-let current_version = 5
+let current_version = 6
 (* version history:
    1 was initial (fields until email_verification_uuid)
    2 added active
    3 added super_user (but did not serialise it)
    4 properly serialised super_user
    5 cookie has two new fields last_access and user_agent
+   6 tokens has 3 new fields: name, last_access and usage_count
 *)
 
 let t_to_json users configuration =
@@ -25,6 +26,7 @@ let t_of_json json =
       | Some (`Int v), Some (`List users), Some configuration ->
           let* () =
             if v = current_version then Ok ()
+            else if v = 5 then Ok ()
             else if v = 4 then Ok ()
             else if v = 3 then Ok ()
             else if v = 2 then Ok ()
@@ -42,8 +44,8 @@ let t_of_json json =
                 let* user =
                   if v = 1 then User_model.user_v1_of_json js
                   else if v = 2 || v = 3 then User_model.user_v2_of_json js
-                  else if v = 4 then
-                    User_model.(user_of_json cookie_v1_of_json) js
+                  else if v = 4 || v = 5 then
+                    User_model.(user_v3_of_json cookie_v1_of_json) js
                   else User_model.(user_of_json cookie_of_json) js
                 in
                 Ok (user :: acc))
