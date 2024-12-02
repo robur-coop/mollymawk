@@ -1733,7 +1733,7 @@ struct
                 extract_csrf_token reqd >>= function
                 | Ok (form_csrf, json_dict) ->
                     authenticate ~form_csrf ~api_meth:true store reqd
-                      (delete_token json_dict store reqd)
+                      (update_token json_dict store reqd)
                 | Error (`Msg msg) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(String.escaped msg) `Bad_request)

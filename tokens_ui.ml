@@ -86,7 +86,7 @@ let edit_token (token : User_model.token) =
         div
           ~a:[ a_class [ "my-6" ] ]
           [
-            p ~a:[ a_id "tokens-form-alert"; a_class [ "my-4 hidden" ] ] [];
+            p ~a:[ a_id "tokens-update-form-alert"; a_class [ "my-4 hidden" ] ] [];
             label
               ~a:[ a_class [ "block text-sm font-medium" ]; a_label_for "name" ]
               [ txt "Name" ];
@@ -96,7 +96,7 @@ let edit_token (token : User_model.token) =
                   a_autocomplete `On;
                   a_input_type `Text;
                   a_name "token_name";
-                  a_id "token_name";
+                  a_id "token_u_name";
                   a_value token.name;
                   a_class
                     [
@@ -127,7 +127,7 @@ let edit_token (token : User_model.token) =
               ~a:
                 [
                   a_name "token_expiry";
-                  a_id "token_expiry";
+                  a_id "token_u_expiry";
                   a_class
                     [
                       "ring-primary-100 mt-1.5 transition block w-full px-3 \

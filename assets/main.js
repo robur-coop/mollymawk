@@ -824,10 +824,10 @@ async function deleteToken(value) {
 
 async function updateToken(value) {
 	const tokenButton = document.getElementById("update-token-button");
-	const token_name = document.getElementById("token_name").value;
-	const token_expiry = document.getElementById("token_expiry").value;
+	const token_name = document.getElementById("token_u_name").value;
+	const token_expiry = document.getElementById("token_u_expiry").value;
 	const molly_csrf = document.getElementById("molly-csrf").value;
-	const formAlert = document.getElementById("tokens-form-alert");
+	const formAlert = document.getElementById("tokens-update-form-alert");
 
 	if (!token_name || token_name == "") {
 		formAlert.classList.remove("hidden", "text-primary-500");
