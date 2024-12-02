@@ -4,7 +4,8 @@ type token = {
   name : string;
   token_type : string;
   value : string;
-  expires_in : int; (* the number of seconds until this token is invalid, starts counting from created_at*)
+  expires_in : int;
+      (* the number of seconds until this token is invalid, starts counting from created_at*)
   created_at : Ptime.t;
   last_access : Ptime.t;
   usage_count : int;
