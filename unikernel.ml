@@ -1452,6 +1452,126 @@ struct
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
 
+  let api_tokens store reqd (user : User_model.user) =
+    let now = Ptime.v (P.now_d_ps ()) in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Dashboard.dashboard_layout ~csrf user
+                ~page_title:"Tokens | Mollymawk"
+                ~content:(Tokens_index.tokens_index_layout user.tokens now)
+                ~icon:"/images/robur.png" ())
+             ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+             `OK)
+    | Error err ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                ~content:(Error_page.error_layout err)
+                ~icon:"/images/robur.png" ())
+             `Internal_server_error)
+
+  let create_token json_dict store reqd (user : User_model.user) =
+    match
+      Utils.Json.(get "token_name" json_dict, get "token_expiry" json_dict)
+    with
+    | Some (`String name), Some (`Int expiry) -> (
+        let now = Ptime.v (P.now_d_ps ()) in
+        let token = User_model.generate_token ~name ~expiry ~current_time:now in
+        let updated_user =
+          User_model.update_user user ~tokens:(token :: user.tokens)
+            ~updated_at:now ()
+        in
+        Store.update_user store updated_user >>= function
+        | Ok () ->
+            Middleware.http_response reqd ~title:"Success"
+              ~data:"Token created succesfully" `OK
+        | Error (`Msg err) ->
+            Logs.warn (fun m -> m "Storage error with %s" err);
+            Middleware.http_response reqd ~title:"Error" ~data:err
+              `Internal_server_error)
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:
+            (Fmt.str "Create token: Unexpected fields. Got %s"
+               (Yojson.Basic.to_string (`Assoc json_dict)))
+          `Bad_request
+
+  let delete_token json_dict store reqd (user : User_model.user) =
+    match Utils.Json.(get "token_value" json_dict) with
+    | Some (`String value) -> (
+        let now = Ptime.v (P.now_d_ps ()) in
+        let tokens =
+          List.filter
+            (fun (token : User_model.token) ->
+              not (String.equal token.value value))
+            user.tokens
+        in
+        let updated_user =
+          User_model.update_user user ~tokens ~updated_at:now ()
+        in
+        Store.update_user store updated_user >>= function
+        | Ok () ->
+            Middleware.http_response reqd ~title:"Success"
+              ~data:"Token deleted succesfully" `OK
+        | Error (`Msg err) ->
+            Logs.warn (fun m -> m "Storage error with %s" err);
+            Middleware.http_response reqd ~title:"Error" ~data:err
+              `Internal_server_error)
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:
+            (Fmt.str "Delete token: Unexpected fields. Got %s"
+               (Yojson.Basic.to_string (`Assoc json_dict)))
+          `Bad_request
+
+  let update_token json_dict store reqd (user : User_model.user) =
+    match
+      Utils.Json.
+        ( get "token_name" json_dict,
+          get "token_expiry" json_dict,
+          get "token_value" json_dict )
+    with
+    | Some (`String name), Some (`Int expiry), Some (`String value) -> (
+        let now = Ptime.v (P.now_d_ps ()) in
+        let token =
+          List.find_opt
+            (fun (token : User_model.token) -> String.equal token.value value)
+            user.tokens
+        in
+        match token with
+        | Some token_ -> (
+            let updated_token = { token_ with name; expires_in = expiry } in
+            let user_tokens =
+              List.filter
+                (fun (token : User_model.token) ->
+                  not (String.equal token.value value))
+                user.tokens
+            in
+            let updated_user =
+              User_model.update_user user
+                ~tokens:(updated_token :: user_tokens)
+                ~updated_at:now ()
+            in
+            Store.update_user store updated_user >>= function
+            | Ok () ->
+                Middleware.http_response reqd ~title:"Success"
+                  ~data:"Token updated succesfully" `OK
+            | Error (`Msg err) ->
+                Logs.warn (fun m -> m "Storage error with %s" err);
+                Middleware.http_response reqd ~title:"Error" ~data:err
+                  `Internal_server_error)
+        | None ->
+            Middleware.http_response reqd ~title:"Error" ~data:"Token not found"
+              `Bad_request)
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:
+            (Fmt.str "Update token: Unexpected fields. Got %s"
+               (Yojson.Basic.to_string (`Assoc json_dict)))
+          `Bad_request
+
   let request_handler stack albatross js_file css_file imgs store
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
@@ -1587,6 +1707,36 @@ struct
         | "/api/volume/upload" ->
             check_meth `POST (fun () ->
                 authenticate store reqd (upload_to_volume !albatross reqd))
+        | "/tokens" ->
+            check_meth `GET (fun () ->
+                authenticate store reqd (api_tokens store reqd))
+        | "/api/tokens/create" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, json_dict) ->
+                    authenticate ~form_csrf ~api_meth:true store reqd
+                      (create_token json_dict store reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
+        | "/api/tokens/delete" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, json_dict) ->
+                    authenticate ~form_csrf ~api_meth:true store reqd
+                      (delete_token json_dict store reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
+        | "/api/tokens/update" ->
+            check_meth `POST (fun () ->
+                extract_csrf_token reqd >>= function
+                | Ok (form_csrf, json_dict) ->
+                    authenticate ~form_csrf ~api_meth:true store reqd
+                      (delete_token json_dict store reqd)
+                | Error (`Msg msg) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(String.escaped msg) `Bad_request)
         | "/admin/users" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (users store reqd))
