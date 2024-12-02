@@ -298,7 +298,17 @@ let tokens_index_layout tokens current_time =
                                               text-gray-800";
                                            ];
                                        ]
-                                     [ txt (string_of_int token.expires_in) ];
+                                     [
+                                       (match
+                                          Utils.TimeHelper.future_time
+                                            token.created_at token.expires_in
+                                        with
+                                       | Some ptime ->
+                                           txt
+                                             (Utils.TimeHelper.string_of_ptime
+                                                ptime)
+                                       | None -> txt "-");
+                                     ];
                                    td
                                      ~a:
                                        [

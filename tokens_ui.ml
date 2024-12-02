@@ -86,7 +86,9 @@ let edit_token (token : User_model.token) =
         div
           ~a:[ a_class [ "my-6" ] ]
           [
-            p ~a:[ a_id "tokens-update-form-alert"; a_class [ "my-4 hidden" ] ] [];
+            p
+              ~a:[ a_id "tokens-update-form-alert"; a_class [ "my-4 hidden" ] ]
+              [];
             label
               ~a:[ a_class [ "block text-sm font-medium" ]; a_label_for "name" ]
               [ txt "Name" ];
