@@ -14,7 +14,8 @@ module TimeHelper = struct
             (Format.asprintf "invalid created_at format: %a"
                Ptime.pp_rfc3339_error err))
 
-  let string_of_ptime (t : Ptime.t) : string = Ptime.to_rfc3339 ~space:true t ~frac_s:0
+  let string_of_ptime (t : Ptime.t) : string =
+    Ptime.to_rfc3339 ~space:true t ~frac_s:0
 
   (* calculate the diff between two timestamps *)
   let diff_in_seconds ~current_time ~check_time =
