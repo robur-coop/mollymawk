@@ -1,10 +1,13 @@
 module Rng = Mirage_crypto_rng
 
 type token = {
+  name : string;
   token_type : string;
   value : string;
   expires_in : int;
   created_at : Ptime.t;
+  last_access : Ptime.t;
+  usage_count : int;
       (* In seconds, so after 1 hour would be 3600 seconds of inactivity *)
 }
 
@@ -178,9 +181,12 @@ let token_to_json t : Yojson.Basic.t =
       ("value", `String t.value);
       ("expires_in", `Int t.expires_in);
       ("created_at", `String (Utils.TimeHelper.string_of_ptime t.created_at));
+      ("last_access", `String (Utils.TimeHelper.string_of_ptime t.last_access));
+      ("name", `String t.name);
+      ("usage_count", `Int t.usage_count);
     ]
 
-let token_of_json = function
+let token_v1_of_json = function
   | `Assoc xs -> (
       match
         Utils.Json.
@@ -204,6 +210,60 @@ let token_of_json = function
               value;
               expires_in;
               created_at = Option.get created_at;
+              last_access = Option.get created_at;
+              name = "";
+              usage_count = 0;
+            }
+      | _ ->
+          Error
+            (`Msg
+              ("invalid json for token: requires token_type, value, and \
+                expires_in: "
+              ^ Yojson.Basic.to_string (`Assoc xs))))
+  | js ->
+      Error
+        (`Msg
+          ("invalid json for token: expected a dict: "
+         ^ Yojson.Basic.to_string js))
+
+let token_of_json = function
+  | `Assoc xs -> (
+      match
+        Utils.Json.
+          ( get "token_type" xs,
+            get "value" xs,
+            get "expires_in" xs,
+            get "created_at" xs,
+            get "last_access" xs,
+            get "name" xs,
+            get "usage_count" xs )
+      with
+      | ( Some (`String token_type),
+          Some (`String value),
+          Some (`Int expires_in),
+          Some (`String created_at_str),
+          Some (`String last_access_str),
+          Some (`String name),
+          Some (`Int usage_count) ) ->
+          let created_at =
+            match Utils.TimeHelper.ptime_of_string created_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let last_access =
+            match Utils.TimeHelper.ptime_of_string last_access_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          Ok
+            {
+              token_type;
+              value;
+              expires_in;
+              created_at = Option.get created_at;
+              last_access = Option.get last_access;
+              name;
+              usage_count;
             }
       | _ ->
           Error
@@ -277,7 +337,7 @@ let user_v1_of_json = function
             List.fold_left
               (fun acc js ->
                 let* acc = acc in
-                let* token = token_of_json js in
+                let* token = token_v1_of_json js in
                 Ok (token :: acc))
               (Ok []) tokens
           in
@@ -373,7 +433,7 @@ let user_v2_of_json = function
             List.fold_left
               (fun acc js ->
                 let* acc = acc in
-                let* token = token_of_json js in
+                let* token = token_v1_of_json js in
                 Ok (token :: acc))
               (Ok []) tokens
           in
@@ -416,6 +476,104 @@ let user_v2_of_json = function
               email_verification_uuid;
               active;
               super_user = true;
+            }
+      | _ ->
+          Error
+            (`Msg
+              ("invalid json for user: " ^ Yojson.Basic.to_string (`Assoc xs))))
+  | js ->
+      Error
+        (`Msg
+          ("invalid json for user, expected a dict: "
+         ^ Yojson.Basic.to_string js))
+
+let user_v3_of_json cookie_fn = function
+  | `Assoc xs -> (
+      match
+        Utils.Json.
+          ( get "name" xs,
+            get "email" xs,
+            get "email_verified" xs,
+            get "password" xs,
+            get "uuid" xs,
+            get "tokens" xs,
+            get "cookies" xs,
+            get "created_at" xs,
+            get "updated_at" xs,
+            get "email_verification_uuid" xs,
+            get "active" xs,
+            get "super_user" xs )
+      with
+      | ( Some (`String name),
+          Some (`String email),
+          Some email_verified,
+          Some (`String password),
+          Some (`String uuid),
+          Some (`List tokens),
+          Some (`List cookies),
+          Some (`String updated_at_str),
+          Some (`String created_at_str),
+          Some email_verification_uuid,
+          Some (`Bool active),
+          Some (`Bool super_user) ) ->
+          let created_at =
+            match Utils.TimeHelper.ptime_of_string created_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let updated_at =
+            match Utils.TimeHelper.ptime_of_string updated_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let* email_verified = Utils.TimeHelper.ptime_of_json email_verified in
+          let* tokens =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* token = token_v1_of_json js in
+                Ok (token :: acc))
+              (Ok []) tokens
+          in
+          let* cookies =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* cookie = cookie_fn js in
+                Ok (cookie :: acc))
+              (Ok []) cookies
+          in
+          let* email_verification_uuid =
+            match email_verification_uuid with
+            | `Null -> Ok None
+            | `String s ->
+                let* uuid =
+                  Option.to_result
+                    ~none:
+                      (`Msg ("invalid UUID for email verification UUID: " ^ s))
+                    (Uuidm.of_string s)
+                in
+                Ok (Some uuid)
+            | js ->
+                Error
+                  (`Msg
+                    ("invalid json data for email verification UUID, expected \
+                      a string: " ^ Yojson.Basic.to_string js))
+          in
+          Ok
+            {
+              name;
+              email;
+              email_verified;
+              password;
+              uuid;
+              tokens;
+              cookies;
+              created_at = Option.get created_at;
+              updated_at = Option.get updated_at;
+              email_verification_uuid;
+              active;
+              super_user;
             }
       | _ ->
           Error
@@ -535,15 +693,6 @@ let generate_uuid () =
   let data = Rng.generate 16 in
   Uuidm.v4 (Bytes.unsafe_of_string data)
 
-let generate_token ?(expires_in = 3600) ~created_at () =
-  let token = generate_uuid () in
-  {
-    token_type = "Bearer";
-    value = Uuidm.to_string token;
-    expires_in;
-    created_at;
-  }
-
 let generate_cookie ~name ~uuid ?(expires_in = 3600) ~created_at ~user_agent ()
     =
   let id = generate_uuid () in
@@ -557,11 +706,22 @@ let generate_cookie ~name ~uuid ?(expires_in = 3600) ~created_at ~user_agent ()
     user_agent;
   }
 
+let generate_token ~name ~expiry ~current_time =
+  let value = generate_uuid () in
+  {
+    name;
+    token_type = "Bearer";
+    value = Uuidm.to_string value;
+    expires_in = expiry;
+    created_at = current_time;
+    last_access = current_time;
+    usage_count = 0;
+  }
+
 let create_user ~name ~email ~password ~created_at ~active ~super_user
     ~user_agent =
   let uuid = Uuidm.to_string (generate_uuid ()) in
   let password = hash_password ~password ~uuid in
-  let auth_token = generate_token ~created_at () in
   let session =
     generate_cookie ~name:session_cookie ~expires_in:week ~uuid ~created_at
       ~user_agent ()
@@ -572,7 +732,7 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
       email_verified = None;
       password;
       uuid;
-      tokens = [ auth_token ];
+      tokens = [];
       cookies = [ session ];
       created_at;
       updated_at = created_at;
