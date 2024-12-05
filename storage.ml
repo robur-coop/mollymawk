@@ -164,6 +164,18 @@ module Make (BLOCK : Mirage_block.S) = struct
             | Some c -> Some (user, c)))
       None store.users
 
+  let find_by_api_token store token =
+    List.find_map
+      (fun (user : User_model.user) ->
+        match
+          List.find_opt
+            (fun (token_ : User_model.token) -> String.equal token token_.value)
+            user.tokens
+        with
+        | Some token_ -> Some (user, token_)
+        | None -> None)
+      store.users
+
   let count_users store = List.length store.users
 
   let find_email_verification_token store uuid =
