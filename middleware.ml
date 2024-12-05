@@ -178,3 +178,10 @@ let csrf_verification user now form_csrf handler reqd =
   | None ->
       http_response ~data:"Missing CSRF token. Please refresh and try again."
         ~title:"Missing CSRF Token" reqd `Bad_request
+
+let api_authentication reqd =
+  match header "Authorization" reqd with
+  | Some auth when String.starts_with ~prefix:"Bearer " auth ->
+      let token = String.sub auth 7 (String.length auth - 7) in
+      Some token
+  | _ -> None
