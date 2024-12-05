@@ -764,6 +764,11 @@ let is_valid_cookie (cookie : cookie) now =
     ~check_time:cookie.created_at
   < cookie.expires_in
 
+let is_valid_token (token : token) now =
+  Utils.TimeHelper.diff_in_seconds ~current_time:now
+    ~check_time:token.created_at
+  < token.expires_in
+
 let is_email_verified user = Option.is_some user.email_verified
 let password_validation password = String.length password >= 8
 
