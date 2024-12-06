@@ -102,6 +102,20 @@ struct
         Logs.warn (fun m -> m "JSON is not a dictionary: %s" data);
         Lwt.return (Error (`Msg "not a dictionary"))
 
+  let extract_json_body reqd =
+    decode_request_body reqd >>= fun data ->
+    match
+      try Ok (Yojson.Basic.from_string data)
+      with Yojson.Json_error s -> Error (`Msg s)
+    with
+    | Error (`Msg err) ->
+        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
+        Lwt.return (Error (`Msg err))
+    | Ok (`Assoc json_dict) -> Lwt.return (Ok json_dict)
+    | Ok _ ->
+        Logs.warn (fun m -> m "JSON is not a dictionary: %s" data);
+        Lwt.return (Error (`Msg "not a dictionary"))
+
   module Albatross = Albatross.Make (T) (P) (S)
 
   let to_map ~assoc m =
