@@ -130,64 +130,99 @@ struct
   let authenticate ?(email_verified = true) ?(check_admin = false)
       ?(api_meth = false) ?form_csrf store reqd f =
     let now = Ptime.v (P.now_d_ps ()) in
-    match Middleware.session_cookie_value reqd with
-    | Error (`Msg err) ->
-        Logs.err (fun m ->
-            m "auth-middleware: No molly-session in cookie header. %s" err);
-        Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
-          ~with_error:true ~msg:"No session cookie found in request." reqd ()
-    | Ok cookie_value -> (
-        match Store.find_by_cookie store cookie_value with
-        | None ->
-            Logs.err (fun m ->
-                m "auth-middleware: Failed to find user with key %s"
-                  cookie_value);
-            Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
-              ~with_error:true ~msg:"No user account found." reqd ()
-        | Some (user, cookie) ->
-            if not (User_model.is_valid_cookie cookie now) then (
-              Logs.err (fun m ->
-                  m
-                    "auth-middleware: Session value doesn't match user session \
-                     %s"
-                    cookie_value);
-              Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
-                ~with_error:true ~msg:"Session cookie is no longer valid." reqd
-                ())
-            else
-              let middlewares =
-                (if check_admin then
-                   [ Middleware.is_user_admin_middleware api_meth user ]
-                 else [])
-                @ (if email_verified && false (* TODO *) then
-                     [ Middleware.email_verified_middleware user ]
-                   else [])
-                @ Option.fold ~none:[]
-                    ~some:(fun csrf ->
-                      [ Middleware.csrf_verification user now csrf ])
-                    form_csrf
-                @ [ Middleware.auth_middleware user ]
+    let middlewares user =
+      (if check_admin then [ Middleware.is_user_admin_middleware api_meth user ]
+       else [])
+      @ (if email_verified && false (* TODO *) then
+           [ Middleware.email_verified_middleware user ]
+         else [])
+      @ Option.fold ~none:[]
+          ~some:(fun csrf -> [ Middleware.csrf_verification user now csrf ])
+          form_csrf
+      @ [ Middleware.auth_middleware user ]
+    in
+    match Middleware.api_authentication reqd with
+    | Some token_value -> (
+        match Store.find_by_api_token store token_value with
+        | Some (user, token) ->
+            if User_model.is_valid_token token now then (
+              let token = { token with usage_count = token.usage_count + 1 } in
+              let tokens =
+                List.map
+                  (fun (token' : User_model.token) ->
+                    if String.equal token_value token'.value then token
+                    else token')
+                  user.tokens
               in
-              Middleware.apply_middleware middlewares
-                (fun reqd ->
-                  let cookie =
-                    { cookie with user_agent = Middleware.user_agent reqd }
-                  in
-                  let cookies =
-                    List.map
-                      (fun (cookie' : User_model.cookie) ->
-                        if String.equal cookie_value cookie'.value then cookie
-                        else cookie')
-                      user.cookies
-                  in
-                  let updated_user = User_model.update_user user ~cookies () in
-                  Store.update_user store updated_user >>= function
-                  | Ok () -> f user
-                  | Error (`Msg err) ->
-                      Logs.err (fun m -> m "Error with storage: %s" err);
-                      Middleware.http_response reqd ~title:"Error" ~data:err
-                        `Not_found)
-                reqd)
+              let updated_user = User_model.update_user user ~tokens () in
+              Store.update_user store updated_user >>= function
+              | Ok () -> f user
+              | Error (`Msg err) ->
+                  Logs.err (fun m -> m "Error with storage: %s" err);
+                  Middleware.http_response reqd ~title:"Error" ~data:err
+                    `Not_found)
+            else
+              Middleware.http_response reqd ~title:"Error"
+                ~data:
+                  "Authorization token has expired. Please generate a new \
+                   token from your account dashboard."
+                `Not_found
+        | None ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:
+                ("Invalid authorization token. User not found for token "
+               ^ token_value)
+              `Not_found)
+    | None -> (
+        match Middleware.session_cookie_value reqd with
+        | Error (`Msg err) ->
+            Logs.err (fun m ->
+                m "auth-middleware: No molly-session in cookie header. %s" err);
+            Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
+              ~with_error:true ~msg:"No session cookie found in request." reqd
+              ()
+        | Ok cookie_value -> (
+            match Store.find_by_cookie store cookie_value with
+            | None ->
+                Logs.err (fun m ->
+                    m "auth-middleware: Failed to find user with key %s"
+                      cookie_value);
+                Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
+                  ~with_error:true ~msg:"No user account found." reqd ()
+            | Some (user, cookie) ->
+                if not (User_model.is_valid_cookie cookie now) then (
+                  Logs.err (fun m ->
+                      m
+                        "auth-middleware: Session value doesn't match user \
+                         session %s"
+                        cookie_value);
+                  Middleware.redirect_to_page ~path:"/sign-in"
+                    ~clear_session:true ~with_error:true
+                    ~msg:"Session cookie is no longer valid." reqd ())
+                else
+                  Middleware.apply_middleware (middlewares user)
+                    (fun reqd ->
+                      let cookie =
+                        { cookie with user_agent = Middleware.user_agent reqd }
+                      in
+                      let cookies =
+                        List.map
+                          (fun (cookie' : User_model.cookie) ->
+                            if String.equal cookie_value cookie'.value then
+                              cookie
+                            else cookie')
+                          user.cookies
+                      in
+                      let updated_user =
+                        User_model.update_user user ~cookies ()
+                      in
+                      Store.update_user store updated_user >>= function
+                      | Ok () -> f user
+                      | Error (`Msg err) ->
+                          Logs.err (fun m -> m "Error with storage: %s" err);
+                          Middleware.http_response reqd ~title:"Error" ~data:err
+                            `Not_found)
+                    reqd))
 
   let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status
       =
