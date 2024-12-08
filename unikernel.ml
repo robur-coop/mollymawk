@@ -689,7 +689,7 @@ struct
                  (Dashboard.dashboard_layout ~csrf user
                     ~page_title:"Account | Mollymawk"
                     ~content:
-                      (User_account.user_account_layout ~csrf user
+                      (User_account.user_account_layout user
                          ~active_cookie_value now)
                     ~icon:"/images/robur.png" ())
                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
@@ -839,6 +839,36 @@ struct
                 ~content:(Error_page.error_layout error)
                 ~icon:"/images/robur.png" ())
              `Unauthorized)
+
+  let close_session store reqd ~json_dict (user : User_model.user) =
+    Logs.warn (fun m -> m "We got here");
+    match Utils.Json.(get "session_value" json_dict) with
+    | Some (`String session_value) -> (
+        let now = Ptime.v (P.now_d_ps ()) in
+        let cookies =
+          List.filter
+            (fun (cookie : User_model.cookie) ->
+              not (String.equal cookie.value session_value))
+            user.cookies
+        in
+        let updated_user =
+          User_model.update_user user ~cookies ~updated_at:now ()
+        in
+        Store.update_user store updated_user >>= function
+        | Ok () ->
+            Middleware.http_response reqd ~title:"Success"
+              ~data:(`String "Session closed succesfully") `OK
+        | Error (`Msg err) ->
+            Logs.warn (fun m -> m "Storage error with %s" err);
+            Middleware.http_response reqd ~title:"Error" ~data:(`String err)
+              `Internal_server_error)
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:
+            (`String
+              (Fmt.str "Close session: Unexpected fields. Got %s"
+                 (Yojson.Basic.to_string (`Assoc json_dict))))
+          `Bad_request
 
   let users store reqd ~json_dict:_ (user : User_model.user) =
     let now = Ptime.v (P.now_d_ps ()) in
@@ -1730,7 +1760,7 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_csrf:true store reqd
                   (update_password store reqd))
-        | "/account/sessions/close" ->
+        | "/api/account/sessions/close" ->
             check_meth `POST (fun () ->
                 authenticate ~check_csrf:true store reqd
                   (close_sessions store reqd))
@@ -1738,22 +1768,10 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_csrf:true store reqd
                   (close_sessions ~logout:true store reqd))
-        | path when String.starts_with ~prefix:"/account/session/close/" path ->
-            check_meth `GET (fun () ->
-                match
-                  String.split_on_char '/'
-                    (String.sub path 23 (String.length path - 23))
-                with
-                (* TODO: Find a way to do CSRF verification here or change to Post request*)
-                | [ to_logout_cookie ] ->
-                    authenticate store reqd
-                      (close_sessions ~to_logout_cookie store reqd)
-                | _ ->
-                    Middleware.http_response reqd ~title:"Error"
-                      ~data:
-                        (`String
-                          "An error occured. Please refresh and try again")
-                      `Bad_request)
+        | "/api/account/session/close" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_csrf:true store reqd
+                  (close_session store reqd))
         | "/volumes" ->
             check_meth `GET (fun () ->
                 authenticate store reqd (volumes store !albatross reqd))

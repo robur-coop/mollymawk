@@ -483,7 +483,7 @@ async function closeSessions() {
 	try {
 		buttonLoading(sessionButton, true, "Closing sessions..")
 		const molly_csrf = document.getElementById("molly-csrf").value;
-		const response = await fetch('/account/sessions/close', {
+		const response = await fetch('/api/account/sessions/close', {
 			method: 'POST',
 			body: JSON.stringify(
 				{
@@ -503,6 +503,35 @@ async function closeSessions() {
 	} catch (error) {
 		postAlert("bg-secondary-300", error);
 		buttonLoading(sessionButton, false, "Logout all other sessions")
+	}
+}
+
+async function closeSession(session_value) {
+	const sessionButton = document.getElementById(`session-button-${session_value}`);
+	try {
+		buttonLoading(sessionButton, true, "Closing session..")
+		const molly_csrf = document.getElementById("molly-csrf").value;
+		const response = await fetch('/api/account/session/close', {
+			method: 'POST',
+			body: JSON.stringify(
+				{
+					session_value,
+					molly_csrf,
+				}),
+			headers: { 'Content-Type': 'application/json' }
+		});
+
+		const data = await response.json();
+		if (response.status === 200) {
+			postAlert("bg-primary-300", data.data);
+			setTimeout(() => window.location.reload(), 1000);
+		} else {
+			postAlert("bg-secondary-300", data.data);
+			buttonLoading(sessionButton, false, "Close session")
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		buttonLoading(sessionButton, false, "Close session")
 	}
 }
 
