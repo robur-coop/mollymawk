@@ -142,20 +142,79 @@ struct
     go (Map.empty, []) m
 
   let authenticate ?(email_verified = true) ?(check_admin = false)
-      ?(api_meth = false) store reqd f =
+      ?(api_meth = false) ?(check_csrf = false) store reqd f =
     let now = Ptime.v (P.now_d_ps ()) in
-    let middlewares form_csrf user =
+    let middlewares ?(form_csrf = None) user =
       (if check_admin then [ Middleware.is_user_admin_middleware api_meth user ]
        else [])
       @ (if email_verified && false (* TODO *) then
            [ Middleware.email_verified_middleware user ]
          else [])
-      @ (if api_meth then [ Middleware.csrf_verification user now form_csrf ]
-         else [])
+      @ Option.fold ~none:[]
+          ~some:(fun csrf -> [ Middleware.csrf_verification user now csrf ])
+          form_csrf
       @ [ Middleware.auth_middleware user ]
     in
-    match Middleware.api_authentication reqd with
-    | Some token_value -> (
+    let handle_csrf () =
+      if check_csrf then
+        extract_csrf_token reqd >>= function
+        | Ok (form_csrf, json_dict) ->
+            Lwt.return (Ok (Some (form_csrf, json_dict)))
+        | Error (`Msg msg) -> Lwt.return (Error (`Msg msg))
+      else Lwt.return (Ok None)
+    in
+    let process_request ?(json_dict = []) ?form_csrf () =
+      match Middleware.session_cookie_value reqd with
+      | Error (`Msg err) ->
+          Logs.err (fun m ->
+              m "auth-middleware: No molly-session in cookie header. %s" err);
+          Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
+            ~with_error:true ~msg:"No session cookie found in request." reqd ()
+      | Ok cookie_value -> (
+          match Store.find_by_cookie store cookie_value with
+          | None ->
+              Logs.err (fun m ->
+                  m "auth-middleware: Failed to find user with key %s"
+                    cookie_value);
+              Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
+                ~with_error:true ~msg:"No user account found." reqd ()
+          | Some (user, cookie) ->
+              if not (User_model.is_valid_cookie cookie now) then (
+                Logs.err (fun m ->
+                    m
+                      "auth-middleware: Session value doesn't match user \
+                       session %s"
+                      cookie_value);
+                Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
+                  ~with_error:true ~msg:"Session cookie is no longer valid."
+                  reqd ())
+              else
+                Middleware.apply_middleware
+                  (middlewares ~form_csrf user)
+                  (fun reqd ->
+                    let cookie =
+                      { cookie with user_agent = Middleware.user_agent reqd }
+                    in
+                    let cookies =
+                      List.map
+                        (fun (cookie' : User_model.cookie) ->
+                          if String.equal cookie_value cookie'.value then cookie
+                          else cookie')
+                        user.cookies
+                    in
+                    let updated_user =
+                      User_model.update_user user ~cookies ()
+                    in
+                    Store.update_user store updated_user >>= function
+                    | Ok () -> f ~json_dict user
+                    | Error (`Msg err) ->
+                        Logs.err (fun m -> m "Error with storage: %s" err);
+                        Middleware.http_response reqd ~title:"Error" ~data:err
+                          `Not_found)
+                  reqd)
+    in
+    match (Middleware.api_authentication reqd, api_meth) with
+    | Some token_value, true -> (
         extract_json_body reqd >>= function
         | Ok json_dict -> (
             match Store.find_by_api_token store token_value with
@@ -193,64 +252,11 @@ struct
         | Error (`Msg msg) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:(String.escaped msg) `Bad_request)
-    | None -> (
-        extract_csrf_token reqd >>= function
-        | Ok (form_csrf, json_dict) -> (
-            match Middleware.session_cookie_value reqd with
-            | Error (`Msg err) ->
-                Logs.err (fun m ->
-                    m "auth-middleware: No molly-session in cookie header. %s"
-                      err);
-                Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
-                  ~with_error:true ~msg:"No session cookie found in request."
-                  reqd ()
-            | Ok cookie_value -> (
-                match Store.find_by_cookie store cookie_value with
-                | None ->
-                    Logs.err (fun m ->
-                        m "auth-middleware: Failed to find user with key %s"
-                          cookie_value);
-                    Middleware.redirect_to_page ~path:"/sign-in"
-                      ~clear_session:true ~with_error:true
-                      ~msg:"No user account found." reqd ()
-                | Some (user, cookie) ->
-                    if not (User_model.is_valid_cookie cookie now) then (
-                      Logs.err (fun m ->
-                          m
-                            "auth-middleware: Session value doesn't match user \
-                             session %s"
-                            cookie_value);
-                      Middleware.redirect_to_page ~path:"/sign-in"
-                        ~clear_session:true ~with_error:true
-                        ~msg:"Session cookie is no longer valid." reqd ())
-                    else
-                      Middleware.apply_middleware
-                        (middlewares form_csrf user)
-                        (fun reqd ->
-                          let cookie =
-                            {
-                              cookie with
-                              user_agent = Middleware.user_agent reqd;
-                            }
-                          in
-                          let cookies =
-                            List.map
-                              (fun (cookie' : User_model.cookie) ->
-                                if String.equal cookie_value cookie'.value then
-                                  cookie
-                                else cookie')
-                              user.cookies
-                          in
-                          let updated_user =
-                            User_model.update_user user ~cookies ()
-                          in
-                          Store.update_user store updated_user >>= function
-                          | Ok () -> f ~json_dict user
-                          | Error (`Msg err) ->
-                              Logs.err (fun m -> m "Error with storage: %s" err);
-                              Middleware.http_response reqd ~title:"Error"
-                                ~data:err `Not_found)
-                        reqd))
+    | _ -> (
+        handle_csrf () >>= function
+        | Ok None -> process_request ()
+        | Ok (Some (form_csrf, json_dict)) ->
+            process_request ~json_dict ~form_csrf ()
         | Error (`Msg msg) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:(String.escaped msg) `Bad_request)
@@ -1556,7 +1562,8 @@ struct
         Store.update_user store updated_user >>= function
         | Ok () ->
             Middleware.http_response reqd ~title:"Success"
-              ~data:"Token created succesfully" `OK
+              ~data:(User_model.token_to_json token |> Yojson.Basic.to_string)
+              `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
             Middleware.http_response reqd ~title:"Error" ~data:err
@@ -1712,13 +1719,16 @@ struct
                 authenticate store reqd (account_page store reqd))
         | "/account/password/update" ->
             check_meth `POST (fun () ->
-                authenticate store reqd (update_password store reqd))
+                authenticate ~check_csrf:true store reqd
+                  (update_password store reqd))
         | "/account/sessions/close" ->
             check_meth `POST (fun () ->
-                authenticate store reqd (close_sessions store reqd))
+                authenticate ~check_csrf:true store reqd
+                  (close_sessions store reqd))
         | "/logout" ->
             check_meth `POST (fun () ->
-                authenticate store reqd (close_sessions ~logout:true store reqd))
+                authenticate ~check_csrf:true store reqd
+                  (close_sessions ~logout:true store reqd))
         | path when String.starts_with ~prefix:"/account/session/close/" path ->
             check_meth `GET (fun () ->
                 match
@@ -1738,30 +1748,35 @@ struct
                 authenticate store reqd (volumes store !albatross reqd))
         | "/api/volume/delete" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store reqd
+                authenticate ~check_csrf:true ~api_meth:true store reqd
                   (delete_volume !albatross reqd))
         | "/api/volume/create" ->
             check_meth `POST (fun () ->
-                authenticate store reqd (create_volume !albatross reqd))
+                authenticate ~check_csrf:true store reqd
+                  (create_volume !albatross reqd))
         | "/api/volume/download" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store reqd
+                authenticate ~check_csrf:true ~api_meth:true store reqd
                   (download_volume !albatross reqd))
         | "/api/volume/upload" ->
             check_meth `POST (fun () ->
-                authenticate store reqd (upload_to_volume !albatross reqd))
+                authenticate ~check_csrf:true store reqd
+                  (upload_to_volume !albatross reqd))
         | "/tokens" ->
             check_meth `GET (fun () ->
                 authenticate store reqd (api_tokens store reqd))
         | "/api/tokens/create" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store reqd (create_token store reqd))
+                authenticate ~check_csrf:true ~api_meth:true store reqd
+                  (create_token store reqd))
         | "/api/tokens/delete" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store reqd (delete_token store reqd))
+                authenticate ~check_csrf:true ~api_meth:true store reqd
+                  (delete_token store reqd))
         | "/api/tokens/update" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store reqd (update_token store reqd))
+                authenticate ~check_csrf:true ~api_meth:true store reqd
+                  (update_token store reqd))
         | "/admin/users" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (users store reqd))
@@ -1783,19 +1798,23 @@ struct
                 authenticate ~check_admin:true store reqd (settings store reqd))
         | "/api/admin/settings/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store reqd
+                authenticate ~check_csrf:true ~check_admin:true ~api_meth:true
+                  store reqd
                   (update_settings stack store albatross reqd))
         | "/api/admin/u/policy/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store reqd
+                authenticate ~check_csrf:true ~check_admin:true ~api_meth:true
+                  store reqd
                   (update_policy store !albatross reqd))
         | "/api/admin/user/activate/toggle" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store reqd
+                authenticate ~check_csrf:true ~check_admin:true ~api_meth:true
+                  store reqd
                   (toggle_account_activation store reqd))
         | "/api/admin/user/admin/toggle" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store reqd
+                authenticate ~check_csrf:true ~check_admin:true ~api_meth:true
+                  store reqd
                   (toggle_admin_activation store reqd))
         | "/api/unikernels" ->
             check_meth `GET (fun () ->
@@ -1811,12 +1830,13 @@ struct
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
                 authenticate store reqd (deploy_form store reqd))
-        | "/unikernel/destroy" ->
+        | "api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate store reqd (unikernel_destroy !albatross reqd))
-        | "/unikernel/restart" ->
+        | "api/unikernel/restart" ->
             check_meth `POST (fun () ->
-                authenticate store reqd (unikernel_restart !albatross reqd))
+                authenticate ~check_csrf:true store reqd
+                  (unikernel_restart !albatross reqd))
         | path when String.starts_with ~prefix:"/unikernel/console/" path ->
             check_meth `GET (fun () ->
                 let unikernel_name =
@@ -1824,9 +1844,10 @@ struct
                 in
                 authenticate store reqd
                   (unikernel_console !albatross unikernel_name reqd))
-        | "/unikernel/create" ->
+        | "api/unikernel/create" ->
             check_meth `POST (fun () ->
-                authenticate store reqd (unikernel_create !albatross reqd))
+                authenticate ~check_csrf:true store reqd
+                  (unikernel_create !albatross reqd))
         | _ ->
             let error =
               {
