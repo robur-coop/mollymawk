@@ -188,7 +188,8 @@ struct
                   | Error (`Msg err) ->
                       Logs.err (fun m -> m "Error with storage: %s" err);
                       Middleware.http_response reqd ~title:"Error"
-                        ~data:(`String err) `Not_found)
+                        ~data:(`String (String.escaped err))
+                        `Not_found)
                 reqd)
 
   let process_api_request ~json_dict ~token_value ~current_time f store reqd =
@@ -609,7 +610,8 @@ struct
               | Error (`Msg msg) ->
                   Logs.warn (fun m -> m "%s : Storage error with %s" key msg);
                   Middleware.http_response reqd ~title:"Error"
-                    ~data:(`String msg) `Internal_server_error))
+                    ~data:(`String (String.escaped msg))
+                    `Internal_server_error))
     | _ ->
         Logs.warn (fun m -> m "%s: Failed to parse JSON - no UUID found" key);
         Middleware.http_response reqd ~title:"Error"
@@ -736,7 +738,8 @@ struct
                 ~data:(`String "Updated password successfully") `OK
           | Error (`Msg err) ->
               Logs.warn (fun m -> m "Storage error with %s" err);
-              Middleware.http_response reqd ~title:"Error" ~data:(`String err)
+              Middleware.http_response reqd ~title:"Error"
+                ~data:(`String (String.escaped err))
                 `Internal_server_error)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
@@ -756,7 +759,8 @@ struct
     | Ok () -> redirect
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Storage error with %s" err);
-        Middleware.http_response reqd ~title:"Error" ~data:(`String err)
+        Middleware.http_response reqd ~title:"Error"
+          ~data:(`String (String.escaped err))
           `Internal_server_error
 
   let close_sessions ?to_logout_cookie ?(logout = false) store reqd ~json_dict:_
@@ -836,7 +840,8 @@ struct
               ~data:(`String "Session closed succesfully") `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
-            Middleware.http_response reqd ~title:"Error" ~data:(`String err)
+            Middleware.http_response reqd ~title:"Error"
+              ~data:(`String (String.escaped err))
               `Internal_server_error)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
@@ -943,8 +948,9 @@ struct
     | Ok (_hdr, res) -> (
         match Albatross_json.res res with
         | Ok res -> Middleware.http_response reqd ~title:"Success" ~data:res `OK
-        | Error (`String res) ->
-            Middleware.http_response reqd ~title:"Error" ~data:(`String res)
+        | Error (`String err) ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:(`String (String.escaped err))
               `Internal_server_error)
 
   let unikernel_info_one albatross store name reqd ~json_dict:_
@@ -1023,8 +1029,9 @@ struct
             match Albatross_json.res res with
             | Ok res ->
                 Middleware.http_response reqd ~title:"Success" ~data:res `OK
-            | Error (`String res) ->
-                Middleware.http_response reqd ~title:"Error" ~data:(`String res)
+            | Error (`String err) ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:(`String (String.escaped err))
                   `Internal_server_error))
     | _ ->
         Middleware.http_response reqd ~title:"Error"
@@ -1046,8 +1053,9 @@ struct
             match Albatross_json.res res with
             | Ok res ->
                 Middleware.http_response reqd ~title:"Success" ~data:res `OK
-            | Error (`String res) ->
-                Middleware.http_response reqd ~title:"Error" ~data:(`String res)
+            | Error (`String err) ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:(`String (String.escaped err))
                   `Internal_server_error))
     | _ ->
         Middleware.http_response reqd ~title:"Error"
@@ -1093,13 +1101,15 @@ struct
                         | Ok res ->
                             Middleware.http_response reqd ~title:"Success"
                               ~data:res `OK
-                        | Error (`String res) ->
+                        | Error (`String err) ->
                             Middleware.http_response reqd ~title:"Error"
-                              ~data:(`String res) `Internal_server_error))
+                              ~data:(`String (String.escaped err))
+                              `Internal_server_error))
                 | Error (`Msg err) ->
                     Logs.warn (fun m -> m "couldn't decode data %s" err);
                     Middleware.http_response reqd ~title:"Error"
-                      ~data:(`String err) `Internal_server_error)
+                      ~data:(`String (String.escaped err))
+                      `Internal_server_error)
               reqd
         | _ ->
             Logs.warn (fun m -> m "couldn't find fields");
@@ -1119,7 +1129,6 @@ struct
         let console_output =
           List.map Albatross_json.console_data_to_json console_output
         in
-
         Lwt.return
           (reply reqd ~content_type:"application/json"
              (Yojson.Basic.to_string (`List console_output))
@@ -1282,10 +1291,13 @@ struct
                            policy: %s"
                           err);
                     Middleware.http_response reqd ~title:"Error"
-                      ~data:(`String ("error with root policy: " ^ err))
+                      ~data:
+                        (`String
+                          ("error with root policy: " ^ String.escaped err))
                       `Internal_server_error)
             | Error (`Msg err) ->
-                Middleware.http_response reqd ~title:"Error" ~data:(`String err)
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:(`String (String.escaped err))
                   `Bad_request)
         | None ->
             Middleware.http_response reqd ~title:"Error"
@@ -1330,17 +1342,20 @@ struct
         Albatross.query albatross ~domain:user.name ~name:block_name
           (`Block_cmd `Block_remove)
         >>= function
-        | Error msg ->
-            Logs.err (fun m -> m "Error querying albatross: %s" msg);
+        | Error err ->
+            Logs.err (fun m ->
+                m "Error querying albatross: %s" (String.escaped err));
             Middleware.http_response reqd ~title:"Error"
-              ~data:(`String ("Error querying albatross: " ^ msg))
+              ~data:
+                (`String ("Error querying albatross: " ^ String.escaped err))
               `Internal_server_error
         | Ok (_hdr, res) -> (
             match Albatross_json.res res with
             | Ok res ->
                 Middleware.http_response reqd ~title:"Success" ~data:res `OK
-            | Error (`String res) ->
-                Middleware.http_response reqd ~title:"Error" ~data:(`String res)
+            | Error (`String err) ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:(`String (String.escaped err))
                   `Internal_server_error))
     | _ ->
         Middleware.http_response reqd ~title:"Error"
@@ -1383,21 +1398,25 @@ struct
                             (`Block_add
                               (block_size, block_compressed, Some block_data)))
                         >>= function
-                        | Error msg ->
+                        | Error err ->
                             Logs.err (fun m ->
-                                m "Error querying albatross: %s" msg);
+                                m "Error querying albatross: %s"
+                                  (String.escaped err));
                             Middleware.http_response reqd ~title:"Error"
                               ~data:
-                                (`String ("Error querying albatross: " ^ msg))
+                                (`String
+                                  ("Error querying albatross: "
+                                 ^ String.escaped err))
                               `Internal_server_error
                         | Ok (_hdr, res) -> (
                             match Albatross_json.res res with
                             | Ok res ->
                                 Middleware.http_response reqd ~title:"Success"
                                   ~data:res `OK
-                            | Error (`String res) ->
+                            | Error (`String err) ->
                                 Middleware.http_response reqd ~title:"Error"
-                                  ~data:(`String res) `Internal_server_error))
+                                  ~data:(`String (String.escaped err))
+                                  `Internal_server_error))
                       reqd
                 | _ ->
                     Middleware.http_response reqd ~title:"Error"
@@ -1423,10 +1442,12 @@ struct
         Albatross.query albatross ~domain:user.name ~name:block_name
           (`Block_cmd (`Block_dump compression_level))
         >>= function
-        | Error msg ->
-            Logs.err (fun m -> m "Error querying albatross: %s" msg);
+        | Error err ->
+            Logs.err (fun m ->
+                m "Error querying albatross: %s" (String.escaped err));
             Middleware.http_response reqd ~title:"Error"
-              ~data:(`String ("Error querying albatross: " ^ msg))
+              ~data:
+                (`String ("Error querying albatross: " ^ String.escaped err))
               `Internal_server_error
         | Ok (_hdr, res) -> (
             match Albatross_json.res res with
@@ -1438,8 +1459,9 @@ struct
                   ~header_list:[ ("Content-Disposition", disposition) ]
                   file_content `OK
                 |> Lwt.return
-            | Error (`String res) ->
-                Middleware.http_response reqd ~title:"Error" ~data:(`String res)
+            | Error (`String err) ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:(`String (String.escaped err))
                   `Internal_server_error))
     | _ ->
         Middleware.http_response reqd ~title:"Error"
@@ -1478,21 +1500,25 @@ struct
                           (`Block_cmd
                             (`Block_set (block_compressed, block_data)))
                         >>= function
-                        | Error msg ->
+                        | Error err ->
                             Logs.err (fun m ->
-                                m "Error querying albatross: %s" msg);
+                                m "Error querying albatross: %s"
+                                  (String.escaped err));
                             Middleware.http_response reqd ~title:"Error"
                               ~data:
-                                (`String ("Error querying albatross: " ^ msg))
+                                (`String
+                                  ("Error querying albatross: "
+                                 ^ String.escaped err))
                               `Internal_server_error
                         | Ok (_hdr, res) -> (
                             match Albatross_json.res res with
                             | Ok res ->
                                 Middleware.http_response reqd ~title:"Success"
                                   ~data:res `OK
-                            | Error (`String res) ->
+                            | Error (`String err) ->
                                 Middleware.http_response reqd ~title:"Error"
-                                  ~data:(`String res) `Internal_server_error))
+                                  ~data:(`String (String.escaped err))
+                                  `Internal_server_error))
                       reqd
                 | _ ->
                     Middleware.http_response reqd ~title:"Error"
@@ -1577,7 +1603,8 @@ struct
               `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
-            Middleware.http_response reqd ~title:"Error" ~data:(`String err)
+            Middleware.http_response reqd ~title:"Error"
+              ~data:(`String (String.escaped err))
               `Internal_server_error)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
@@ -1606,7 +1633,8 @@ struct
               ~data:(`String "Token deleted succesfully") `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
-            Middleware.http_response reqd ~title:"Error" ~data:(`String err)
+            Middleware.http_response reqd ~title:"Error"
+              ~data:(`String (String.escaped err))
               `Internal_server_error)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
@@ -1651,7 +1679,8 @@ struct
                   `OK
             | Error (`Msg err) ->
                 Logs.warn (fun m -> m "Storage error with %s" err);
-                Middleware.http_response reqd ~title:"Error" ~data:(`String err)
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:(`String (String.escaped err))
                   `Internal_server_error)
         | None ->
             Middleware.http_response reqd ~title:"Error"
