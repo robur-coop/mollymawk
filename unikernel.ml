@@ -841,7 +841,6 @@ struct
              `Unauthorized)
 
   let close_session store reqd ~json_dict (user : User_model.user) =
-    Logs.warn (fun m -> m "We got here");
     match Utils.Json.(get "session_value" json_dict) with
     | Some (`String session_value) -> (
         let now = Ptime.v (P.now_d_ps ()) in
