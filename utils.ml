@@ -80,7 +80,7 @@ module Email = struct
 end
 
 module Status = struct
-  type t = { code : int; title : string; data : string; success : bool }
+  type t = { code : int; title : string; data : Yojson.Basic.t; success : bool }
 
   let to_json (status : t) : string =
     `Assoc
@@ -88,7 +88,7 @@ module Status = struct
         ("status", `Int status.code);
         ("title", `String status.title);
         ("success", `Bool status.success);
-        ("data", `String status.data);
+        ("data", status.data);
       ]
     |> Yojson.Basic.to_string
 end
