@@ -176,6 +176,38 @@ module Make (BLOCK : Mirage_block.S) = struct
         | None -> None)
       store.users
 
+  let increment_token_usage store (token : User_model.token)
+      (user : User_model.user) =
+    let token = { token with usage_count = token.usage_count + 1 } in
+    let tokens =
+      List.map
+        (fun (token' : User_model.token) ->
+          if String.equal token.value token'.value then token else token')
+        user.tokens
+    in
+    let updated_user = User_model.update_user user ~tokens () in
+    update_user store updated_user >>= function
+    | Ok () -> Lwt.return (Ok ())
+    | Error (`Msg err) ->
+        Logs.err (fun m -> m "Error with storage: %s" err);
+        Lwt.return (Error (`Msg err))
+
+  let update_cookie_usage store (cookie : User_model.cookie)
+      (user : User_model.user) reqd =
+    let cookie = { cookie with user_agent = Middleware.user_agent reqd } in
+    let cookies =
+      List.map
+        (fun (cookie' : User_model.cookie) ->
+          if String.equal cookie.value cookie'.value then cookie else cookie')
+        user.cookies
+    in
+    let updated_user = User_model.update_user user ~cookies () in
+    update_user store updated_user >>= function
+    | Ok () -> Lwt.return (Ok ())
+    | Error (`Msg err) ->
+        Logs.err (fun m -> m "Error with storage: %s" err);
+        Lwt.return (Error (`Msg err))
+
   let count_users store = List.length store.users
 
   let find_email_verification_token store uuid =
