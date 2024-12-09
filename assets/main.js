@@ -186,7 +186,7 @@ async function deployUnikernel() {
 		formData.append("arguments", arguments)
 		formData.append("molly_csrf", molly_csrf)
 		try {
-			const response = await fetch("/unikernel/create", {
+			const response = await fetch("/api/unikernel/create", {
 				method: 'POST',
 				body: formData
 			})
@@ -219,7 +219,7 @@ async function deployUnikernel() {
 async function restartUnikernel(name) {
 	try {
 		const molly_csrf = document.getElementById("molly-csrf").value;
-		const response = await fetch(`/unikernel/restart/${name}`, {
+		const response = await fetch(`/api/unikernel/restart/${name}`, {
 			method: 'POST',
 			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
 			headers: { 'Content-Type': 'application/json' }
@@ -242,7 +242,7 @@ async function restartUnikernel(name) {
 async function destroyUnikernel(name) {
 	try {
 		const molly_csrf = document.getElementById("molly-csrf").value;
-		const response = await fetch(`/unikernel/destroy/${name}`, {
+		const response = await fetch(`/api/unikernel/destroy/${name}`, {
 			method: 'POST',
 			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
 			headers: { 'Content-Type': 'application/json' }

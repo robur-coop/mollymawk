@@ -1835,10 +1835,10 @@ struct
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
                 authenticate store reqd (deploy_form store reqd))
-        | "api/unikernel/destroy" ->
+        | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate store reqd (unikernel_destroy !albatross reqd))
-        | "api/unikernel/restart" ->
+        | "/api/unikernel/restart" ->
             check_meth `POST (fun () ->
                 authenticate ~check_csrf:true store reqd
                   (unikernel_restart !albatross reqd))
@@ -1849,7 +1849,7 @@ struct
                 in
                 authenticate store reqd
                   (unikernel_console !albatross unikernel_name reqd))
-        | "api/unikernel/create" ->
+        | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_csrf:true store reqd
                   (unikernel_create !albatross reqd))
