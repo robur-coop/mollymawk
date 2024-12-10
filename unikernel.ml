@@ -217,9 +217,10 @@ struct
           `Not_found
 
   let authenticate ?(email_verified = true) ?(check_admin = false)
-      ?(api_meth = false) ?(check_csrf = false) store reqd f =
+      ?(api_meth = false) ?(check_csrf = false) ?(check_token = false) store
+      reqd f =
     let current_time = Ptime.v (P.now_d_ps ()) in
-    match (Middleware.api_authentication reqd, api_meth) with
+    match (Middleware.api_authentication reqd, check_token) with
     | Some token_value, true -> (
         extract_json_body reqd >>= function
         | Ok json_dict ->
@@ -229,6 +230,13 @@ struct
             Middleware.http_response reqd ~title:"Error"
               ~data:(`String (String.escaped msg))
               `Bad_request)
+    | Some _token_value, false ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:
+            (`String
+              "This endpoint cannot be accessed via the API. Please use the \
+               web dashboard.")
+          `Bad_request
     | _ ->
         if check_csrf then
           extract_csrf_token reqd >>= function
@@ -1782,19 +1790,21 @@ struct
                 authenticate store reqd (volumes store !albatross reqd))
         | "/api/volume/delete" ->
             check_meth `POST (fun () ->
-                authenticate ~check_csrf:true ~api_meth:true store reqd
+                authenticate ~check_token:true ~check_csrf:true ~api_meth:true
+                  store reqd
                   (delete_volume !albatross reqd))
         | "/api/volume/create" ->
             check_meth `POST (fun () ->
-                authenticate ~check_csrf:true store reqd
+                authenticate ~check_token:true ~check_csrf:true store reqd
                   (create_volume !albatross reqd))
         | "/api/volume/download" ->
             check_meth `POST (fun () ->
-                authenticate ~check_csrf:true ~api_meth:true store reqd
+                authenticate ~check_token:true ~check_csrf:true ~api_meth:true
+                  store reqd
                   (download_volume !albatross reqd))
         | "/api/volume/upload" ->
             check_meth `POST (fun () ->
-                authenticate ~check_csrf:true store reqd
+                authenticate ~check_token:true ~check_csrf:true store reqd
                   (upload_to_volume !albatross reqd))
         | "/tokens" ->
             check_meth `GET (fun () ->
@@ -1866,10 +1876,11 @@ struct
                 authenticate store reqd (deploy_form store reqd))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
-                authenticate store reqd (unikernel_destroy !albatross reqd))
+                authenticate ~check_token:true store reqd
+                  (unikernel_destroy !albatross reqd))
         | "/api/unikernel/restart" ->
             check_meth `POST (fun () ->
-                authenticate ~check_csrf:true store reqd
+                authenticate ~check_token:true ~check_csrf:true store reqd
                   (unikernel_restart !albatross reqd))
         | path when String.starts_with ~prefix:"/unikernel/console/" path ->
             check_meth `GET (fun () ->
@@ -1880,7 +1891,7 @@ struct
                   (unikernel_console !albatross unikernel_name reqd))
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
-                authenticate ~check_csrf:true store reqd
+                authenticate ~check_token:true ~check_csrf:true store reqd
                   (unikernel_create !albatross reqd))
         | _ ->
             let error =
