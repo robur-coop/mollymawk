@@ -1889,7 +1889,7 @@ struct
                   (unikernel_destroy !albatross reqd))
         | "/api/unikernel/restart" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~check_csrf:true store reqd
+                authenticate ~check_token:true ~check_csrf:true ~api_meth:true store reqd
                   (unikernel_restart !albatross reqd))
         | path when String.starts_with ~prefix:"/unikernel/console/" path ->
             check_meth `GET (fun () ->
