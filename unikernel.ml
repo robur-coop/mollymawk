@@ -1900,7 +1900,7 @@ struct
                   (unikernel_console !albatross unikernel_name reqd))
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~check_csrf:true store reqd
+                authenticate ~check_token:true ~check_csrf:true ~api_meth:true store reqd
                   (unikernel_create !albatross reqd))
         | _ ->
             let error =
