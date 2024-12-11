@@ -1813,7 +1813,7 @@ struct
                   (download_volume !albatross reqd))
         | "/api/volume/upload" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~check_csrf:true store reqd
+                authenticate ~check_token:true ~check_csrf:true ~api_meth:true store reqd
                   (upload_to_volume !albatross reqd))
         | "/tokens" ->
             check_meth `GET (fun () ->
