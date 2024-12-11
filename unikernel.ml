@@ -1804,7 +1804,8 @@ struct
                   (delete_volume !albatross reqd))
         | "/api/volume/create" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~check_csrf:true ~api_meth:true store reqd
+                authenticate ~check_token:true ~check_csrf:true ~api_meth:true
+                  store reqd
                   (create_volume !albatross reqd))
         | "/api/volume/download" ->
             check_meth `POST (fun () ->
@@ -1813,7 +1814,8 @@ struct
                   (download_volume !albatross reqd))
         | "/api/volume/upload" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~check_csrf:true ~api_meth:true store reqd
+                authenticate ~check_token:true ~check_csrf:true ~api_meth:true
+                  store reqd
                   (upload_to_volume !albatross reqd))
         | "/tokens" ->
             check_meth `GET (fun () ->
@@ -1889,7 +1891,8 @@ struct
                   (unikernel_destroy !albatross reqd))
         | "/api/unikernel/restart" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~check_csrf:true ~api_meth:true store reqd
+                authenticate ~check_token:true ~check_csrf:true ~api_meth:true
+                  store reqd
                   (unikernel_restart !albatross reqd))
         | path when String.starts_with ~prefix:"/unikernel/console/" path ->
             check_meth `GET (fun () ->
@@ -1900,7 +1903,8 @@ struct
                   (unikernel_console !albatross unikernel_name reqd))
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~check_csrf:true ~api_meth:true store reqd
+                authenticate ~check_token:true ~check_csrf:true ~api_meth:true
+                  store reqd
                   (unikernel_create !albatross reqd))
         | _ ->
             let error =
