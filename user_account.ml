@@ -1,4 +1,4 @@
-let user_account_layout ~csrf (user : User_model.user) ~active_cookie_value
+let user_account_layout (user : User_model.user) ~active_cookie_value
     current_time =
   Tyxml_html.(
     section
@@ -304,21 +304,21 @@ let user_account_layout ~csrf (user : User_model.user) ~active_cookie_value
                                         (String.equal cookie.value
                                            active_cookie_value)
                                     then
-                                      a
-                                        ~a:
-                                          [
-                                            a_href
-                                              ("account/session/close/"
-                                             ^ cookie.value ^ "/" ^ csrf);
-                                            a_class
+                                      div
+                                        [
+                                          Utils.button_component
+                                            ~attribs:
                                               [
-                                                "hover:text-secondary-800 \
-                                                 text-secondary-500 \
-                                                 transition-colors \
-                                                 cursor-pointer";
-                                              ];
-                                          ]
-                                        [ txt "Close session" ]
+                                                a_id
+                                                  ("session-button-"
+                                                 ^ cookie.value);
+                                                a_onclick
+                                                  ("closeSession('"
+                                                 ^ cookie.value ^ "')");
+                                              ]
+                                            ~content:(txt "Close session")
+                                            ~btn_type:`Danger_outlined ();
+                                        ]
                                     else div []);
                                  ];
                              ])

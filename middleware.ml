@@ -101,7 +101,8 @@ let redirect_to_dashboard reqd ?(msg = "") () =
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
-let http_response ~title ?(header_list = []) ?(data = "") reqd http_status =
+let http_response ~title ?(header_list = []) ?(data = `String "") reqd
+    http_status =
   let code = Httpaf.Status.to_code http_status
   and success = Httpaf.Status.is_successful http_status in
   let status = { Utils.Status.code; title; data; success } in
@@ -138,22 +139,9 @@ let session_cookie_value reqd =
           m "auth-middleware: No molly-session in cookie header.");
       Error (`Msg "User not found")
 
-let auth_middleware user handler reqd =
-  if user.User_model.active then handler reqd
-  else
-    redirect_to_page ~path:"/sign-in" ~clear_session:true ~with_error:true
-      ~msg:"User account is deactivated." reqd ()
-
 let email_verified_middleware user handler reqd =
   if User_model.is_email_verified user then handler reqd
   else redirect_to_verify_email reqd ()
-
-let is_user_admin_middleware api_meth user handler reqd =
-  if user.User_model.super_user && user.active then handler reqd
-  else
-    redirect_to_error ~title:"Unauthorized"
-      ~data:"You don't have the necessary permissions to access this service."
-      `Unauthorized 401 api_meth reqd ()
 
 let csrf_cookie_verification form_csrf reqd =
   match cookie User_model.csrf_cookie reqd with
@@ -173,8 +161,17 @@ let csrf_verification user now form_csrf handler reqd =
       if User_model.is_valid_cookie csrf_token now then handler reqd
       else
         http_response ~title:"CSRF Token Mismatch"
-          ~data:"Invalid CSRF token error. Please refresh and try again." reqd
-          `Bad_request
+          ~data:
+            (`String "Invalid CSRF token error. Please refresh and try again.")
+          reqd `Bad_request
   | None ->
-      http_response ~data:"Missing CSRF token. Please refresh and try again."
+      http_response
+        ~data:(`String "Missing CSRF token. Please refresh and try again.")
         ~title:"Missing CSRF Token" reqd `Bad_request
+
+let api_authentication reqd =
+  match header "Authorization" reqd with
+  | Some auth when String.starts_with ~prefix:"Bearer " auth ->
+      let token = String.sub auth 7 (String.length auth - 7) in
+      Some token
+  | _ -> None

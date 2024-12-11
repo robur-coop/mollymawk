@@ -40,7 +40,7 @@ let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
 let session_cookie = "molly_session"
 let csrf_cookie = "molly_csrf"
 
-let cookie_to_json (cookie : cookie) : Yojson.Basic.t =
+let cookie_to_json (cookie : cookie) =
   `Assoc
     [
       ("name", `String cookie.name);
@@ -174,7 +174,7 @@ let cookie_of_json = function
           ("invalid json for cookie, expected a dict: "
          ^ Yojson.Basic.to_string js))
 
-let token_to_json t : Yojson.Basic.t =
+let token_to_json t =
   `Assoc
     [
       ("token_type", `String t.token_type);
@@ -277,7 +277,7 @@ let token_of_json = function
           ("invalid json for token: expected a dict: "
          ^ Yojson.Basic.to_string js))
 
-let user_to_json (u : user) : Yojson.Basic.t =
+let user_to_json (u : user) =
   `Assoc
     [
       ("name", `String u.name);
@@ -763,6 +763,11 @@ let is_valid_cookie (cookie : cookie) now =
   Utils.TimeHelper.diff_in_seconds ~current_time:now
     ~check_time:cookie.created_at
   < cookie.expires_in
+
+let is_valid_token (token : token) now =
+  Utils.TimeHelper.diff_in_seconds ~current_time:now
+    ~check_time:token.created_at
+  < token.expires_in
 
 let is_email_verified user = Option.is_some user.email_verified
 let password_validation password = String.length password >= 8
