@@ -1885,7 +1885,7 @@ struct
                 authenticate store reqd (deploy_form store reqd))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true store reqd
+                authenticate ~check_token:true ~api_meth:true store reqd
                   (unikernel_destroy !albatross reqd))
         | "/api/unikernel/restart" ->
             check_meth `POST (fun () ->
