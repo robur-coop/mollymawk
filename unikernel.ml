@@ -155,7 +155,7 @@ struct
     in
     Middleware.apply_middleware
       (middlewares ~form_csrf user)
-      (fun reqd -> f ~json_dict user)
+      (fun _reqd -> f ~json_dict user)
       reqd
 
   let authenticate_user ~check_admin ~check_token store reqd =
