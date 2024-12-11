@@ -141,115 +141,125 @@ struct
     in
     go (Map.empty, []) m
 
-  let process_session_request ?(json_dict = []) ?form_csrf ~api_meth
-      ~check_admin ~email_verified ~current_time f store reqd =
-    let middlewares ?(form_csrf = None) user =
-      (if check_admin then [ Middleware.is_user_admin_middleware api_meth user ]
-       else [])
-      @ (if email_verified && false (* TODO *) then
+  let process_session_request ?(json_dict = []) ?form_csrf
+      ~email_verified f reqd user =
+    let current_time = Ptime.v (P.now_d_ps ()) in
+    let middlewares ~form_csrf user =
+      (if email_verified && false (* TODO *) then
            [ Middleware.email_verified_middleware user ]
          else [])
       @ Option.fold ~none:[]
           ~some:(fun csrf ->
             [ Middleware.csrf_verification user current_time csrf ])
           form_csrf
-      @ [ Middleware.auth_middleware user ]
     in
-    match Middleware.session_cookie_value reqd with
-    | Error (`Msg err) ->
-        Logs.err (fun m ->
-            m "auth-middleware: No molly-session in cookie header. %s" err);
-        Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
-          ~with_error:true ~msg:"No session cookie found in request." reqd ()
-    | Ok cookie_value -> (
-        match Store.find_by_cookie store cookie_value with
-        | None ->
-            Logs.err (fun m ->
-                m "auth-middleware: Failed to find user with key %s"
-                  cookie_value);
-            Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
-              ~with_error:true ~msg:"No user account found." reqd ()
-        | Some (user, cookie) ->
-            if not (User_model.is_valid_cookie cookie current_time) then (
-              Logs.err (fun m ->
-                  m
-                    "auth-middleware: Session value doesn't match user session \
-                     %s"
-                    cookie_value);
-              Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
-                ~with_error:true ~msg:"Session cookie is no longer valid." reqd
-                ())
-            else
-              Middleware.apply_middleware
-                (middlewares ~form_csrf user)
-                (fun reqd ->
-                  Store.update_cookie_usage store cookie user reqd >>= function
-                  | Ok () -> f ~json_dict user
-                  | Error (`Msg err) ->
-                      Logs.err (fun m -> m "Error with storage: %s" err);
-                      Middleware.http_response reqd ~title:"Error"
-                        ~data:(`String (String.escaped err))
-                        `Not_found)
-                reqd)
+    Middleware.apply_middleware
+      (middlewares ~form_csrf user)
+        (fun reqd -> f ~json_dict user) reqd
 
-  let process_api_request ~json_dict ~token_value ~current_time f store reqd =
-    match Store.find_by_api_token store token_value with
-    | Some (user, token) ->
+  let authenticate_user ~check_admin ~check_token store reqd =
+    let ( let* ) = Result.bind in
+    let current_time = Ptime.v (P.now_d_ps ()) in
+    let user_is_active user =
+      if user.User_model.active then Ok () else Error "User account is deactivated"
+    in
+    let user_is_admin user = 
+      if (check_admin && user.User_model.super_user) || not check_admin then
+        Ok ()
+      else
+        Error "You don't have the necessary permissions to access this service."
+    in
+    let check_cookie reqd =
+      match Middleware.session_cookie_value reqd with
+      | Error (`Msg err) ->
+          Error (`Cookie, "No molly-session in cookie header. %s" ^ err)
+      | Ok cookie_value ->
+         match Store.find_by_cookie store cookie_value with
+          | None ->
+              Error (`Cookie, "Failed to find user with cookie " ^ cookie_value)
+          | Some (user, cookie) ->
+              if User_model.is_valid_cookie cookie current_time then
+                match
+                  let* () = user_is_active user in
+                  user_is_admin user
+                with
+                | Error msg -> Error (`Cookie, msg)
+                | Ok () -> Ok (`Cookie (user, cookie))
+              else
+                Error (`Cookie, "Session value doesn't match user session " ^ cookie_value)
+    in
+    let valid_token token_value =
+      match Store.find_by_api_token store token_value with
+      | Some (user, token) ->
         if User_model.is_valid_token token current_time then
-          Store.increment_token_usage store token user >>= function
-          | Ok () -> f ~json_dict user
-          | Error (`Msg err) ->
-              Middleware.http_response reqd ~title:"Error" ~data:(`String err)
-                `Not_found
+          Ok (user, token)
         else
-          Middleware.http_response reqd ~title:"Error"
-            ~data:
-              (`String
-                "Authorization token has expired. Please generate a new token \
-                 from your account dashboard.")
-            `Not_found
-    | None ->
-        Middleware.http_response reqd ~title:"Error"
-          ~data:
-            (`String
-              ("Invalid authorization token. User not found for token "
-             ^ token_value))
-          `Not_found
-
+          Error (`Token, "Token value is not valid " ^ token_value)
+      | None ->
+        Error (`Token, "Failed to find user with token " ^ token_value)
+    in
+    if check_token then
+      match Middleware.api_authentication reqd with
+      | Some token_value -> (
+        let* (user, token) = valid_token token_value in
+        match
+          let* () = user_is_active user in
+          user_is_admin user
+        with
+        | Ok () -> Ok (`Token (user, token))
+        | Error msg -> Error (`Token, msg))
+      | None -> check_cookie reqd
+    else
+      check_cookie reqd
+ 
   let authenticate ?(email_verified = true) ?(check_admin = false)
       ?(api_meth = false) ?(check_csrf = false) ?(check_token = false) store
       reqd f =
-    let current_time = Ptime.v (P.now_d_ps ()) in
-    match (Middleware.api_authentication reqd, check_token) with
-    | Some token_value, true -> (
-        extract_json_body reqd >>= function
-        | Ok json_dict ->
-            process_api_request ~json_dict ~token_value ~current_time f store
-              reqd
-        | Error (`Msg msg) ->
-            Middleware.http_response reqd ~title:"Error"
-              ~data:(`String (String.escaped msg))
-              `Bad_request)
-    | Some _token_value, false ->
+    match authenticate_user ~check_admin ~check_token store reqd with
+    | Error (`Cookie, msg) ->
+      Logs.err (fun m -> m "authenticate: %s" msg);
+      if api_meth then
         Middleware.http_response reqd ~title:"Error"
-          ~data:
-            (`String
-              "This endpoint cannot be accessed via the API. Please use the \
-               web dashboard.")
-          `Bad_request
-    | _ ->
-        if check_csrf then
-          extract_csrf_token reqd >>= function
-          | Ok (form_csrf, json_dict) ->
-              process_session_request ~check_admin ~email_verified ~current_time
-                ~json_dict ~form_csrf ~api_meth f store reqd
+          ~data:(`String msg) `Bad_request
+      else
+        Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
+          ~with_error:true ~msg reqd ()
+    | Error (`Token, msg) ->
+      Logs.err (fun m -> m "authenticate: %s" msg);
+      Middleware.http_response reqd ~title:"Error"
+        ~data:(`String msg) `Bad_request
+    | Ok `Token (user, token) -> (
+        Store.increment_token_usage store token user >>= function
+         | Error (`Msg err) ->
+           Middleware.http_response reqd ~title:"Error" ~data:(`String err)
+            `Internal_server_error
+         | Ok () ->
+          extract_json_body reqd >>= function
+          | Ok json_dict -> f ~json_dict user
           | Error (`Msg msg) ->
               Middleware.http_response reqd ~title:"Error"
                 ~data:(`String (String.escaped msg))
-                `Bad_request
-        else
-          process_session_request ~check_admin ~email_verified ~current_time
-            ~api_meth f store reqd
+                `Bad_request)
+    | Ok `Cookie (user, cookie) ->
+        Store.update_cookie_usage store cookie user reqd >>= function
+           | Error (`Msg err) ->
+              Logs.err (fun m -> m "Error with storage: %s" err);
+                Middleware.http_response reqd ~title:"Error"
+                ~data:(`String (String.escaped err))
+                `Internal_server_error
+           | Ok () ->
+             if check_csrf then
+               extract_csrf_token reqd >>= function
+               | Ok (form_csrf, json_dict) ->
+                   process_session_request ~email_verified
+                     ~json_dict ~form_csrf f reqd user
+               | Error (`Msg msg) ->
+                   Middleware.http_response reqd ~title:"Error"
+                     ~data:(`String (String.escaped msg))
+                     `Bad_request
+             else
+               process_session_request ~email_verified
+                 f reqd user
 
   let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status
       =
