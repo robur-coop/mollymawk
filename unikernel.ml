@@ -301,6 +301,21 @@ struct
               reply);
         []
 
+  let single_unikernel albatross ~user_name ~unikernel_name =
+    Albatross.query albatross ~domain:user_name ~name:unikernel_name
+      (`Unikernel_cmd `Unikernel_info)
+    >|= function
+    | Error msg ->
+        Logs.err (fun m -> m "error while communicating with albatross: %s" msg);
+        []
+    | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
+    | Ok reply ->
+        Logs.err (fun m ->
+            m "expected a unikernel info reply, received %a"
+              (Vmm_commands.pp_wire ~verbose:false)
+              reply);
+        []
+
   let read_multipart_data reqd =
     let response_body = Httpaf.Reqd.request_body reqd in
     let finished, notify_finished = Lwt.wait () in
@@ -973,20 +988,7 @@ struct
   let unikernel_info_one albatross store name reqd ~json_dict:_
       (user : User_model.user) =
     (* TODO use uuid in the future *)
-    (Albatross.query albatross ~domain:user.name ~name
-       (`Unikernel_cmd `Unikernel_info)
-     >|= function
-     | Error msg ->
-         Logs.err (fun m ->
-             m "error while communicating with albatross: %s" msg);
-         []
-     | Ok (_hdr, `Success (`Unikernel_info unikernel)) -> unikernel
-     | Ok reply ->
-         Logs.err (fun m ->
-             m "expected a unikernel info reply, received %a"
-               (Vmm_commands.pp_wire ~verbose:false)
-               reply);
-         [])
+    single_unikernel albatross ~user_name:user.name ~unikernel_name:name
     >>= fun unikernels ->
     if List.length unikernels > 0 then
       (Albatross.query_console ~domain:user.name albatross ~name >|= function
