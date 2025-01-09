@@ -8,7 +8,9 @@ document.addEventListener('DOMContentLoaded', function () {
 		} else {
 			postAlert("bg-primary-300", flashMessage);
 		}
-		document.cookie = "flash_msg=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+		setTimeout(() => {
+			document.cookie = "flash_msg=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 UTC;";
+		}, 400);
 	}
 
 	if (window.location.pathname.startsWith("/admin/user/")) {
@@ -32,6 +34,27 @@ document.addEventListener('DOMContentLoaded', function () {
 				const target = document.querySelector(tab.getAttribute("href"));
 				target.classList.remove("hidden");
 			});
+		});
+	}
+
+	if (window.location.pathname.startsWith("/unikernel/update/")) {
+		const targetElements = document.querySelectorAll(".code-diff");
+		targetElements.forEach((targetElement) => {
+			const diffString = targetElement.textContent;
+			const configuration = {
+				drawFileList: false,
+				fileListToggle: false,
+				fileListStartVisible: false,
+				fileContentToggle: false,
+				matching: 'none',
+				outputFormat: 'line-by-line',
+				synchronisedScroll: true,
+				highlight: true,
+				renderNothingWhenEmpty: false,
+			};
+			var diff2htmlUi = new Diff2HtmlUI(targetElement, diffString, configuration);
+			diff2htmlUi.draw();
+			diff2htmlUi.highlightCode();
 		});
 	}
 });
@@ -933,3 +956,4 @@ function areCharactersValid(s) {
 	}
 	return true;
 }
+
