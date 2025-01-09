@@ -57,8 +57,10 @@ let redirect_to_page ~path ?(clear_session = false) ?(with_error = false) reqd
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
-let redirect_to_error ~title ~data status code api_meth reqd () =
-  let error = { Utils.Status.code; title; success = false; data } in
+let redirect_to_error ~title ~data ~api_meth status reqd () =
+  let code = Httpaf.Status.to_code status
+  and success = Httpaf.Status.is_successful status in
+  let error = { Utils.Status.code; title; data; success } in
   let data =
     if api_meth then Utils.Status.to_json error
     else
