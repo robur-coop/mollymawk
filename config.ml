@@ -1,8 +1,6 @@
 (* mirage >= 4.7.0 & < 4.9.0 *)
 open Mirage
-
 let assets = crunch "assets"
-
 let mollymawk =
   let packages =
     [
@@ -22,6 +20,7 @@ let mollymawk =
       package "oneffs";
       package "duration";
       package ~min:"0.2.0" "ohex";
+      package "http-lwt-client";
     ]
   in
   main ~packages "Unikernel.Main"
