@@ -1908,6 +1908,13 @@ struct
                 authenticate ~check_token:true ~check_csrf:true ~api_meth:true
                   store reqd
                   (unikernel_create !albatross reqd))
+        | path when String.starts_with ~prefix:"/unikernel/update/" path ->
+            check_meth `GET (fun () ->
+                let unikernel_name =
+                  String.sub path 18 (String.length path - 18)
+                in
+                authenticate store reqd
+                  (unikernel_prepare_update !albatross store unikernel_name reqd))
         | _ ->
             let error =
               {
