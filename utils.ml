@@ -514,4 +514,4 @@ let display_banner = function
 
 let bytes_to_megabytes bytes =
   let megabytes = float_of_int bytes /. (1024.0 *. 1024.0) in
-  Printf.sprintf "%.2f" megabytes
+  Printf.sprintf "%.2f MB" megabytes
