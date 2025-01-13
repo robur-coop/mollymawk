@@ -28,7 +28,6 @@ type o_diff = {
 }
 
 type duniverse = { name : string; value_ : string }
-type duniverse_detailed_diff = { name : string }
 
 type package_diff = {
   left_packages : package list;
@@ -39,7 +38,7 @@ type package_diff = {
 type duniverse_diff = {
   left : duniverse list;
   right : duniverse list;
-  detailed_diff : duniverse_detailed_diff list;
+  detailed_diff : string list;
 }
 
 type opam_diff = {
@@ -71,7 +70,7 @@ let list_of_json parse_fn json =
 let duniverse_detailed_diff_of_json = function
   | `Assoc xs -> (
       match Utils.Json.(get "name" xs) with
-      | Some (`String name) -> Ok { name }
+      | Some (`String name) -> Ok name
       | _ ->
           Error
             (`Msg

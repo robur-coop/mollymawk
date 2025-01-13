@@ -429,9 +429,7 @@ let unikernel_update_layout unikernel current_time
                         div
                           ~a:[ a_class [ "flex gap-4" ] ]
                           (List.map
-                             (fun (package :
-                                    Builder_web.duniverse_detailed_diff) ->
-                               p [ txt package.name ])
+                             (fun (package : string) -> p [ txt package ])
                              build_comparison.opam_diff.duniverse_diff
                                .detailed_diff);
                       ];
