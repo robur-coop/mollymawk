@@ -421,19 +421,19 @@ module Builder_web = struct
             ("invalid json for builder_web diff, expected a dict: "
            ^ Yojson.Basic.to_string js))
 
-  let send_request url response_body =
+  let send_request url =
+    let body = "" in
     let body_f _ acc chunk =
-      response_body := !response_body ^ chunk;
-      Lwt.return acc
+      Lwt.return (acc ^ chunk)
     in
     Http_lwt_client.request ~follow_redirect:true
       ~headers:[ ("Accept", "application/json") ]
-      url body_f ()
+      url body_f body
     >>= function
     | Error (`Msg err) -> Lwt.return (Error (`Msg err))
-    | Ok (resp, ()) -> (
+    | Ok (resp, body) -> (
         match resp.Http_lwt_client.status with
-        | `OK -> Lwt.return (Ok response_body)
+        | `OK -> Lwt.return (Ok body)
         | _ ->
             Lwt.return
               (Error
