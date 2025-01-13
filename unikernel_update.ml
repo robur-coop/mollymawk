@@ -90,7 +90,7 @@ let build_table (build : Builder_web.build) =
                     [
                       a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ];
                     ]
-                  [ txt (Utils.bytes_to_megabytes size ^ " MB") ]);
+                  [ txt (Utils.bytes_to_megabytes size) ]);
           ];
       ])
 
