@@ -1,6 +1,8 @@
 (* mirage >= 4.7.0 & < 4.9.0 *)
 open Mirage
+
 let assets = crunch "assets"
+
 let mollymawk =
   let packages =
     [
