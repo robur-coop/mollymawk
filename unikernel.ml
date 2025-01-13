@@ -301,20 +301,26 @@ struct
               reply);
         []
 
-  let single_unikernel albatross ~user_name ~unikernel_name =
+  let user_unikernel albatross ~user_name ~unikernel_name =
     Albatross.query albatross ~domain:user_name ~name:unikernel_name
       (`Unikernel_cmd `Unikernel_info)
     >|= function
-    | Error msg ->
-        Logs.err (fun m -> m "error while communicating with albatross: %s" msg);
-        []
-    | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
+    | Error err ->
+        Logs.err (fun m ->
+            m
+              "Error while communicating with albatross. Trying to fetch %s \
+               resulted in : %s"
+              unikernel_name err);
+        None
+    | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
+        if List.length unikernels > 0 then Some (List.hd unikernels) else None
     | Ok reply ->
         Logs.err (fun m ->
-            m "expected a unikernel info reply, received %a"
+            m "Trying to fetch %s: expected a unikernel info reply, received %a"
+              unikernel_name
               (Vmm_commands.pp_wire ~verbose:false)
               reply);
-        []
+        None
 
   let read_multipart_data reqd =
     let response_body = Httpaf.Reqd.request_body reqd in
@@ -988,186 +994,188 @@ struct
   let unikernel_info_one albatross store name reqd ~json_dict:_
       (user : User_model.user) =
     (* TODO use uuid in the future *)
-    single_unikernel albatross ~user_name:user.name ~unikernel_name:name
-    >>= fun unikernels ->
-    if List.length unikernels > 0 then
-      (Albatross.query_console ~domain:user.name albatross ~name >|= function
-       | Error err ->
-           Logs.warn (fun m -> m "error querying console of albatross: %s" err);
-           []
-       | Ok (_, console_output) -> console_output)
-      >>= fun console_output ->
-      let now = Ptime.v (P.now_d_ps ()) in
-      generate_csrf_token store user now reqd >>= function
-      | Ok csrf ->
-          Lwt.return
-            (reply reqd ~content_type:"text/html"
-               (Dashboard.dashboard_layout ~csrf user
-                  ~content:
-                    (Unikernel_single.unikernel_single_layout
-                       (List.hd unikernels) now console_output)
-                  ~icon:"/images/robur.png" ())
-               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-               `OK)
-      | Error err ->
-          Lwt.return
-            (reply reqd ~content_type:"text/html"
-               (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-                  ~content:(Error_page.error_layout err)
-                  ~icon:"/images/robur.png" ())
-               `Internal_server_error)
-    else
-      let error =
-        {
-          Utils.Status.code = 500;
-          title = "An error occured";
-          success = false;
-          data = `String "Error while fetching unikernel.";
-        }
-      in
-      Lwt.return
-        (reply reqd ~content_type:"text/html"
-           (Guest_layout.guest_layout ~page_title:"An Error Occured | Mollymawk"
-              ~content:(Error_page.error_layout error)
-              ~icon:"/images/robur.png" ())
-           `Internal_server_error)
+    user_unikernel albatross ~user_name:user.name ~unikernel_name:name
+    >>= fun unikernel_info ->
+    match unikernel_info with
+    | None ->
+        Lwt.return
+          (reply reqd ~content_type:"text/html"
+             (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                ~content:
+                  (Error_page.error_layout
+                     {
+                       code = 500;
+                       success = false;
+                       title = "Error fetching " ^ name;
+                       data =
+                         `String ("An error occured trying to fetch " ^ name);
+                     })
+                ~icon:"/images/robur.png" ())
+             `Internal_server_error)
+    | Some (unikernel_name, unikernel) -> (
+        (Albatross.query_console ~domain:user.name albatross ~name >|= function
+         | Error err ->
+             Logs.warn (fun m ->
+                 m "error querying console of albatross: %s" err);
+             []
+         | Ok (_, console_output) -> console_output)
+        >>= fun console_output ->
+        let now = Ptime.v (P.now_d_ps ()) in
+        generate_csrf_token store user now reqd >>= function
+        | Ok csrf ->
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Dashboard.dashboard_layout ~csrf user
+                    ~content:
+                      (Unikernel_single.unikernel_single_layout
+                         (unikernel_name, unikernel)
+                         now console_output)
+                    ~icon:"/images/robur.png" ())
+                 ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                 `OK)
+        | Error err ->
+            Lwt.return
+              (reply reqd ~content_type:"text/html"
+                 (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                    ~content:(Error_page.error_layout err)
+                    ~icon:"/images/robur.png" ())
+                 `Internal_server_error))
 
   let unikernel_prepare_update albatross store name reqd ~json_dict:_
       (user : User_model.user) =
     (* TODO use uuid in the future *)
-    single_unikernel albatross ~user_name:user.name ~unikernel_name:name
-    >>= fun unikernels ->
-    if List.length unikernels > 0 then
-      let name, unikernel = List.hd unikernels in
-      Builder_web.send_request
-        (Builder_web.base_url ^ "/hash?sha256=" ^ Ohex.encode unikernel.digest)
-      >>= function
-      | Error (`Msg err) ->
-          Logs.err (fun m -> m "Builder_web update error %s" err);
-          Middleware.redirect_to_error
-            ~data:(`String ("Builder_web request: " ^ err))
-            ~title:(Vmm_core.Name.to_string name ^ "update Error")
-            ~api_meth:false `Internal_server_error reqd ()
-      | Ok response_body -> (
-          match
-            Builder_web.build_of_json (Yojson.Basic.from_string response_body)
-          with
-          | Error (`Msg err) ->
-              Logs.err (fun m -> m "Builder_web update error %s" err);
-              Middleware.redirect_to_error
-                ~data:(`String ("Builder_web request: " ^ err))
-                ~title:(Vmm_core.Name.to_string name ^ "update Error")
-                ~api_meth:false `Internal_server_error reqd ()
-          | Ok current_job_data -> (
-              Builder_web.send_request
-                (Builder_web.base_url ^ "/job/" ^ current_job_data.job
-               ^ "/build/latest")
-              >>= function
-              | Error (`Msg err) ->
-                  Logs.err (fun m -> m "Builder_web update error %s" err);
-                  Middleware.redirect_to_error
-                    ~data:(`String ("Builder_web request: " ^ err))
-                    ~title:(Vmm_core.Name.to_string name ^ "update Error")
-                    ~api_meth:false `Internal_server_error reqd ()
-              | Ok response_body -> (
-                  match
-                    Builder_web.build_of_json
-                      (Yojson.Basic.from_string response_body)
-                  with
-                  | Error (`Msg err) ->
-                      Logs.err (fun m -> m "Builder_web update error %s" err);
-                      Middleware.redirect_to_error
-                        ~data:(`String ("Builder_web request: " ^ err))
-                        ~title:(Vmm_core.Name.to_string name ^ "update Error")
-                        ~api_meth:false `Internal_server_error reqd ()
-                  | Ok latest_job_data ->
-                      if String.equal latest_job_data.uuid current_job_data.uuid
-                      then (
-                        Logs.info (fun m ->
-                            m "There is no update %s %s" latest_job_data.uuid
-                              current_job_data.uuid);
-                        Middleware.redirect_to_page
-                          ~path:
-                            ("/unikernel/info/"
-                            ^ Option.value ~default:"" (Vmm_core.Name.name name)
-                            )
-                          reqd ~msg:"There is no update" ())
-                      else (
-                        Logs.info (fun m ->
-                            m "There is an update %s %s" latest_job_data.uuid
-                              current_job_data.uuid);
-                        Builder_web.send_request
-                          (Builder_web.base_url ^ "/compare/"
-                         ^ current_job_data.uuid ^ "/" ^ latest_job_data.uuid
-                         ^ "")
-                        >>= function
-                        | Error (`Msg err) ->
-                            Logs.err (fun m ->
-                                m "Builder_web update error %s" err);
-                            Middleware.redirect_to_error
-                              ~data:(`String ("Builder_web request: " ^ err))
-                              ~title:
-                                (Vmm_core.Name.to_string name ^ "update Error")
-                              ~api_meth:false `Internal_server_error reqd ()
-                        | Ok response_body -> (
-                            match
-                              Builder_web.compare_of_json
-                                (Yojson.Basic.from_string response_body)
-                            with
-                            | Ok build_comparison -> (
-                                let now = Ptime.v (P.now_d_ps ()) in
-                                generate_csrf_token store user now reqd
-                                >>= function
-                                | Ok csrf ->
-                                    Lwt.return
-                                      (reply reqd ~content_type:"text/html"
-                                         (Dashboard.dashboard_layout ~csrf user
-                                            ~page_title:
-                                              (Vmm_core.Name.to_string name
-                                              ^ " Update | Mollymawk")
-                                            ~content:
-                                              (Unikernel_update
-                                               .unikernel_update_layout
-                                                 (List.hd unikernels) now
-                                                 build_comparison)
-                                            ~icon:"/images/robur.png" ())
-                                         ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-                                         `OK)
-                                | Error err ->
-                                    Lwt.return
-                                      (reply reqd ~content_type:"text/html"
-                                         (Guest_layout.guest_layout
-                                            ~page_title:"500 | Mollymawk"
-                                            ~content:
-                                              (Error_page.error_layout err)
-                                            ~icon:"/images/robur.png" ())
-                                         `Internal_server_error))
-                            | Error (`Msg err) ->
-                                Logs.err (fun m ->
-                                    m "Builder_web update error %s" err);
-                                Middleware.redirect_to_error
-                                  ~data:
-                                    (`String ("Builder_web request: " ^ err))
-                                  ~title:
-                                    (Vmm_core.Name.to_string name
-                                    ^ "update Error")
-                                  ~api_meth:false `Internal_server_error reqd ()
-                            )))))
-    else
-      let error =
-        {
-          Utils.Status.code = 500;
-          title = "An error occured";
-          success = false;
-          data = `String "Error while fetching unikernel.";
-        }
-      in
-      Lwt.return
-        (reply reqd ~content_type:"text/html"
-           (Guest_layout.guest_layout ~page_title:"An Error Occured | Mollymawk"
-              ~content:(Error_page.error_layout error)
-              ~icon:"/images/robur.png" ())
-           `Internal_server_error)
+    user_unikernel albatross ~user_name:user.name ~unikernel_name:name
+    >>= fun unikernel_info ->
+    match unikernel_info with
+    | None ->
+        Middleware.redirect_to_error ~data:(`String "Builder_web request error")
+          ~title:("An error occured while fetching " ^ name)
+          ~api_meth:false `Internal_server_error reqd ()
+    | Some (unikernel_name, unikernel) -> (
+        Builder_web.send_request
+          (Builder_web.base_url ^ "/hash?sha256=" ^ Ohex.encode unikernel.digest)
+        >>= function
+        | Error (`Msg err) ->
+            Logs.err (fun m -> m "Builder_web update error %s" err);
+            Middleware.redirect_to_error
+              ~data:(`String ("Builder_web request: " ^ err))
+              ~title:(Vmm_core.Name.to_string unikernel_name ^ "update Error")
+              ~api_meth:false `Internal_server_error reqd ()
+        | Ok response_body -> (
+            match
+              Builder_web.build_of_json (Yojson.Basic.from_string response_body)
+            with
+            | Error (`Msg err) ->
+                Logs.err (fun m -> m "Builder_web update error %s" err);
+                Middleware.redirect_to_error
+                  ~data:(`String ("Builder_web request: " ^ err))
+                  ~title:
+                    (Vmm_core.Name.to_string unikernel_name ^ "update Error")
+                  ~api_meth:false `Internal_server_error reqd ()
+            | Ok current_job_data -> (
+                Builder_web.send_request
+                  (Builder_web.base_url ^ "/job/" ^ current_job_data.job
+                 ^ "/build/latest")
+                >>= function
+                | Error (`Msg err) ->
+                    Logs.err (fun m -> m "Builder_web update error %s" err);
+                    Middleware.redirect_to_error
+                      ~data:(`String ("Builder_web request: " ^ err))
+                      ~title:
+                        (Vmm_core.Name.to_string unikernel_name ^ "update Error")
+                      ~api_meth:false `Internal_server_error reqd ()
+                | Ok response_body -> (
+                    match
+                      Builder_web.build_of_json
+                        (Yojson.Basic.from_string response_body)
+                    with
+                    | Error (`Msg err) ->
+                        Logs.err (fun m -> m "Builder_web update error %s" err);
+                        Middleware.redirect_to_error
+                          ~data:(`String ("Builder_web request: " ^ err))
+                          ~title:
+                            (Vmm_core.Name.to_string unikernel_name
+                            ^ "update Error")
+                          ~api_meth:false `Internal_server_error reqd ()
+                    | Ok latest_job_data ->
+                        if
+                          String.equal latest_job_data.uuid
+                            current_job_data.uuid
+                        then (
+                          Logs.info (fun m ->
+                              m "There is no update %s %s" latest_job_data.uuid
+                                current_job_data.uuid);
+                          Middleware.redirect_to_page
+                            ~path:
+                              ("/unikernel/info/"
+                              ^ Option.value ~default:""
+                                  (Vmm_core.Name.name unikernel_name))
+                            reqd ~msg:"There is no update" ())
+                        else (
+                          Logs.info (fun m ->
+                              m "There is an update %s %s" latest_job_data.uuid
+                                current_job_data.uuid);
+                          Builder_web.send_request
+                            (Builder_web.base_url ^ "/compare/"
+                           ^ current_job_data.uuid ^ "/" ^ latest_job_data.uuid
+                           ^ "")
+                          >>= function
+                          | Error (`Msg err) ->
+                              Logs.err (fun m ->
+                                  m "Builder_web update error %s" err);
+                              Middleware.redirect_to_error
+                                ~data:(`String ("Builder_web request: " ^ err))
+                                ~title:
+                                  (Vmm_core.Name.to_string unikernel_name
+                                  ^ "update Error")
+                                ~api_meth:false `Internal_server_error reqd ()
+                          | Ok response_body -> (
+                              match
+                                Builder_web.compare_of_json
+                                  (Yojson.Basic.from_string response_body)
+                              with
+                              | Ok build_comparison -> (
+                                  let now = Ptime.v (P.now_d_ps ()) in
+                                  generate_csrf_token store user now reqd
+                                  >>= function
+                                  | Ok csrf ->
+                                      Lwt.return
+                                        (reply reqd ~content_type:"text/html"
+                                           (Dashboard.dashboard_layout ~csrf
+                                              user
+                                              ~page_title:
+                                                (Vmm_core.Name.to_string
+                                                   unikernel_name
+                                                ^ " Update | Mollymawk")
+                                              ~content:
+                                                (Unikernel_update
+                                                 .unikernel_update_layout
+                                                   (unikernel_name, unikernel)
+                                                   now build_comparison)
+                                              ~icon:"/images/robur.png" ())
+                                           ~header_list:
+                                             [ ("X-MOLLY-CSRF", csrf) ]
+                                           `OK)
+                                  | Error err ->
+                                      Lwt.return
+                                        (reply reqd ~content_type:"text/html"
+                                           (Guest_layout.guest_layout
+                                              ~page_title:"500 | Mollymawk"
+                                              ~content:
+                                                (Error_page.error_layout err)
+                                              ~icon:"/images/robur.png" ())
+                                           `Internal_server_error))
+                              | Error (`Msg err) ->
+                                  Logs.err (fun m ->
+                                      m "Builder_web update error %s" err);
+                                  Middleware.redirect_to_error
+                                    ~data:
+                                      (`String ("Builder_web request: " ^ err))
+                                    ~title:
+                                      (Vmm_core.Name.to_string unikernel_name
+                                      ^ "update Error")
+                                    ~api_meth:false `Internal_server_error reqd
+                                    ()))))))
 
   let unikernel_destroy ~json_dict albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
