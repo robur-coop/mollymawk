@@ -1043,38 +1043,43 @@ struct
         (Builder_web.base_url ^ "/hash?sha256=" ^ Ohex.encode unikernel.digest)
       >>= function
       | Error (`Msg err) ->
+          Logs.err (fun m -> m "Builder_web update error %s" err);
           Middleware.redirect_to_error
             ~data:(`String ("Builder_web request: " ^ err))
-            ~title:"Update Error" ~api_meth:false `Internal_server_error reqd ()
+            ~title:(Vmm_core.Name.to_string name ^ "update Error")
+            ~api_meth:false `Internal_server_error reqd ()
       | Ok response_body -> (
           match
             Builder_web.build_of_json (Yojson.Basic.from_string response_body)
           with
           | Error (`Msg err) ->
+              Logs.err (fun m -> m "Builder_web update error %s" err);
               Middleware.redirect_to_error
                 ~data:(`String ("Builder_web request: " ^ err))
-                ~title:"Update Error" ~api_meth:false `Internal_server_error
-                reqd ()
+                ~title:(Vmm_core.Name.to_string name ^ "update Error")
+                ~api_meth:false `Internal_server_error reqd ()
           | Ok current_job_data -> (
               Builder_web.send_request
                 (Builder_web.base_url ^ "/job/" ^ current_job_data.job
                ^ "/build/latest")
               >>= function
               | Error (`Msg err) ->
+                  Logs.err (fun m -> m "Builder_web update error %s" err);
                   Middleware.redirect_to_error
                     ~data:(`String ("Builder_web request: " ^ err))
-                    ~title:"Update Error" ~api_meth:false `Internal_server_error
-                    reqd ()
+                    ~title:(Vmm_core.Name.to_string name ^ "update Error")
+                    ~api_meth:false `Internal_server_error reqd ()
               | Ok response_body -> (
                   match
                     Builder_web.build_of_json
                       (Yojson.Basic.from_string response_body)
                   with
                   | Error (`Msg err) ->
+                      Logs.err (fun m -> m "Builder_web update error %s" err);
                       Middleware.redirect_to_error
                         ~data:(`String ("Builder_web request: " ^ err))
-                        ~title:"Update Error" ~api_meth:false
-                        `Internal_server_error reqd ()
+                        ~title:(Vmm_core.Name.to_string name ^ "update Error")
+                        ~api_meth:false `Internal_server_error reqd ()
                   | Ok latest_job_data ->
                       if String.equal latest_job_data.uuid current_job_data.uuid
                       then (
@@ -1097,10 +1102,13 @@ struct
                          ^ "")
                         >>= function
                         | Error (`Msg err) ->
+                            Logs.err (fun m ->
+                                m "Builder_web update error %s" err);
                             Middleware.redirect_to_error
                               ~data:(`String ("Builder_web request: " ^ err))
-                              ~title:"Update Error" ~api_meth:false
-                              `Internal_server_error reqd ()
+                              ~title:
+                                (Vmm_core.Name.to_string name ^ "update Error")
+                              ~api_meth:false `Internal_server_error reqd ()
                         | Ok response_body -> (
                             match
                               Builder_web.compare_of_json
@@ -1135,11 +1143,16 @@ struct
                                             ~icon:"/images/robur.png" ())
                                          `Internal_server_error))
                             | Error (`Msg err) ->
+                                Logs.err (fun m ->
+                                    m "Builder_web update error %s" err);
                                 Middleware.redirect_to_error
                                   ~data:
                                     (`String ("Builder_web request: " ^ err))
-                                  ~title:"Update Error" ~api_meth:false
-                                  `Internal_server_error reqd ())))))
+                                  ~title:
+                                    (Vmm_core.Name.to_string name
+                                    ^ "update Error")
+                                  ~api_meth:false `Internal_server_error reqd ()
+                            )))))
     else
       let error =
         {
