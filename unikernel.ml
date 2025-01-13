@@ -1059,7 +1059,7 @@ struct
             Logs.err (fun m -> m "Builder_web update error %s" err);
             Middleware.redirect_to_error
               ~data:(`String ("Builder_web request: " ^ err))
-              ~title:(Vmm_core.Name.to_string unikernel_name ^ "update Error")
+              ~title:(Vmm_core.Name.to_string unikernel_name ^ " update Error")
               ~api_meth:false `Internal_server_error reqd ()
         | Ok response_body -> (
             match
@@ -1070,7 +1070,7 @@ struct
                 Middleware.redirect_to_error
                   ~data:(`String ("Builder_web request: " ^ err))
                   ~title:
-                    (Vmm_core.Name.to_string unikernel_name ^ "update Error")
+                    (Vmm_core.Name.to_string unikernel_name ^ " update Error")
                   ~api_meth:false `Internal_server_error reqd ()
             | Ok current_job_data -> (
                 Builder_web.send_request
@@ -1082,7 +1082,7 @@ struct
                     Middleware.redirect_to_error
                       ~data:(`String ("Builder_web request: " ^ err))
                       ~title:
-                        (Vmm_core.Name.to_string unikernel_name ^ "update Error")
+                        (Vmm_core.Name.to_string unikernel_name ^ " update Error")
                       ~api_meth:false `Internal_server_error reqd ()
                 | Ok response_body -> (
                     match
@@ -1127,7 +1127,7 @@ struct
                                 ~data:(`String ("Builder_web request: " ^ err))
                                 ~title:
                                   (Vmm_core.Name.to_string unikernel_name
-                                  ^ "update Error")
+                                  ^ " update Error")
                                 ~api_meth:false `Internal_server_error reqd ()
                           | Ok response_body -> (
                               match
@@ -1173,7 +1173,7 @@ struct
                                       (`String ("Builder_web request: " ^ err))
                                     ~title:
                                       (Vmm_core.Name.to_string unikernel_name
-                                      ^ "update Error")
+                                      ^ " update Error")
                                     ~api_meth:false `Internal_server_error reqd
                                     ()))))))
 
