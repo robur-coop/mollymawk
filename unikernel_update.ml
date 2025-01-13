@@ -1,4 +1,4 @@
-let build_table (build : Utils.Builder_web.build) =
+let build_table (build : Builder_web.build) =
   Tyxml_html.(
     table
       ~a:[ a_class [ "table-auto min-w-full divide-y divide-gray-200" ] ]
@@ -94,7 +94,7 @@ let build_table (build : Utils.Builder_web.build) =
           ];
       ])
 
-let package_table (packages : Utils.Builder_web.package list) =
+let package_table (packages : Builder_web.package list) =
   Tyxml_html.(
     table
       ~a:[ a_class [ "table-auto min-w-full divide-y divide-gray-200" ] ]
@@ -116,7 +116,7 @@ let package_table (packages : Utils.Builder_web.package list) =
                ];
            ])
       (List.map
-         (fun (package : Utils.Builder_web.package) ->
+         (fun (package : Builder_web.package) ->
            tr
              [
                td
@@ -126,7 +126,7 @@ let package_table (packages : Utils.Builder_web.package list) =
              ])
          packages))
 
-let duniverse_table (packages : Utils.Builder_web.duniverse list) =
+let duniverse_table (packages : Builder_web.duniverse list) =
   Tyxml_html.(
     table
       ~a:[ a_class [ "table-auto min-w-full divide-y divide-gray-200" ] ]
@@ -148,7 +148,7 @@ let duniverse_table (packages : Utils.Builder_web.duniverse list) =
                ];
            ])
       (List.map
-         (fun (package : Utils.Builder_web.duniverse) ->
+         (fun (package : Builder_web.duniverse) ->
            tr
              [
                td
@@ -158,8 +158,7 @@ let duniverse_table (packages : Utils.Builder_web.duniverse list) =
              ])
          packages))
 
-let opam_version_table (packages : Utils.Builder_web.package_version_diff list)
-    =
+let opam_version_table (packages : Builder_web.package_version_diff list) =
   Tyxml_html.(
     table
       ~a:[ a_class [ "table-auto min-w-full divide-y divide-gray-200" ] ]
@@ -201,7 +200,7 @@ let opam_version_table (packages : Utils.Builder_web.package_version_diff list)
                ];
            ])
       (List.map
-         (fun (package : Utils.Builder_web.package_version_diff) ->
+         (fun (package : Builder_web.package_version_diff) ->
            tr
              [
                td
@@ -225,7 +224,7 @@ let opam_version_table (packages : Utils.Builder_web.package_version_diff list)
              ])
          packages))
 
-let opam_diff_table (diffs : Utils.Builder_web.o_diff list) =
+let opam_diff_table (diffs : Builder_web.o_diff list) =
   Tyxml_html.(
     table
       ~a:[ a_class [ "table-auto min-w-full divide-y divide-gray-200" ] ]
@@ -247,7 +246,7 @@ let opam_diff_table (diffs : Utils.Builder_web.o_diff list) =
                ];
            ])
       (List.map
-         (fun (diff : Utils.Builder_web.o_diff) ->
+         (fun (diff : Builder_web.o_diff) ->
            tr
              ~a:[ a_class [ "border" ] ]
              [
@@ -272,7 +271,7 @@ let opam_diff_table (diffs : Utils.Builder_web.o_diff list) =
          diffs))
 
 let unikernel_update_layout unikernel current_time
-    (build_comparison : Utils.Builder_web.compare) =
+    (build_comparison : Builder_web.compare) =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
@@ -431,7 +430,7 @@ let unikernel_update_layout unikernel current_time
                           ~a:[ a_class [ "flex gap-4" ] ]
                           (List.map
                              (fun (package :
-                                    Utils.Builder_web.duniverse_detailed_diff) ->
+                                    Builder_web.duniverse_detailed_diff) ->
                                p [ txt package.name ])
                              build_comparison.opam_diff.duniverse_diff
                                .detailed_diff);
