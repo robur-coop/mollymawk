@@ -5,13 +5,13 @@ let error_layout (error : Utils.Status.t) =
       [
         i ~a:[ a_class [ "fa-solid fa-triangle-exclamation text-5xl" ] ] [];
         div
-          ~a:[ a_class [ "flex gap-2 justify-center" ] ]
+          ~a:[ a_class [ "text-center" ] ]
           [
             p
               ~a:[ a_class [ "text-5xl text-secondary-500 font-semibold" ] ]
-              [ txt (string_of_int error.code ^ ":") ];
+              [ txt ("Error " ^ string_of_int error.code) ];
             p
-              ~a:[ a_class [ "uppercase font-bold text-5xl" ] ]
+              ~a:[ a_class [ "uppercase font-bold text-xl" ] ]
               [ txt error.title ];
           ];
         p

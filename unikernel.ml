@@ -1082,7 +1082,8 @@ struct
                     Middleware.redirect_to_error
                       ~data:(`String ("Builder_web request: " ^ err))
                       ~title:
-                        (Vmm_core.Name.to_string unikernel_name ^ " update Error")
+                        (Vmm_core.Name.to_string unikernel_name
+                        ^ " update Error")
                       ~api_meth:false `Internal_server_error reqd ()
                 | Ok response_body -> (
                     match
