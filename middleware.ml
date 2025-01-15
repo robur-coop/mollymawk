@@ -32,16 +32,14 @@ let apply_middleware middlewares handler =
 let redirect_to_page ~path ?(clear_session = false) ?(with_error = false) reqd
     ?(msg = "") () =
   let msg_cookie =
-    if with_error then "flash_msg=error: " ^ Uri.pct_encode msg ^ ";"
-    else "flash_msg=" ^ Uri.pct_encode msg ^ ";"
+    if with_error then "flash_msg=error: " ^ Uri.pct_encode msg ^ ";Path=/;"
+    else "flash_msg=" ^ Uri.pct_encode msg ^ ";Path=/;"
   in
   let header_list =
     let session_header =
       if clear_session then
         [
-          ( "Set-Cookie",
-            User_model.session_cookie
-            ^ "=; Path=/; HttpOnly=true; Expires=2023-10-27T11:00:00.778Z" );
+          ("Set-Cookie", User_model.session_cookie ^ "=; Path=/; HttpOnly=true;");
         ]
       else []
     in
