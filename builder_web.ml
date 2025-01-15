@@ -315,18 +315,17 @@ let compare_of_json = function
           ("invalid json for builder_web diff, expected a dict: "
          ^ Yojson.Basic.to_string js))
 
-let send_request url =
+let send_request http_client url =
   let body = "" in
   let body_f _ acc chunk = Lwt.return (acc ^ chunk) in
-  Http_lwt_client.request ~follow_redirect:true
+  Http_mirage_client.request http_client ~follow_redirect:true
     ~headers:[ ("Accept", "application/json") ]
     url body_f body
   >>= function
   | Error (`Msg err) -> Lwt.return (Error (`Msg err))
+  | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
+  | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
   | Ok (resp, body) -> (
-      match resp.Http_lwt_client.status with
+      match resp.Http_mirage_client.status with
       | `OK -> Lwt.return (Ok body)
-      | _ ->
-          Lwt.return
-            (Error
-               (`Msg (Format.asprintf "%a" Http_lwt_client.pp_response resp))))
+      | _ -> Lwt.return (Error (`Msg resp.reason)))

@@ -15,7 +15,8 @@ module Main
     (T : Mirage_time.S)
     (S : Tcpip.Stack.V4V6)
     (KV_ASSETS : Mirage_kv.RO)
-    (BLOCK : Mirage_block.S) =
+    (BLOCK : Mirage_block.S)
+    (Http_client : Http_mirage_client.S) =
 struct
   module Paf = Paf_mirage.Make (S.TCP)
 
@@ -1041,8 +1042,8 @@ struct
                     ~icon:"/images/robur.png" ())
                  `Internal_server_error))
 
-  let unikernel_prepare_update albatross store name reqd ~json_dict:_
-      (user : User_model.user) =
+  let unikernel_prepare_update albatross store name reqd http_client
+      ~json_dict:_ (user : User_model.user) =
     (* TODO use uuid in the future *)
     user_unikernel albatross ~user_name:user.name ~unikernel_name:name
     >>= fun unikernel_info ->
@@ -1052,7 +1053,7 @@ struct
           ~title:("An error occured while fetching " ^ name)
           ~api_meth:false `Internal_server_error reqd ()
     | Some (unikernel_name, unikernel) -> (
-        Builder_web.send_request
+        Builder_web.send_request http_client
           (Builder_web.base_url ^ "/hash?sha256=" ^ Ohex.encode unikernel.digest)
         >>= function
         | Error (`Msg err) ->
@@ -1073,7 +1074,7 @@ struct
                     (Vmm_core.Name.to_string unikernel_name ^ " update Error")
                   ~api_meth:false `Internal_server_error reqd ()
             | Ok current_job_data -> (
-                Builder_web.send_request
+                Builder_web.send_request http_client
                   (Builder_web.base_url ^ "/job/" ^ current_job_data.job
                  ^ "/build/latest")
                 >>= function
@@ -1116,7 +1117,7 @@ struct
                           Logs.info (fun m ->
                               m "There is an update %s %s" latest_job_data.uuid
                                 current_job_data.uuid);
-                          Builder_web.send_request
+                          Builder_web.send_request http_client
                             (Builder_web.base_url ^ "/compare/"
                            ^ current_job_data.uuid ^ "/" ^ latest_job_data.uuid
                            ^ "")
@@ -1858,7 +1859,7 @@ struct
                  (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let request_handler stack albatross js_file css_file imgs store
+  let request_handler stack albatross js_file css_file imgs store http_client
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
@@ -2060,7 +2061,8 @@ struct
                   String.sub path 18 (String.length path - 18)
                 in
                 authenticate store reqd
-                  (unikernel_prepare_update !albatross store unikernel_name reqd))
+                  (unikernel_prepare_update !albatross store unikernel_name reqd
+                     http_client))
         | _ ->
             let error =
               {
@@ -2087,7 +2089,7 @@ struct
           Fmt.(option ~none:(any "unknown") Httpaf.Request.pp_hum)
           request)
 
-  let start _ _ _ _ stack assets storage =
+  let start _ _ _ _ stack assets storage http_client =
     js_contents assets >>= fun js_file ->
     css_contents assets >>= fun css_file ->
     images assets >>= fun imgs ->
@@ -2105,6 +2107,7 @@ struct
               port);
         let request_handler _flow =
           request_handler stack albatross js_file css_file imgs store
+            http_client
         in
         Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
         let http = Paf.http_service ~error_handler request_handler in
