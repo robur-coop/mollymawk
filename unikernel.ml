@@ -64,7 +64,9 @@ struct
             Utils.Status.code = 500;
             title = "CSRF Token Error";
             success = false;
-            data = `String err;
+            data =
+              `String
+                ("An error occured while generating a CSRF token. Error: " ^ err);
           }
         in
         Lwt.return (Error error)
@@ -313,11 +315,14 @@ struct
                resulted in : %s"
               unikernel_name err);
         None
-    | Ok (_hdr, `Success (`Unikernel_info [ unikernel ])) ->
-        Some unikernel
-   | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
-       Logs.err (fun m -> m "expected a single unikernel information from albatross, received %u" (List.length unikernels));
-       None
+    | Ok (_hdr, `Success (`Unikernel_info [ unikernel ])) -> Some unikernel
+    | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
+        Logs.err (fun m ->
+            m
+              "expected a single unikernel information from albatross, \
+               received %u"
+              (List.length unikernels));
+        None
     | Ok reply ->
         Logs.err (fun m ->
             m "Trying to fetch %s: expected a unikernel info reply, received %a"
@@ -1010,9 +1015,11 @@ struct
                      {
                        code = 500;
                        success = false;
-                       title = "Error fetching " ^ name;
+                       title = "Albatross Error";
                        data =
-                         `String ("An error occured trying to fetch " ^ name);
+                         `String
+                           ("An error occured trying to fetch " ^ name
+                          ^ "from albatross.");
                      })
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
@@ -1052,74 +1059,103 @@ struct
     >>= fun unikernel_info ->
     match unikernel_info with
     | None ->
-        Middleware.redirect_to_error ~data:(`String "Builder_web request error")
-          ~title:("An error occured while fetching " ^ name)
-          ~api_meth:false `Internal_server_error reqd ()
+        Middleware.redirect_to_error
+          ~data:
+            (`String
+              ("An error occured while fetching " ^ name ^ " from albatross."))
+          ~title:"Albatross Error" ~api_meth:false `Internal_server_error reqd
+          ()
     | Some (unikernel_name, unikernel) -> (
         Builder_web.send_request http_client
           (Builder_web.base_url ^ "/hash?sha256=" ^ Ohex.encode unikernel.digest)
         >>= function
         | Error (`Msg err) ->
-            Logs.err (fun m -> m "Builder_web update error %s" err);
+            Logs.err (fun m ->
+                m
+                  "Builder_web: Error while fetching the current build info of \
+                   %s with error: %s"
+                  name err);
             Middleware.redirect_to_error
-              ~data:(`String ("Builder_web request: " ^ err))
-              ~title:(Vmm_core.Name.to_string unikernel_name ^ " update Error")
-              ~api_meth:false `Internal_server_error reqd ()
+              ~data:
+                (`String
+                  ("An error occured while fetching the current build \
+                    information from Builder_web. The error gotten is: " ^ err))
+              ~title:(name ^ " update Error") ~api_meth:false
+              `Internal_server_error reqd ()
         | Ok response_body -> (
             match
               Builder_web.build_of_json (Yojson.Basic.from_string response_body)
             with
             | Error (`Msg err) ->
-                Logs.err (fun m -> m "Builder_web update error %s" err);
+                Logs.err (fun m ->
+                    m
+                      "JSON parsing of the current build of %s from \
+                       Builder_web failed with error: %s"
+                      name err);
                 Middleware.redirect_to_error
-                  ~data:(`String ("Builder_web request: " ^ err))
-                  ~title:
-                    (Vmm_core.Name.to_string unikernel_name ^ " update Error")
-                  ~api_meth:false `Internal_server_error reqd ()
+                  ~data:
+                    (`String
+                      ("An error occured while parsing the json of the current \
+                        build from Builder_web. The error gotten is: " ^ err))
+                  ~title:(name ^ " update Error") ~api_meth:false
+                  `Internal_server_error reqd ()
             | Ok current_job_data -> (
                 Builder_web.send_request http_client
                   (Builder_web.base_url ^ "/job/" ^ current_job_data.job
                  ^ "/build/latest")
                 >>= function
                 | Error (`Msg err) ->
-                    Logs.err (fun m -> m "Builder_web update error %s" err);
+                    Logs.err (fun m ->
+                        m
+                          "Builder_web: Error while fetching the latest build \
+                           info of %s with error: %s"
+                          name err);
                     Middleware.redirect_to_error
-                      ~data:(`String ("Builder_web request: " ^ err))
-                      ~title:
-                        (Vmm_core.Name.to_string unikernel_name
-                        ^ " update Error")
-                      ~api_meth:false `Internal_server_error reqd ()
+                      ~data:
+                        (`String
+                          ("An error occured while fetching the latest build \
+                            information from Builder_web. The error gotten \
+                            is: " ^ err))
+                      ~title:(name ^ " update Error") ~api_meth:false
+                      `Internal_server_error reqd ()
                 | Ok response_body -> (
                     match
                       Builder_web.build_of_json
                         (Yojson.Basic.from_string response_body)
                     with
                     | Error (`Msg err) ->
-                        Logs.err (fun m -> m "Builder_web update error %s" err);
+                        Logs.err (fun m ->
+                            m
+                              "JSON parsing of the latest build of %s from \
+                               Builder_web failed with error: %s"
+                              name err);
                         Middleware.redirect_to_error
-                          ~data:(`String ("Builder_web request: " ^ err))
-                          ~title:
-                            (Vmm_core.Name.to_string unikernel_name
-                            ^ "update Error")
-                          ~api_meth:false `Internal_server_error reqd ()
-                    | Ok latest_job_data ->
+                          ~data:
+                            (`String
+                              ("An error occured while parsing the json of the \
+                                latest build from Builder_web. The error \
+                                gotten is: " ^ err))
+                          ~title:(name ^ "update Error") ~api_meth:false
+                          `Internal_server_error reqd ()
+                    | Ok latest_job_data -> (
                         if
                           String.equal latest_job_data.uuid
                             current_job_data.uuid
                         then (
                           Logs.info (fun m ->
-                              m "There is no update %s %s" latest_job_data.uuid
-                                current_job_data.uuid);
+                              m
+                                "There is no new update of %s found with uuid  \
+                                 %s"
+                                name latest_job_data.uuid);
                           Middleware.redirect_to_page
                             ~path:
                               ("/unikernel/info/"
                               ^ Option.value ~default:""
                                   (Vmm_core.Name.name unikernel_name))
-                            reqd ~msg:"There is no update" ())
-                        else (
-                          Logs.info (fun m ->
-                              m "There is an update %s %s" latest_job_data.uuid
-                                current_job_data.uuid);
+                            reqd
+                            ~msg:("There is no update of " ^ name ^ " found.")
+                            ())
+                        else
                           Builder_web.send_request http_client
                             (Builder_web.base_url ^ "/compare/"
                            ^ current_job_data.uuid ^ "/" ^ latest_job_data.uuid
@@ -1127,13 +1163,20 @@ struct
                           >>= function
                           | Error (`Msg err) ->
                               Logs.err (fun m ->
-                                  m "Builder_web update error %s" err);
+                                  m
+                                    "Builder_web: Error while fetching the \
+                                     diff between the current and latest build \
+                                     info of %s with error: %s"
+                                    name err);
                               Middleware.redirect_to_error
-                                ~data:(`String ("Builder_web request: " ^ err))
-                                ~title:
-                                  (Vmm_core.Name.to_string unikernel_name
-                                  ^ " update Error")
-                                ~api_meth:false `Internal_server_error reqd ()
+                                ~data:
+                                  (`String
+                                    ("An error occured while fetching the diff \
+                                      between the latest and the current build \
+                                      information from Builder_web. The error \
+                                      gotten is: " ^ err))
+                                ~title:(name ^ " update Error") ~api_meth:false
+                                `Internal_server_error reqd ()
                           | Ok response_body -> (
                               match
                                 Builder_web.compare_of_json
@@ -1165,20 +1208,27 @@ struct
                                       Lwt.return
                                         (reply reqd ~content_type:"text/html"
                                            (Guest_layout.guest_layout
-                                              ~page_title:"500 | Mollymawk"
+                                              ~page_title:
+                                                "CSRF Token Error | Mollymawk"
                                               ~content:
                                                 (Error_page.error_layout err)
                                               ~icon:"/images/robur.png" ())
                                            `Internal_server_error))
                               | Error (`Msg err) ->
                                   Logs.err (fun m ->
-                                      m "Builder_web update error %s" err);
+                                      m
+                                        "JSON parsing of the diff between the \
+                                         latest and current build of %s from \
+                                         Builder_web failed with error: %s"
+                                        name err);
                                   Middleware.redirect_to_error
                                     ~data:
-                                      (`String ("Builder_web request: " ^ err))
-                                    ~title:
-                                      (Vmm_core.Name.to_string unikernel_name
-                                      ^ " update Error")
+                                      (`String
+                                        ("An error occured while parsing the \
+                                          json of the diff between the latest \
+                                          and curent build from Builder_web. \
+                                          The error gotten is: " ^ err))
+                                    ~title:(name ^ " update Error")
                                     ~api_meth:false `Internal_server_error reqd
                                     ()))))))
 
