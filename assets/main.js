@@ -956,4 +956,3 @@ function areCharactersValid(s) {
 	}
 	return true;
 }
-
