@@ -313,8 +313,11 @@ struct
                resulted in : %s"
               unikernel_name err);
         None
-    | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
-        if List.length unikernels > 0 then Some (List.hd unikernels) else None
+    | Ok (_hdr, `Success (`Unikernel_info [ unikernel ])) ->
+        Some unikernel
+   | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
+       Logs.err (fun m -> m "expected a single unikernel information from albatross, received %u" (List.length unikernels));
+       None
     | Ok reply ->
         Logs.err (fun m ->
             m "Trying to fetch %s: expected a unikernel info reply, received %a"
