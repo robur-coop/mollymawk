@@ -1071,7 +1071,7 @@ struct
           ()
     | Ok (unikernel_name, unikernel) -> (
         Builder_web.send_request http_client
-          (Builder_web.base_url ^ "/hash?sha256=" ^ Ohex.encode unikernel.digest)
+          ("/hash?sha256=" ^ Ohex.encode unikernel.digest)
         >>= function
         | Error (`Msg err) ->
             Logs.err (fun m ->
@@ -1105,8 +1105,7 @@ struct
                   `Internal_server_error reqd ()
             | Ok current_job_data -> (
                 Builder_web.send_request http_client
-                  (Builder_web.base_url ^ "/job/" ^ current_job_data.job
-                 ^ "/build/latest")
+                  ("/job/" ^ current_job_data.job ^ "/build/latest")
                 >>= function
                 | Error (`Msg err) ->
                     Logs.err (fun m ->
@@ -1161,9 +1160,8 @@ struct
                             ())
                         else
                           Builder_web.send_request http_client
-                            (Builder_web.base_url ^ "/compare/"
-                           ^ current_job_data.uuid ^ "/" ^ latest_job_data.uuid
-                           ^ "")
+                            ("/compare/" ^ current_job_data.uuid ^ "/"
+                           ^ latest_job_data.uuid ^ "")
                           >>= function
                           | Error (`Msg err) ->
                               Logs.err (fun m ->

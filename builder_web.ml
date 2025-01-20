@@ -315,7 +315,8 @@ let compare_of_json = function
           ("invalid json for builder_web diff, expected a dict: "
          ^ Yojson.Basic.to_string js))
 
-let send_request http_client url =
+let send_request http_client path =
+  let url = base_url ^ path in
   let body = "" in
   let body_f _ acc chunk = Lwt.return (acc ^ chunk) in
   Http_mirage_client.request http_client ~follow_redirect:true
@@ -328,4 +329,9 @@ let send_request http_client url =
   | Ok (resp, body) -> (
       match resp.Http_mirage_client.status with
       | `OK -> Lwt.return (Ok body)
-      | _ -> Lwt.return (Error (`Msg resp.reason)))
+      | _ ->
+          Lwt.return
+            (Error
+               (`Msg
+                 ("accessing " ^ url ^ " resulted in an error: " ^ resp.reason
+                 ^ Http_mirage_client.Status.to_string resp.status))))
