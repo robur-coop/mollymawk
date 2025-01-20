@@ -1,4 +1,5 @@
-let unikernel_single_layout unikernel current_time console_output =
+let unikernel_single_layout ~unikernel_name unikernel current_time
+    console_output =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
@@ -48,10 +49,8 @@ let unikernel_single_layout unikernel current_time console_output =
                               ~attribs:
                                 [
                                   a_onclick
-                                    ("restartUnikernel('"
-                                    ^ Option.value ~default:""
-                                        (Vmm_core.Name.name u_name)
-                                    ^ "')");
+                                    ("restartUnikernel('" ^ unikernel_name
+                                   ^ "')");
                                 ]
                               ~content:(txt "Restart")
                               ~btn_type:`Primary_outlined ();
@@ -61,9 +60,7 @@ let unikernel_single_layout unikernel current_time console_output =
                             a
                               ~a:
                                 [
-                                  a_href
-                                    ("/unikernel/update/"
-                                    ^ Vmm_core.Name.to_string u_name);
+                                  a_href ("/unikernel/update/" ^ unikernel_name);
                                   a_class
                                     [
                                       "py-2 px-2 rounded border border-1 \
@@ -80,10 +77,8 @@ let unikernel_single_layout unikernel current_time console_output =
                               ~attribs:
                                 [
                                   a_onclick
-                                    ("destroyUnikernel('"
-                                    ^ Option.value ~default:""
-                                        (Vmm_core.Name.name u_name)
-                                    ^ "')");
+                                    ("destroyUnikernel('" ^ unikernel_name
+                                   ^ "')");
                                 ]
                               ~content:(txt "Destroy")
                               ~btn_type:`Danger_outlined ();

@@ -1029,7 +1029,7 @@ struct
                      })
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
-    | Some (unikernel_name, unikernel), None -> (
+    | Some unikernel, None -> (
         (Albatross.query_console ~domain:user.name albatross ~name >|= function
          | Error err ->
              Logs.warn (fun m ->
@@ -1045,8 +1045,7 @@ struct
                  (Dashboard.dashboard_layout ~csrf user
                     ~content:
                       (Unikernel_single.unikernel_single_layout
-                         (unikernel_name, unikernel)
-                         now console_output)
+                         ~unikernel_name:name unikernel now console_output)
                     ~icon:"/images/robur.png" ())
                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                  `OK)
