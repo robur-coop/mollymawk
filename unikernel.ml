@@ -1083,7 +1083,7 @@ struct
               ~data:
                 (`String
                   ("An error occured while fetching the current build \
-                    information from Builder_web. The error gotten is: " ^ err))
+                    information from Builder_web. The error is: " ^ err))
               ~title:(name ^ " update Error") ~api_meth:false
               `Internal_server_error reqd ()
         | Ok response_body -> (
@@ -1100,7 +1100,7 @@ struct
                   ~data:
                     (`String
                       ("An error occured while parsing the json of the current \
-                        build from Builder_web. The error gotten is: " ^ err))
+                        build from Builder_web. The error is: " ^ err))
                   ~title:(name ^ " update Error") ~api_meth:false
                   `Internal_server_error reqd ()
             | Ok current_job_data -> (
@@ -1118,8 +1118,8 @@ struct
                       ~data:
                         (`String
                           ("An error occured while fetching the latest build \
-                            information from Builder_web. The error gotten \
-                            is: " ^ err))
+                            information from Builder_web. The error is: " ^ err
+                          ))
                       ~title:(name ^ " update Error") ~api_meth:false
                       `Internal_server_error reqd ()
                 | Ok response_body -> (
@@ -1137,8 +1137,8 @@ struct
                           ~data:
                             (`String
                               ("An error occured while parsing the json of the \
-                                latest build from Builder_web. The error \
-                                gotten is: " ^ err))
+                                latest build from Builder_web. The error is: "
+                             ^ err))
                           ~title:(name ^ "update Error") ~api_meth:false
                           `Internal_server_error reqd ()
                     | Ok latest_job_data -> (
@@ -1178,7 +1178,7 @@ struct
                                     ("An error occured while fetching the diff \
                                       between the latest and the current build \
                                       information from Builder_web. The error \
-                                      gotten is: " ^ err))
+                                      is: " ^ err))
                                 ~title:(name ^ " update Error") ~api_meth:false
                                 `Internal_server_error reqd ()
                           | Ok response_body -> (
@@ -1231,7 +1231,7 @@ struct
                                         ("An error occured while parsing the \
                                           json of the diff between the latest \
                                           and curent build from Builder_web. \
-                                          The error gotten is: " ^ err))
+                                          The error is: " ^ err))
                                     ~title:(name ^ " update Error")
                                     ~api_meth:false `Internal_server_error reqd
                                     ()))))))
