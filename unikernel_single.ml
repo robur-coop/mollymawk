@@ -63,8 +63,7 @@ let unikernel_single_layout unikernel current_time console_output =
                                 [
                                   a_href
                                     ("/unikernel/update/"
-                                    ^ Option.value ~default:""
-                                        (Vmm_core.Name.name u_name));
+                                    ^ Vmm_core.Name.to_string u_name);
                                   a_class
                                     [
                                       "py-2 px-2 rounded border border-1 \

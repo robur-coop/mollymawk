@@ -314,22 +314,28 @@ struct
               "Error while communicating with albatross. Trying to fetch %s \
                resulted in : %s"
               unikernel_name err);
-        None
-    | Ok (_hdr, `Success (`Unikernel_info [ unikernel ])) -> Some unikernel
+        (None, Some err)
+    | Ok (_hdr, `Success (`Unikernel_info [ unikernel ])) ->
+        (Some unikernel, None)
     | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
-        Logs.err (fun m ->
-            m
-              "expected a single unikernel information from albatross, \
-               received %u"
-              (List.length unikernels));
-        None
+        let message =
+          Printf.sprintf
+            "Expected a single unikernel information from albatross, received \
+             %u"
+            (List.length unikernels)
+        in
+        Logs.err (fun m -> m "%s" message);
+        (None, Some message)
     | Ok reply ->
-        Logs.err (fun m ->
-            m "Trying to fetch %s: expected a unikernel info reply, received %a"
-              unikernel_name
-              (Vmm_commands.pp_wire ~verbose:false)
-              reply);
-        None
+        let message =
+          Printf.sprintf
+            "Trying to fetch %s: expected a unikernel info reply, received %s"
+            unikernel_name
+            (Format.asprintf "%a" (Vmm_commands.pp_wire ~verbose:false) reply)
+        in
+        Logs.err (fun m -> m "%s" message);
+
+        (None, Some message)
 
   let read_multipart_data reqd =
     let response_body = Httpaf.Reqd.request_body reqd in
@@ -1006,7 +1012,7 @@ struct
     user_unikernel albatross ~user_name:user.name ~unikernel_name:name
     >>= fun unikernel_info ->
     match unikernel_info with
-    | None ->
+    | None, Some err ->
         Lwt.return
           (reply reqd ~content_type:"text/html"
              (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
@@ -1019,11 +1025,11 @@ struct
                        data =
                          `String
                            ("An error occured trying to fetch " ^ name
-                          ^ "from albatross.");
+                          ^ "from albatross: " ^ err);
                      })
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
-    | Some (unikernel_name, unikernel) -> (
+    | Some (unikernel_name, unikernel), None -> (
         (Albatross.query_console ~domain:user.name albatross ~name >|= function
          | Error err ->
              Logs.warn (fun m ->
@@ -1051,6 +1057,16 @@ struct
                     ~content:(Error_page.error_layout err)
                     ~icon:"/images/robur.png" ())
                  `Internal_server_error))
+    | _ ->
+        Logs.err (fun m ->
+            m "n unknown error occured while fetching %s from albatross." name);
+        Middleware.redirect_to_error
+          ~data:
+            (`String
+              "An unknown error occured while fetching this unikernel from \
+               albatross. ")
+          ~title:(name ^ " update Error") ~api_meth:false `Internal_server_error
+          reqd ()
 
   let unikernel_prepare_update albatross store name reqd http_client
       ~json_dict:_ (user : User_model.user) =
@@ -1058,14 +1074,15 @@ struct
     user_unikernel albatross ~user_name:user.name ~unikernel_name:name
     >>= fun unikernel_info ->
     match unikernel_info with
-    | None ->
+    | None, Some err ->
         Middleware.redirect_to_error
           ~data:
             (`String
-              ("An error occured while fetching " ^ name ^ " from albatross."))
+              ("An error occured while fetching " ^ name
+             ^ " from albatross with error " ^ err))
           ~title:"Albatross Error" ~api_meth:false `Internal_server_error reqd
           ()
-    | Some (unikernel_name, unikernel) -> (
+    | Some (unikernel_name, unikernel), None -> (
         Builder_web.send_request http_client
           (Builder_web.base_url ^ "/hash?sha256=" ^ Ohex.encode unikernel.digest)
         >>= function
@@ -1231,6 +1248,16 @@ struct
                                     ~title:(name ^ " update Error")
                                     ~api_meth:false `Internal_server_error reqd
                                     ()))))))
+    | _ ->
+        Logs.err (fun m ->
+            m "n unknown error occured while fetching %s from albatross." name);
+        Middleware.redirect_to_error
+          ~data:
+            (`String
+              "An unknown error occured while fetching this unikernel from \
+               albatross. ")
+          ~title:(name ^ " update Error") ~api_meth:false `Internal_server_error
+          reqd ()
 
   let unikernel_destroy ~json_dict albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
