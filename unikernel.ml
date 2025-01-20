@@ -1076,14 +1076,14 @@ struct
         | Error (`Msg err) ->
             Logs.err (fun m ->
                 m
-                  "Builder_web: Error while fetching the current build info of \
-                   %s with error: %s"
+                  "builds.robur.coop: Error while fetching the current build \
+                   info of %s with error: %s"
                   name err);
             Middleware.redirect_to_error
               ~data:
                 (`String
                   ("An error occured while fetching the current build \
-                    information from Builder_web. The error is: " ^ err))
+                    information from builds.robur.coop. The error is: " ^ err))
               ~title:(name ^ " update Error") ~api_meth:false
               `Internal_server_error reqd ()
         | Ok response_body -> (
@@ -1094,13 +1094,13 @@ struct
                 Logs.err (fun m ->
                     m
                       "JSON parsing of the current build of %s from \
-                       Builder_web failed with error: %s"
+                       builds.robur.coop failed with error: %s"
                       name err);
                 Middleware.redirect_to_error
                   ~data:
                     (`String
                       ("An error occured while parsing the json of the current \
-                        build from Builder_web. The error is: " ^ err))
+                        build from builds.robur.coop. The error is: " ^ err))
                   ~title:(name ^ " update Error") ~api_meth:false
                   `Internal_server_error reqd ()
             | Ok current_job_data -> (
@@ -1110,15 +1110,15 @@ struct
                 | Error (`Msg err) ->
                     Logs.err (fun m ->
                         m
-                          "Builder_web: Error while fetching the latest build \
-                           info of %s with error: %s"
+                          "builds.robur.coop: Error while fetching the latest \
+                           build info of %s with error: %s"
                           name err);
                     Middleware.redirect_to_error
                       ~data:
                         (`String
                           ("An error occured while fetching the latest build \
-                            information from Builder_web. The error is: " ^ err
-                          ))
+                            information from builds.robur.coop. The error is: "
+                         ^ err))
                       ~title:(name ^ " update Error") ~api_meth:false
                       `Internal_server_error reqd ()
                 | Ok response_body -> (
@@ -1130,14 +1130,14 @@ struct
                         Logs.err (fun m ->
                             m
                               "JSON parsing of the latest build of %s from \
-                               Builder_web failed with error: %s"
+                               builds.robur.coop failed with error: %s"
                               name err);
                         Middleware.redirect_to_error
                           ~data:
                             (`String
                               ("An error occured while parsing the json of the \
-                                latest build from Builder_web. The error is: "
-                             ^ err))
+                                latest build from builds.robur.coop. The error \
+                                is: " ^ err))
                           ~title:(name ^ "update Error") ~api_meth:false
                           `Internal_server_error reqd ()
                     | Ok latest_job_data -> (
@@ -1156,7 +1156,9 @@ struct
                               ^ Option.value ~default:""
                                   (Vmm_core.Name.name unikernel_name))
                             reqd
-                            ~msg:("There is no update of " ^ name ^ " found.")
+                            ~msg:
+                              ("There is no update of " ^ name
+                             ^ " found on builds.robur.coop")
                             ())
                         else
                           Builder_web.send_request http_client
@@ -1166,17 +1168,17 @@ struct
                           | Error (`Msg err) ->
                               Logs.err (fun m ->
                                   m
-                                    "Builder_web: Error while fetching the \
-                                     diff between the current and latest build \
-                                     info of %s with error: %s"
+                                    "builds.robur.coop: Error while fetching \
+                                     the diff between the current and latest \
+                                     build info of %s with error: %s"
                                     name err);
                               Middleware.redirect_to_error
                                 ~data:
                                   (`String
                                     ("An error occured while fetching the diff \
                                       between the latest and the current build \
-                                      information from Builder_web. The error \
-                                      is: " ^ err))
+                                      information from builds.robur.coop. The \
+                                      error is: " ^ err))
                                 ~title:(name ^ " update Error") ~api_meth:false
                                 `Internal_server_error reqd ()
                           | Ok response_body -> (
@@ -1221,15 +1223,17 @@ struct
                                       m
                                         "JSON parsing of the diff between the \
                                          latest and current build of %s from \
-                                         Builder_web failed with error: %s"
+                                         builds.robur.coop failed with error: \
+                                         %s"
                                         name err);
                                   Middleware.redirect_to_error
                                     ~data:
                                       (`String
                                         ("An error occured while parsing the \
                                           json of the diff between the latest \
-                                          and curent build from Builder_web. \
-                                          The error is: " ^ err))
+                                          and curent build from \
+                                          builds.robur.coop. The error is: "
+                                       ^ err))
                                     ~title:(name ^ " update Error")
                                     ~api_meth:false `Internal_server_error reqd
                                     ()))))))
