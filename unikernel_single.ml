@@ -1,4 +1,5 @@
-let unikernel_single_layout unikernel current_time console_output =
+let unikernel_single_layout ~unikernel_name unikernel current_time
+    console_output =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
@@ -40,7 +41,7 @@ let unikernel_single_layout unikernel current_time console_output =
                           [ txt (Ohex.encode data.digest) ];
                       ];
                     div
-                      ~a:[ a_class [ "flex space-x-2" ] ]
+                      ~a:[ a_class [ "flex space-x-2 items-center" ] ]
                       [
                         div
                           [
@@ -48,13 +49,27 @@ let unikernel_single_layout unikernel current_time console_output =
                               ~attribs:
                                 [
                                   a_onclick
-                                    ("restartUnikernel('"
-                                    ^ Option.value ~default:""
-                                        (Vmm_core.Name.name u_name)
-                                    ^ "')");
+                                    ("restartUnikernel('" ^ unikernel_name
+                                   ^ "')");
                                 ]
-                              ~content:(txt "Restart") ~btn_type:`Primary_full
-                              ();
+                              ~content:(txt "Restart")
+                              ~btn_type:`Primary_outlined ();
+                          ];
+                        div
+                          [
+                            a
+                              ~a:
+                                [
+                                  a_href ("/unikernel/update/" ^ unikernel_name);
+                                  a_class
+                                    [
+                                      "py-2 px-2 rounded border border-1 \
+                                       border-primary-400 text-primary-600 \
+                                       hover:text-gray-50 focus:outline-none \
+                                       hover:bg-primary-800 font-semibold";
+                                    ];
+                                ]
+                              [ txt "Update" ];
                           ];
                         div
                           [
@@ -62,13 +77,11 @@ let unikernel_single_layout unikernel current_time console_output =
                               ~attribs:
                                 [
                                   a_onclick
-                                    ("destroyUnikernel('"
-                                    ^ Option.value ~default:""
-                                        (Vmm_core.Name.name u_name)
-                                    ^ "')");
+                                    ("destroyUnikernel('" ^ unikernel_name
+                                   ^ "')");
                                 ]
-                              ~content:(txt "Destroy") ~btn_type:`Primary_full
-                              ();
+                              ~content:(txt "Destroy")
+                              ~btn_type:`Danger_outlined ();
                           ];
                       ];
                   ];

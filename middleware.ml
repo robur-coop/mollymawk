@@ -32,16 +32,14 @@ let apply_middleware middlewares handler =
 let redirect_to_page ~path ?(clear_session = false) ?(with_error = false) reqd
     ?(msg = "") () =
   let msg_cookie =
-    if with_error then "flash_msg=error: " ^ Uri.pct_encode msg ^ ";"
-    else "flash_msg=" ^ Uri.pct_encode msg ^ ";"
+    if with_error then "flash_msg=error: " ^ Uri.pct_encode msg ^ ";Path=/;"
+    else "flash_msg=" ^ Uri.pct_encode msg ^ ";Path=/;"
   in
   let header_list =
     let session_header =
       if clear_session then
         [
-          ( "Set-Cookie",
-            User_model.session_cookie
-            ^ "=; Path=/; HttpOnly=true; Expires=2023-10-27T11:00:00.778Z" );
+          ("Set-Cookie", User_model.session_cookie ^ "=; Path=/; HttpOnly=true;");
         ]
       else []
     in
@@ -57,8 +55,10 @@ let redirect_to_page ~path ?(clear_session = false) ?(with_error = false) reqd
   Httpaf.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
-let redirect_to_error ~title ~data status code api_meth reqd () =
-  let error = { Utils.Status.code; title; success = false; data } in
+let redirect_to_error ~title ~data ~api_meth status reqd () =
+  let code = Httpaf.Status.to_code status
+  and success = Httpaf.Status.is_successful status in
+  let error = { Utils.Status.code; title; data; success } in
   let data =
     if api_meth then Utils.Status.to_json error
     else

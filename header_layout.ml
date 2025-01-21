@@ -34,4 +34,16 @@ let header ?(page_title = "Mollymawk") ~icon () =
           (txt "");
         (* chart.js is used for chart elements like pie charts. We use this to visualize usage data of policies*)
         script ~a:[ a_src "https://cdn.jsdelivr.net/npm/chart.js" ] (txt "");
+        (* used in update_unikernel.ml to display diffs in better visuals *)
+        script
+          ~a:
+            [
+              a_src
+                "https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html-ui.min.js";
+            ]
+          (txt "");
+        link ~rel:[ `Stylesheet ]
+          ~href:
+            "https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css"
+          ();
       ])

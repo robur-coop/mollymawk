@@ -163,3 +163,7 @@ let display_banner = function
               ~btn_type:`Primary_outlined ();
           ])
   | None -> Tyxml_html.div []
+
+let bytes_to_megabytes bytes =
+  let megabytes = float_of_int bytes /. (1024.0 *. 1024.0) in
+  Printf.sprintf "%.2f MB" megabytes
