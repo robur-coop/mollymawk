@@ -485,20 +485,20 @@ struct
                       Middleware.http_response reqd ~title:"Error"
                         ~data:
                           (`String
-                            "A user with this name or email already exist.")
+                             "A user with this name or email already exist.")
                         `Bad_request
                 else
                   Middleware.http_response reqd ~title:"Error"
                     ~data:
                       (`String
-                        "CSRF token mismatch error. Please referesh and try \
-                         again.") `Bad_request)
+                         "CSRF token mismatch error. Please referesh and try \
+                          again.") `Bad_request)
         | _ ->
             Middleware.http_response reqd ~title:"Error"
               ~data:
                 (`String
-                  (Fmt.str "Register: Unexpected fields. Got %s"
-                     (Yojson.Basic.to_string (`Assoc json_dict))))
+                   (Fmt.str "Register: Unexpected fields. Got %s"
+                      (Yojson.Basic.to_string (`Assoc json_dict))))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
@@ -569,8 +569,8 @@ struct
             Middleware.http_response reqd ~title:"Error"
               ~data:
                 (`String
-                  (Fmt.str "Update password: Unexpected fields. Got %s"
-                     (Yojson.Basic.to_string (`Assoc json_dict))))
+                   (Fmt.str "Update password: Unexpected fields. Got %s"
+                      (Yojson.Basic.to_string (`Assoc json_dict))))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
@@ -796,8 +796,8 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:
             (`String
-              (Fmt.str "Update password: Unexpected fields. Got %s"
-                 (Yojson.Basic.to_string (`Assoc json_dict))))
+               (Fmt.str "Update password: Unexpected fields. Got %s"
+                  (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
   let new_user_cookies ~user ~filter ~redirect store reqd =
@@ -898,8 +898,8 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:
             (`String
-              (Fmt.str "Close session: Unexpected fields. Got %s"
-                 (Yojson.Basic.to_string (`Assoc json_dict))))
+               (Fmt.str "Close session: Unexpected fields. Got %s"
+                  (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
   let users store reqd ~json_dict:_ (user : User_model.user) =
@@ -1028,12 +1028,12 @@ struct
                 ~icon:"/images/robur.png" ())
              `Internal_server_error)
     | Ok unikernel -> (
-        (Albatross.query_console ~domain:user.name albatross ~name >|= function
-         | Error err ->
-             Logs.warn (fun m ->
-                 m "error querying console of albatross: %s" err);
-             []
-         | Ok (_, console_output) -> console_output)
+        ( Albatross.query_console ~domain:user.name albatross ~name >|= function
+          | Error err ->
+              Logs.warn (fun m ->
+                  m "error querying console of albatross: %s" err);
+              []
+          | Ok (_, console_output) -> console_output )
         >>= fun console_output ->
         let now = Ptime.v (P.now_d_ps ()) in
         generate_csrf_token store user now reqd >>= function
@@ -1065,8 +1065,8 @@ struct
         Middleware.redirect_to_error
           ~data:
             (`String
-              ("An error occured while fetching " ^ name
-             ^ " from albatross with error " ^ err))
+               ("An error occured while fetching " ^ name
+              ^ " from albatross with error " ^ err))
           ~title:"Albatross Error" ~api_meth:false `Internal_server_error reqd
           ()
     | Ok (unikernel_name, unikernel) -> (
@@ -1082,8 +1082,8 @@ struct
             Middleware.redirect_to_error
               ~data:
                 (`String
-                  ("An error occured while fetching the current build \
-                    information from builds.robur.coop. The error is: " ^ err))
+                   ("An error occured while fetching the current build \
+                     information from builds.robur.coop. The error is: " ^ err))
               ~title:(name ^ " update Error") ~api_meth:false
               `Internal_server_error reqd ()
         | Ok response_body -> (
@@ -1099,8 +1099,9 @@ struct
                 Middleware.redirect_to_error
                   ~data:
                     (`String
-                      ("An error occured while parsing the json of the current \
-                        build from builds.robur.coop. The error is: " ^ err))
+                       ("An error occured while parsing the json of the \
+                         current build from builds.robur.coop. The error is: "
+                      ^ err))
                   ~title:(name ^ " update Error") ~api_meth:false
                   `Internal_server_error reqd ()
             | Ok current_job_data -> (
@@ -1116,9 +1117,9 @@ struct
                     Middleware.redirect_to_error
                       ~data:
                         (`String
-                          ("An error occured while fetching the latest build \
-                            information from builds.robur.coop. The error is: "
-                         ^ err))
+                           ("An error occured while fetching the latest build \
+                             information from builds.robur.coop. The error \
+                             is: " ^ err))
                       ~title:(name ^ " update Error") ~api_meth:false
                       `Internal_server_error reqd ()
                 | Ok response_body -> (
@@ -1135,9 +1136,9 @@ struct
                         Middleware.redirect_to_error
                           ~data:
                             (`String
-                              ("An error occured while parsing the json of the \
-                                latest build from builds.robur.coop. The error \
-                                is: " ^ err))
+                               ("An error occured while parsing the json of \
+                                 the latest build from builds.robur.coop. The \
+                                 error is: " ^ err))
                           ~title:(name ^ "update Error") ~api_meth:false
                           `Internal_server_error reqd ()
                     | Ok latest_job_data -> (
@@ -1175,10 +1176,11 @@ struct
                               Middleware.redirect_to_error
                                 ~data:
                                   (`String
-                                    ("An error occured while fetching the diff \
-                                      between the latest and the current build \
-                                      information from builds.robur.coop. The \
-                                      error is: " ^ err))
+                                     ("An error occured while fetching the \
+                                       diff between the latest and the current \
+                                       build information from \
+                                       builds.robur.coop. The error is: " ^ err
+                                     ))
                                 ~title:(name ^ " update Error") ~api_meth:false
                                 `Internal_server_error reqd ()
                           | Ok response_body -> (
@@ -1229,11 +1231,11 @@ struct
                                   Middleware.redirect_to_error
                                     ~data:
                                       (`String
-                                        ("An error occured while parsing the \
-                                          json of the diff between the latest \
-                                          and curent build from \
-                                          builds.robur.coop. The error is: "
-                                       ^ err))
+                                         ("An error occured while parsing the \
+                                           json of the diff between the latest \
+                                           and curent build from \
+                                           builds.robur.coop. The error is: "
+                                        ^ err))
                                     ~title:(name ^ " update Error")
                                     ~api_meth:false `Internal_server_error reqd
                                     ()))))))
@@ -1488,7 +1490,7 @@ struct
                         Middleware.http_response reqd ~title:"Error"
                           ~data:
                             (`String
-                              ("Policy is not smaller than root policy: " ^ err))
+                               ("Policy is not smaller than root policy: " ^ err))
                           `Internal_server_error
                     | Ok () -> (
                         Albatross.set_policy albatross ~domain:u.name policy
@@ -1518,7 +1520,7 @@ struct
                     Middleware.http_response reqd ~title:"Error"
                       ~data:
                         (`String
-                          ("error with root policy: " ^ String.escaped err))
+                           ("error with root policy: " ^ String.escaped err))
                       `Internal_server_error)
             | Error (`Msg err) ->
                 Middleware.http_response reqd ~title:"Error"
@@ -1531,8 +1533,8 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:
             (`String
-              (Fmt.str "Update policy: Unexpected fields. Got %s"
-                 (Yojson.Basic.to_string (`Assoc json_dict))))
+               (Fmt.str "Update policy: Unexpected fields. Got %s"
+                  (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
   let volumes store albatross reqd ~json_dict:_ (user : User_model.user) =
@@ -1620,8 +1622,8 @@ struct
                         Albatross.query albatross ~domain:user.name
                           ~name:block_name
                           (`Block_cmd
-                            (`Block_add
-                              (block_size, block_compressed, Some block_data)))
+                             (`Block_add
+                                (block_size, block_compressed, Some block_data)))
                         >>= function
                         | Error err ->
                             Logs.err (fun m ->
@@ -1630,8 +1632,8 @@ struct
                             Middleware.http_response reqd ~title:"Error"
                               ~data:
                                 (`String
-                                  ("Error querying albatross: "
-                                 ^ String.escaped err))
+                                   ("Error querying albatross: "
+                                  ^ String.escaped err))
                               `Internal_server_error
                         | Ok (_hdr, res) -> (
                             match Albatross_json.res res with
@@ -1647,8 +1649,8 @@ struct
                     Middleware.http_response reqd ~title:"Error"
                       ~data:
                         (`String
-                          (Fmt.str "Create volume: Unexpected fields. Got %s"
-                             (Yojson.Basic.to_string (`Assoc json_dict))))
+                           (Fmt.str "Create volume: Unexpected fields. Got %s"
+                              (Yojson.Basic.to_string (`Assoc json_dict))))
                       `Bad_request)
             | _ ->
                 Middleware.http_response reqd ~title:"Error"
@@ -1723,7 +1725,7 @@ struct
                         Albatross.query albatross ~domain:user.name
                           ~name:block_name
                           (`Block_cmd
-                            (`Block_set (block_compressed, block_data)))
+                             (`Block_set (block_compressed, block_data)))
                         >>= function
                         | Error err ->
                             Logs.err (fun m ->
@@ -1732,8 +1734,8 @@ struct
                             Middleware.http_response reqd ~title:"Error"
                               ~data:
                                 (`String
-                                  ("Error querying albatross: "
-                                 ^ String.escaped err))
+                                   ("Error querying albatross: "
+                                  ^ String.escaped err))
                               `Internal_server_error
                         | Ok (_hdr, res) -> (
                             match Albatross_json.res res with
@@ -1749,8 +1751,9 @@ struct
                     Middleware.http_response reqd ~title:"Error"
                       ~data:
                         (`String
-                          (Fmt.str "Upload to volume: Unexpected fields. Got %s"
-                             (Yojson.Basic.to_string (`Assoc json_dict))))
+                           (Fmt.str
+                              "Upload to volume: Unexpected fields. Got %s"
+                              (Yojson.Basic.to_string (`Assoc json_dict))))
                       `Bad_request)
             | _ ->
                 Middleware.http_response reqd ~title:"Error"
@@ -1835,8 +1838,8 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:
             (`String
-              (Fmt.str "Create token: Unexpected fields. Got %s"
-                 (Yojson.Basic.to_string (`Assoc json_dict))))
+               (Fmt.str "Create token: Unexpected fields. Got %s"
+                  (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
   let delete_token store reqd ~json_dict (user : User_model.user) =
@@ -1865,8 +1868,8 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:
             (`String
-              (Fmt.str "Delete token: Unexpected fields. Got %s"
-                 (Yojson.Basic.to_string (`Assoc json_dict))))
+               (Fmt.str "Delete token: Unexpected fields. Got %s"
+                  (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
   let update_token store reqd ~json_dict (user : User_model.user) =
@@ -1914,8 +1917,8 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:
             (`String
-              (Fmt.str "Update token: Unexpected fields. Got %s"
-                 (Yojson.Basic.to_string (`Assoc json_dict))))
+               (Fmt.str "Update token: Unexpected fields. Got %s"
+                  (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
   let request_handler stack albatross js_file css_file imgs store http_client

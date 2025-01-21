@@ -52,30 +52,18 @@ let build_table (build : Builder_web.build) =
             td
               ~a:[ a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ] ]
               [ txt "Start time:" ];
-            (match build.start_time with
-            | None -> td []
-            | Some ptime ->
-                td
-                  ~a:
-                    [
-                      a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ];
-                    ]
-                  [ txt (Utils.TimeHelper.string_of_ptime ptime) ]);
+            td
+              ~a:[ a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ] ]
+              [ txt (Utils.TimeHelper.string_of_ptime build.start_time) ];
           ];
         tr
           [
             td
               ~a:[ a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ] ]
               [ txt "Finish time" ];
-            (match build.finish_time with
-            | None -> td []
-            | Some ptime ->
-                td
-                  ~a:
-                    [
-                      a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ];
-                    ]
-                  [ txt (Utils.TimeHelper.string_of_ptime ptime) ]);
+            td
+              ~a:[ a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ] ]
+              [ txt (Utils.TimeHelper.string_of_ptime build.finish_time) ];
           ];
         tr
           [

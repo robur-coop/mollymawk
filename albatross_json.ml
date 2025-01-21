@@ -218,8 +218,8 @@ let policy_of_json json_dict =
   | _ ->
       Error
         (`Msg
-          (Fmt.str "policy: unexpected types, got %s"
-             (Yojson.Basic.to_string (`Assoc json_dict))))
+           (Fmt.str "policy: unexpected types, got %s"
+              (Yojson.Basic.to_string (`Assoc json_dict))))
 
 let config_of_json str =
   let ( let* ) = Result.bind in

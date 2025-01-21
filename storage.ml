@@ -34,8 +34,8 @@ let t_of_json json =
             else
               Error
                 (`Msg
-                  (Fmt.str "expected version %u, found version %u"
-                     current_version v))
+                   (Fmt.str "expected version %u, found version %u"
+                      current_version v))
           in
           let* users =
             List.fold_left
