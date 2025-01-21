@@ -76,8 +76,8 @@ let of_json_from_http json_dict now =
   | _ ->
       Error
         (`Msg
-          (Fmt.str "configuration: unexpected types, got %s"
-             (Yojson.Basic.to_string (`Assoc json_dict))))
+           (Fmt.str "configuration: unexpected types, got %s"
+              (Yojson.Basic.to_string (`Assoc json_dict))))
 
 let of_json json =
   match json with
@@ -126,12 +126,12 @@ let of_json json =
             | _ ->
                 Error
                   (`Msg
-                    (Fmt.str "configuration: unexpected types, got %s"
-                       (Yojson.Basic.to_string (`Assoc xs))))
+                     (Fmt.str "configuration: unexpected types, got %s"
+                        (Yojson.Basic.to_string (`Assoc xs))))
           else
             Error
               (`Msg
-                (Fmt.str "configuration: found version %u, expected %u" v
-                   current_version))
+                 (Fmt.str "configuration: found version %u, expected %u" v
+                    current_version))
       | Some _ -> Error (`Msg "configuration: version must be an integer"))
   | _ -> Error (`Msg "configuration: expected a dictionary")

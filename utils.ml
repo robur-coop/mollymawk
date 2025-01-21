@@ -11,8 +11,8 @@ module TimeHelper = struct
         Logs.err (fun m -> m "string_to_ptime: %a" Ptime.pp_rfc3339_error err);
         Error
           (`Msg
-            (Format.asprintf "invalid created_at format: %a"
-               Ptime.pp_rfc3339_error err))
+             (Format.asprintf "invalid created_at format: %a"
+                Ptime.pp_rfc3339_error err))
 
   let string_of_ptime (t : Ptime.t) : string =
     Ptime.to_rfc3339 ~space:true t ~frac_s:0
