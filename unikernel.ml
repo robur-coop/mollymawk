@@ -2125,6 +2125,11 @@ struct
                 authenticate store reqd
                   (unikernel_prepare_update !albatross store unikernel_name reqd
                      http_client))
+        | "/api/unikernel/update" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_token:true ~check_csrf:true ~api_meth:true
+                  store reqd
+                  (unikernel_update !albatross reqd http_client))
         | _ ->
             let error =
               {
