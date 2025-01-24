@@ -91,6 +91,37 @@ struct
             }
     | Error (`Msg err) -> Error err
 
+  let owee_buf_of_str b =
+    let buf = Bigarray.Array1.create Bigarray.Int8_unsigned Bigarray.c_layout (String.length b) in
+    for i = 0 to String.length b - 1 do
+      buf.{i} <- String.get_uint8 b i
+    done;
+    buf
+
+ let manifest_devices_match ~bridges ~block_devices binary = 
+   let mft : Solo5_elftool.mft = Solo5_elftool.query_manifest (owee_buf_of_str binary) in
+   let bridges = List.map (fun (name, _, _) -> name) bridges
+   and block_devices = List.map (fun (name, _, _) -> name) block_devices in
+   let bridges' =
+     List.filter_map
+       (function
+         | Solo5_elftool.Dev_net_basic name -> Some name
+         | _ -> None)
+       mft.Solo5_elftool.entries
+   and block_devices' =
+     List.filter_map
+       (function
+         | Solo5_elftool.Dev_block_basic -> Some name
+         | _ -> None)
+       mft.Solo5_elftool.entries
+   in
+   List.equal String.equal
+     (List.sort String.compare bridges)
+     (List.sort String.compare bridges') &&
+   List.equal String.equal
+     (List.sort String.compare block_devices)
+     (List.sort String.compare block_devices')
+
   let key_ids exts pub issuer =
     let open X509 in
     let auth = (Some (Public_key.id issuer), General_name.empty, None) in
