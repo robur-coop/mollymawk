@@ -265,6 +265,9 @@ let unikernel_update_layout unikernel current_time
     section
       ~a:[ a_class [ "col-span-10 p-4 bg-gray-50 my-1" ] ]
       [
+        p
+          ~a:[ a_id "unikernel-update-form-alert"; a_class [ "my-4 hidden" ] ]
+          [];
         div
           ~a:[ a_id "unikernel-container"; a_class [ "p-4 rounded-md" ] ]
           [
