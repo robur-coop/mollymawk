@@ -920,8 +920,40 @@ async function updateToken(value) {
 			buttonLoading(tokenButton, false, "Update Token")
 		}
 	} catch (error) {
-		postAlert("bg-secondary-300", data.data);
+		postAlert("bg-secondary-300", error);
 		buttonLoading(tokenButton, false, "Update Token")
+	}
+}
+
+async function updateUnikernel(job, build) {
+	const updateButton = document.getElementById("update-unikernel-button");
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	try {
+		buttonLoading(updateButton, true, "Updating...")
+		const response = await fetch("/api/unikernel/update", {
+			method: 'POST',
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(
+				{
+					"job": job,
+					"build": build,
+					"molly_csrf": molly_csrf
+				})
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			postAlert("bg-primary-300", "Unikernel updated succesfully");
+			setTimeout(() => window.location.reload(), 1000);
+			buttonLoading(updateButton, false, "Update to Latest")
+		} else {
+			postAlert("bg-secondary-300", data.data);
+			buttonLoading(updateButton, false, "Update to Latest")
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		buttonLoading(updateButton, false, "Update to Latest")
 	}
 }
 
