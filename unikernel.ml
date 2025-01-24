@@ -1240,6 +1240,34 @@ struct
                                     ~api_meth:false `Internal_server_error reqd
                                     ()))))))
 
+  let unikernel_update _albatross reqd http_client ~json_dict
+      (_user : User_model.user) =
+    match Utils.Json.(get "job" json_dict, get "build" json_dict) with
+    | Some (`String job), Some (`String build) -> (
+        Builder_web.send_request http_client
+          ("/job/" ^ job ^ "/build/" ^ build ^ "/main-binary")
+        >>= function
+        | Error (`Msg err) ->
+            Logs.err (fun m ->
+                m
+                  "builds.robur.coop: Error while fetching the binary of with \
+                   error: %s"
+                  err);
+            Middleware.http_response reqd ~title:"Error"
+              ~data:
+                (`String
+                   ("An error occured while fetching the binary from \
+                     builds.robur.coop with error " ^ err))
+              `Internal_server_error
+        | Ok new_binary ->
+            Logs.err (fun m -> m "The binary is %s" new_binary);
+            Middleware.http_response reqd ~title:"Error"
+              ~data:(`String "Couldn't find job or build in json") `Bad_request)
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:(`String "Couldn't find job or build in json. Received ")
+          `Bad_request
+
   let unikernel_destroy ~json_dict albatross reqd (user : User_model.user) =
     (* TODO use uuid in the future *)
     match Utils.Json.get "name" json_dict with
