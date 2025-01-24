@@ -305,18 +305,17 @@ let unikernel_update_layout unikernel current_time
                       ];
                     div
                       [
-                        a
-                          ~a:
+                        Utils.button_component
+                          ~attribs:
                             [
-                              a_href "/unikernel/update/";
-                              a_class
-                                [
-                                  "py-2 px-2 rounded hover:bg-primary-800 \
-                                   text-gray-50 focus:outline-none \
-                                   bg-primary-500 font-semibold";
-                                ];
+                              a_id "update-unikernel-button";
+                              a_onclick
+                                ("updateUnikernel('"
+                               ^ build_comparison.right.job ^ "','"
+                               ^ build_comparison.right.uuid ^ "')");
                             ]
-                          [ txt "Update to Latest" ];
+                          ~content:(txt "Update to Latest")
+                          ~btn_type:`Primary_full ();
                       ];
                   ];
                 div
@@ -437,16 +436,14 @@ let unikernel_update_layout unikernel current_time
           ];
         div
           [
-            a
-              ~a:
+            Utils.button_component
+              ~attribs:
                 [
-                  a_href "/unikernel/update/";
-                  a_class
-                    [
-                      "py-2 px-2 rounded hover:bg-primary-800 text-gray-50 \
-                       focus:outline-none bg-primary-500 font-semibold";
-                    ];
+                  a_id "update-unikernel-button";
+                  a_onclick
+                    ("updateUnikernel('" ^ build_comparison.right.job ^ "','"
+                   ^ build_comparison.right.uuid ^ "')");
                 ]
-              [ txt "Update to Latest" ];
+              ~content:(txt "Update to Latest") ~btn_type:`Primary_full ();
           ];
       ])
