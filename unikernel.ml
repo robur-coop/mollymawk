@@ -1203,7 +1203,7 @@ struct
                                                 ^ " Update | Mollymawk")
                                               ~content:
                                                 (Unikernel_update
-                                                 .unikernel_update_layout
+                                                 .unikernel_update_layout ~unikernel_name:name
                                                    (unikernel_name, unikernel)
                                                    now build_comparison)
                                               ~icon:"/images/robur.png" ())

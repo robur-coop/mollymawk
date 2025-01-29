@@ -258,7 +258,7 @@ let opam_diff_table (diffs : Builder_web.o_diff list) =
              ])
          diffs))
 
-let unikernel_update_layout unikernel current_time
+let unikernel_update_layout ~unikernel_name unikernel current_time
     (build_comparison : Builder_web.compare) =
   let u_name, data = unikernel in
   Tyxml_html.(
@@ -442,7 +442,7 @@ let unikernel_update_layout unikernel current_time
                   a_id "update-unikernel-button";
                   a_onclick
                     ("updateUnikernel('" ^ build_comparison.right.job ^ "','"
-                   ^ build_comparison.right.uuid ^ "')");
+                   ^ build_comparison.right.uuid ^ "','"^unikernel_name^"')");
                 ]
               ~content:(txt "Update to Latest") ~btn_type:`Primary_full ();
           ];
