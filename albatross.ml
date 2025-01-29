@@ -1,3 +1,7 @@
+let ( let* ) = Result.bind
+
+module String_set = Set.Make (String)
+
 module Make (T : Mirage_time.S) (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) =
 struct
   module TLS = Tls_mirage.Make (S.TCP)
@@ -91,29 +95,39 @@ struct
             }
     | Error (`Msg err) -> Error err
 
- let manifest_devices_match ~bridges ~block_devices binary = 
-   let mft : Solo5_elftool.mft = Solo5_elftool.query_manifest (owee_buf_of_str binary) in
-   let bridges = List.map (fun (name, _, _) -> name) bridges
-   and block_devices = List.map (fun (name, _, _) -> name) block_devices in
-   let bridges' =
-     List.filter_map
-       (function
-         | Solo5_elftool.Dev_net_basic name -> Some name
-         | _ -> None)
-       mft.Solo5_elftool.entries
-   and block_devices' =
-     List.filter_map
-       (function
-         | Solo5_elftool.Dev_block_basic -> Some name
-         | _ -> None)
-       mft.Solo5_elftool.entries
-   in
-   List.equal String.equal
-     (List.sort String.compare bridges)
-     (List.sort String.compare bridges') &&
-   List.equal String.equal
-     (List.sort String.compare block_devices)
-     (List.sort String.compare block_devices')
+  let manifest_devices_match ~bridges ~block_devices binary =
+    let* mft : Solo5_elftool.mft =
+      Solo5_elftool.query_manifest binary
+    in
+    let bridges = List.map (fun (name, _, _) -> name) bridges
+    and block_devices = List.map (fun (name, _, _) -> name) block_devices in
+    let bridges' =
+      List.filter_map
+        (function Solo5_elftool.Dev_net_basic name -> Some name | _ -> None)
+        mft.Solo5_elftool.entries
+    and block_devices' =
+      List.filter_map
+        (function Solo5_elftool.Dev_block_basic name -> Some name | _ -> None)
+        mft.Solo5_elftool.entries
+    in
+    let bridges_diff =
+      String_set.(diff (of_list bridges') (of_list bridges) |> elements)
+    in
+    let blocks_diff =
+      String_set.(
+        diff (of_list block_devices') (of_list block_devices) |> elements)
+    in
+    match (bridges_diff, blocks_diff) with
+    | [], [] -> Ok ()
+    | [], blocks ->
+        Error (`Msg ("Block devices mismatch: " ^ String.concat "," blocks))
+    | bridges, [] ->
+        Error (`Msg ("Network devices mismatch: " ^ String.concat "," bridges))
+    | bridges, blocks ->
+        Error
+          (`Msg
+             ("Block devices mismatch: " ^ String.concat "," blocks
+            ^ " and network devices mismatch: " ^ String.concat "," bridges))
 
   let key_ids exts pub issuer =
     let open X509 in
