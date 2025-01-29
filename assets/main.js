@@ -925,7 +925,7 @@ async function updateToken(value) {
 	}
 }
 
-async function updateUnikernel(job, build) {
+async function updateUnikernel(job, build, unikernel_name) {
 	const updateButton = document.getElementById("update-unikernel-button");
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	try {
@@ -939,6 +939,7 @@ async function updateUnikernel(job, build) {
 				{
 					"job": job,
 					"build": build,
+					"unikernel_name": unikernel_name,
 					"molly_csrf": molly_csrf
 				})
 		})
