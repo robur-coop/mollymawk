@@ -1240,29 +1240,106 @@ struct
                                     ~api_meth:false `Internal_server_error reqd
                                     ()))))))
 
-  let unikernel_update _albatross reqd http_client ~json_dict
-      (_user : User_model.user) =
-    match Utils.Json.(get "job" json_dict, get "build" json_dict) with
-    | Some (`String job), Some (`String build) -> (
-        Builder_web.send_request http_client
-          ("/job/" ^ job ^ "/build/" ^ build ^ "/main-binary")
-        >>= function
-        | Error (`Msg err) ->
-            Logs.err (fun m ->
-                m
-                  "builds.robur.coop: Error while fetching the binary of with \
-                   error: %s"
-                  err);
-            Middleware.http_response reqd ~title:"Error"
+  let unikernel_update albatross reqd http_client ~json_dict
+      (user : User_model.user) =
+    match
+      Utils.Json.
+        ( get "job" json_dict,
+          get "build" json_dict,
+          get "unikernel_name" json_dict )
+    with
+    | Some (`String job), Some (`String build), Some (`String unikernel_name)
+      -> (
+        user_unikernel albatross ~user_name:user.name ~unikernel_name
+        >>= fun unikernel_info ->
+        match unikernel_info with
+        | Error err ->
+            Middleware.redirect_to_error
               ~data:
                 (`String
-                   ("An error occured while fetching the binary from \
-                     builds.robur.coop with error " ^ err))
-              `Internal_server_error
-        | Ok new_binary ->
-            Logs.err (fun m -> m "The binary is %s" new_binary);
-            Middleware.http_response reqd ~title:"Error"
-              ~data:(`String "Couldn't find job or build in json") `Bad_request)
+                   ("An error occured while fetching " ^ unikernel_name
+                  ^ " from albatross with error " ^ err))
+              ~title:"Albatross Error" ~api_meth:false `Internal_server_error
+              reqd ()
+        | Ok
+            ( _,
+              Vmm_core.Unikernel.
+                {
+                  bridges;
+                  block_devices;
+                  argv;
+                  cpuid;
+                  memory;
+                  fail_behaviour;
+                  typ = `Solo5 as typ;
+                  _;
+                } ) -> (
+            Builder_web.send_request http_client
+              ("/job/" ^ job ^ "/build/" ^ build ^ "/main-binary")
+            >>= function
+            | Error (`Msg err) ->
+                Logs.err (fun m ->
+                    m
+                      "builds.robur.coop: Error while fetching the binary of \
+                       with error: %s"
+                      err);
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:
+                    (`String
+                       ("An error occured while fetching the binary from \
+                         builds.robur.coop with error " ^ err))
+                  `Internal_server_error
+            | Ok image -> (
+                Logs.info (fun m -> m "The binary is %s" image);
+                let config =
+                  {
+                    Vmm_core.Unikernel.typ;
+                    compressed = true; (*compressed here is assumed to be true.*)
+                    image;
+                    fail_behaviour;
+                    cpuid;
+                    memory;
+                    block_devices;
+                    bridges;
+                    argv;
+                  }
+                in
+                match
+                  Albatross.manifest_devices_match ~bridges ~block_devices image
+                with
+                | Error (`Msg err) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(`String ("Manifest mismatch: " ^ err))
+                      `Bad_request
+                | Ok () -> (
+                    Albatross.query albatross ~domain:user.name
+                      ~name:unikernel_name
+                      (`Unikernel_cmd (`Unikernel_force_create config))
+                    >>= function
+                    | Error msg ->
+                        Logs.err (fun m -> m "Error querying albatross: %s" msg);
+                        Middleware.http_response reqd ~title:"Error"
+                          ~data:(`String ("Error querying albatross: " ^ msg))
+                          `Internal_server_error
+                    | Ok (_hdr, res) -> (
+                        match Albatross_json.res res with
+                        | Error (`String err) ->
+                            Middleware.http_response reqd ~title:"Error"
+                              ~data:(`String (String.escaped err))
+                              `Internal_server_error
+                        | Ok res ->
+                            Logs.err (fun m ->
+                                m
+                                  "%s has been updated succesfully with \
+                                   result: %s"
+                                  unikernel_name
+                                  (Yojson.Basic.to_string res));
+                            Middleware.http_response reqd ~title:"Error"
+                              ~data:
+                                (`String
+                                   (unikernel_name
+                                  ^ " has been updated to the latest build."))
+                              `OK)))))
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find job or build in json. Received ")
