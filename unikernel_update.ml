@@ -442,7 +442,8 @@ let unikernel_update_layout ~unikernel_name unikernel current_time
                   a_id "update-unikernel-button";
                   a_onclick
                     ("updateUnikernel('" ^ build_comparison.right.job ^ "','"
-                   ^ build_comparison.right.uuid ^ "','"^unikernel_name^"')");
+                   ^ build_comparison.right.uuid ^ "','" ^ unikernel_name ^ "')"
+                    );
                 ]
               ~content:(txt "Update to Latest") ~btn_type:`Primary_full ();
           ];

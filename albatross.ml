@@ -96,9 +96,7 @@ struct
     | Error (`Msg err) -> Error err
 
   let manifest_devices_match ~bridges ~block_devices binary =
-    let* mft : Solo5_elftool.mft =
-      Solo5_elftool.query_manifest binary
-    in
+    let* mft : Solo5_elftool.mft = Solo5_elftool.query_manifest binary in
     let bridges = List.map (fun (name, _, _) -> name) bridges
     and block_devices = List.map (fun (name, _, _) -> name) block_devices in
     let bridges' =

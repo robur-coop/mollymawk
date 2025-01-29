@@ -1203,7 +1203,8 @@ struct
                                                 ^ " Update | Mollymawk")
                                               ~content:
                                                 (Unikernel_update
-                                                 .unikernel_update_layout ~unikernel_name:name
+                                                 .unikernel_update_layout
+                                                   ~unikernel_name:name
                                                    (unikernel_name, unikernel)
                                                    now build_comparison)
                                               ~icon:"/images/robur.png" ())
@@ -1294,7 +1295,8 @@ struct
                 let config =
                   {
                     Vmm_core.Unikernel.typ;
-                    compressed = true; (*compressed here is assumed to be true.*)
+                    compressed = true;
+                    (*compressed here is assumed to be true.*)
                     image;
                     fail_behaviour;
                     cpuid;
