@@ -1282,8 +1282,8 @@ struct
                 Logs.err (fun m ->
                     m
                       "builds.robur.coop: Error while fetching the binary of \
-                       with error: %s"
-                      err);
+                       %s with error: %s"
+                      unikernel_name err);
                 Middleware.http_response reqd ~title:"Error"
                   ~data:
                     (`String
@@ -1291,7 +1291,6 @@ struct
                          builds.robur.coop with error " ^ err))
                   `Internal_server_error
             | Ok image -> (
-                Logs.info (fun m -> m "The binary is %s" image);
                 let config =
                   {
                     Vmm_core.Unikernel.typ;
