@@ -97,35 +97,91 @@ struct
 
   let manifest_devices_match ~bridges ~block_devices binary =
     let* mft : Solo5_elftool.mft = Solo5_elftool.query_manifest binary in
-    let bridges = List.map (fun (name, _, _) -> name) bridges
-    and block_devices = List.map (fun (name, _, _) -> name) block_devices in
-    let bridges' =
+    let req_bridges =
+      List.map (fun (name, _, _) -> name) bridges |> String_set.of_list
+    and req_block_devices =
+      List.map (fun (name, _, _) -> name) block_devices |> String_set.of_list
+    and mft_bridges =
       List.filter_map
         (function Solo5_elftool.Dev_net_basic name -> Some name | _ -> None)
         mft.Solo5_elftool.entries
-    and block_devices' =
+      |> String_set.of_list
+    and mft_block_devices =
       List.filter_map
         (function Solo5_elftool.Dev_block_basic name -> Some name | _ -> None)
         mft.Solo5_elftool.entries
+      |> String_set.of_list
     in
-    let bridges_diff =
-      String_set.(diff (of_list bridges') (of_list bridges) |> elements)
+    let req_only_bridges = String_set.(diff req_bridges mft_bridges |> elements)
+    and mft_only_bridges = String_set.(diff mft_bridges req_bridges |> elements)
+    and req_only_blocks =
+      String_set.(diff req_block_devices mft_block_devices |> elements)
+    and mft_only_blocks =
+      String_set.(diff mft_block_devices req_block_devices |> elements)
     in
-    let blocks_diff =
-      String_set.(
-        diff (of_list block_devices') (of_list block_devices) |> elements)
-    in
-    match (bridges_diff, blocks_diff) with
-    | [], [] -> Ok ()
-    | [], blocks ->
-        Error (`Msg ("Block devices mismatch: " ^ String.concat "," blocks))
-    | bridges, [] ->
-        Error (`Msg ("Network devices mismatch: " ^ String.concat "," bridges))
-    | bridges, blocks ->
+    match
+      (req_only_bridges, mft_only_bridges, req_only_blocks, mft_only_blocks)
+    with
+    | [], [], [], [] -> Ok ()
+    | req_only_bridges, [], [], [] ->
         Error
           (`Msg
-             ("Block devices mismatch: " ^ String.concat "," blocks
-            ^ " and network devices mismatch: " ^ String.concat "," bridges))
+             ("Network devices missing from manifest: "
+             ^ String.concat "," req_only_bridges))
+    | [], mft_only_bridges, [], [] ->
+        Error
+          (`Msg
+             ("Network devices only in manifest: "
+             ^ String.concat "," mft_only_bridges))
+    | [], [], req_only_blocks, [] ->
+        Error
+          (`Msg
+             ("Block devices missing from manifest: "
+             ^ String.concat "," req_only_blocks))
+    | [], [], [], mft_only_blocks ->
+        Error
+          (`Msg
+             ("Block devices only in manifest: "
+             ^ String.concat "," mft_only_blocks))
+    | req_only_bridges, req_only_blocks, [], [] ->
+        Error
+          (`Msg
+             ("Network devices missing from manifest: "
+             ^ String.concat "," req_only_bridges
+             ^ " and block devices missing from manifest: "
+             ^ String.concat "," req_only_blocks))
+    | [], req_only_blocks, mft_only_bridges, [] ->
+        Error
+          (`Msg
+             ("Network devices only in manifest: "
+             ^ String.concat "," mft_only_bridges
+             ^ " and block devices missing from manifest: "
+             ^ String.concat "," req_only_blocks))
+    | [], [], mft_only_blocks, req_only_bridges ->
+        Error
+          (`Msg
+             ("Network devices missing from manifest: "
+             ^ String.concat "," req_only_bridges
+             ^ " and block devices only in manifest: "
+             ^ String.concat "," mft_only_blocks))
+    | req_only_bridges, [], mft_only_blocks, [] ->
+        Error
+          (`Msg
+             ("Network devices missing from manifest: "
+             ^ String.concat "," req_only_bridges
+             ^ " and block devices only in manifest: "
+             ^ String.concat "," mft_only_blocks))
+    | req_only_bridges, req_only_blocks, mft_only_bridges, mft_only_blocks ->
+        Error
+          (`Msg
+             ("Network devices missing from manifest: "
+             ^ String.concat "," req_only_bridges
+             ^ " and block devices missing from manifest: "
+             ^ String.concat "," req_only_blocks
+             ^ " and network devices only in manifest: "
+             ^ String.concat "," mft_only_bridges
+             ^ " and block devices only in manifest: "
+             ^ String.concat "," mft_only_blocks))
 
   let key_ids exts pub issuer =
     let open X509 in
