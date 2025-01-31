@@ -98,10 +98,10 @@ struct
   let manifest_devices_match ~bridges ~block_devices binary =
     let b =
       Bigarray.Array1.create Bigarray.Int8_unsigned Bigarray.c_layout
-        (String.length b)
+        (String.length binary)
     in
-    for i = 0 to String.length b - 1 do
-      buf.{i} <- String.get_uint8 b i
+    for i = 0 to String.length binary - 1 do
+      b.{i} <- String.get_uint8 binary i
     done;
     let binary = b in
     let* mft : Solo5_elftool.mft = Solo5_elftool.query_manifest binary in
