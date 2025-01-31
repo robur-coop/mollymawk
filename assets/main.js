@@ -927,7 +927,14 @@ async function updateToken(value) {
 
 async function updateUnikernel(job, build, unikernel_name) {
 	const updateButton = document.getElementById("update-unikernel-button");
+	const unikernelArguments = document.getElementById("unikernel-arguments").value;
+	const argumentsToggle = document.getElementById("arguments-toggle").checked;
 	const molly_csrf = document.getElementById("molly-csrf").value;
+	if (argumentsToggle && !unikernelArguments) {
+		postAlert("bg-secondary-300", "You must give arguments for this build else switch 'Update the arguments for this build' off");
+		buttonLoading(updateButton, false, "Proceed to update")
+		return;
+	}
 	try {
 		buttonLoading(updateButton, true, "Updating...")
 		const response = await fetch("/api/unikernel/update", {
@@ -940,6 +947,7 @@ async function updateUnikernel(job, build, unikernel_name) {
 					"job": job,
 					"build": build,
 					"unikernel_name": unikernel_name,
+					"unikernel_arguments": argumentsToggle ? unikernelArguments : null,
 					"molly_csrf": molly_csrf
 				})
 		})
@@ -947,14 +955,14 @@ async function updateUnikernel(job, build, unikernel_name) {
 		if (data.status === 200) {
 			postAlert("bg-primary-300", "Unikernel updated succesfully");
 			setTimeout(() => window.location.reload(), 1000);
-			buttonLoading(updateButton, false, "Update to Latest")
+			buttonLoading(updateButton, false, "Proceed to update")
 		} else {
 			postAlert("bg-secondary-300", data.data);
-			buttonLoading(updateButton, false, "Update to Latest")
+			buttonLoading(updateButton, false, "Proceed to update")
 		}
 	} catch (error) {
 		postAlert("bg-secondary-300", error);
-		buttonLoading(updateButton, false, "Update to Latest")
+		buttonLoading(updateButton, false, "Proceed to update")
 	}
 }
 
