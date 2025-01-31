@@ -298,3 +298,63 @@ let config_of_json str =
       bridges;
       argv;
     }
+
+let fail_behaviour_to_json fb =
+  match fb with
+  | `Quit -> `String "quit"
+  | `Restart (Some codes) ->
+      `Assoc
+        [
+          ("restart", `Bool true);
+          ( "exit_code",
+            `List
+              (List.map (fun code -> `Int code) (Vmm_core.IS.elements codes)) );
+        ]
+  | `Restart None -> `Assoc [ ("restart", `Bool true) ]
+
+let bridge_to_json (name, host_device, mac) =
+  match (host_device, mac) with
+  | None, None -> `String name
+  | Some host, None ->
+      `Assoc [ ("name", `String name); ("host_device", `String host) ]
+  | None, Some mac ->
+      `Assoc
+        [ ("name", `String name); ("mac", `String (Macaddr.to_string mac)) ]
+  | Some host, Some mac ->
+      `Assoc
+        [
+          ("name", `String name);
+          ("host_device", `String host);
+          ("mac", `String (Macaddr.to_string mac));
+        ]
+
+let block_device_to_json (name, host_device, sector_size) =
+  match (host_device, sector_size) with
+  | None, None -> `String name
+  | Some host, None ->
+      `Assoc [ ("name", `String name); ("host_device", `String host) ]
+  | None, Some sector_size ->
+      `Assoc [ ("name", `String name); ("sector_size", `Int sector_size) ]
+  | Some host, Some sector_size ->
+      `Assoc
+        [
+          ("name", `String name);
+          ("host_device", `String host);
+          ("sector_size", `Int sector_size);
+        ]
+
+let unikernel_info_to_json (unikernel : Vmm_core.Unikernel.info) =
+  `Assoc
+    ([
+       ("fail_behaviour", fail_behaviour_to_json unikernel.fail_behaviour);
+       ("cpuid", `Int unikernel.cpuid);
+       ("memory", `Int unikernel.memory);
+       ("network_interfaces", `List (List.map bridge_to_json unikernel.bridges));
+       ( "block_devices",
+         `List (List.map block_device_to_json unikernel.block_devices) );
+     ]
+    @
+    match unikernel.argv with
+    | Some args ->
+        [ ("arguments", `List (List.map (fun arg -> `String arg) args)) ]
+    | None -> [])
