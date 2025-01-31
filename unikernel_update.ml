@@ -69,6 +69,15 @@ let build_table (build : Builder_web.build) =
           [
             td
               ~a:[ a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ] ]
+              [ txt "Has binary" ];
+            td
+              ~a:[ a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ] ]
+              [ txt (string_of_bool build.main_binary) ];
+          ];
+        tr
+          [
+            td
+              ~a:[ a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ] ]
               [ txt "Binary size:" ];
             (match build.main_binary_size with
             | None -> td [ txt "-" ]
@@ -303,20 +312,26 @@ let unikernel_update_layout ~unikernel_name unikernel current_time
                           ~a:[ a_class [ "text-sm" ] ]
                           [ txt (Ohex.encode data.digest) ];
                       ];
-                    div
-                      [
-                        Utils.button_component
-                          ~attribs:
-                            [
-                              a_id "update-unikernel-button";
-                              a_onclick
-                                ("updateUnikernel('"
-                               ^ build_comparison.right.job ^ "','"
-                               ^ build_comparison.right.uuid ^ "')");
-                            ]
-                          ~content:(txt "Update to Latest")
-                          ~btn_type:`Primary_full ();
-                      ];
+                    (if build_comparison.right.main_binary then
+                       div
+                         [
+                           Utils.button_component
+                             ~attribs:
+                               [
+                                 a_id "update-unikernel-button";
+                                 a_onclick
+                                   ("updateUnikernel('"
+                                  ^ build_comparison.right.job ^ "','"
+                                  ^ build_comparison.right.uuid ^ "','"
+                                  ^ unikernel_name ^ "')");
+                               ]
+                             ~content:(txt "Update to Latest")
+                             ~btn_type:`Primary_full ();
+                         ]
+                     else
+                       p
+                         ~a:[ a_class [ "text-secondary-500 font-semibold" ] ]
+                         [ txt "Can't update. No binary in latest build." ]);
                   ];
                 div
                   ~a:[ a_class [ "grid grid-cols-2 divide-x-2 gap-4" ] ]
@@ -434,17 +449,22 @@ let unikernel_update_layout ~unikernel_name unikernel current_time
                   ];
               ];
           ];
-        div
-          [
-            Utils.button_component
-              ~attribs:
-                [
-                  a_id "update-unikernel-button";
-                  a_onclick
-                    ("updateUnikernel('" ^ build_comparison.right.job ^ "','"
-                   ^ build_comparison.right.uuid ^ "','" ^ unikernel_name ^ "')"
-                    );
-                ]
-              ~content:(txt "Update to Latest") ~btn_type:`Primary_full ();
-          ];
+        (if build_comparison.right.main_binary then
+           div
+             [
+               Utils.button_component
+                 ~attribs:
+                   [
+                     a_id "update-unikernel-button";
+                     a_onclick
+                       ("updateUnikernel('" ^ build_comparison.right.job ^ "','"
+                      ^ build_comparison.right.uuid ^ "','" ^ unikernel_name
+                      ^ "')");
+                   ]
+                 ~content:(txt "Update to Latest") ~btn_type:`Primary_full ();
+             ]
+         else
+           p
+             ~a:[ a_class [ "text-secondary-500 font-semibold" ] ]
+             [ txt "Can't update. No binary in latest build." ]);
       ])
