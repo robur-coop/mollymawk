@@ -1241,106 +1241,117 @@ struct
                                     ~api_meth:false `Internal_server_error reqd
                                     ()))))))
 
+  let process_unikernel_update ~unikernel_name ~job ~build
+      (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user)
+      albatross http_client reqd =
+    Builder_web.send_request http_client
+      ("/job/" ^ job ^ "/build/" ^ build ^ "/main-binary")
+    >>= function
+    | Error (`Msg err) ->
+        Logs.err (fun m ->
+            m
+              "builds.robur.coop: Error while fetching the binary of %s with \
+               error: %s"
+              unikernel_name err);
+        Middleware.http_response reqd ~title:"Error"
+          ~data:
+            (`String
+               ("An error occured while fetching the binary from \
+                 builds.robur.coop with error " ^ err))
+          `Internal_server_error
+    | Ok image -> (
+        match
+          Albatross.manifest_devices_match ~bridges:unikernel_cfg.bridges
+            ~block_devices:unikernel_cfg.block_devices image
+        with
+        | Error (`Msg err) ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:(`String ("Manifest mismatch: " ^ err))
+              `Bad_request
+        | Ok () -> (
+            let unikernel_config = { unikernel_cfg with image } in
+            Albatross.query albatross ~domain:user.name ~name:unikernel_name
+              (`Unikernel_cmd (`Unikernel_force_create unikernel_config))
+            >>= function
+            | Error msg ->
+                Logs.err (fun m -> m "Error querying albatross: %s" msg);
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:(`String ("Error querying albatross: " ^ msg))
+                  `Internal_server_error
+            | Ok (_hdr, res) -> (
+                match Albatross_json.res res with
+                | Error (`String err) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(`String (String.escaped err))
+                      `Internal_server_error
+                | Ok res ->
+                    Logs.err (fun m ->
+                        m "%s has been updated succesfully with result: %s"
+                          unikernel_name
+                          (Yojson.Basic.to_string res));
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:
+                        (`String
+                           (unikernel_name
+                          ^ " has been updated to the latest build."))
+                      `OK)))
+
   let unikernel_update albatross reqd http_client ~json_dict
       (user : User_model.user) =
     match
       Utils.Json.
         ( get "job" json_dict,
           get "build" json_dict,
-          get "unikernel_name" json_dict )
+          get "unikernel_name" json_dict,
+          get "unikernel_arguments" json_dict )
     with
-    | Some (`String job), Some (`String build), Some (`String unikernel_name)
-      -> (
-        user_unikernel albatross ~user_name:user.name ~unikernel_name
-        >>= fun unikernel_info ->
-        match unikernel_info with
-        | Error err ->
-            Middleware.redirect_to_error
+    | ( Some (`String job),
+        Some (`String build),
+        Some (`String unikernel_name),
+        arguments ) -> (
+        match Utils.Json.string_or_none "unikernel_arguments" arguments with
+        | Error (`Msg err) ->
+            Middleware.http_response reqd
+              ~title:"Error with Unikernel Arguments Json"
               ~data:
-                (`String
-                   ("An error occured while fetching " ^ unikernel_name
-                  ^ " from albatross with error " ^ err))
-              ~title:"Albatross Error" ~api_meth:false `Internal_server_error
-              reqd ()
-        | Ok
-            ( _,
-              Vmm_core.Unikernel.
-                {
-                  bridges;
-                  block_devices;
-                  argv;
-                  cpuid;
-                  memory;
-                  fail_behaviour;
-                  typ = `Solo5 as typ;
-                  _;
-                } ) -> (
-            Builder_web.send_request http_client
-              ("/job/" ^ job ^ "/build/" ^ build ^ "/main-binary")
-            >>= function
-            | Error (`Msg err) ->
-                Logs.err (fun m ->
-                    m
-                      "builds.robur.coop: Error while fetching the binary of \
-                       %s with error: %s"
-                      unikernel_name err);
-                Middleware.http_response reqd ~title:"Error"
+                (`String ("Could not get the unikernel arguments json: " ^ err))
+              `OK
+        | Ok None -> (
+            user_unikernel albatross ~user_name:user.name ~unikernel_name
+            >>= fun unikernel_info ->
+            match unikernel_info with
+            | Error err ->
+                Middleware.redirect_to_error
                   ~data:
                     (`String
-                       ("An error occured while fetching the binary from \
-                         builds.robur.coop with error " ^ err))
-                  `Internal_server_error
-            | Ok image -> (
-                let config =
-                  {
-                    Vmm_core.Unikernel.typ;
-                    compressed = true;
-                    (*compressed here is assumed to be true.*)
-                    image;
-                    fail_behaviour;
-                    cpuid;
-                    memory;
-                    block_devices;
-                    bridges;
-                    argv;
-                  }
-                in
+                       ("An error occured while fetching " ^ unikernel_name
+                      ^ " from albatross with error " ^ err))
+                  ~title:"Albatross Error" ~api_meth:false
+                  `Internal_server_error reqd ()
+            | Ok (_, unikernel) -> (
                 match
-                  Albatross.manifest_devices_match ~bridges ~block_devices image
+                  Albatross_json.(
+                    unikernel_info_to_json unikernel
+                    |> Yojson.Basic.to_string |> config_of_json)
                 with
+                | Ok cfg ->
+                    process_unikernel_update ~unikernel_name ~job ~build cfg
+                      user albatross http_client reqd
                 | Error (`Msg err) ->
+                    Logs.warn (fun m -> m "Couldn't decode data %s" err);
                     Middleware.http_response reqd ~title:"Error"
-                      ~data:(`String ("Manifest mismatch: " ^ err))
-                      `Bad_request
-                | Ok () -> (
-                    Albatross.query albatross ~domain:user.name
-                      ~name:unikernel_name
-                      (`Unikernel_cmd (`Unikernel_force_create config))
-                    >>= function
-                    | Error msg ->
-                        Logs.err (fun m -> m "Error querying albatross: %s" msg);
-                        Middleware.http_response reqd ~title:"Error"
-                          ~data:(`String ("Error querying albatross: " ^ msg))
-                          `Internal_server_error
-                    | Ok (_hdr, res) -> (
-                        match Albatross_json.res res with
-                        | Error (`String err) ->
-                            Middleware.http_response reqd ~title:"Error"
-                              ~data:(`String (String.escaped err))
-                              `Internal_server_error
-                        | Ok res ->
-                            Logs.err (fun m ->
-                                m
-                                  "%s has been updated succesfully with \
-                                   result: %s"
-                                  unikernel_name
-                                  (Yojson.Basic.to_string res));
-                            Middleware.http_response reqd ~title:"Error"
-                              ~data:
-                                (`String
-                                   (unikernel_name
-                                  ^ " has been updated to the latest build."))
-                              `OK)))))
+                      ~data:(`String (String.escaped err))
+                      `Internal_server_error))
+        | Ok (Some args) -> (
+            match Albatross_json.config_of_json args with
+            | Ok cfg ->
+                process_unikernel_update ~unikernel_name ~job ~build cfg user
+                  albatross http_client reqd
+            | Error (`Msg err) ->
+                Logs.warn (fun m -> m "Couldn't decode data %s" err);
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:(`String (String.escaped err))
+                  `Internal_server_error))
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find job or build in json. Received ")
