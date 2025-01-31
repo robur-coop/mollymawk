@@ -96,6 +96,11 @@ struct
     | Error (`Msg err) -> Error err
 
   let manifest_devices_match ~bridges ~block_devices binary =
+    let b = Bigarray.Array1.create Bigarray.Int8_unsigned Bigarray.c_layout (String.length b) in
+    for i = 0 to String.length b - 1 do
+      buf.{i} <- String.get_uint8 b i
+    done;
+    let binary = b in
     let* mft : Solo5_elftool.mft = Solo5_elftool.query_manifest binary in
     let req_bridges =
       List.map (fun (name, _, _) -> name) bridges |> String_set.of_list
