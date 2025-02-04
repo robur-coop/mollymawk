@@ -102,9 +102,11 @@ struct
           (Cachet.Bstr.empty :> Cachet.bigstring)
         else
           let len = min len (max 0 (String.length binary - pos)) in
-          let b : Cachet.bigstring = Bigarray.Array1.create Bigarray.char Bigarray.c_layout len in
+          let b : Cachet.bigstring =
+            Bigarray.Array1.create Bigarray.char Bigarray.c_layout len
+          in
           for i = 0 to len - 1 do
-            b.{i} <- (binary.[pos+i])
+            b.{i} <- binary.[pos + i]
           done;
           b
       in

@@ -24,7 +24,8 @@ let mollymawk =
       package ~min:"0.2.0" "ohex";
       package "http-mirage-client";
       (* XXX(reynir): remove the pin; it's only there for the CI until the release has been merged *)
-      package "solo5-elftool" ~min:"0.4.0" ~pin:"git+https://git.robur.coop/robur/ocaml-solo5-elftool.git";
+      package "solo5-elftool" ~min:"0.4.0"
+        ~pin:"git+https://git.robur.coop/robur/ocaml-solo5-elftool.git";
     ]
   in
   main ~packages "Unikernel.Main"
