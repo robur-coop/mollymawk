@@ -134,62 +134,58 @@ struct
     | req_only_bridges, [], [], [] ->
         Error
           (`Msg
-             ("Network devices missing from manifest: "
-             ^ String.concat "," req_only_bridges))
+             (String.concat "," req_only_bridges
+             ^ " devices missing from manifest."))
     | [], mft_only_bridges, [], [] ->
         Error
           (`Msg
-             ("Network devices only in manifest: "
-             ^ String.concat "," mft_only_bridges))
+             (String.concat "," mft_only_bridges ^ " devices only in manifest."))
     | [], [], req_only_blocks, [] ->
         Error
           (`Msg
-             ("Block devices missing from manifest: "
-             ^ String.concat "," req_only_blocks))
+             (String.concat "," req_only_blocks
+             ^ " devices missing from manifest: "))
     | [], [], [], mft_only_blocks ->
         Error
           (`Msg
-             ("Block devices only in manifest: "
-             ^ String.concat "," mft_only_blocks))
+             (String.concat "," mft_only_blocks ^ " devices only in manifest."))
     | req_only_bridges, req_only_blocks, [], [] ->
         Error
           (`Msg
-             ("Network devices missing from manifest: "
-             ^ String.concat "," req_only_bridges
-             ^ " and block devices missing from manifest: "
-             ^ String.concat "," req_only_blocks))
+             (String.concat "," req_only_bridges
+             ^ String.concat "," req_only_blocks
+             ^ " devices missing from manifest."))
     | [], req_only_blocks, mft_only_bridges, [] ->
         Error
           (`Msg
-             ("Network devices only in manifest: "
-             ^ String.concat "," mft_only_bridges
-             ^ " and block devices missing from manifest: "
-             ^ String.concat "," req_only_blocks))
+             (String.concat "," mft_only_bridges
+             ^ " devices only in manifest, and "
+             ^ String.concat "," req_only_blocks
+             ^ " devices missing from manifest."))
     | [], [], mft_only_blocks, req_only_bridges ->
         Error
           (`Msg
-             ("Network devices missing from manifest: "
-             ^ String.concat "," req_only_bridges
-             ^ " and block devices only in manifest: "
-             ^ String.concat "," mft_only_blocks))
+             (String.concat "," req_only_bridges
+             ^ " devices missing from manifest and "
+             ^ String.concat "," mft_only_blocks
+             ^ " devices only in manifest."))
     | req_only_bridges, [], mft_only_blocks, [] ->
         Error
           (`Msg
-             ("Network devices missing from manifest: "
-             ^ String.concat "," req_only_bridges
-             ^ " and block devices only in manifest: "
+             (String.concat "," req_only_bridges
+             ^ " devices missing from manifest and "
+             ^ String.concat "," mft_only_blocks
+             ^ " devices only in manifest."
              ^ String.concat "," mft_only_blocks))
     | req_only_bridges, req_only_blocks, mft_only_bridges, mft_only_blocks ->
         Error
           (`Msg
-             ("Network devices missing from manifest: "
-             ^ String.concat "," req_only_bridges
-             ^ " and block devices missing from manifest: "
+             (String.concat "," req_only_bridges
              ^ String.concat "," req_only_blocks
-             ^ " and network devices only in manifest: "
+             ^ " devices missing from manifest and "
              ^ String.concat "," mft_only_bridges
-             ^ " and block devices only in manifest: "
-             ^ String.concat "," mft_only_blocks))
+             ^ String.concat "," mft_only_blocks
+             ^ " devices only in manifest."))
 
   let key_ids exts pub issuer =
     let open X509 in
