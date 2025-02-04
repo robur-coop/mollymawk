@@ -110,7 +110,7 @@ struct
           done;
           b
       in
-      Cachet.make ~cachesize:8 ~map
+      Cachet.make ~cachesize:8 ~map ()
     in
     let* mft : Solo5_elftool.mft = Solo5_elftool.query_manifest cachet in
     let req_bridges =
