@@ -96,15 +96,21 @@ struct
     | Error (`Msg err) -> Error err
 
   let manifest_devices_match ~bridges ~block_devices binary =
-    let b =
-      Bigarray.Array1.create Bigarray.Int8_unsigned Bigarray.c_layout
-        (String.length binary)
+    let cachet =
+      let map () ~pos len =
+        if pos >= String.length binary || len <= 0 then
+          (Cachet.Bstr.empty :> Cachet.bigstring)
+        else
+          let len = min len (max 0 (String.length binary - pos)) in
+          let b : Cachet.bigstring = Bigarray.Array1.create Bigarray.char Bigarray.c_layout len in
+          for i = 0 to len - 1 do
+            b.{i} <- (binary.[pos+i])
+          done;
+          b
+      in
+      Cachet.make ~cachesize:8 ~map
     in
-    for i = 0 to String.length binary - 1 do
-      b.{i} <- String.get_uint8 binary i
-    done;
-    let binary = b in
-    let* mft : Solo5_elftool.mft = Solo5_elftool.query_manifest binary in
+    let* mft : Solo5_elftool.mft = Solo5_elftool.query_manifest cachet in
     let req_bridges =
       List.map (fun (name, _, _) -> name) bridges |> String_set.of_list
     and req_block_devices =

@@ -23,9 +23,8 @@ let mollymawk =
       package "duration";
       package ~min:"0.2.0" "ohex";
       package "http-mirage-client";
-      package "solo5-elftool" ~max:"0.4.0";
-      (* NOTE(reynir): Pin no-unix owee until solo5-elftool 0.4.0 is released *)
-      package "owee" ~pin:"git+https://github.com/robur-coop/owee#unix-free";
+      (* XXX(reynir): remove the pin; it's only there for the CI until the release has been merged *)
+      package "solo5-elftool" ~min:"0.4.0" ~pin:"git+https://git.robur.coop/robur/ocaml-solo5-elftool.git";
     ]
   in
   main ~packages "Unikernel.Main"
