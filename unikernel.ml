@@ -1285,11 +1285,11 @@ struct
                       ~data:(`String (String.escaped err))
                       `Internal_server_error
                 | Ok res ->
-                    Logs.err (fun m ->
+                    Logs.info (fun m ->
                         m "%s has been updated succesfully with result: %s"
                           unikernel_name
                           (Yojson.Basic.to_string res));
-                    Middleware.http_response reqd ~title:"Error"
+                    Middleware.http_response reqd ~title:"Update Successful"
                       ~data:
                         (`String
                            (unikernel_name
