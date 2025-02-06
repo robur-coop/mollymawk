@@ -1,4 +1,5 @@
-let arg_modal ~unikernel_name (unikernel : Vmm_core.Unikernel.info)
+let arg_modal ~unikernel_name
+    (unikernel : Vmm_core.Name.t * Vmm_core.Unikernel.info)
     (build : Builder_web.build) =
   Tyxml_html.(
     section
@@ -113,7 +114,7 @@ let arg_modal ~unikernel_name (unikernel : Vmm_core.Unikernel.info)
                             ];
                         ]
                       (txt
-                         (Albatross_json.unikernel_info_to_json unikernel
+                         (Albatross_json.unikernel_info unikernel
                          |> Yojson.Basic.pretty_to_string));
                   ];
               ];
@@ -452,7 +453,7 @@ let unikernel_update_layout ~unikernel_name unikernel current_time
                        Modal_dialog.modal_dialog ~modal_title:"Check arguments"
                          ~button_content:(txt "Update to Latest")
                          ~content:
-                           (arg_modal ~unikernel_name data
+                           (arg_modal ~unikernel_name unikernel
                               build_comparison.right)
                          ()
                      else
@@ -579,7 +580,8 @@ let unikernel_update_layout ~unikernel_name unikernel current_time
         (if build_comparison.right.main_binary then
            Modal_dialog.modal_dialog ~modal_title:"Check arguments"
              ~button_content:(txt "Update to Latest")
-             ~content:(arg_modal ~unikernel_name data build_comparison.right)
+             ~content:
+               (arg_modal ~unikernel_name unikernel build_comparison.right)
              ()
          else
            p

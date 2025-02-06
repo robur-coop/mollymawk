@@ -1328,10 +1328,10 @@ struct
                       ^ " from albatross with error " ^ err))
                   ~title:"Albatross Error" ~api_meth:false
                   `Internal_server_error reqd ()
-            | Ok (_, unikernel) -> (
+            | Ok (n, unikernel) -> (
                 match
                   Albatross_json.(
-                    unikernel_info_to_json unikernel
+                    unikernel_info (n, unikernel)
                     |> Yojson.Basic.to_string |> config_of_json)
                 with
                 | Ok cfg ->
