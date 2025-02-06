@@ -4,6 +4,7 @@ let arg_modal ~unikernel_name
   Tyxml_html.(
     section
       [
+        p ~a:[ a_id "unikernel-arguments-alert"; a_class [ "my-4 hidden" ] ] [];
         div
           ~a:[ a_class [ "my-4" ] ]
           [
@@ -75,7 +76,7 @@ let arg_modal ~unikernel_name
                                dark:peer-checked:text-white";
                             ];
                         ]
-                      [ txt "Update the arguments for this build" ];
+                      [ txt "Update the configuration for this build" ];
                   ];
                 div
                   ~a:
@@ -578,7 +579,7 @@ let unikernel_update_layout ~unikernel_name unikernel current_time
               ];
           ];
         (if build_comparison.right.main_binary then
-           Modal_dialog.modal_dialog ~modal_title:"Check arguments"
+           Modal_dialog.modal_dialog ~modal_title:"Unikernel Configuration"
              ~button_content:(txt "Update to Latest")
              ~content:
                (arg_modal ~unikernel_name unikernel build_comparison.right)

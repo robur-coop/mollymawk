@@ -142,58 +142,82 @@ struct
     | req_only_bridges, [], [], [] ->
         Error
           (`Msg
-             (String.concat "," req_only_bridges
-             ^ " devices missing from manifest."))
+             ("Extra network interfaces specified: "
+             ^ String.concat ", " req_only_bridges
+             ^ ". Please remove them from the 'network_interfaces' list of \
+                your configuration."))
     | [], mft_only_bridges, [], [] ->
         Error
           (`Msg
-             (String.concat "," mft_only_bridges ^ " devices only in manifest."))
+             ("Missing required network interfaces: "
+             ^ String.concat ", " mft_only_bridges
+             ^ ". Please add them to the 'network_interfaces' list of your \
+                configuration."))
     | [], [], req_only_blocks, [] ->
         Error
           (`Msg
-             (String.concat "," req_only_blocks
-             ^ " devices missing from manifest: "))
+             ("Extra block devices specified: "
+             ^ String.concat ", " req_only_blocks
+             ^ ". Please remove them from the 'block_devices' list of your \
+                configuration."))
     | [], [], [], mft_only_blocks ->
         Error
           (`Msg
-             (String.concat "," mft_only_blocks ^ " devices only in manifest."))
-    | req_only_bridges, req_only_blocks, [], [] ->
+             ("Missing required block devices: "
+             ^ String.concat ", " mft_only_blocks
+             ^ ". Please add them to the 'block_devices' list of your \
+                configuration."))
+    | req_only_bridges, [], req_only_blocks, [] ->
         Error
           (`Msg
-             (String.concat "," req_only_bridges
-             ^ String.concat "," req_only_blocks
-             ^ " devices missing from manifest."))
-    | [], req_only_blocks, mft_only_bridges, [] ->
+             ("Extra network interfaces: "
+             ^ String.concat ", " req_only_bridges
+             ^ " and extra block devices: "
+             ^ String.concat ", " req_only_blocks
+             ^ ". Please remove them from the 'network_interfaces' lists and \
+                'block_devices' list of your configuration."))
+    | [], mft_only_bridges, [], mft_only_blocks ->
         Error
           (`Msg
-             (String.concat "," mft_only_bridges
-             ^ " devices only in manifest, and "
-             ^ String.concat "," req_only_blocks
-             ^ " devices missing from manifest."))
-    | [], [], mft_only_blocks, req_only_bridges ->
+             ("Missing network interfaces: "
+             ^ String.concat ", " mft_only_bridges
+             ^ " and missing block devices: "
+             ^ String.concat ", " mft_only_blocks
+             ^ ". Please add them to the 'network_interfaces' lists and \
+                'block_devices' list of your configuration."))
+    | req_only_bridges, [], [], mft_only_blocks ->
         Error
           (`Msg
-             (String.concat "," req_only_bridges
-             ^ " devices missing from manifest and "
-             ^ String.concat "," mft_only_blocks
-             ^ " devices only in manifest."))
-    | req_only_bridges, [], mft_only_blocks, [] ->
+             ("Extra network interfaces: "
+             ^ String.concat ", " req_only_bridges
+             ^ " and missing block devices: "
+             ^ String.concat ", " mft_only_blocks
+             ^ ". Please remove the network interfaces from the \
+                'network_interfaces' list and add the block devices to the \
+                'block_devices' list of your configuration."))
+    | [], mft_only_bridges, req_only_blocks, [] ->
         Error
           (`Msg
-             (String.concat "," req_only_bridges
-             ^ " devices missing from manifest and "
-             ^ String.concat "," mft_only_blocks
-             ^ " devices only in manifest."
-             ^ String.concat "," mft_only_blocks))
-    | req_only_bridges, req_only_blocks, mft_only_bridges, mft_only_blocks ->
+             ("Missing network interfaces: "
+             ^ String.concat ", " mft_only_bridges
+             ^ " and extra block devices: "
+             ^ String.concat ", " req_only_blocks
+             ^ ". Please add the network interfaces to the \
+                'network_interfaces' list and remove the block devices from \
+                the 'block_devices' list of your configuration."))
+    | req_only_bridges, mft_only_bridges, req_only_blocks, mft_only_blocks ->
         Error
           (`Msg
-             (String.concat "," req_only_bridges
-             ^ String.concat "," req_only_blocks
-             ^ " devices missing from manifest and "
-             ^ String.concat "," mft_only_bridges
-             ^ String.concat "," mft_only_blocks
-             ^ " devices only in manifest."))
+             ("Missing network interfaces: "
+             ^ String.concat ", " req_only_bridges
+             ^ " and missing block devices: "
+             ^ String.concat ", " req_only_blocks
+             ^ " while also having extra network interfaces: "
+             ^ String.concat ", " mft_only_bridges
+             ^ " and extra block devices: "
+             ^ String.concat ", " mft_only_blocks
+             ^ ". Please update 'network_interfaces' and 'block_devices' \
+                accordingly."))
 
   let key_ids exts pub issuer =
     let open X509 in

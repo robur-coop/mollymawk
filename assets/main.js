@@ -930,6 +930,7 @@ async function updateUnikernel(job, build, unikernel_name) {
 	const unikernelArguments = document.getElementById("unikernel-arguments").value;
 	const argumentsToggle = document.getElementById("arguments-toggle").checked;
 	const molly_csrf = document.getElementById("molly-csrf").value;
+	const formAlert = document.getElementById("unikernel-arguments-alert");
 	if (argumentsToggle && !unikernelArguments) {
 		postAlert("bg-secondary-300", "You must give arguments for this build else switch 'Update the arguments for this build' off");
 		buttonLoading(updateButton, false, "Proceed to update")
@@ -958,10 +959,16 @@ async function updateUnikernel(job, build, unikernel_name) {
 			buttonLoading(updateButton, false, "Proceed to update")
 		} else {
 			postAlert("bg-secondary-300", data.data);
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = data.data
 			buttonLoading(updateButton, false, "Proceed to update")
 		}
 	} catch (error) {
 		postAlert("bg-secondary-300", error);
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = data.data
 		buttonLoading(updateButton, false, "Proceed to update")
 	}
 }

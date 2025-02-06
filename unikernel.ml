@@ -1266,7 +1266,9 @@ struct
         with
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
-              ~data:(`String ("Manifest mismatch: " ^ err))
+              ~data:
+                (`String
+                   ("An error occured with the unikernel configuration: " ^ err))
               `Bad_request
         | Ok () -> (
             let unikernel_config = { unikernel_cfg with image } in
@@ -1274,9 +1276,11 @@ struct
               (`Unikernel_cmd (`Unikernel_force_create unikernel_config))
             >>= function
             | Error msg ->
-                Logs.err (fun m -> m "Error querying albatross: %s" msg);
+                Logs.err (fun m ->
+                    m "albatross-force-create: error querying albatross: %s" msg);
                 Middleware.http_response reqd ~title:"Error"
-                  ~data:(`String ("Error querying albatross: " ^ msg))
+                  ~data:
+                    (`String ("Force create: Error querying albatross: " ^ msg))
                   `Internal_server_error
             | Ok (_hdr, res) -> (
                 match Albatross_json.res res with
@@ -1293,7 +1297,8 @@ struct
                       ~data:
                         (`String
                            (unikernel_name
-                          ^ " has been updated to the latest build."))
+                          ^ " has been updated to the latest build with uuid "
+                          ^ build))
                       `OK)))
 
   let unikernel_update albatross reqd http_client ~json_dict
