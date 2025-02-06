@@ -920,8 +920,56 @@ async function updateToken(value) {
 			buttonLoading(tokenButton, false, "Update Token")
 		}
 	} catch (error) {
-		postAlert("bg-secondary-300", data.data);
+		postAlert("bg-secondary-300", error);
 		buttonLoading(tokenButton, false, "Update Token")
+	}
+}
+
+async function updateUnikernel(job, build, unikernel_name) {
+	const updateButton = document.getElementById("update-unikernel-button");
+	const unikernelArguments = document.getElementById("unikernel-arguments").value;
+	const argumentsToggle = document.getElementById("arguments-toggle").checked;
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	const formAlert = document.getElementById("unikernel-arguments-alert");
+	if (argumentsToggle && !unikernelArguments) {
+		postAlert("bg-secondary-300", "You must give arguments for this build else switch 'Update the configuration for this build' off");
+		buttonLoading(updateButton, false, "Proceed to update")
+		return;
+	}
+	try {
+		buttonLoading(updateButton, true, "Updating...")
+		const response = await fetch("/api/unikernel/update", {
+			method: 'POST',
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(
+				{
+					"job": job,
+					"build": build,
+					"unikernel_name": unikernel_name,
+					"unikernel_arguments": argumentsToggle ? JSON.parse(unikernelArguments) : null,
+					"molly_csrf": molly_csrf
+				})
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			postAlert("bg-primary-300", "Unikernel updated succesfully");
+			setTimeout(() => window.location.reload(), 1000);
+			buttonLoading(updateButton, false, "Proceed to update")
+		} else {
+			postAlert("bg-secondary-300", data.data);
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = data.data
+			buttonLoading(updateButton, false, "Proceed to update")
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = data.data
+		buttonLoading(updateButton, false, "Proceed to update")
 	}
 }
 

@@ -1,8 +1,7 @@
 open Utils.Json
 
 let unikernel_info (unikernel_name, info) =
-  let typ = function `Solo5 -> `String "solo5"
-  and fail_behaviour = function
+  let fail_behaviour = function
     | `Quit -> `String "quit"
     | `Restart ex ->
         let els =
@@ -33,33 +32,25 @@ let unikernel_info (unikernel_name, info) =
     in
     `List (List.map block bs)
   and bridges bs =
-    let bridge (name, dev, mac) =
+    let bridge (name, dev, _) =
       let dev = Option.value ~default:name dev in
-      let mac =
-        Option.value ~default:(Vmm_core.Name.mac unikernel_name dev) mac
-      in
-      `Assoc
-        [
-          ("name", `String name);
-          ("host_device", `String dev);
-          ("mac", `String (Macaddr.to_string mac));
-        ]
+      `Assoc [ ("name", `String name); ("host_device", `String dev) ]
     in
     `List (List.map bridge bs)
   and argv args =
     `List (List.map (fun a -> `String a) (Option.value ~default:[] args))
-  and digest d = `String (Ohex.encode d) in
+  in
   `Assoc
     [
-      ("name", `String (Vmm_core.Name.to_string unikernel_name));
-      ("typ", typ info.Vmm_core.Unikernel.typ);
-      ("fail_behaviour", fail_behaviour info.fail_behaviour);
+      ( "name",
+        `String (Option.value ~default:"" (Vmm_core.Name.name unikernel_name))
+      );
+      ("fail_behaviour", fail_behaviour info.Vmm_core.Unikernel.fail_behaviour);
       ("cpuid", cpuid info.cpuid);
       ("memory", memory info.memory);
       ("block_devices", block_devices info.block_devices);
       ("network_interfaces", bridges info.bridges);
       ("arguments", argv info.argv);
-      ("digest", digest info.digest);
     ]
 
 let unikernel_infos is = `List (List.map unikernel_info is)

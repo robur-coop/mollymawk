@@ -1,3 +1,141 @@
+let arg_modal ~unikernel_name
+    (unikernel : Vmm_core.Name.t * Vmm_core.Unikernel.info)
+    (build : Builder_web.build) =
+  Tyxml_html.(
+    section
+      [
+        p ~a:[ a_id "unikernel-arguments-alert"; a_class [ "my-4 hidden" ] ] [];
+        div
+          ~a:[ a_class [ "my-4" ] ]
+          [
+            div
+              ~a:
+                [
+                  a_class [ "my-6" ];
+                  Unsafe.string_attrib "x-data" "{ changeArgs: false}";
+                ]
+              [
+                label
+                  ~a:
+                    [
+                      a_label_for "arguments-toggle";
+                      a_class
+                        [ "inline-flex cursor-pointer items-center gap-3" ];
+                    ]
+                  [
+                    input
+                      ~a:
+                        [
+                          a_id "arguments-toggle";
+                          a_input_type `Checkbox;
+                          a_class [ "peer sr-only" ];
+                          a_role [ "switch" ];
+                          Unsafe.string_attrib "x-on:click"
+                            "changeArgs = !changeArgs";
+                        ]
+                      ();
+                    span
+                      ~a:
+                        [
+                          a_aria "hidden" [ "true" ];
+                          a_class
+                            [
+                              "relative h-6 w-11 after:h-5 after:w-5 \
+                               peer-checked:after:translate-x-5 rounded-full \
+                               border border-gray-300 bg-gray-50 \
+                               after:absolute after:bottom-0 \
+                               after:left-[0.0625rem] after:top-0 \
+                               after:my-auto after:rounded-full \
+                               after:bg-gray-600 after:transition-all \
+                               after:content-[''] peer-checked:bg-primary-500 \
+                               peer-checked:after:bg-white peer-focus:outline \
+                               peer-focus:outline-2 \
+                               peer-focus:outline-offset-2 \
+                               peer-focus:outline-gray-800 \
+                               peer-focus:peer-checked:outline-primary-500 \
+                               peer-active:outline-offset-0 \
+                               peer-disabled:cursor-not-allowed \
+                               peer-disabled:opacity-70 dark:border-gray-700 \
+                               dark:bg-gray-900 dark:after:bg-gray-300 \
+                               dark:peer-checked:bg-primary-500 \
+                               dark:peer-checked:after:bg-white \
+                               dark:peer-focus:outline-gray-300 \
+                               dark:peer-focus:peer-checked:outline-primary-500";
+                            ];
+                        ]
+                      [];
+                    span
+                      ~a:
+                        [
+                          a_class
+                            [
+                              "trancking-wide text-sm font-medium \
+                               text-gray-600 peer-checked:text-gray-900 \
+                               peer-disabled:cursor-not-allowed \n\
+                              \                               \
+                               dark:peer-checked:text-white";
+                            ];
+                        ]
+                      [ txt "Update the configuration for this build" ];
+                  ];
+                div
+                  ~a:
+                    [
+                      Unsafe.string_attrib "x-show" "changeArgs";
+                      a_class [ "my-4" ];
+                    ]
+                  [
+                    small
+                      ~a:[ a_class [ "my-1" ] ]
+                      [
+                        txt
+                          "Use json syntax to provide arguments for the latest \
+                           build";
+                      ];
+                    textarea
+                      ~a:
+                        [
+                          a_rows 15;
+                          a_required ();
+                          a_name "arguments";
+                          a_id "unikernel-arguments";
+                          a_class
+                            [
+                              "ring-primary-100 mt-1.5 transition \
+                               appearance-none block w-full px-3 py-3 \
+                               rounded-xl shadow-sm border \
+                               hover:border-primary-200\n\
+                              \                                           \
+                               focus:border-primary-300 bg-primary-50 \
+                               bg-opacity-0 hover:bg-opacity-50 \
+                               focus:bg-opacity-50 ring-primary-200 \
+                               focus:ring-primary-200\n\
+                              \                                           \
+                               focus:ring-[1px] focus:outline-none";
+                            ];
+                        ]
+                      (txt
+                         (Albatross_json.unikernel_info unikernel
+                         |> Yojson.Basic.pretty_to_string));
+                  ];
+              ];
+          ];
+        hr ();
+        div
+          ~a:[ a_class [ "my-4" ] ]
+          [
+            Utils.button_component
+              ~attribs:
+                [
+                  a_id "update-unikernel-button";
+                  a_onclick
+                    ("updateUnikernel('" ^ build.job ^ "','" ^ build.uuid
+                   ^ "','" ^ unikernel_name ^ "')");
+                ]
+              ~content:(txt "Proceed to update") ~btn_type:`Primary_full ();
+          ];
+      ])
+
 let build_table (build : Builder_web.build) =
   Tyxml_html.(
     table
@@ -64,6 +202,15 @@ let build_table (build : Builder_web.build) =
             td
               ~a:[ a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ] ]
               [ txt (Utils.TimeHelper.string_of_ptime build.finish_time) ];
+          ];
+        tr
+          [
+            td
+              ~a:[ a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ] ]
+              [ txt "Has binary" ];
+            td
+              ~a:[ a_class [ "px-6 py-1 text-sm font-medium text-gray-800" ] ]
+              [ txt (string_of_bool build.main_binary) ];
           ];
         tr
           [
@@ -258,13 +405,16 @@ let opam_diff_table (diffs : Builder_web.o_diff list) =
              ])
          diffs))
 
-let unikernel_update_layout unikernel current_time
+let unikernel_update_layout ~unikernel_name unikernel current_time
     (build_comparison : Builder_web.compare) =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-10 p-4 bg-gray-50 my-1" ] ]
       [
+        p
+          ~a:[ a_id "unikernel-update-form-alert"; a_class [ "my-4 hidden" ] ]
+          [];
         div
           ~a:[ a_id "unikernel-container"; a_class [ "p-4 rounded-md" ] ]
           [
@@ -300,21 +450,18 @@ let unikernel_update_layout unikernel current_time
                           ~a:[ a_class [ "text-sm" ] ]
                           [ txt (Ohex.encode data.digest) ];
                       ];
-                    div
-                      [
-                        a
-                          ~a:
-                            [
-                              a_href "/unikernel/update/";
-                              a_class
-                                [
-                                  "py-2 px-2 rounded hover:bg-primary-800 \
-                                   text-gray-50 focus:outline-none \
-                                   bg-primary-500 font-semibold";
-                                ];
-                            ]
-                          [ txt "Update to Latest" ];
-                      ];
+                    (if build_comparison.right.main_binary then
+                       Modal_dialog.modal_dialog
+                         ~modal_title:"Unikernel Configuration"
+                         ~button_content:(txt "Update to Latest")
+                         ~content:
+                           (arg_modal ~unikernel_name unikernel
+                              build_comparison.right)
+                         ()
+                     else
+                       p
+                         ~a:[ a_class [ "text-secondary-500 font-semibold" ] ]
+                         [ txt "Can't update. No binary in latest build." ]);
                   ];
                 div
                   ~a:[ a_class [ "grid grid-cols-2 divide-x-2 gap-4" ] ]
@@ -432,18 +579,14 @@ let unikernel_update_layout unikernel current_time
                   ];
               ];
           ];
-        div
-          [
-            a
-              ~a:
-                [
-                  a_href "/unikernel/update/";
-                  a_class
-                    [
-                      "py-2 px-2 rounded hover:bg-primary-800 text-gray-50 \
-                       focus:outline-none bg-primary-500 font-semibold";
-                    ];
-                ]
-              [ txt "Update to Latest" ];
-          ];
+        (if build_comparison.right.main_binary then
+           Modal_dialog.modal_dialog ~modal_title:"Unikernel Configuration"
+             ~button_content:(txt "Update to Latest")
+             ~content:
+               (arg_modal ~unikernel_name unikernel build_comparison.right)
+             ()
+         else
+           p
+             ~a:[ a_class [ "text-secondary-500 font-semibold" ] ]
+             [ txt "Can't update. No binary in latest build." ]);
       ])

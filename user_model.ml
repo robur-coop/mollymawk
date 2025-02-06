@@ -58,13 +58,6 @@ let cookie_to_json (cookie : cookie) =
         | None -> `Null );
     ]
 
-let string_or_none field = function
-  | None | Some `Null -> Ok None
-  | Some (`String v) -> Ok (Some v)
-  | Some json ->
-      Error
-        (`Msg ("invalid json for " ^ field ^ ": " ^ Yojson.Basic.to_string json))
-
 let ( let* ) = Result.bind
 
 let cookie_v1_of_json = function
@@ -91,7 +84,7 @@ let cookie_v1_of_json = function
                       created_at_str);
                 Ptime.epoch
           in
-          let* uuid = string_or_none "uuid" uuid in
+          let* uuid = Utils.Json.string_or_none "uuid" uuid in
           Ok
             {
               name;
@@ -150,8 +143,8 @@ let cookie_of_json = function
                       last_access_str);
                 created_at
           in
-          let* uuid = string_or_none "uuid" uuid in
-          let* user_agent = string_or_none "user-agent" user_agent in
+          let* uuid = Utils.Json.string_or_none "uuid" uuid in
+          let* user_agent = Utils.Json.string_or_none "user-agent" user_agent in
           Ok
             {
               name;
