@@ -932,7 +932,7 @@ async function updateUnikernel(job, build, unikernel_name) {
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	const formAlert = document.getElementById("unikernel-arguments-alert");
 	if (argumentsToggle && !unikernelArguments) {
-		postAlert("bg-secondary-300", "You must give arguments for this build else switch 'Update the arguments for this build' off");
+		postAlert("bg-secondary-300", "You must give arguments for this build else switch 'Update the configuration for this build' off");
 		buttonLoading(updateButton, false, "Proceed to update")
 		return;
 	}
@@ -948,7 +948,7 @@ async function updateUnikernel(job, build, unikernel_name) {
 					"job": job,
 					"build": build,
 					"unikernel_name": unikernel_name,
-					"unikernel_arguments": argumentsToggle ? unikernelArguments : null,
+					"unikernel_arguments": argumentsToggle ? JSON.parse(unikernelArguments) : null,
 					"molly_csrf": molly_csrf
 				})
 		})

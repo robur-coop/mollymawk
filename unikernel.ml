@@ -1305,6 +1305,18 @@ struct
 
   let unikernel_update albatross reqd http_client ~json_dict
       (user : User_model.user) =
+    let config_or_none field = function
+      | None | Some `Null -> Ok None
+      | Some json -> (
+          match Albatross_json.config_of_json (Yojson.Basic.to_string json) with
+          | Ok cfg -> Ok (Some cfg)
+          | Error (`Msg err) ->
+              Error
+                (`Msg
+                   ("invalid json for " ^ field ^ ": "
+                   ^ Yojson.Basic.to_string json
+                   ^ "failed with: " ^ err)))
+    in
     match
       Utils.Json.
         ( get "job" json_dict,
@@ -1315,8 +1327,8 @@ struct
     | ( Some (`String job),
         Some (`String build),
         Some (`String unikernel_name),
-        arguments ) -> (
-        match Utils.Json.string_or_none "unikernel_arguments" arguments with
+        configuration ) -> (
+        match config_or_none "unikernel_arguments" configuration with
         | Error (`Msg err) ->
             Middleware.http_response reqd
               ~title:"Error with Unikernel Arguments Json"
@@ -1349,16 +1361,9 @@ struct
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(`String (String.escaped err))
                       `Internal_server_error))
-        | Ok (Some args) -> (
-            match Albatross_json.config_of_json args with
-            | Ok cfg ->
-                process_unikernel_update ~unikernel_name ~job ~build cfg user
-                  albatross http_client reqd
-            | Error (`Msg err) ->
-                Logs.warn (fun m -> m "Couldn't decode data %s" err);
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:(`String (String.escaped err))
-                  `Internal_server_error))
+        | Ok (Some cfg) ->
+            process_unikernel_update ~unikernel_name ~job ~build cfg user
+              albatross http_client reqd)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find job or build in json. Received ")
