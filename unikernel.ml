@@ -1286,7 +1286,9 @@ struct
                 match Albatross_json.res res with
                 | Error (`String err) ->
                     Middleware.http_response reqd ~title:"Error"
-                      ~data:(`String (String.escaped err))
+                      ~data:
+                        (`String
+                           ("albatross force-create: " ^ String.escaped err))
                       `Internal_server_error
                 | Ok res ->
                     Logs.info (fun m ->
