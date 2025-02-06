@@ -451,7 +451,8 @@ let unikernel_update_layout ~unikernel_name unikernel current_time
                           [ txt (Ohex.encode data.digest) ];
                       ];
                     (if build_comparison.right.main_binary then
-                       Modal_dialog.modal_dialog ~modal_title:"Check arguments"
+                       Modal_dialog.modal_dialog
+                         ~modal_title:"Unikernel Configuration"
                          ~button_content:(txt "Update to Latest")
                          ~content:
                            (arg_modal ~unikernel_name unikernel
