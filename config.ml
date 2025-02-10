@@ -9,7 +9,7 @@ let mollymawk =
       package "logs";
       package "x509";
       package "tls-mirage";
-      package ~min:"2.3.0" "albatross";
+      package ~min:"2.4.0" "albatross";
       package "yojson";
       package "uri";
       package "tyxml";
