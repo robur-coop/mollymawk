@@ -23,6 +23,7 @@ let mollymawk =
       package "duration";
       package ~min:"0.2.0" "ohex";
       package "http-mirage-client";
+      package "solo5-elftool" ~min:"0.4.0";
     ]
   in
   main ~packages "Unikernel.Main"
