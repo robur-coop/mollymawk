@@ -47,15 +47,14 @@ let account_usage_layout policy unikernels blocks =
     List.iter
       (fun (_, unikernel) ->
         List.iter
-          (fun (name, bridge, _) ->
-            let bridge_name = Option.value bridge ~default:name in
+          (fun { Vmm_core.Unikernel.host_device; _ } ->
             (* Only count if the bridge is in policy.bridges *)
-            if Vmm_core.String_set.mem bridge_name policy.bridges then
+            if Vmm_core.String_set.mem host_device policy.bridges then
               let count =
-                Hashtbl.find_opt bridge_count bridge_name
+                Hashtbl.find_opt bridge_count host_device
                 |> Option.value ~default:0
               in
-              Hashtbl.replace bridge_count bridge_name (count + 1))
+              Hashtbl.replace bridge_count host_device (count + 1))
           unikernel.Vmm_core.Unikernel.bridges)
       unikernels;
 

@@ -16,25 +16,27 @@ let unikernel_info (unikernel_name, info) =
   and cpuid c = `Int c
   and memory m = `Int m
   and block_devices bs =
-    let block (name, dev, sec) =
-      let dev = Option.value ~default:"none specified (name is used)" dev in
-      let s =
-        Option.value ~default:512
-          (* TODO we should find a path to query solo5 for the default sector size*)
-          sec
-      in
+    let block
+        { Vmm_core.Unikernel.unikernel_device; host_device; sector_size; size }
+        =
       `Assoc
         [
-          ("name", `String name);
-          ("host_device", `String dev);
-          ("sector_size", `Int s);
+          ("name", `String unikernel_device);
+          ("host_device", `String host_device);
+          ("sector_size", `Int sector_size);
+          ("size", `Int size);
         ]
     in
     `List (List.map block bs)
   and bridges bs =
-    let bridge (name, dev, _) =
-      let dev = Option.value ~default:name dev in
-      `Assoc [ ("name", `String name); ("host_device", `String dev) ]
+    let bridge
+        ({ Vmm_core.Unikernel.unikernel_device; host_device; _ } :
+          Vmm_core.Unikernel.net_info) =
+      `Assoc
+        [
+          ("name", `String unikernel_device);
+          ("host_device", `String host_device);
+        ]
     in
     `List (List.map bridge bs)
   and argv args =
@@ -88,7 +90,8 @@ let success = function
   | `Empty -> `Null
   | `String m -> `String m
   | `Policies ps -> policy_infos ps
-  | `Old_unikernel_info is -> unikernel_infos is
+  | `Old_unikernel_info2 is -> unikernel_infos is
+  | `Old_unikernel_info3 is -> unikernel_infos is
   | `Unikernel_info is -> unikernel_infos is
   | `Block_devices bs -> block_infos bs
   | `Old_unikernels _ -> `String "old unikernels not supported"

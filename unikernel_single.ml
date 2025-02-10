@@ -270,10 +270,26 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                                                  ];
                                              ]
                                            [ txt "Sector size" ];
+                                         th
+                                           ~a:
+                                             [
+                                               a_class
+                                                 [
+                                                   "px-6 py-2 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase";
+                                                 ];
+                                             ]
+                                           [ txt "Size" ];
                                        ];
                                    ])
                               (List.map
-                                 (fun (name, device, size) ->
+                                 (fun {
+                                        Vmm_core.Unikernel.unikernel_device;
+                                        host_device;
+                                        sector_size;
+                                        size;
+                                      } ->
                                    tr
                                      [
                                        td
@@ -286,7 +302,18 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                                                   text-gray-800";
                                                ];
                                            ]
-                                         [ txt name ];
+                                         [ txt unikernel_device ];
+                                       td
+                                         ~a:
+                                           [
+                                             a_class
+                                               [
+                                                 "px-6 py-1 whitespace-nowrap \
+                                                  text-sm font-medium \
+                                                  text-gray-800";
+                                               ];
+                                           ]
+                                         [ txt host_device ];
                                        td
                                          ~a:
                                            [
@@ -299,7 +326,8 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                                            ]
                                          [
                                            txt
-                                             (Option.value device ~default:name);
+                                             (string_of_int sector_size
+                                            ^ " bytes");
                                          ];
                                        td
                                          ~a:
@@ -311,13 +339,7 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                                                   text-gray-800";
                                                ];
                                            ]
-                                         [
-                                           txt
-                                             (string_of_int
-                                                (Option.value size ~default:512)
-                                              (* TODO: Read the default from albatross json *)
-                                             ^ " bytes");
-                                         ];
+                                         [ txt (string_of_int size ^ " MB") ];
                                      ])
                                  data.block_devices);
                           ];
@@ -377,7 +399,11 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                                        ];
                                    ])
                               (List.map
-                                 (fun (name, device, mac) ->
+                                 (fun {
+                                        Vmm_core.Unikernel.unikernel_device;
+                                        host_device;
+                                        mac;
+                                      } ->
                                    tr
                                      [
                                        td
@@ -390,7 +416,7 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                                                   text-gray-800";
                                                ];
                                            ]
-                                         [ txt name ];
+                                         [ txt unikernel_device ];
                                        td
                                          ~a:
                                            [
@@ -401,10 +427,7 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                                                   text-gray-800";
                                                ];
                                            ]
-                                         [
-                                           txt
-                                             (Option.value device ~default:name);
-                                         ];
+                                         [ txt host_device ];
                                        td
                                          ~a:
                                            [
@@ -415,15 +438,7 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                                                   text-gray-800";
                                                ];
                                            ]
-                                         [
-                                           txt
-                                             (Macaddr.to_string
-                                                (Option.value mac
-                                                   ~default:
-                                                     (Vmm_core.Name.mac u_name
-                                                        (Option.value device
-                                                           ~default:name))));
-                                         ];
+                                         [ txt (Macaddr.to_string mac) ];
                                      ])
                                  data.bridges);
                           ];

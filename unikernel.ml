@@ -1398,7 +1398,7 @@ struct
     match Utils.Json.get "name" json_dict with
     | Some (`String unikernel_name) -> (
         Albatross.query albatross ~domain:user.name ~name:unikernel_name
-          (`Unikernel_cmd `Unikernel_restart)
+          (`Unikernel_cmd (`Unikernel_restart None))
         >>= function
         | Error msg ->
             Logs.err (fun m -> m "Error querying albatross: %s" msg);
