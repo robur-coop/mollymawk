@@ -95,7 +95,7 @@ struct
       with Yojson.Json_error s -> Error (`Msg s)
     with
     | Error (`Msg err) ->
-        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
+        Logs.err (fun m -> m "Failed to parse JSON: %s" err);
         Lwt.return (Error (`Msg err))
     | Ok (`Assoc json_dict) -> (
         match Utils.Json.get User_model.csrf_cookie json_dict with
@@ -112,7 +112,7 @@ struct
       with Yojson.Json_error s -> Error (`Msg s)
     with
     | Error (`Msg err) ->
-        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
+        Logs.err (fun m -> m "Failed to parse JSON: %s" err);
         Lwt.return (Error (`Msg err))
     | Ok (`Assoc json_dict) -> Lwt.return (Ok json_dict)
     | Ok _ ->
@@ -296,7 +296,7 @@ struct
     | Error msg ->
         Logs.err (fun m -> m "error while communicating with albatross: %s" msg);
         []
-    | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels)) -> unikernels
+    | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
     | Ok reply ->
         Logs.err (fun m ->
             m "expected a unikernel info reply, received %a"
@@ -315,7 +315,7 @@ struct
                resulted in : %s"
               unikernel_name err);
         Error err
-    | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ])) -> Ok unikernel
+    | Ok (_hdr, `Success (`Unikernel_info [ unikernel ])) -> Ok unikernel
     | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
         let message =
           Printf.sprintf
@@ -403,7 +403,7 @@ struct
     in
     match json with
     | Error (`Msg err) ->
-        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
+        Logs.err (fun m -> m "Failed to parse JSON: %s" err);
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String (String.escaped err))
           `Bad_request
@@ -512,7 +512,7 @@ struct
     in
     match json with
     | Error (`Msg err) ->
-        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
+        Logs.err (fun m -> m "Failed to parse JSON: %s" err);
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String (String.escaped err))
           `Bad_request
@@ -664,7 +664,7 @@ struct
                     ~data:(`String (String.escaped msg))
                     `Internal_server_error))
     | _ ->
-        Logs.warn (fun m -> m "%s: Failed to parse JSON - no UUID found" key);
+        Logs.err (fun m -> m "%s: Failed to parse JSON - no UUID found" key);
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find a UUID in the JSON.") `Not_found
 
@@ -1728,6 +1728,7 @@ struct
         let m, _r = to_map ~assoc m in
         match (Map.find_opt "json_data" m, Map.find_opt "block_data" m) with
         | Some (_, json_data), Some (_, block_data) -> (
+          Logs.info (fun m  -> m  "%s" json_data);
             let json =
               try Ok (Yojson.Basic.from_string json_data)
               with Yojson.Json_error s -> Error (`Msg s)
