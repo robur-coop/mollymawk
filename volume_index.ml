@@ -95,6 +95,7 @@ let volume_index_layout volumes policy =
                   ();
               ];
             hr ~a:[ a_class [ "border border-primary-500 my-5" ] ] ();
+            p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
             div
               ~a:[ a_class [ "flex flex-col" ] ]
               [
