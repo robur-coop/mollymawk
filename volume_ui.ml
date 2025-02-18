@@ -3,6 +3,7 @@ let create_volume total_free_space =
     section
       ~a:[ a_id "block-create"; a_class [ "w-full mx-auto" ] ]
       [
+        p ~a:[ a_id "create-volume-form-alert"; a_class [ "my-4 hidden" ] ] [];
         div
           ~a:[ a_class [ "my-6" ] ]
           [
