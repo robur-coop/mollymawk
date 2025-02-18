@@ -136,6 +136,7 @@ async function saveConfig() {
 				method: 'POST',
 				headers: {
 					"Content-Type": "application/json",
+					"Accept": "application/json",
 				},
 				body: JSON.stringify({
 					"server_ip": ipInput,
@@ -245,7 +246,7 @@ async function restartUnikernel(name) {
 		const response = await fetch(`/api/unikernel/restart`, {
 			method: 'POST',
 			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
-			headers: { 'Content-Type': 'application/json' }
+			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
 		})
 
 		const data = await response.json();
@@ -268,7 +269,7 @@ async function destroyUnikernel(name) {
 		const response = await fetch(`/api/unikernel/destroy/${name}`, {
 			method: 'POST',
 			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
-			headers: { 'Content-Type': 'application/json' }
+			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
 		})
 
 		const data = await response.json();
@@ -301,7 +302,7 @@ async function toggleUserStatus(uuid, endpoint) {
 		const response = await fetch(endpoint, {
 			method: 'POST',
 			body: JSON.stringify({ uuid, molly_csrf }),
-			headers: { 'Content-Type': 'application/json' }
+			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
 		});
 
 		const data = await response.json();
@@ -362,6 +363,7 @@ async function updatePolicy() {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",
+				"Accept": "application/json",
 			},
 			body: JSON.stringify(
 				{
@@ -483,7 +485,7 @@ async function updatePassword() {
 						confirm_password
 
 					}),
-				headers: { 'Content-Type': 'application/json' }
+				headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
 			});
 
 			const data = await response.json();
@@ -512,7 +514,7 @@ async function closeSessions() {
 				{
 					molly_csrf,
 				}),
-			headers: { 'Content-Type': 'application/json' }
+			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
 		});
 
 		const data = await response.json();
@@ -541,7 +543,7 @@ async function closeSession(session_value) {
 					session_value,
 					molly_csrf,
 				}),
-			headers: { 'Content-Type': 'application/json' }
+			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
 		});
 
 		const data = await response.json();
@@ -588,6 +590,7 @@ async function deleteVolume(block_name) {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",
+				"Accept": "application/json",
 			},
 			body: JSON.stringify(
 				{
@@ -719,6 +722,7 @@ async function downloadVolume(block_name) {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",
+				"Accept": "application/octet-stream,application/json"
 			},
 			body: JSON.stringify(
 				{
@@ -820,6 +824,7 @@ async function createToken() {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",
+				"Accept": "application/json",
 			},
 			body: JSON.stringify(
 				{
@@ -852,6 +857,7 @@ async function deleteToken(value) {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",
+				"Accept": "application/json",
 			},
 			body: JSON.stringify(
 				{
@@ -901,6 +907,7 @@ async function updateToken(value) {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",
+				"Accept": "application/json",
 			},
 			body: JSON.stringify(
 				{
@@ -942,6 +949,7 @@ async function updateUnikernel(job, build, unikernel_name) {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",
+				"Accept": "application/json",
 			},
 			body: JSON.stringify(
 				{
