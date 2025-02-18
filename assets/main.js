@@ -242,7 +242,7 @@ async function deployUnikernel() {
 async function restartUnikernel(name) {
 	try {
 		const molly_csrf = document.getElementById("molly-csrf").value;
-		const response = await fetch(`/api/unikernel/restart/${name}`, {
+		const response = await fetch(`/api/unikernel/restart`, {
 			method: 'POST',
 			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
 			headers: { 'Content-Type': 'application/json' }
@@ -255,7 +255,7 @@ async function restartUnikernel(name) {
 				window.location.href = "/dashboard";
 			}, 2000);
 		} else {
-			postAlert("bg-secondary-300", `${name} has been restarted succesfully.`);
+			postAlert("bg-secondary-300", `Error. Restarting ${name} returned ${data.data}.`);
 		}
 	} catch (error) {
 		postAlert("bg-secondary-300", error);
