@@ -1728,7 +1728,6 @@ struct
         let m, _r = to_map ~assoc m in
         match (Map.find_opt "json_data" m, Map.find_opt "block_data" m) with
         | Some (_, json_data), Some (_, block_data) -> (
-          Logs.info (fun m  -> m  "%s" json_data);
             let json =
               try Ok (Yojson.Basic.from_string json_data)
               with Yojson.Json_error s -> Error (`Msg s)
