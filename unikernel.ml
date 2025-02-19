@@ -296,7 +296,7 @@ struct
     | Error msg ->
         Logs.err (fun m -> m "error while communicating with albatross: %s" msg);
         []
-    | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
+    | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels)) -> unikernels
     | Ok reply ->
         Logs.err (fun m ->
             m "expected a unikernel info reply, received %a"
@@ -315,7 +315,7 @@ struct
                resulted in : %s"
               unikernel_name err);
         Error err
-    | Ok (_hdr, `Success (`Unikernel_info [ unikernel ])) -> Ok unikernel
+    | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ])) -> Ok unikernel
     | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
         let message =
           Printf.sprintf
