@@ -50,6 +50,66 @@ struct
   module Store = Storage.Make (BLOCK)
   module Map = Map.Make (String)
 
+  let read_multipart_data reqd =
+    let response_body = Httpaf.Reqd.request_body reqd in
+    let finished, notify_finished = Lwt.wait () in
+    let wakeup v = Lwt.wakeup_later notify_finished v in
+    let on_eof data () = wakeup data in
+    let f acc s = acc ^ s in
+    let rec on_read on_eof acc bs ~off ~len =
+      let str = Bigstringaf.substring ~off ~len bs in
+      let acc = acc >>= fun acc -> Lwt.return (f acc str) in
+      Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof acc)
+        ~on_eof:(on_eof acc)
+    in
+    let f_init = Lwt.return "" in
+    Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof f_init)
+      ~on_eof:(on_eof f_init);
+    finished >>= fun data ->
+    data >>= fun data ->
+    let content_type =
+      Httpaf.(
+        Headers.get_exn (Reqd.request reqd).Request.headers "content-type")
+    in
+    let ct = Multipart_form.Content_type.of_string (content_type ^ "\r\n") in
+    match ct with
+    | Error (`Msg msg) ->
+        Logs.warn (fun m ->
+            m "couldn't parse content-type %s: %S" content_type msg);
+        Error
+          (`Msg ("couldn't parse content-type " ^ content_type ^ ": " ^ msg))
+        |> Lwt.return
+    | Ok ct -> (
+        match Multipart_form.of_string_to_list data ct with
+        | Error (`Msg msg) ->
+            Logs.warn (fun m -> m "couldn't decode multipart data: %s" msg);
+            Error (`Msg ("Couldn't decode multipart data: " ^ msg))
+            |> Lwt.return
+        | Ok (m, assoc) -> Ok (m, assoc) |> Lwt.return)
+
+  let to_map ~assoc m =
+    let open Multipart_form in
+    let rec go (map, rest) = function
+      | Leaf { header; body } -> (
+          let filename =
+            Option.bind
+              (Header.content_disposition header)
+              Content_disposition.filename
+          in
+          match
+            Option.bind
+              (Header.content_disposition header)
+              Content_disposition.name
+          with
+          | Some name ->
+              (Map.add name (filename, List.assoc body assoc) map, rest)
+          | None -> (map, (body, (filename, List.assoc body assoc)) :: rest))
+      | Multipart { body; _ } ->
+          let fold acc = function Some elt -> go acc elt | None -> acc in
+          List.fold_left fold (map, rest) body
+    in
+    go (Map.empty, []) m
+
   let generate_csrf_token store user now reqd =
     let csrf = Middleware.generate_csrf_cookie now reqd in
     let updated_user =
@@ -121,31 +181,8 @@ struct
 
   module Albatross = Albatross.Make (T) (P) (S)
 
-  let to_map ~assoc m =
-    let open Multipart_form in
-    let rec go (map, rest) = function
-      | Leaf { header; body } -> (
-          let filename =
-            Option.bind
-              (Header.content_disposition header)
-              Content_disposition.filename
-          in
-          match
-            Option.bind
-              (Header.content_disposition header)
-              Content_disposition.name
-          with
-          | Some name ->
-              (Map.add name (filename, List.assoc body assoc) map, rest)
-          | None -> (map, (body, (filename, List.assoc body assoc)) :: rest))
-      | Multipart { body; _ } ->
-          let fold acc = function Some elt -> go acc elt | None -> acc in
-          List.fold_left fold (map, rest) body
-    in
-    go (Map.empty, []) m
-
-  let process_session_request ?(json_dict = []) ?form_csrf ~email_verified f
-      reqd user =
+  let process_session_request ~request_body ?form_csrf ~email_verified f reqd
+      user =
     let current_time = Ptime.v (P.now_d_ps ()) in
     let middlewares ~form_csrf user =
       (if email_verified && false (* TODO *) then
@@ -334,43 +371,6 @@ struct
         in
         Logs.err (fun m -> m "%s" message);
         Error message
-
-  let read_multipart_data reqd =
-    let response_body = Httpaf.Reqd.request_body reqd in
-    let finished, notify_finished = Lwt.wait () in
-    let wakeup v = Lwt.wakeup_later notify_finished v in
-    let on_eof data () = wakeup data in
-    let f acc s = acc ^ s in
-    let rec on_read on_eof acc bs ~off ~len =
-      let str = Bigstringaf.substring ~off ~len bs in
-      let acc = acc >>= fun acc -> Lwt.return (f acc str) in
-      Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof acc)
-        ~on_eof:(on_eof acc)
-    in
-    let f_init = Lwt.return "" in
-    Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof f_init)
-      ~on_eof:(on_eof f_init);
-    finished >>= fun data ->
-    data >>= fun data ->
-    let content_type =
-      Httpaf.(
-        Headers.get_exn (Reqd.request reqd).Request.headers "content-type")
-    in
-    let ct = Multipart_form.Content_type.of_string (content_type ^ "\r\n") in
-    match ct with
-    | Error (`Msg msg) ->
-        Logs.warn (fun m ->
-            m "couldn't parse content-type %s: %S" content_type msg);
-        Error
-          (`Msg ("couldn't parse content-type " ^ content_type ^ ": " ^ msg))
-        |> Lwt.return
-    | Ok ct -> (
-        match Multipart_form.of_string_to_list data ct with
-        | Error (`Msg msg) ->
-            Logs.warn (fun m -> m "couldn't decode multipart data: %s" msg);
-            Error (`Msg ("Couldn't decode multipart data: " ^ msg))
-            |> Lwt.return
-        | Ok (m, assoc) -> Ok (m, assoc) |> Lwt.return)
 
   let sign_up reqd =
     let now = Ptime.v (P.now_d_ps ()) in
