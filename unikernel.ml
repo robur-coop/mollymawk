@@ -149,6 +149,21 @@ struct
     finished >>= fun data -> data
 
   let extract_csrf_token reqd =
+    match Middleware.header "Content-Type" reqd with
+    | Some header when String.starts_with ~prefix:"multipart/form-data" header
+      -> (
+        read_multipart_data reqd >>= fun result ->
+        match result with
+        | Error (`Msg msg) ->
+            Lwt.return
+              (Error (`Msg ("Couldn't process multipart request: " ^ msg)))
+        | Ok (m, assoc) -> (
+            let multipart_body, _r = to_map ~assoc m in
+            match Map.find_opt "molly_csrf" multipart_body with
+            | None -> Lwt.return (Error (`Msg "Couldn't find CSRF token"))
+            | Some (_, token) ->
+                Lwt.return (Ok (token, `Multipart multipart_body))))
+    | None | _ -> (
     decode_request_body reqd >>= fun data ->
     match
       try Ok (Yojson.Basic.from_string data)
@@ -159,11 +174,11 @@ struct
         Lwt.return (Error (`Msg err))
     | Ok (`Assoc json_dict) -> (
         match Utils.Json.get User_model.csrf_cookie json_dict with
-        | Some (`String token) -> Lwt.return (Ok (token, json_dict))
+            | Some (`String token) -> Lwt.return (Ok (token, `JSON json_dict))
         | _ -> Lwt.return (Error (`Msg "Couldn't find CSRF token")))
     | Ok _ ->
         Logs.warn (fun m -> m "JSON is not a dictionary: %s" data);
-        Lwt.return (Error (`Msg "not a dictionary"))
+            Lwt.return (Error (`Msg "not a dictionary")))
 
   let extract_json_body reqd =
     decode_request_body reqd >>= fun data ->
@@ -195,7 +210,7 @@ struct
     in
     Middleware.apply_middleware
       (middlewares ~form_csrf user)
-      (fun _reqd -> f ~json_dict user)
+      (fun _reqd -> f ~request_body user)
       reqd
 
   let authenticate_user ~check_admin ~check_token store reqd =
@@ -276,7 +291,7 @@ struct
               `Internal_server_error
         | Ok () -> (
             extract_json_body reqd >>= function
-            | Ok json_dict -> f ~json_dict user
+            | Ok request_body -> f ~request_body:(`JSON request_body) user
             | Error (`Msg msg) ->
                 Middleware.http_response reqd ~title:"Error"
                   ~data:(`String (String.escaped msg))
@@ -291,14 +306,16 @@ struct
         | Ok () ->
             if check_csrf then
               extract_csrf_token reqd >>= function
-              | Ok (form_csrf, json_dict) ->
-                  process_session_request ~email_verified ~json_dict ~form_csrf
-                    f reqd user
+              | Ok (form_csrf, request_body) ->
+                  process_session_request ~email_verified ~request_body
+                    ~form_csrf f reqd user
               | Error (`Msg msg) ->
                   Middleware.http_response reqd ~title:"Error"
                     ~data:(`String (String.escaped msg))
                     `Bad_request
-            else process_session_request ~email_verified f reqd user)
+            else
+              process_session_request ~email_verified ~request_body:`Nothing f
+                reqd user)
 
   let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status
       =
