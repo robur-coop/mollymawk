@@ -206,8 +206,8 @@ async function deployUnikernel() {
 		buttonLoading(deployButton, true, "Deploying...")
 		let formData = new FormData();
 		formData.append("name", name);
-		formData.append("binary", binary)
-		formData.append("arguments", arguments)
+		formData.append("arguments", arguments);
+		formData.append("binary", binary);
 		formData.append("molly_csrf", molly_csrf)
 		try {
 			const response = await fetch("/api/unikernel/create", {
@@ -626,7 +626,7 @@ async function createVolume() {
 	const block_size = document.getElementById("block_size").innerText;
 	const data_toggle = document.getElementById("dataToggle").checked;
 	const molly_csrf = document.getElementById("molly-csrf").value;
-	const formAlert = document.getElementById("form-alert");
+	const formAlert = document.getElementById("create-volume-form-alert");
 	const block_compressed = document.getElementById("block_compressed").checked;
 	const block_data = document.getElementById("block_data").files[0];
 
@@ -681,10 +681,10 @@ async function createVolume() {
 			{
 				"block_name": block_name,
 				"block_size": Number(block_size),
-				"block_compressed": block_compressed,
-				"molly_csrf": molly_csrf
+				"block_compressed": block_compressed
 			})
 		formData.append("block_data", block_data)
+		formData.append("molly_csrf", molly_csrf)
 		formData.append("json_data", json_data)
 		const response = await fetch("/api/volume/create", {
 			method: 'POST',
@@ -772,11 +772,11 @@ async function uploadToVolume(block_name) {
 		let json_data = JSON.stringify(
 			{
 				"block_name": block_name,
-				"block_compressed": block_compressed,
-				"molly_csrf": molly_csrf
+				"block_compressed": block_compressed
 			})
 		formData.append("block_data", block_data)
 		formData.append("json_data", json_data)
+		formData.append("molly_csrf", molly_csrf)
 		const response = await fetch("/api/volume/upload", {
 			method: 'POST',
 			body: formData
