@@ -154,13 +154,16 @@ struct
       -> (
         read_multipart_data reqd >>= fun result ->
         match result with
-        | Error (`Msg msg) ->
+        | Error (`Msg err) ->
+            Logs.warn (fun m -> m "Failed to read multipart data: %s" err);
             Lwt.return
-              (Error (`Msg ("Couldn't process multipart request: " ^ msg)))
+              (Error (`Msg ("Couldn't process multipart request: " ^ err)))
         | Ok (m, assoc) -> (
             let multipart_body, _r = to_map ~assoc m in
             match Map.find_opt "molly_csrf" multipart_body with
-            | None -> Lwt.return (Error (`Msg "Couldn't find CSRF token"))
+            | None ->
+                Logs.warn (fun m -> m "No csrf token in multipart request");
+                Lwt.return (Error (`Msg "Couldn't find CSRF token"))
             | Some (_, token) ->
                 Lwt.return (Ok (token, `Multipart multipart_body))))
     | None | _ -> (
@@ -170,12 +173,15 @@ struct
           with Yojson.Json_error s -> Error (`Msg s)
         with
         | Error (`Msg err) ->
-            Logs.err (fun m -> m "Failed to parse JSON: %s" err);
+            Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
             Lwt.return (Error (`Msg err))
         | Ok (`Assoc json_dict) -> (
             match Utils.Json.get User_model.csrf_cookie json_dict with
             | Some (`String token) -> Lwt.return (Ok (token, `JSON json_dict))
-            | _ -> Lwt.return (Error (`Msg "Couldn't find CSRF token")))
+            | _ ->
+                Logs.warn (fun m ->
+                    m "No csrf token in session request with Json body");
+                Lwt.return (Error (`Msg "Couldn't find CSRF token")))
         | Ok _ ->
             Logs.warn (fun m -> m "JSON is not a dictionary: %s" data);
             Lwt.return (Error (`Msg "not a dictionary")))
@@ -187,7 +193,7 @@ struct
       with Yojson.Json_error s -> Error (`Msg s)
     with
     | Error (`Msg err) ->
-        Logs.err (fun m -> m "Failed to parse JSON: %s" err);
+        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
         Lwt.return (Error (`Msg err))
     | Ok (`Assoc json_dict) -> Lwt.return (Ok json_dict)
     | Ok _ ->
@@ -420,7 +426,7 @@ struct
     in
     match json with
     | Error (`Msg err) ->
-        Logs.err (fun m -> m "Failed to parse JSON: %s" err);
+        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String (String.escaped err))
           `Bad_request
@@ -529,7 +535,7 @@ struct
     in
     match json with
     | Error (`Msg err) ->
-        Logs.err (fun m -> m "Failed to parse JSON: %s" err);
+        Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String (String.escaped err))
           `Bad_request
@@ -681,7 +687,7 @@ struct
                     ~data:(`String (String.escaped msg))
                     `Internal_server_error))
     | _ ->
-        Logs.err (fun m -> m "%s: Failed to parse JSON - no UUID found" key);
+        Logs.warn (fun m -> m "%s: Failed to parse JSON - no UUID found" key);
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find a UUID in the JSON.") `Not_found
 
