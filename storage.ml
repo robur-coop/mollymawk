@@ -1,6 +1,6 @@
 open Utils.Json
 
-let current_version = 6
+let current_version = 7
 (* version history:
    1 was initial (fields until email_verification_uuid)
    2 added active
@@ -8,6 +8,7 @@ let current_version = 6
    4 properly serialised super_user
    5 cookie has two new fields last_access and user_agent
    6 tokens has 3 new fields: name, last_access and usage_count
+   7 added unikernel_updates to keep track of when unikernels are updated
 *)
 
 let t_to_json users configuration =
@@ -26,6 +27,7 @@ let t_of_json json =
       | Some (`Int v), Some (`List users), Some configuration ->
           let* () =
             if v = current_version then Ok ()
+            else if v = 6 then Ok ()
             else if v = 5 then Ok ()
             else if v = 4 then Ok ()
             else if v = 3 then Ok ()
@@ -46,6 +48,8 @@ let t_of_json json =
                   else if v = 2 || v = 3 then User_model.user_v2_of_json js
                   else if v = 4 || v = 5 then
                     User_model.(user_v3_of_json cookie_v1_of_json) js
+                  else if v = 6 then
+                    User_model.(user_v4_of_json cookie_v1_of_json) js
                   else User_model.(user_of_json cookie_of_json) js
                 in
                 Ok (user :: acc))
@@ -202,6 +206,23 @@ module Make (BLOCK : Mirage_block.S) = struct
         user.cookies
     in
     let updated_user = User_model.update_user user ~cookies () in
+    update_user store updated_user >>= function
+    | Ok () -> Lwt.return (Ok ())
+    | Error (`Msg err) ->
+        Logs.err (fun m -> m "Error with storage: %s" err);
+        Lwt.return (Error (`Msg err))
+
+  let update_user_unikernel_updates store
+      (new_update : User_model.unikernel_update) (user : User_model.user) =
+    let is_unique (u : User_model.unikernel_update) =
+      u.name <> new_update.name
+    in
+    let updated_list =
+      new_update :: List.filter is_unique user.unikernel_updates
+    in
+    let updated_user =
+      User_model.update_user user ~unikernel_updates:updated_list ()
+    in
     update_user store updated_user >>= function
     | Ok () -> Lwt.return (Ok ())
     | Error (`Msg err) ->
