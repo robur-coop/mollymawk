@@ -21,6 +21,14 @@ type cookie = {
   user_agent : string option;
 }
 
+type unikernel_update = {
+  name : string;
+  job : string;
+  uuid : string;
+  config : Vmm_core.Unikernel.config;
+  timestamp : Ptime.t;
+}
+
 type user = {
   name : string;
   email : string;
@@ -34,11 +42,52 @@ type user = {
   email_verification_uuid : Uuidm.t option;
   active : bool;
   super_user : bool;
+  unikernel_updates : unikernel_update list;
 }
 
 let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
 let session_cookie = "molly_session"
 let csrf_cookie = "molly_csrf"
+
+let unikernel_update_to_json (u : unikernel_update) : Yojson.Basic.t =
+  `Assoc
+    [
+      ("name", `String u.name);
+      ("job", `String u.job);
+      ("uuid", `String u.uuid);
+      ("timestamp", `String (Utils.TimeHelper.string_of_ptime u.timestamp));
+    ]
+
+let ( let* ) = Result.bind
+
+let unikernel_update_of_json = function
+  | `Assoc xs -> (
+      match
+        ( Utils.Json.get "name" xs,
+          Utils.Json.get "job" xs,
+          Utils.Json.get "uuid" xs,
+          Utils.Json.get "config" xs,
+          Utils.Json.get "timestamp" xs )
+      with
+      | ( Some (`String name),
+          Some (`String job),
+          Some (`String uuid),
+          Some (`String config),
+          Some (`String timestamp_str) ) ->
+          let* timestamp = Utils.TimeHelper.ptime_of_string timestamp_str in
+          let* config = Albatross_json.config_of_json config in
+          Ok { name; job; uuid; config; timestamp }
+      | _ ->
+          Error
+            (`Msg
+               ("Invalid JSON for unikernel_update: requires name, job, uuid, \
+                 config and timestamp but got: "
+               ^ Yojson.Basic.to_string (`Assoc xs))))
+  | js ->
+      Error
+        (`Msg
+           ("Invalid JSON for unikernel_update: expected a dictionary, got: "
+          ^ Yojson.Basic.to_string js))
 
 let cookie_to_json (cookie : cookie) =
   `Assoc
@@ -57,8 +106,6 @@ let cookie_to_json (cookie : cookie) =
         | Some agent -> `String agent
         | None -> `Null );
     ]
-
-let ( let* ) = Result.bind
 
 let cookie_v1_of_json = function
   | `Assoc xs -> (
@@ -287,6 +334,8 @@ let user_to_json (u : user) =
         | Some s -> `String (Uuidm.to_string s) );
       ("active", `Bool u.active);
       ("super_user", `Bool u.super_user);
+      ( "unikernel_updates",
+        `List (List.map unikernel_update_to_json u.unikernel_updates) );
     ]
 
 let user_v1_of_json = function
@@ -372,6 +421,7 @@ let user_v1_of_json = function
               email_verification_uuid;
               active = true;
               super_user = true;
+              unikernel_updates = [];
             }
       | _ ->
           Error
@@ -469,6 +519,7 @@ let user_v2_of_json = function
               email_verification_uuid;
               active;
               super_user = true;
+              unikernel_updates = [];
             }
       | _ ->
           Error
@@ -568,6 +619,7 @@ let user_v3_of_json cookie_fn = function
               email_verification_uuid;
               active;
               super_user;
+              unikernel_updates = [];
             }
       | _ ->
           Error
@@ -580,7 +632,7 @@ let user_v3_of_json cookie_fn = function
            ("invalid json for user, expected a dict: "
           ^ Yojson.Basic.to_string js))
 
-let user_of_json cookie_fn = function
+let user_v4_of_json cookie_fn = function
   | `Assoc xs -> (
       match
         Utils.Json.
@@ -667,6 +719,117 @@ let user_of_json cookie_fn = function
               email_verification_uuid;
               active;
               super_user;
+              unikernel_updates = [];
+            }
+      | _ ->
+          Error
+            (`Msg
+               ("invalid json for user: " ^ Yojson.Basic.to_string (`Assoc xs)))
+      )
+  | js ->
+      Error
+        (`Msg
+           ("invalid json for user, expected a dict: "
+          ^ Yojson.Basic.to_string js))
+
+let user_of_json cookie_fn = function
+  | `Assoc xs -> (
+      match
+        Utils.Json.
+          ( get "name" xs,
+            get "email" xs,
+            get "email_verified" xs,
+            get "password" xs,
+            get "uuid" xs,
+            get "tokens" xs,
+            get "cookies" xs,
+            get "created_at" xs,
+            get "updated_at" xs,
+            get "email_verification_uuid" xs,
+            get "active" xs,
+            get "super_user" xs,
+            get "unikernel_updates" xs )
+      with
+      | ( Some (`String name),
+          Some (`String email),
+          Some email_verified,
+          Some (`String password),
+          Some (`String uuid),
+          Some (`List tokens),
+          Some (`List cookies),
+          Some (`String updated_at_str),
+          Some (`String created_at_str),
+          Some email_verification_uuid,
+          Some (`Bool active),
+          Some (`Bool super_user),
+          Some (`List unikernel_updates) ) ->
+          let created_at =
+            match Utils.TimeHelper.ptime_of_string created_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let updated_at =
+            match Utils.TimeHelper.ptime_of_string updated_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let* email_verified = Utils.TimeHelper.ptime_of_json email_verified in
+          let* tokens =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* token = token_of_json js in
+                Ok (token :: acc))
+              (Ok []) tokens
+          in
+          let* cookies =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* cookie = cookie_fn js in
+                Ok (cookie :: acc))
+              (Ok []) cookies
+          in
+          let* email_verification_uuid =
+            match email_verification_uuid with
+            | `Null -> Ok None
+            | `String s ->
+                let* uuid =
+                  Option.to_result
+                    ~none:
+                      (`Msg ("invalid UUID for email verification UUID: " ^ s))
+                    (Uuidm.of_string s)
+                in
+                Ok (Some uuid)
+            | js ->
+                Error
+                  (`Msg
+                     ("invalid json data for email verification UUID, expected \
+                       a string: " ^ Yojson.Basic.to_string js))
+          in
+          let* unikernel_updates =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* unikernel_update = unikernel_update_of_json js in
+                Ok (unikernel_update :: acc))
+              (Ok []) unikernel_updates
+          in
+          Ok
+            {
+              name;
+              email;
+              email_verified;
+              password;
+              uuid;
+              tokens;
+              cookies;
+              created_at = Option.get created_at;
+              updated_at = Option.get updated_at;
+              email_verification_uuid;
+              active;
+              super_user;
+              unikernel_updates;
             }
       | _ ->
           Error
@@ -735,11 +898,13 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
       email_verification_uuid = None;
       active;
       super_user;
+      unikernel_updates = [];
     },
     session )
 
 let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
-    ?updated_at ?email_verification_uuid ?active ?super_user () =
+    ?updated_at ?email_verification_uuid ?active ?super_user ?unikernel_updates
+    () =
   {
     user with
     name = Option.value ~default:user.name name;
@@ -753,6 +918,8 @@ let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
       Option.value ~default:user.email_verification_uuid email_verification_uuid;
     active = Option.value ~default:user.active active;
     super_user = Option.value ~default:user.super_user super_user;
+    unikernel_updates =
+      Option.value ~default:user.unikernel_updates unikernel_updates;
   }
 
 let is_valid_cookie (cookie : cookie) now =
