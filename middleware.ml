@@ -26,9 +26,6 @@ let cookie cookie_name (reqd : Httpaf.Reqd.t) =
         cookie_list
   | _ -> None
 
-let apply_middleware middlewares handler =
-  List.fold_right (fun middleware acc -> middleware acc) middlewares handler
-
 let redirect_to_page ~path ?(clear_session = false) ?(with_error = false) reqd
     ?(msg = "") () =
   let msg_cookie =
