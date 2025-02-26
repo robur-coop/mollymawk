@@ -268,18 +268,14 @@ struct
       ?(api_meth = false) ?(check_csrf = false) ?(check_token = false) store
       reqd f =
     match authenticate_user ~check_admin ~check_token store reqd with
-    | Error (`Cookie, msg) ->
+    | Error (v, msg) ->
         Logs.err (fun m -> m "authenticate: %s" msg);
-        if api_meth then
+        if api_meth || v = `Token then
           Middleware.http_response reqd ~title:"Error" ~data:(`String msg)
             `Bad_request
         else
           Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
             ~with_error:true ~msg reqd ()
-    | Error (`Token, msg) ->
-        Logs.err (fun m -> m "authenticate: %s" msg);
-        Middleware.http_response reqd ~title:"Error" ~data:(`String msg)
-          `Bad_request
     | Ok (`Token (user, token)) -> (
         Store.increment_token_usage store token user >>= function
         | Error (`Msg err) ->
