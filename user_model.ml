@@ -73,10 +73,12 @@ let unikernel_update_of_json = function
       | ( Some (`String name),
           Some (`String job),
           Some (`String uuid),
-          Some (`String config),
+          Some config,
           Some (`String timestamp_str) ) ->
           let* timestamp = Utils.TimeHelper.ptime_of_string timestamp_str in
-          let* config = Albatross_json.config_of_json config in
+          let* config =
+            Albatross_json.config_of_json (Yojson.Basic.to_string config)
+          in
           Ok { name; job; uuid; config; timestamp }
       | _ ->
           Error
