@@ -55,6 +55,7 @@ let unikernel_update_to_json (u : unikernel_update) : Yojson.Basic.t =
       ("name", `String u.name);
       ("job", `String u.job);
       ("uuid", `String u.uuid);
+      ("config", Albatross_json.config_to_json u.config);
       ("timestamp", `String (Utils.TimeHelper.string_of_ptime u.timestamp));
     ]
 
