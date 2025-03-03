@@ -215,7 +215,7 @@ module Make (BLOCK : Mirage_block.S) = struct
   let update_user_unikernel_updates store
       (new_update : User_model.unikernel_update) (user : User_model.user) =
     let is_unique (u : User_model.unikernel_update) =
-      u.name <> new_update.name
+      not (String.equal u.name new_update.name)
     in
     let updated_list =
       new_update :: List.filter is_unique user.unikernel_updates
