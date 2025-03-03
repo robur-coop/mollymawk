@@ -1,6 +1,6 @@
-let arg_modal ~unikernel_name
-    (unikernel : Vmm_core.Name.t * Vmm_core.Unikernel.info)
-    (build : Builder_web.build) =
+let arg_modal ~unikernel_name ~(latest_build : Builder_web.build)
+    ~(current_build : Builder_web.build)
+    (unikernel : Vmm_core.Name.t * Vmm_core.Unikernel.info) =
   Tyxml_html.(
     section
       [
@@ -129,8 +129,9 @@ let arg_modal ~unikernel_name
                 [
                   a_id "update-unikernel-button";
                   a_onclick
-                    ("updateUnikernel('" ^ build.job ^ "','" ^ build.uuid
-                   ^ "','" ^ unikernel_name ^ "')");
+                    ("updateUnikernel('" ^ latest_build.job ^ "','"
+                   ^ latest_build.uuid ^ "','" ^ current_build.uuid ^ "','"
+                   ^ unikernel_name ^ "')");
                 ]
               ~content:(txt "Proceed to update") ~btn_type:`Primary_full ();
           ];
@@ -455,8 +456,9 @@ let unikernel_update_layout ~unikernel_name unikernel current_time
                          ~modal_title:"Unikernel Configuration"
                          ~button_content:(txt "Update to Latest")
                          ~content:
-                           (arg_modal ~unikernel_name unikernel
-                              build_comparison.right)
+                           (arg_modal ~unikernel_name
+                              ~latest_build:build_comparison.right
+                              ~current_build:build_comparison.left unikernel)
                          ()
                      else
                        p
@@ -583,7 +585,8 @@ let unikernel_update_layout ~unikernel_name unikernel current_time
            Modal_dialog.modal_dialog ~modal_title:"Unikernel Configuration"
              ~button_content:(txt "Update to Latest")
              ~content:
-               (arg_modal ~unikernel_name unikernel build_comparison.right)
+               (arg_modal ~unikernel_name ~latest_build:build_comparison.right
+                  ~current_build:build_comparison.left unikernel)
              ()
          else
            p
