@@ -1,4 +1,4 @@
-(* mirage >= 4.7.0 & < 4.9.0 *)
+(* mirage >= 4.9.0 & < 4.10.0 *)
 open Mirage
 
 let assets = crunch "assets"
@@ -27,19 +27,18 @@ let mollymawk =
     ]
   in
   main ~packages "Unikernel.Main"
-    (random @-> pclock @-> mclock @-> time @-> stackv4v6 @-> kv_ro @-> block
-   @-> http_client @-> job)
+    (stackv4v6 @-> kv_ro @-> block @-> http_client @-> job)
 
 let block = block_of_file "data"
 
 let http_client =
   let connect _ modname = function
-    | [ _pclock; _tcpv4v6; ctx ] ->
+    | [ _tcpv4v6; ctx ] ->
         code ~pos:__POS__ {ocaml|%s.connect %s|ocaml} modname ctx
     | _ -> assert false
   in
   impl ~connect "Http_mirage_client.Make"
-    (pclock @-> tcpv4v6 @-> mimic @-> Mirage.http_client)
+    (tcpv4v6 @-> mimic @-> Mirage.http_client)
 
 let stack = generic_stackv4v6 default_network
 let eyeballs = generic_happy_eyeballs stack
@@ -48,11 +47,8 @@ let tcp = tcpv4v6_of_stackv4v6 stack
 
 let http_client =
   let happy_eyeballs = mimic_happy_eyeballs stack eyeballs dns in
-  http_client $ default_posix_clock $ tcp $ happy_eyeballs
+  http_client $ tcp $ happy_eyeballs
 
 let () =
   register "mollymawk"
-    [
-      mollymawk $ default_random $ default_posix_clock $ default_monotonic_clock
-      $ default_time $ stack $ assets $ block $ http_client;
-    ]
+    [ mollymawk $ stack $ assets $ block $ http_client ]

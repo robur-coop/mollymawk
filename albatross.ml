@@ -2,8 +2,7 @@ let ( let* ) = Result.bind
 
 module String_set = Set.Make (String)
 
-module Make (T : Mirage_time.S) (P : Mirage_clock.PCLOCK) (S : Tcpip.Stack.V4V6) =
-struct
+module Make (S : Tcpip.Stack.V4V6) = struct
   module TLS = Tls_mirage.Make (S.TCP)
 
   type t = {
@@ -228,7 +227,7 @@ struct
         (add Authority_key_id (false, auth) exts))
 
   let timestamps validity =
-    let now = Ptime.v (P.now_d_ps ()) in
+    let now = Mirage_ptime.now () in
     match
       (* subtracting some seconds here to not require perfectly synchronised
          clocks on client and server *)
@@ -405,7 +404,7 @@ struct
     Lwt.choose
       [
         continue_reading name tls_flow;
-        ( T.sleep_ns (Duration.of_sec 1) >>= fun () ->
+        ( Mirage_sleep.ns (Duration.of_sec 1) >>= fun () ->
           TLS.close tls_flow >|= fun () ->
           Logs.warn (fun m ->
               m "albatross: timeout after 1 second reading console");
@@ -432,7 +431,7 @@ struct
           match
             let authenticator =
               X509.Authenticator.chain_of_trust
-                ~time:(fun () -> Some (Ptime.v (P.now_d_ps ())))
+                ~time:(fun () -> Some (Mirage_ptime.now ()))
                 [ t.cert ]
             in
             Tls.Config.client ~authenticator ~certificates ()
