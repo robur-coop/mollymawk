@@ -1,9 +1,9 @@
-type handler = Httpaf.Reqd.t -> unit Lwt.t
+type handler = H1.Reqd.t -> unit Lwt.t
 type middleware = handler -> handler
 
 let header header_name reqd =
-  let headers = (Httpaf.Reqd.request reqd).headers in
-  Httpaf.Headers.get headers header_name
+  let headers = (H1.Reqd.request reqd).headers in
+  H1.Headers.get headers header_name
 
 let user_agent reqd = header "User-Agent" reqd
 
@@ -13,7 +13,7 @@ let generate_csrf_cookie now reqd =
     ~uuid:(Uuidm.to_string (User_model.generate_uuid ()))
     ~created_at:now ~expires_in:3600 ()
 
-let cookie cookie_name (reqd : Httpaf.Reqd.t) =
+let cookie cookie_name (reqd : H1.Reqd.t) =
   match header "Cookie" reqd with
   | Some cookies ->
       let cookie_list = String.split_on_char ';' cookies in
@@ -47,14 +47,14 @@ let redirect_to_page ~path ?(clear_session = false) ?(with_error = false) reqd
         ("Content-Length", string_of_int (String.length msg));
       ]
   in
-  let headers = Httpaf.Headers.of_list header_list in
-  let response = Httpaf.Response.create ~headers `Found in
-  Httpaf.Reqd.respond_with_string reqd response msg;
+  let headers = H1.Headers.of_list header_list in
+  let response = H1.Response.create ~headers `Found in
+  H1.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
 let redirect_to_error ~title ~data ~api_meth status reqd () =
-  let code = Httpaf.Status.to_code status
-  and success = Httpaf.Status.is_successful status in
+  let code = H1.Status.to_code status
+  and success = H1.Status.is_successful status in
   let error = { Utils.Status.code; title; data; success } in
   let data =
     if api_meth then Utils.Status.to_json error
@@ -65,47 +65,47 @@ let redirect_to_error ~title ~data ~api_meth status reqd () =
   in
   Lwt.return
     (let headers =
-       Httpaf.Headers.of_list
+       H1.Headers.of_list
          [
            ("content-length", string_of_int (String.length data));
            ("content-type", if api_meth then "application/json" else "text/html");
          ]
      in
-     let resp = Httpaf.Response.create ~headers status in
-     Httpaf.Reqd.respond_with_string reqd resp data)
+     let resp = H1.Response.create ~headers status in
+     H1.Reqd.respond_with_string reqd resp data)
 
 let redirect_to_verify_email reqd ?(msg = "") () =
   let headers =
-    Httpaf.Headers.of_list
+    H1.Headers.of_list
       [
         ("location", "/verify-email");
         ("Content-Length", string_of_int (String.length msg));
       ]
   in
-  let response = Httpaf.Response.create ~headers `Found in
-  Httpaf.Reqd.respond_with_string reqd response msg;
+  let response = H1.Response.create ~headers `Found in
+  H1.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
 let redirect_to_dashboard reqd ?(msg = "") () =
   let headers =
-    Httpaf.Headers.of_list
+    H1.Headers.of_list
       [
         ("location", "/dashboard");
         ("Content-Length", string_of_int (String.length msg));
       ]
   in
-  let response = Httpaf.Response.create ~headers `Found in
-  Httpaf.Reqd.respond_with_string reqd response msg;
+  let response = H1.Response.create ~headers `Found in
+  H1.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
 let http_response ~title ?(header_list = []) ?(data = `String "") reqd
     http_status =
-  let code = Httpaf.Status.to_code http_status
-  and success = Httpaf.Status.is_successful http_status in
+  let code = H1.Status.to_code http_status
+  and success = H1.Status.is_successful http_status in
   let status = { Utils.Status.code; title; data; success } in
   let data = Utils.Status.to_json status in
   let headers =
-    Httpaf.Headers.(
+    H1.Headers.(
       add_list
         (of_list
            [
@@ -114,8 +114,8 @@ let http_response ~title ?(header_list = []) ?(data = `String "") reqd
            ])
         header_list)
   in
-  let response = Httpaf.Response.create ~headers http_status in
-  Httpaf.Reqd.respond_with_string reqd response data;
+  let response = H1.Response.create ~headers http_status in
+  H1.Reqd.respond_with_string reqd response data;
   Lwt.return_unit
 
 let cookie_value cookie =
