@@ -50,5 +50,4 @@ let http_client =
   http_client $ tcp $ happy_eyeballs
 
 let () =
-  register "mollymawk"
-    [ mollymawk $ stack $ assets $ block $ http_client ]
+  register "mollymawk" [ mollymawk $ stack $ assets $ block $ http_client ]

@@ -64,8 +64,7 @@ struct
     finished >>= fun data ->
     data >>= fun data ->
     let content_type =
-      H1.(
-        Headers.get_exn (Reqd.request reqd).Request.headers "content-type")
+      H1.(Headers.get_exn (Reqd.request reqd).Request.headers "content-type")
     in
     let ct = Multipart_form.Content_type.of_string (content_type ^ "\r\n") in
     match ct with
@@ -577,8 +576,7 @@ struct
     | Ok csrf -> (
         let email_verification_uuid = User_model.generate_uuid () in
         let updated_user =
-          User_model.update_user user
-            ~updated_at:now
+          User_model.update_user user ~updated_at:now
             ~email_verification_uuid:(Some email_verification_uuid) ()
         in
         Store.update_user store updated_user >>= function
@@ -611,8 +609,7 @@ struct
           (Uuidm.of_string verification_token)
       in
       let u = Store.find_email_verification_token store uuid in
-      User_model.verify_email_token u verification_token
-        (Mirage_ptime.now ())
+      User_model.verify_email_token u verification_token (Mirage_ptime.now ())
     with
     | Ok user' ->
         if String.equal user.uuid user'.uuid then
@@ -665,8 +662,7 @@ struct
     toggle_account_attribute json_dict store reqd ~key:"toggle-active-account"
       (fun user ->
         User_model.update_user user ~active:(not user.active)
-          ~updated_at:(Mirage_ptime.now ())
-          ())
+          ~updated_at:(Mirage_ptime.now ()) ())
       (fun user -> user.active && Store.count_active store <= 1)
       ~error_message:(`String "Cannot deactivate last active user")
 
@@ -674,8 +670,7 @@ struct
     toggle_account_attribute json_dict store reqd ~key:"toggle-admin-account"
       (fun user ->
         User_model.update_user user ~super_user:(not user.super_user)
-          ~updated_at:(Mirage_ptime.now ())
-          ())
+          ~updated_at:(Mirage_ptime.now ()) ())
       (fun user -> user.super_user && Store.count_superusers store <= 1)
       ~error_message:(`String "Cannot remove last administrator")
 
@@ -687,8 +682,7 @@ struct
         user_unikernels albatross user.name >>= fun unikernels ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
-             ~content:
-               (Unikernel_index.unikernel_index_layout unikernels now)
+             ~content:(Unikernel_index.unikernel_index_layout unikernels now)
              ~icon:"/images/robur.png" ())
           `OK
     | Error err ->
@@ -893,8 +887,7 @@ struct
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Users | Mollymawk"
-             ~content:
-               (Users_index.users_index_layout (Store.users store) now)
+             ~content:(Users_index.users_index_layout (Store.users store) now)
              ~icon:"/images/robur.png" ())
           `OK
     | Error err ->
@@ -924,9 +917,7 @@ struct
           `Internal_server_error
 
   let update_settings stack store albatross _user json_dict reqd =
-    match
-      Configuration.of_json_from_http json_dict (Mirage_ptime.now ())
-    with
+    match Configuration.of_json_from_http json_dict (Mirage_ptime.now ()) with
     | Ok configuration_settings -> (
         Store.update_configuration store configuration_settings >>= function
         | Ok () ->
@@ -1952,9 +1943,7 @@ struct
             ~data:(`String "Bad HTTP request method.") `Bad_request
         in
         let req = H1.Reqd.request reqd in
-        let path =
-          Uri.(pct_decode (path (of_string req.H1.Request.target)))
-        in
+        let path = Uri.(pct_decode (path (of_string req.H1.Request.target))) in
         let check_meth m f = if m = req.meth then f () else bad_request () in
         match path with
         | "/" ->
