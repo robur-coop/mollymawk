@@ -1216,14 +1216,14 @@ struct
                                     ~api_meth:false `Internal_server_error reqd
                                     ()))))))
 
-  let process_unikernel_change ~unikernel_name ~job ~change_build ~current_build
-      (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user)
-      albatross store http_client =
+  let process_unikernel_change ~unikernel_name ~job ~to_be_updated_unikernel
+      ~currently_running_unikernel (unikernel_cfg : Vmm_core.Unikernel.config)
+      (user : User_model.user) albatross store http_client =
     let unikernel_update : User_model.unikernel_update =
       {
         name = unikernel_name;
         job;
-        uuid = current_build;
+        uuid = currently_running_unikernel;
         config = unikernel_cfg;
         timestamp = Ptime.v (P.now_d_ps ());
       }
@@ -1245,7 +1245,7 @@ struct
                (`Internal_server_error : Httpaf.Status.t) ))
     | Ok () -> (
         Builder_web.send_request http_client
-          ("/job/" ^ job ^ "/build/" ^ change_build ^ "/main-binary")
+          ("/job/" ^ job ^ "/build/" ^ to_be_updated_unikernel ^ "/main-binary")
         >>= function
         | Error (`Msg err) ->
             Logs.err (fun m ->
@@ -1308,8 +1308,9 @@ struct
     with
     | Some old_unikernel -> (
         process_unikernel_change ~unikernel_name ~job:old_unikernel.name
-          ~change_build:old_unikernel.uuid ~current_build:old_unikernel.uuid
-          old_unikernel.config user albatross store http_client
+          ~to_be_updated_unikernel:old_unikernel.uuid
+          ~currently_running_unikernel:old_unikernel.uuid old_unikernel.config
+          user albatross store http_client
         >>= function
         | Ok _res ->
             Middleware.http_response reqd ~title:"Rollback Successful"
@@ -1357,8 +1358,8 @@ struct
           get "unikernel_arguments" json_dict )
     with
     | ( Some (`String job),
-        Some (`String latest_build),
-        Some (`String current_build),
+        Some (`String to_be_updated_unikernel),
+        Some (`String currently_running_unikernel),
         Some (`String unikernel_name),
         configuration ) -> (
         match config_or_none "unikernel_arguments" configuration with
@@ -1388,15 +1389,15 @@ struct
                 with
                 | Ok cfg -> (
                     process_unikernel_change ~unikernel_name ~job
-                      ~change_build:latest_build ~current_build cfg user
-                      albatross store http_client
+                      ~to_be_updated_unikernel ~currently_running_unikernel cfg
+                      user albatross store http_client
                     >>= function
                     | Ok _res ->
                         Middleware.http_response reqd ~title:"Update Successful"
                           ~data:
                             (`String
                                ("Succesfully updated " ^ unikernel_name
-                              ^ "to build " ^ latest_build))
+                              ^ "to build " ^ to_be_updated_unikernel))
                           `OK
                     | Error (`Msg _err, _status) ->
                         unikernel_rollback ~unikernel_name albatross store
@@ -1408,15 +1409,15 @@ struct
                       `Internal_server_error))
         | Ok (Some cfg) -> (
             process_unikernel_change ~unikernel_name ~job
-              ~change_build:latest_build ~current_build cfg user albatross store
-              http_client
+              ~to_be_updated_unikernel ~currently_running_unikernel cfg user
+              albatross store http_client
             >>= function
             | Ok _res ->
                 Middleware.http_response reqd ~title:"Update Successful"
                   ~data:
                     (`String
                        ("Succesfully updated " ^ unikernel_name ^ "to build "
-                      ^ latest_build))
+                      ^ to_be_updated_unikernel))
                   `OK
             | Error (`Msg _err, _status) ->
                 unikernel_rollback ~unikernel_name albatross store http_client
