@@ -982,6 +982,45 @@ async function updateUnikernel(job, latest_build, current_build, unikernel_name)
 	}
 }
 
+async function rollbackUnikernel(unikernel_name) {
+	const rollbackButton = document.getElementById("unikernel-rollback");
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	const formAlert = document.getElementById("form-alert");
+	try {
+		buttonLoading(rollbackButton, true, "Rolling back...")
+		const response = await fetch("/api/unikernel/rollback", {
+			method: 'POST',
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json",
+			},
+			body: JSON.stringify(
+				{
+					"unikernel_name": unikernel_name,
+					"molly_csrf": molly_csrf
+				})
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			postAlert("bg-primary-300", "Unikernel rollback succesful");
+			setTimeout(() => window.location.reload(), 1000);
+			buttonLoading(rollbackButton, false, "Rollback")
+		} else {
+			postAlert("bg-secondary-300", data.data);
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = data.data
+			buttonLoading(rollbackButton, false, "Rollback")
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = data.data
+		buttonLoading(rollbackButton, false, "Rollback")
+	}
+}
+
 function isValidName(s) {
 	const length = s.length;
 	if (length === 0 || length >= 64) return false;
