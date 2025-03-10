@@ -1318,7 +1318,7 @@ struct
                        `Bad_request ))
             | Ok () -> Lwt.return (Ok (unikernel_image, unikernel_cfg))))
 
-  let unikernel_rollback ~unikernel_name albatross store http_client reqd
+  let process_rollback ~unikernel_name albatross store http_client reqd
       (user : User_model.user) =
     match
       List.find_opt
