@@ -1019,11 +1019,22 @@ struct
         let now = Ptime.v (P.now_d_ps ()) in
         generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
+            let last_update_time =
+              match
+                List.find_opt
+                  (fun (u : User_model.unikernel_update) ->
+                    String.equal u.name name)
+                  user.unikernel_updates
+              with
+              | Some unikernel_update -> Some unikernel_update.timestamp
+              | None -> None
+            in
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
                  ~content:
                    (Unikernel_single.unikernel_single_layout
-                      ~unikernel_name:name unikernel now console_output)
+                      ~unikernel_name:name unikernel ~last_update_time
+                      ~current_time:now console_output)
                  ~icon:"/images/robur.png" ())
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK

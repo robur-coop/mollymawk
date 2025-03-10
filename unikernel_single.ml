@@ -1,5 +1,5 @@
-let unikernel_single_layout ~unikernel_name unikernel current_time
-    console_output =
+let unikernel_single_layout ~unikernel_name ?(last_update_time = None)
+    ~current_time unikernel console_output =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
@@ -71,19 +71,26 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                                 ]
                               [ txt "Update" ];
                           ];
-                        div
-                          [
-                            Utils.button_component
-                              ~attribs:
-                                [
-                                  a_id "unikernel-rollback";
-                                  a_onclick
-                                    ("rollbackUnikernel('" ^ unikernel_name
-                                   ^ "')");
-                                ]
-                              ~content:(txt "Rollback")
-                              ~btn_type:`Primary_outlined ();
-                          ];
+                        (* check that the last update happened less than 10 minutes ago (600 seconds)*)
+                        (match last_update_time with
+                        | Some check_time
+                          when Utils.TimeHelper.diff_in_seconds ~current_time
+                                 ~check_time
+                               < 600 ->
+                            div
+                              [
+                                Utils.button_component
+                                  ~attribs:
+                                    [
+                                      a_id "unikernel-rollback";
+                                      a_onclick
+                                        ("rollbackUnikernel('" ^ unikernel_name
+                                       ^ "')");
+                                    ]
+                                  ~content:(txt "Rollback")
+                                  ~btn_type:`Primary_outlined ();
+                              ]
+                        | _ -> div []);
                         div
                           [
                             Utils.button_component
