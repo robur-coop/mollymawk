@@ -85,6 +85,7 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                           ];
                       ];
                   ];
+                p ~a:[ a_id "form-alert"; a_class [ "my-3" ] ] [];
                 div
                   ~a:[ a_class [ "grid grid-cols-3 gap-3 text-white my-3" ] ]
                   [
