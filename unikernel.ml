@@ -1488,6 +1488,15 @@ struct
           ~data:(`String "Couldn't find job or build in json. Received ")
           `Bad_request
 
+  let unikernel_rollback albatross store http_client (user : User_model.user)
+      json_dict reqd =
+    match Utils.Json.get "unikernel_name" json_dict with
+    | Some (`String unikernel_name) ->
+        process_rollback ~unikernel_name albatross store http_client reqd user
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:(`String "Couldn't find unikernel name in json") `Bad_request
+
   let unikernel_destroy albatross (user : User_model.user) json_dict reqd =
     (* TODO use uuid in the future *)
     match Utils.Json.get "name" json_dict with
@@ -2286,6 +2295,11 @@ struct
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
                      (unikernel_update !albatross store http_client)))
+        | "/api/unikernel/rollback" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_token:true ~api_meth:true store reqd
+                  (extract_json_csrf_token
+                     (unikernel_rollback !albatross store http_client)))
         | _ ->
             let error =
               {
