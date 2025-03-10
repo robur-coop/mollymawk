@@ -76,6 +76,19 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                             Utils.button_component
                               ~attribs:
                                 [
+                                  a_id "unikernel-rollback";
+                                  a_onclick
+                                    ("rollbackUnikernel('" ^ unikernel_name
+                                   ^ "')");
+                                ]
+                              ~content:(txt "Rollback")
+                              ~btn_type:`Primary_outlined ();
+                          ];
+                        div
+                          [
+                            Utils.button_component
+                              ~attribs:
+                                [
                                   a_onclick
                                     ("destroyUnikernel('" ^ unikernel_name
                                    ^ "')");
