@@ -1,21 +1,24 @@
 open Utils.Json
 
+let fail_behaviour = function
+  | `Quit -> `String "quit"
+  | `Restart ex ->
+      let els = Option.value ~default:[] (Option.map Vmm_core.IS.elements ex) in
+      `Assoc
+        [
+          ("restart", `Null);
+          ("exit_code", `List (List.map (fun e -> `Int e) els));
+          ("all_exit_codes", `Bool (ex = None));
+        ]
+
+let cpuid c = `Int c
+let memory m = `Int m
+
+let argv args =
+  `List (List.map (fun a -> `String a) (Option.value ~default:[] args))
+
 let unikernel_info (unikernel_name, info) =
-  let fail_behaviour = function
-    | `Quit -> `String "quit"
-    | `Restart ex ->
-        let els =
-          Option.value ~default:[] (Option.map Vmm_core.IS.elements ex)
-        in
-        `Assoc
-          [
-            ("restart", `Null);
-            ("exit_code", `List (List.map (fun e -> `Int e) els));
-            ("all_exit_codes", `Bool (ex = None));
-          ]
-  and cpuid c = `Int c
-  and memory m = `Int m
-  and block_devices bs =
+  let block_devices bs =
     let block
         { Vmm_core.Unikernel.unikernel_device; host_device; sector_size; size }
         =
@@ -39,8 +42,6 @@ let unikernel_info (unikernel_name, info) =
         ]
     in
     `List (List.map bridge bs)
-  and argv args =
-    `List (List.map (fun a -> `String a) (Option.value ~default:[] args))
   in
   `Assoc
     [
@@ -292,3 +293,49 @@ let config_of_json str =
       bridges;
       argv;
     }
+
+let config_to_json (cfg : Vmm_core.Unikernel.config) =
+  let block_devices bs =
+    let block (name, host_device, sector_size) =
+      `Assoc
+        [
+          ("name", `String name);
+          ( "host_device",
+            match host_device with
+            | Some host_device -> `String host_device
+            | None -> `Null );
+          ( "sector_size",
+            match sector_size with
+            | Some sector_size -> `Int sector_size
+            | None -> `Null );
+        ]
+    in
+    `List (List.map block bs)
+  and bridges bs =
+    let bridge (name, host_device, mac) =
+      `Assoc
+        [
+          ("name", `String name);
+          ( "host_device",
+            match host_device with
+            | Some host_device -> `String host_device
+            | None -> `Null );
+          ( "mac",
+            match mac with
+            | Some mac -> `String (Macaddr.to_string mac)
+            | None -> `Null );
+        ]
+    in
+    `List (List.map bridge bs)
+  in
+  `Assoc
+    [
+      ("typ", `String "solo5");
+      ("compressed", `Bool cfg.compressed);
+      ("fail_behaviour", fail_behaviour cfg.fail_behaviour);
+      ("cpuid", cpuid cfg.cpuid);
+      ("memory", memory cfg.memory);
+      ("block_devices", block_devices cfg.block_devices);
+      ("network_interfaces", bridges cfg.bridges);
+      ("arguments", argv cfg.argv);
+    ]
