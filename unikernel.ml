@@ -1259,7 +1259,7 @@ struct
         job;
         uuid = currently_running_unikernel;
         config = unikernel_cfg;
-        timestamp = Ptime.v (P.now_d_ps ());
+        timestamp = Mirage_ptime.now ();
       }
     in
     Store.update_user_unikernel_updates store unikernel_update user >>= function
@@ -1280,7 +1280,7 @@ struct
                  (change_string change_kind ^ " storing update information for "
                 ^ unikernel_name ^ " failed with: " ^ err ^ " for data: " ^ data
                  ),
-               (`Internal_server_error : Httpaf.Status.t) ))
+               (`Internal_server_error : H1.Status.t) ))
     | Ok () -> (
         Builder_web.send_request http_client
           ("/job/" ^ job ^ "/build/" ^ to_be_updated_unikernel ^ "/main-binary")
@@ -1501,9 +1501,8 @@ struct
       json_dict reqd =
     match Utils.Json.get "unikernel_name" json_dict with
     | Some (`String unikernel_name) ->
-        process_rollback ~unikernel_name
-          (Ptime.v (P.now_d_ps ()))
-          albatross store http_client reqd user
+        process_rollback ~unikernel_name (Mirage_ptime.now ()) albatross store
+          http_client reqd user
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
