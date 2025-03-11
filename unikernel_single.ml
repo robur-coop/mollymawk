@@ -76,7 +76,7 @@ let unikernel_single_layout ~unikernel_name ?(last_update_time = None)
                         | Some check_time
                           when Utils.TimeHelper.diff_in_seconds ~current_time
                                  ~check_time
-                               < 600 ->
+                               < Utils.rollback_seconds_limit ->
                             div
                               [
                                 Utils.button_component
