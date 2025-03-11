@@ -9,10 +9,6 @@ type images = {
 }
 
 module Main
-    (R : Mirage_crypto_rng_mirage.S)
-    (P : Mirage_clock.PCLOCK)
-    (M : Mirage_clock.MCLOCK)
-    (T : Mirage_time.S)
     (S : Tcpip.Stack.V4V6)
     (KV_ASSETS : Mirage_kv.RO)
     (BLOCK : Mirage_block.S)
@@ -51,7 +47,7 @@ struct
   module Map = Map.Make (String)
 
   let read_multipart_data reqd =
-    let response_body = Httpaf.Reqd.request_body reqd in
+    let response_body = H1.Reqd.request_body reqd in
     let finished, notify_finished = Lwt.wait () in
     let wakeup v = Lwt.wakeup_later notify_finished v in
     let on_eof data () = wakeup data in
@@ -59,17 +55,16 @@ struct
     let rec on_read on_eof acc bs ~off ~len =
       let str = Bigstringaf.substring ~off ~len bs in
       let acc = acc >>= fun acc -> Lwt.return (f acc str) in
-      Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof acc)
+      H1.Body.Reader.schedule_read response_body ~on_read:(on_read on_eof acc)
         ~on_eof:(on_eof acc)
     in
     let f_init = Lwt.return "" in
-    Httpaf.Body.schedule_read response_body ~on_read:(on_read on_eof f_init)
+    H1.Body.Reader.schedule_read response_body ~on_read:(on_read on_eof f_init)
       ~on_eof:(on_eof f_init);
     finished >>= fun data ->
     data >>= fun data ->
     let content_type =
-      Httpaf.(
-        Headers.get_exn (Reqd.request reqd).Request.headers "content-type")
+      H1.(Headers.get_exn (Reqd.request reqd).Request.headers "content-type")
     in
     let ct = Multipart_form.Content_type.of_string (content_type ^ "\r\n") in
     match ct with
@@ -132,7 +127,7 @@ struct
         Lwt.return (Error error)
 
   let decode_request_body reqd =
-    let request_body = Httpaf.Reqd.request_body reqd in
+    let request_body = H1.Reqd.request_body reqd in
     let finished, notify_finished = Lwt.wait () in
     let wakeup v = Lwt.wakeup_later notify_finished v in
     let on_eof data () = wakeup data in
@@ -140,11 +135,11 @@ struct
     let rec on_read on_eof acc bs ~off ~len =
       let str = Bigstringaf.substring ~off ~len bs in
       let acc = acc >>= fun acc -> Lwt.return (f acc str) in
-      Httpaf.Body.schedule_read request_body ~on_read:(on_read on_eof acc)
+      H1.Body.Reader.schedule_read request_body ~on_read:(on_read on_eof acc)
         ~on_eof:(on_eof acc)
     in
     let f_init = Lwt.return "" in
-    Httpaf.Body.schedule_read request_body ~on_read:(on_read on_eof f_init)
+    H1.Body.Reader.schedule_read request_body ~on_read:(on_read on_eof f_init)
       ~on_eof:(on_eof f_init);
     finished >>= fun data -> data
 
@@ -163,7 +158,7 @@ struct
         Lwt.return (Error (`Msg "not a dictionary"))
 
   let csrf_verification f user csrf reqd =
-    let now = Ptime.v (P.now_d_ps ()) in
+    let now = Mirage_ptime.now () in
     Middleware.csrf_verification user now csrf f reqd
 
   let extract_json_csrf_token f token_or_cookie user reqd =
@@ -212,7 +207,7 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Expected multipart form data") `Bad_request
 
-  module Albatross = Albatross.Make (T) (P) (S)
+  module Albatross = Albatross.Make (S)
 
   let email_verification f _ user reqd =
     if false (* TODO *) then
@@ -221,7 +216,7 @@ struct
 
   let authenticate_user ~check_admin ~check_token store reqd =
     let ( let* ) = Result.bind in
-    let current_time = Ptime.v (P.now_d_ps ()) in
+    let current_time = Mirage_ptime.now () in
     let user_is_active user =
       if user.User_model.active then Ok ()
       else Error "User account is deactivated"
@@ -303,15 +298,15 @@ struct
   let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status
       =
     let h =
-      Httpaf.Headers.of_list
+      H1.Headers.of_list
         [
           ("content-length", string_of_int (String.length data));
           ("content-type", content_type);
         ]
     in
-    let headers = Httpaf.Headers.add_list h header_list in
-    let resp = Httpaf.Response.create ~headers status in
-    Httpaf.Reqd.respond_with_string reqd resp data;
+    let headers = H1.Headers.add_list h header_list in
+    let resp = H1.Response.create ~headers status in
+    H1.Reqd.respond_with_string reqd resp data;
     Lwt.return_unit
 
   let user_volumes albatross user_name =
@@ -374,7 +369,7 @@ struct
         Error message
 
   let sign_up reqd =
-    let now = Ptime.v (P.now_d_ps ()) in
+    let now = Mirage_ptime.now () in
     let csrf = Middleware.generate_csrf_cookie now reqd in
     let csrf_cookie = csrf.name ^ "=" ^ csrf.value ^ ";Path=/;HttpOnly=true" in
     match Middleware.session_cookie_value reqd with
@@ -450,7 +445,7 @@ struct
                         ~data:(`String "A user with this email already exist.")
                         `Bad_request
                   | None, None -> (
-                      let created_at = Ptime.v (P.now_d_ps ()) in
+                      let created_at = Mirage_ptime.now () in
                       let user, cookie =
                         let active, super_user =
                           if Store.count_users store = 0 then (true, true)
@@ -532,7 +527,7 @@ struct
                   ~data:(`String (String.escaped err))
                   `Bad_request
             | Ok _ -> (
-                let now = Ptime.v (P.now_d_ps ()) in
+                let now = Mirage_ptime.now () in
                 let user = Store.find_by_email store email in
                 match
                   User_model.login_user ~email ~password
@@ -576,13 +571,12 @@ struct
           ~data:(`String "Update password: expected a dictionary") `Bad_request
 
   let verify_email store (user : User_model.user) reqd =
-    let now = Ptime.v (P.now_d_ps ()) in
+    let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf -> (
         let email_verification_uuid = User_model.generate_uuid () in
         let updated_user =
-          User_model.update_user user
-            ~updated_at:(Ptime.v (P.now_d_ps ()))
+          User_model.update_user user ~updated_at:now
             ~email_verification_uuid:(Some email_verification_uuid) ()
         in
         Store.update_user store updated_user >>= function
@@ -615,8 +609,7 @@ struct
           (Uuidm.of_string verification_token)
       in
       let u = Store.find_email_verification_token store uuid in
-      User_model.verify_email_token u verification_token
-        (Ptime.v (P.now_d_ps ()))
+      User_model.verify_email_token u verification_token (Mirage_ptime.now ())
     with
     | Ok user' ->
         if String.equal user.uuid user'.uuid then
@@ -669,8 +662,7 @@ struct
     toggle_account_attribute json_dict store reqd ~key:"toggle-active-account"
       (fun user ->
         User_model.update_user user ~active:(not user.active)
-          ~updated_at:(Ptime.v (P.now_d_ps ()))
-          ())
+          ~updated_at:(Mirage_ptime.now ()) ())
       (fun user -> user.active && Store.count_active store <= 1)
       ~error_message:(`String "Cannot deactivate last active user")
 
@@ -678,22 +670,19 @@ struct
     toggle_account_attribute json_dict store reqd ~key:"toggle-admin-account"
       (fun user ->
         User_model.update_user user ~super_user:(not user.super_user)
-          ~updated_at:(Ptime.v (P.now_d_ps ()))
-          ())
+          ~updated_at:(Mirage_ptime.now ()) ())
       (fun user -> user.super_user && Store.count_superusers store <= 1)
       ~error_message:(`String "Cannot remove last administrator")
 
   let dashboard store albatross _ (user : User_model.user) reqd =
-    let now = Ptime.v (P.now_d_ps ()) in
+    let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         (* TODO use uuid in the future *)
         user_unikernels albatross user.name >>= fun unikernels ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
-             ~content:
-               (Unikernel_index.unikernel_index_layout unikernels
-                  (Ptime.v (P.now_d_ps ())))
+             ~content:(Unikernel_index.unikernel_index_layout unikernels now)
              ~icon:"/images/robur.png" ())
           `OK
     | Error err ->
@@ -706,7 +695,7 @@ struct
   let account_page store _ (user : User_model.user) reqd =
     match Middleware.session_cookie_value reqd with
     | Ok active_cookie_value -> (
-        let now = Ptime.v (P.now_d_ps ()) in
+        let now = Mirage_ptime.now () in
         generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
             reply reqd ~content_type:"text/html"
@@ -749,7 +738,7 @@ struct
     | ( Some (`String current_password),
         Some (`String new_password),
         Some (`String confirm_password) ) -> (
-        let now = Ptime.v (P.now_d_ps ()) in
+        let now = Mirage_ptime.now () in
         let new_password_hash =
           User_model.hash_password ~password:new_password ~uuid:user.uuid
         in
@@ -793,7 +782,7 @@ struct
           `Bad_request
 
   let new_user_cookies ~user ~filter ~redirect store reqd =
-    let now = Ptime.v (P.now_d_ps ()) in
+    let now = Mirage_ptime.now () in
     let cookies = List.filter filter user.User_model.cookies in
     let updated_user =
       User_model.update_user user ~cookies ~updated_at:now ()
@@ -865,7 +854,7 @@ struct
   let close_session store (user : User_model.user) json_dict reqd =
     match Utils.Json.(get "session_value" json_dict) with
     | Some (`String session_value) -> (
-        let now = Ptime.v (P.now_d_ps ()) in
+        let now = Mirage_ptime.now () in
         let cookies =
           List.filter
             (fun (cookie : User_model.cookie) ->
@@ -893,14 +882,12 @@ struct
           `Bad_request
 
   let users store _ (user : User_model.user) reqd =
-    let now = Ptime.v (P.now_d_ps ()) in
+    let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Users | Mollymawk"
-             ~content:
-               (Users_index.users_index_layout (Store.users store)
-                  (Ptime.v (P.now_d_ps ())))
+             ~content:(Users_index.users_index_layout (Store.users store) now)
              ~icon:"/images/robur.png" ())
           `OK
     | Error err ->
@@ -911,7 +898,7 @@ struct
           `Internal_server_error
 
   let settings store _ (user : User_model.user) reqd =
-    let now = Ptime.v (P.now_d_ps ()) in
+    let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
@@ -930,9 +917,7 @@ struct
           `Internal_server_error
 
   let update_settings stack store albatross _user json_dict reqd =
-    match
-      Configuration.of_json_from_http json_dict (Ptime.v (P.now_d_ps ()))
-    with
+    match Configuration.of_json_from_http json_dict (Mirage_ptime.now ()) with
     | Ok configuration_settings -> (
         Store.update_configuration store configuration_settings >>= function
         | Ok () ->
@@ -954,7 +939,7 @@ struct
           reqd `Bad_request
 
   let deploy_form store _ (user : User_model.user) reqd =
-    let now = Ptime.v (P.now_d_ps ()) in
+    let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
@@ -1016,7 +1001,7 @@ struct
               []
           | Ok (_, console_output) -> console_output )
         >>= fun console_output ->
-        let now = Ptime.v (P.now_d_ps ()) in
+        let now = Mirage_ptime.now () in
         generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
             let last_update_time =
@@ -1179,7 +1164,7 @@ struct
                                   (Yojson.Basic.from_string response_body)
                               with
                               | Ok build_comparison -> (
-                                  let now = Ptime.v (P.now_d_ps ()) in
+                                  let now = Mirage_ptime.now () in
                                   generate_csrf_token store user now reqd
                                   >>= function
                                   | Ok csrf ->
@@ -1633,7 +1618,7 @@ struct
           | Ok p -> p
           | Error _ -> None
         in
-        let now = Ptime.v (P.now_d_ps ()) in
+        let now = Mirage_ptime.now () in
         generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
             reply reqd ~content_type:"text/html"
@@ -1676,7 +1661,7 @@ struct
         in
         match Albatross.policy_resource_avalaible albatross with
         | Ok unallocated_resources -> (
-            let now = Ptime.v (P.now_d_ps ()) in
+            let now = Mirage_ptime.now () in
             generate_csrf_token store user now reqd >>= function
             | Ok csrf ->
                 reply reqd ~content_type:"text/html"
@@ -1798,7 +1783,7 @@ struct
         ~error:(fun _ -> None)
         (Albatross.policy ~domain:user.name albatross)
     in
-    let now = Ptime.v (P.now_d_ps ()) in
+    let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
@@ -1978,7 +1963,7 @@ struct
           ~data:(`String "Couldn't find fields") `Bad_request
 
   let account_usage store albatross _ (user : User_model.user) reqd =
-    let now = Ptime.v (P.now_d_ps ()) in
+    let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         user_volumes albatross user.name >>= fun blocks ->
@@ -2004,7 +1989,7 @@ struct
           `Internal_server_error
 
   let api_tokens store _ (user : User_model.user) reqd =
-    let now = Ptime.v (P.now_d_ps ()) in
+    let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
@@ -2026,7 +2011,7 @@ struct
       Utils.Json.(get "token_name" json_dict, get "token_expiry" json_dict)
     with
     | Some (`String name), Some (`Int expiry) -> (
-        let now = Ptime.v (P.now_d_ps ()) in
+        let now = Mirage_ptime.now () in
         let token = User_model.generate_token ~name ~expiry ~current_time:now in
         let updated_user =
           User_model.update_user user ~tokens:(token :: user.tokens)
@@ -2053,7 +2038,7 @@ struct
   let delete_token store (user : User_model.user) json_dict reqd =
     match Utils.Json.(get "token_value" json_dict) with
     | Some (`String value) -> (
-        let now = Ptime.v (P.now_d_ps ()) in
+        let now = Mirage_ptime.now () in
         let tokens =
           List.filter
             (fun (token : User_model.token) ->
@@ -2088,7 +2073,7 @@ struct
           get "token_value" json_dict )
     with
     | Some (`String name), Some (`Int expiry), Some (`String value) -> (
-        let now = Ptime.v (P.now_d_ps ()) in
+        let now = Mirage_ptime.now () in
         let token =
           List.find_opt
             (fun (token : User_model.token) -> String.equal token.value value)
@@ -2136,10 +2121,8 @@ struct
           Middleware.http_response reqd ~title:"Error"
             ~data:(`String "Bad HTTP request method.") `Bad_request
         in
-        let req = Httpaf.Reqd.request reqd in
-        let path =
-          Uri.(pct_decode (path (of_string req.Httpaf.Request.target)))
-        in
+        let req = H1.Reqd.request reqd in
+        let path = Uri.(pct_decode (path (of_string req.H1.Request.target))) in
         let check_meth m f = if m = req.meth then f () else bad_request () in
         match path with
         | "/" ->
@@ -2342,16 +2325,16 @@ struct
               `Not_found)
 
   let pp_error ppf = function
-    | #Httpaf.Status.t as code -> Httpaf.Status.pp_hum ppf code
+    | #H1.Status.t as code -> H1.Status.pp_hum ppf code
     | `Exn exn -> Fmt.pf ppf "exception %s" (Printexc.to_string exn)
 
   let error_handler _dst ?request err _ =
     Logs.err (fun m ->
         m "error %a while processing request %a" pp_error err
-          Fmt.(option ~none:(any "unknown") Httpaf.Request.pp_hum)
+          Fmt.(option ~none:(any "unknown") H1.Request.pp_hum)
           request)
 
-  let start _ _ _ _ stack assets storage http_client =
+  let start stack assets storage http_client =
     js_contents assets >>= fun js_file ->
     css_contents assets >>= fun css_file ->
     images assets >>= fun imgs ->
