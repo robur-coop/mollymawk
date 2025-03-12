@@ -1004,11 +1004,22 @@ struct
         let now = Mirage_ptime.now () in
         generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
+            let last_update_time =
+              match
+                List.find_opt
+                  (fun (u : User_model.unikernel_update) ->
+                    String.equal u.name name)
+                  user.unikernel_updates
+              with
+              | Some unikernel_update -> Some unikernel_update.timestamp
+              | None -> None
+            in
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
                  ~content:
                    (Unikernel_single.unikernel_single_layout
-                      ~unikernel_name:name unikernel now console_output)
+                      ~unikernel_name:name unikernel ~last_update_time
+                      ~current_time:now console_output)
                  ~icon:"/images/robur.png" ())
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
@@ -1201,70 +1212,172 @@ struct
                                     ~api_meth:false `Internal_server_error reqd
                                     ()))))))
 
-  let process_unikernel_update ~unikernel_name ~job ~build
+  let force_create_unikernel ~unikernel_name ~unikernel_image
       (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user)
-      albatross http_client reqd =
-    Builder_web.send_request http_client
-      ("/job/" ^ job ^ "/build/" ^ build ^ "/main-binary")
+      albatross =
+    let unikernel_config = { unikernel_cfg with image = unikernel_image } in
+    Albatross.query albatross ~domain:user.name ~name:unikernel_name
+      (`Unikernel_cmd (`Unikernel_force_create unikernel_config))
     >>= function
-    | Error (`Msg err) ->
-        Logs.err (fun m ->
+    | Error err ->
+        Logs.warn (fun m ->
             m
-              "builds.robur.coop: Error while fetching the binary of %s with \
-               error: %s"
+              "albatross-force-create: error querying albatross for creating \
+               %s: %s"
               unikernel_name err);
-        Middleware.http_response reqd ~title:"Error"
+        Lwt.return
+          (Error (`Msg ("Force create: Error querying albatross: " ^ err)))
+    | Ok (_hdr, res) -> (
+        match Albatross_json.res res with
+        | Error (`String err) ->
+            Logs.warn (fun m ->
+                m
+                  "albatross-force-create: albatross_json.res error parsing \
+                   albatross response for creating %s: %s"
+                  unikernel_name err);
+            Lwt.return (Error (`Msg err))
+        | Ok res ->
+            Logs.info (fun m ->
+                m
+                  "albatross-force-create: succesfully created %s with result \
+                   %s"
+                  unikernel_name
+                  (Yojson.Basic.to_string res));
+            Lwt.return (Ok (Yojson.Basic.to_string res)))
+
+  let process_change ~unikernel_name ~job ~to_be_updated_unikernel
+      ~currently_running_unikernel (unikernel_cfg : Vmm_core.Unikernel.config)
+      (user : User_model.user) store http_client
+      (change_kind : [ `Rollback | `Update ]) =
+    let change_string = function
+      | `Rollback -> "rollback"
+      | `Update -> "update"
+    in
+    let unikernel_update : User_model.unikernel_update =
+      {
+        name = unikernel_name;
+        job;
+        uuid = currently_running_unikernel;
+        config = unikernel_cfg;
+        timestamp = Mirage_ptime.now ();
+      }
+    in
+    Store.update_user_unikernel_updates store unikernel_update user >>= function
+    | Error (`Msg err) ->
+        let data =
+          Yojson.Basic.to_string
+            (User_model.unikernel_update_to_json unikernel_update)
+        in
+        Logs.warn (fun m ->
+            m
+              "%s: storing update information for %s failed with: %s for data \
+               %s"
+              (change_string change_kind)
+              unikernel_name err data);
+        Lwt.return
+          (Error
+             ( `Msg
+                 (change_string change_kind ^ " storing update information for "
+                ^ unikernel_name ^ " failed with: " ^ err ^ " for data: " ^ data
+                 ),
+               (`Internal_server_error : H1.Status.t) ))
+    | Ok () -> (
+        Builder_web.send_request http_client
+          ("/job/" ^ job ^ "/build/" ^ to_be_updated_unikernel ^ "/main-binary")
+        >>= function
+        | Error (`Msg err) ->
+            Logs.err (fun m ->
+                m
+                  "%s: builds.robur.coop: Error while fetching the binary of \
+                   %s with error: %s"
+                  (change_string change_kind)
+                  unikernel_name err);
+            Lwt.return
+              (Error
+                 ( `Msg
+                     (change_string change_kind
+                    ^ " :an error occured while fetching the binary from \
+                       builds.robur.coop with error: " ^ err),
+                   `Internal_server_error ))
+        | Ok unikernel_image -> (
+            match
+              Albatross.manifest_devices_match ~bridges:unikernel_cfg.bridges
+                ~block_devices:unikernel_cfg.block_devices unikernel_image
+            with
+            | Error (`Msg err) ->
+                Lwt.return
+                  (Error
+                     ( `Msg
+                         (change_string change_kind
+                        ^ " :an error occured with the unikernel \
+                           configuration: " ^ err),
+                       `Bad_request ))
+            | Ok () -> Lwt.return (Ok (unikernel_image, unikernel_cfg))))
+
+  let process_rollback ~unikernel_name current_time albatross store http_client
+      reqd (user : User_model.user) =
+    match
+      List.find_opt
+        (fun (u : User_model.unikernel_update) ->
+          String.equal u.name unikernel_name)
+        user.unikernel_updates
+    with
+    | Some old_unikernel ->
+        if
+          Utils.TimeHelper.diff_in_seconds ~current_time
+            ~check_time:old_unikernel.timestamp
+          < Utils.rollback_seconds_limit
+        then
+          process_change ~unikernel_name ~job:old_unikernel.name
+            ~to_be_updated_unikernel:old_unikernel.uuid
+            ~currently_running_unikernel:old_unikernel.uuid old_unikernel.config
+            user store http_client `Rollback
+          >>= function
+          | Ok (unikernel_image, unikernel_cfg) -> (
+              force_create_unikernel ~unikernel_name ~unikernel_image
+                unikernel_cfg user albatross
+              >>= function
+              | Ok _res ->
+                  Middleware.http_response reqd ~title:"Rollback Successful"
+                    ~data:
+                      (`String
+                         ("Rollback succesful. " ^ unikernel_name
+                        ^ " is now running on build " ^ old_unikernel.uuid))
+                    `OK
+              | Error (`Msg err) ->
+                  Middleware.http_response reqd ~title:"Rollback Error"
+                    ~data:
+                      (`String
+                         ("Rollback failed. " ^ unikernel_name
+                        ^ " failed to revert to build " ^ old_unikernel.uuid
+                        ^ " with error " ^ err))
+                    `Internal_server_error)
+          | Error (`Msg err, status) ->
+              Middleware.http_response reqd ~title:"Rollback Error"
+                ~data:
+                  (`String
+                     ("Rollback failed. " ^ unikernel_name
+                    ^ " failed to revert to build " ^ old_unikernel.uuid
+                    ^ " with error " ^ err))
+                status
+        else
+          Middleware.http_response reqd ~title:"Rollback Failed"
+            ~data:
+              (`String
+                 (unikernel_name
+                ^ " rollback failed. We can't do a rollback after 10 minutes \
+                   of an update."))
+            `Bad_request
+    | None ->
+        Middleware.http_response reqd ~title:"Rollback Error"
           ~data:
             (`String
-               ("An error occured while fetching the binary from \
-                 builds.robur.coop with error " ^ err))
+               (unikernel_name
+              ^ " rollback failed. Could not find the build information."))
           `Internal_server_error
-    | Ok image -> (
-        match
-          Albatross.manifest_devices_match ~bridges:unikernel_cfg.bridges
-            ~block_devices:unikernel_cfg.block_devices image
-        with
-        | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Error"
-              ~data:
-                (`String
-                   ("An error occured with the unikernel configuration: " ^ err))
-              `Bad_request
-        | Ok () -> (
-            let unikernel_config = { unikernel_cfg with image } in
-            Albatross.query albatross ~domain:user.name ~name:unikernel_name
-              (`Unikernel_cmd (`Unikernel_force_create unikernel_config))
-            >>= function
-            | Error msg ->
-                Logs.err (fun m ->
-                    m "albatross-force-create: error querying albatross: %s" msg);
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:
-                    (`String ("Force create: Error querying albatross: " ^ msg))
-                  `Internal_server_error
-            | Ok (_hdr, res) -> (
-                match Albatross_json.res res with
-                | Error (`String err) ->
-                    Middleware.http_response reqd ~title:"Error"
-                      ~data:
-                        (`String
-                           ("albatross force-create: " ^ String.escaped err))
-                      `Internal_server_error
-                | Ok res ->
-                    Logs.info (fun m ->
-                        m "%s has been updated succesfully with result: %s"
-                          unikernel_name
-                          (Yojson.Basic.to_string res));
-                    Middleware.http_response reqd ~title:"Update Successful"
-                      ~data:
-                        (`String
-                           (unikernel_name
-                          ^ " has been updated to the latest build with uuid "
-                          ^ build))
-                      `OK)))
 
-  let unikernel_update albatross http_client (user : User_model.user) json_dict
-      reqd =
+  let unikernel_update albatross store http_client (user : User_model.user)
+      json_dict reqd =
     let config_or_none field = function
       | None | Some `Null -> Ok None
       | Some json -> (
@@ -1280,12 +1393,14 @@ struct
     match
       Utils.Json.
         ( get "job" json_dict,
-          get "build" json_dict,
+          get "latest_build" json_dict,
+          get "current_build" json_dict,
           get "unikernel_name" json_dict,
           get "unikernel_arguments" json_dict )
     with
     | ( Some (`String job),
-        Some (`String build),
+        Some (`String to_be_updated_unikernel),
+        Some (`String currently_running_unikernel),
         Some (`String unikernel_name),
         configuration ) -> (
         match config_or_none "unikernel_arguments" configuration with
@@ -1294,7 +1409,7 @@ struct
               ~title:"Error with Unikernel Arguments Json"
               ~data:
                 (`String ("Could not get the unikernel arguments json: " ^ err))
-              `OK
+              `Bad_request
         | Ok None -> (
             user_unikernel albatross ~user_name:user.name ~unikernel_name
             >>= fun unikernel_info ->
@@ -1313,21 +1428,84 @@ struct
                     unikernel_info (n, unikernel)
                     |> Yojson.Basic.to_string |> config_of_json)
                 with
-                | Ok cfg ->
-                    process_unikernel_update ~unikernel_name ~job ~build cfg
-                      user albatross http_client reqd
+                | Ok cfg -> (
+                    process_change ~unikernel_name ~job ~to_be_updated_unikernel
+                      ~currently_running_unikernel cfg user store http_client
+                      `Update
+                    >>= function
+                    | Ok (unikernel_image, unikernel_cfg) -> (
+                        force_create_unikernel ~unikernel_name ~unikernel_image
+                          unikernel_cfg user albatross
+                        >>= function
+                        | Ok _res ->
+                            Middleware.http_response reqd
+                              ~title:"Update Successful"
+                              ~data:
+                                (`String
+                                   ("Update succesful. " ^ unikernel_name
+                                  ^ " is now running on build "
+                                  ^ to_be_updated_unikernel))
+                              `OK
+                        | Error (`Msg err) ->
+                            Middleware.http_response reqd ~title:"Update Error"
+                              ~data:
+                                (`String
+                                   ("Update failed. " ^ unikernel_name
+                                  ^ " failed to update to build "
+                                  ^ to_be_updated_unikernel ^ " with error "
+                                  ^ err))
+                              `Internal_server_error)
+                    | Error (`Msg err, status) ->
+                        Middleware.http_response reqd ~title:"Error"
+                          ~data:(`String (String.escaped err))
+                          status)
                 | Error (`Msg err) ->
                     Logs.warn (fun m -> m "Couldn't decode data %s" err);
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(`String (String.escaped err))
                       `Internal_server_error))
-        | Ok (Some cfg) ->
-            process_unikernel_update ~unikernel_name ~job ~build cfg user
-              albatross http_client reqd)
+        | Ok (Some cfg) -> (
+            process_change ~unikernel_name ~job ~to_be_updated_unikernel
+              ~currently_running_unikernel cfg user store http_client `Update
+            >>= function
+            | Ok (unikernel_image, unikernel_cfg) -> (
+                force_create_unikernel ~unikernel_name ~unikernel_image
+                  unikernel_cfg user albatross
+                >>= function
+                | Ok _res ->
+                    Middleware.http_response reqd ~title:"Update Successful"
+                      ~data:
+                        (`String
+                           ("Update succesful. " ^ unikernel_name
+                          ^ " is now running on build "
+                          ^ to_be_updated_unikernel))
+                      `OK
+                | Error (`Msg err) ->
+                    Middleware.http_response reqd ~title:"Update Error"
+                      ~data:
+                        (`String
+                           ("Update failed. " ^ unikernel_name
+                          ^ " failed to update to build "
+                          ^ to_be_updated_unikernel ^ " with error " ^ err))
+                      `Internal_server_error)
+            | Error (`Msg err, status) ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:(`String (String.escaped err))
+                  status))
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find job or build in json. Received ")
           `Bad_request
+
+  let unikernel_rollback albatross store http_client (user : User_model.user)
+      json_dict reqd =
+    match Utils.Json.get "unikernel_name" json_dict with
+    | Some (`String unikernel_name) ->
+        process_rollback ~unikernel_name (Mirage_ptime.now ()) albatross store
+          http_client reqd user
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
   let unikernel_destroy albatross (user : User_model.user) json_dict reqd =
     (* TODO use uuid in the future *)
@@ -2124,7 +2302,12 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (unikernel_update !albatross http_client)))
+                     (unikernel_update !albatross store http_client)))
+        | "/api/unikernel/rollback" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_token:true ~api_meth:true store reqd
+                  (extract_json_csrf_token
+                     (unikernel_rollback !albatross store http_client)))
         | _ ->
             let error =
               {

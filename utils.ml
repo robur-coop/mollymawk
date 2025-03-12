@@ -175,3 +175,6 @@ let display_banner = function
 let bytes_to_megabytes bytes =
   let megabytes = float_of_int bytes /. (1024.0 *. 1024.0) in
   Printf.sprintf "%.2f MB" megabytes
+
+(*10 minutes for a rollback to be valid*)
+let rollback_seconds_limit = 600

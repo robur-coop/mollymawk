@@ -1,5 +1,5 @@
-let unikernel_single_layout ~unikernel_name unikernel current_time
-    console_output =
+let unikernel_single_layout ~unikernel_name ?(last_update_time = None)
+    ~current_time unikernel console_output =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
@@ -71,6 +71,26 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                                 ]
                               [ txt "Update" ];
                           ];
+                        (* check that the last update happened less than 10 minutes ago (600 seconds)*)
+                        (match last_update_time with
+                        | Some check_time
+                          when Utils.TimeHelper.diff_in_seconds ~current_time
+                                 ~check_time
+                               < Utils.rollback_seconds_limit ->
+                            div
+                              [
+                                Utils.button_component
+                                  ~attribs:
+                                    [
+                                      a_id "unikernel-rollback";
+                                      a_onclick
+                                        ("rollbackUnikernel('" ^ unikernel_name
+                                       ^ "')");
+                                    ]
+                                  ~content:(txt "Rollback")
+                                  ~btn_type:`Primary_outlined ();
+                              ]
+                        | _ -> div []);
                         div
                           [
                             Utils.button_component
@@ -85,6 +105,7 @@ let unikernel_single_layout ~unikernel_name unikernel current_time
                           ];
                       ];
                   ];
+                p ~a:[ a_id "form-alert"; a_class [ "my-3" ] ] [];
                 div
                   ~a:[ a_class [ "grid grid-cols-3 gap-3 text-white my-3" ] ]
                   [
