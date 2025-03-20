@@ -178,3 +178,73 @@ let bytes_to_megabytes bytes =
 
 (*10 minutes for a rollback to be valid*)
 let rollback_seconds_limit = 600
+
+let switch_button ~switch_id ~switch_label html_content =
+  Tyxml_html.(
+    div
+      ~a:
+        [
+          a_class [ "my-6" ]; Unsafe.string_attrib "x-data" "{ toggle: false }";
+        ]
+      [
+        label
+          ~a:
+            [
+              a_label_for switch_id;
+              a_class [ "inline-flex cursor-pointer items-center gap-3" ];
+            ]
+          [
+            input
+              ~a:
+                [
+                  a_id switch_id;
+                  a_input_type `Checkbox;
+                  a_class [ "peer sr-only" ];
+                  a_role [ "switch" ];
+                  Unsafe.string_attrib "x-model" "toggle";
+                ]
+              ();
+            span
+              ~a:
+                [
+                  a_aria "hidden" [ "true" ];
+                  a_class
+                    [
+                      "relative h-6 w-11 after:h-5 after:w-5 \
+                       peer-checked:after:translate-x-5 rounded-full border \
+                       border-gray-300 bg-gray-50 after:absolute \
+                       after:bottom-0 after:left-[0.0625rem] after:top-0 \
+                       after:my-auto after:rounded-full after:bg-gray-600 \
+                       after:transition-all after:content-[''] \
+                       peer-checked:bg-primary-500 peer-checked:after:bg-white \
+                       peer-focus:outline peer-focus:outline-2 \
+                       peer-focus:outline-offset-2 peer-focus:outline-gray-800 \
+                       peer-focus:peer-checked:outline-primary-500 \
+                       peer-active:outline-offset-0 \
+                       peer-disabled:cursor-not-allowed \
+                       peer-disabled:opacity-70 dark:border-gray-700 \
+                       dark:bg-gray-900 dark:after:bg-gray-300 \
+                       dark:peer-checked:bg-primary-500 \
+                       dark:peer-checked:after:bg-white \
+                       dark:peer-focus:outline-gray-300 \
+                       dark:peer-focus:peer-checked:outline-primary-500";
+                    ];
+                ]
+              [];
+            span
+              ~a:
+                [
+                  a_class
+                    [
+                      "tracking-wide text-sm font-medium text-gray-600 \
+                       peer-checked:text-gray-900 \
+                       peer-disabled:cursor-not-allowed \
+                       dark:peer-checked:text-white";
+                    ];
+                ]
+              [ txt switch_label ];
+          ];
+        div
+          ~a:[ Unsafe.string_attrib "x-show" "toggle"; a_class [ "my-4" ] ]
+          [ html_content ];
+      ])
