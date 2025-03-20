@@ -266,7 +266,7 @@ async function restartUnikernel(name) {
 async function destroyUnikernel(name) {
 	try {
 		const molly_csrf = document.getElementById("molly-csrf").value;
-		const response = await fetch(`/api/unikernel/destroy/${name}`, {
+		const response = await fetch(`/api/unikernel/destroy`, {
 			method: 'POST',
 			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
 			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
