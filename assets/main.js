@@ -932,7 +932,7 @@ async function updateToken(value) {
 	}
 }
 
-async function updateUnikernel(job, latest_build, current_build, unikernel_name) {
+async function updateUnikernel(job, to_be_updated_unikernel, currently_running_unikernel, unikernel_name) {
 	const updateButton = document.getElementById("update-unikernel-button");
 	const unikernelArguments = document.getElementById("unikernel-arguments").value;
 	const argumentsToggle = document.getElementById("arguments-toggle").checked;
@@ -954,8 +954,8 @@ async function updateUnikernel(job, latest_build, current_build, unikernel_name)
 			body: JSON.stringify(
 				{
 					"job": job,
-					"latest_build": latest_build,
-					"current_build": current_build,
+					"to_be_updated_unikernel": to_be_updated_unikernel,
+					"currently_running_unikernel": currently_running_unikernel,
 					"unikernel_name": unikernel_name,
 					"unikernel_arguments": argumentsToggle ? JSON.parse(unikernelArguments) : null,
 					"molly_csrf": molly_csrf
