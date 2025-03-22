@@ -5,7 +5,7 @@ let ( let* ) = Result.bind
 type checks = [ `HTTP of string | `TCP of string | `DNS of string ]
 
 let check_http http_client base_url =
-  Utils.send_request http_client ~base_url >>= function
+  Utils.send_http_request http_client ~base_url >>= function
   | Error (`Msg err) ->
       Logs.err (fun m ->
           m "http-liveliness-check: Error response of %s with error: %s"

@@ -1045,7 +1045,7 @@ struct
           ~title:"Albatross Error" ~api_meth:false `Internal_server_error reqd
           ()
     | Ok (unikernel_name, unikernel) -> (
-        Utils.send_request http_client ~base_url:Builder_web.base_url
+        Utils.send_http_request http_client ~base_url:Builder_web.base_url
           ~path:("/hash?sha256=" ^ Ohex.encode unikernel.digest)
         >>= function
         | Error (`Msg err) ->
@@ -1080,7 +1080,8 @@ struct
                   ~title:(name ^ " update Error") ~api_meth:false
                   `Internal_server_error reqd ()
             | Ok current_job_data -> (
-                Utils.send_request http_client ~base_url:Builder_web.base_url
+                Utils.send_http_request http_client
+                  ~base_url:Builder_web.base_url
                   ~path:("/job/" ^ current_job_data.job ^ "/build/latest")
                 >>= function
                 | Error (`Msg err) ->
@@ -1137,7 +1138,7 @@ struct
                              ^ " found on builds.robur.coop")
                             ())
                         else
-                          Utils.send_request http_client
+                          Utils.send_http_request http_client
                             ~base_url:Builder_web.base_url
                             ~path:
                               ("/compare/" ^ current_job_data.uuid ^ "/"
@@ -1284,7 +1285,7 @@ struct
                  ),
                (`Internal_server_error : H1.Status.t) ))
     | Ok () -> (
-        Utils.send_request http_client ~base_url:Builder_web.base_url
+        Utils.send_http_request http_client ~base_url:Builder_web.base_url
           ~path:
             ("/job/" ^ job ^ "/build/" ^ to_be_updated_unikernel
            ^ "/main-binary")

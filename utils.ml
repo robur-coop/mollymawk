@@ -256,7 +256,7 @@ let switch_button ~switch_id ~switch_label html_content =
           [ html_content ];
       ])
 
-let send_request ?(path = "") ~base_url http_client =
+let send_http_request ?(path = "") ~base_url http_client =
   let url = base_url ^ path in
   let body = "" in
   let body_f _ acc chunk = Lwt.return (acc ^ chunk) in
