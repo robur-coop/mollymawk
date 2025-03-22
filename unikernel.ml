@@ -1140,8 +1140,8 @@ struct
                           Utils.send_request http_client
                             ~base_url:Builder_web.base_url
                             ~path:
-                            ("/compare/" ^ current_job_data.uuid ^ "/"
-                           ^ latest_job_data.uuid ^ "")
+                              ("/compare/" ^ current_job_data.uuid ^ "/"
+                             ^ latest_job_data.uuid ^ "")
                           >>= function
                           | Error (`Msg err) ->
                               Logs.err (fun m ->
@@ -1397,15 +1397,21 @@ struct
     match
       Utils.Json.
         ( get "job" json_dict,
-          get "latest_build" json_dict,
-          get "current_build" json_dict,
+          get "to_be_updated_unikernel" json_dict,
+          get "currently_running_unikernel" json_dict,
           get "unikernel_name" json_dict,
+          get "http_liveliness_address" json_dict,
+          get "tcp_liveliness_address" json_dict,
+          get "dns_liveliness_address" json_dict,
           get "unikernel_arguments" json_dict )
     with
     | ( Some (`String job),
         Some (`String to_be_updated_unikernel),
         Some (`String currently_running_unikernel),
         Some (`String unikernel_name),
+        http_liveliness_address,
+        tcp_liveliness_address,
+        dns_liveliness_address,
         configuration ) -> (
         match config_or_none "unikernel_arguments" configuration with
         | Error (`Msg err) ->
@@ -1476,14 +1482,30 @@ struct
                 force_create_unikernel ~unikernel_name ~unikernel_image
                   unikernel_cfg user albatross
                 >>= function
-                | Ok _res ->
-                    Middleware.http_response reqd ~title:"Update Successful"
-                      ~data:
-                        (`String
-                           ("Update succesful. " ^ unikernel_name
-                          ^ " is now running on build "
-                          ^ to_be_updated_unikernel))
-                      `OK
+                | Ok _res -> (
+                    Mirage_sleep.ns
+                      (Duration.of_sec Utils.liveliness_wait_period)
+                    >>= fun () ->
+                    Liveliness_checks.liveliness_checks ~http_liveliness_address
+                      ~tcp_liveliness_address ~dns_liveliness_address
+                      http_client
+                    >>= function
+                    | Error (`Msg err) ->
+                        Logs.err (fun m ->
+                            m
+                              "liveliness-checks for %s and build %s failed \
+                               with error %s. now performing a rollback"
+                              unikernel_name to_be_updated_unikernel err);
+                        process_rollback ~unikernel_name (Mirage_ptime.now ())
+                          albatross store http_client reqd user
+                    | Ok () ->
+                        Middleware.http_response reqd ~title:"Update Successful"
+                          ~data:
+                            (`String
+                               ("Update succesful. " ^ unikernel_name
+                              ^ " is now running on build "
+                              ^ to_be_updated_unikernel))
+                          `OK)
                 | Error (`Msg err) ->
                     Middleware.http_response reqd ~title:"Update Error"
                       ~data:
