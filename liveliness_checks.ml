@@ -2,7 +2,7 @@ open Lwt.Infix
 
 let ( let* ) = Result.bind
 
-type checks = [ `HTTP of string | `TCP of string | `DNS of string ]
+type checks = [ `HTTP of string | `DNS of string ]
 
 let check_http http_client base_url =
   Utils.send_http_request http_client ~base_url >>= function
@@ -20,10 +20,6 @@ let check_http http_client base_url =
 
 let check_type http_client = function
   | `HTTP address -> check_http http_client address
-  | `TCP address ->
-      Error
-        (`Msg (address ^ ": Can't handle TCP liveliness checks at the moment"))
-      |> Lwt.return
   | `DNS address ->
       Error
         (`Msg (address ^ ": Can't handle DNS liveliness checks at the moment"))
@@ -46,20 +42,16 @@ let rec perform_checks http_client failed = function
           let failed_desc =
             match check with
             | `HTTP url -> "HTTP (" ^ url ^ "): " ^ err
-            | `TCP addr -> "TCP (" ^ addr ^ "): " ^ err
             | `DNS domain -> "DNS (" ^ domain ^ "): " ^ err
           in
           perform_checks http_client (failed_desc :: failed) rest)
 
 let liveliness_checks ~http_liveliness_address ~dns_liveliness_address
-    ~tcp_liveliness_address http_client =
+    http_client =
   Lwt.return
     (let* http_liveliness_address =
        Utils.Json.string_or_none "http_liveliness_address"
          http_liveliness_address
-     in
-     let* tcp_liveliness_address =
-       Utils.Json.string_or_none "tcp_liveliness_address" tcp_liveliness_address
      in
      let* dns_liveliness_address =
        Utils.Json.string_or_none "dns_liveliness_address" dns_liveliness_address
@@ -72,7 +64,6 @@ let liveliness_checks ~http_liveliness_address ~dns_liveliness_address
            | None -> None)
          [
            ((fun addr -> `HTTP addr), http_liveliness_address);
-           ((fun addr -> `TCP addr), tcp_liveliness_address);
            ((fun addr -> `DNS addr), dns_liveliness_address);
          ]
      in

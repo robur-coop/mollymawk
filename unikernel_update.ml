@@ -100,49 +100,6 @@ let arg_modal ~unikernel_name ~(to_be_updated_unikernel : Builder_web.build)
                                     ();
                                 ];
                             ]);
-                       hr ();
-                       Utils.switch_button ~switch_id:"tcp-toggle"
-                         ~switch_label:"TCP check"
-                         (div
-                            [
-                              div
-                                [
-                                  label
-                                    ~a:
-                                      [
-                                        a_class [ "block text-sm font-medium" ];
-                                        a_label_for "http_link";
-                                      ]
-                                    [ txt "TCP address for liveliness check" ];
-                                  input
-                                    ~a:
-                                      [
-                                        a_autocomplete `On;
-                                        a_input_type `Text;
-                                        a_name "tcp_address";
-                                        a_id "tcp-address";
-                                        a_class
-                                          [
-                                            "ring-primary-100 mt-1.5 \
-                                             transition appearance-none block \
-                                             w-full px-3 py-3 rounded-xl \
-                                             shadow-sm border \
-                                             hover:border-primary-200\n\
-                                            \                                           \
-                                             focus:border-primary-300 \
-                                             bg-primary-50 bg-opacity-0 \
-                                             hover:bg-opacity-50 \
-                                             focus:bg-opacity-50 \
-                                             ring-primary-200 \
-                                             focus:ring-primary-200\n\
-                                            \                                           \
-                                             focus:ring-[1px] \
-                                             focus:outline-none";
-                                          ];
-                                      ]
-                                    ();
-                                ];
-                            ]);
                      ];
                  ]);
             hr ();
