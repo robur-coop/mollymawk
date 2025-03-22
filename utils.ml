@@ -1,3 +1,7 @@
+open Lwt.Infix
+
+let ( let* ) = Result.bind
+
 module Json = struct
   let get key assoc =
     Option.map snd (List.find_opt (fun (k, _) -> String.equal k key) assoc)
@@ -179,6 +183,9 @@ let bytes_to_megabytes bytes =
 (*10 minutes for a rollback to be valid*)
 let rollback_seconds_limit = 600
 
+(* 60 seconds wait time to start a liveliness check*)
+let liveliness_wait_period = 60
+
 let switch_button ~switch_id ~switch_label html_content =
   Tyxml_html.(
     div
@@ -248,3 +255,25 @@ let switch_button ~switch_id ~switch_label html_content =
           ~a:[ Unsafe.string_attrib "x-show" "toggle"; a_class [ "my-4" ] ]
           [ html_content ];
       ])
+
+let send_http_request ?(path = "") ~base_url http_client =
+  let url = base_url ^ path in
+  let body = "" in
+  let body_f _ acc chunk = Lwt.return (acc ^ chunk) in
+  Http_mirage_client.request http_client ~follow_redirect:true
+    ~headers:[ ("Accept", "application/json") ]
+    url body_f body
+  >>= function
+  | Error (`Msg err) -> Lwt.return (Error (`Msg err))
+  | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
+  | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
+  | Ok (resp, body) -> (
+      match resp.Http_mirage_client.status with
+      | `OK -> Lwt.return (Ok body)
+      | _ ->
+          Lwt.return
+            (Error
+               (`Msg
+                  ("accessing " ^ url ^ " resulted in an error: "
+                  ^ Http_mirage_client.Status.to_string resp.status
+                  ^ " " ^ resp.reason))))
