@@ -1402,7 +1402,6 @@ struct
           get "currently_running_unikernel" json_dict,
           get "unikernel_name" json_dict,
           get "http_liveliness_address" json_dict,
-          get "tcp_liveliness_address" json_dict,
           get "dns_liveliness_address" json_dict,
           get "unikernel_arguments" json_dict )
     with
@@ -1411,7 +1410,6 @@ struct
         Some (`String currently_running_unikernel),
         Some (`String unikernel_name),
         http_liveliness_address,
-        tcp_liveliness_address,
         dns_liveliness_address,
         configuration ) -> (
         match config_or_none "unikernel_arguments" configuration with
@@ -1484,18 +1482,15 @@ struct
                   unikernel_cfg user albatross
                 >>= function
                 | Ok _res -> (
-                    Mirage_sleep.ns
-                      (Duration.of_sec Utils.liveliness_wait_period)
-                    >>= fun () ->
-                    Liveliness_checks.liveliness_checks ~http_liveliness_address
-                      ~tcp_liveliness_address ~dns_liveliness_address
+                    Liveliness_checks.interval_liveliness_checks ~unikernel_name
+                      ~http_liveliness_address ~dns_liveliness_address
                       http_client
                     >>= function
                     | Error (`Msg err) ->
                         Logs.err (fun m ->
                             m
                               "liveliness-checks for %s and build %s failed \
-                               with error %s. now performing a rollback"
+                               with error(s) %s. now performing a rollback"
                               unikernel_name to_be_updated_unikernel err);
                         process_rollback ~unikernel_name (Mirage_ptime.now ())
                           albatross store http_client reqd user

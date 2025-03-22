@@ -78,3 +78,32 @@ let liveliness_checks ~http_liveliness_address ~dns_liveliness_address
       | Error (`Msg err) ->
           Logs.err (fun m -> m "liveliness-checks-failed with error %s" err);
           Lwt.return (Error (`Msg err)))
+
+let interval_liveliness_checks ~unikernel_name ~http_liveliness_address
+    ~dns_liveliness_address http_client =
+  let rec aux_check failed_checks delay_intervals =
+    match delay_intervals with
+    | [] ->
+        (match failed_checks with
+        | [] -> Ok ()
+        | _ ->
+            let err_msg =
+              "Liveliness checks failed with error(s): "
+              ^ String.concat ", " (List.rev failed_checks)
+            in
+            Logs.info (fun m ->
+                m "liveliness-checks for %s: %s" unikernel_name err_msg);
+            Error (`Msg err_msg))
+        |> Lwt.return
+    | delay :: rest -> (
+        Mirage_sleep.ns (Duration.of_sec delay) >>= fun () ->
+        Logs.info (fun m ->
+            m "Performing liveliness check of %s after %d second delay."
+              unikernel_name delay);
+        liveliness_checks ~http_liveliness_address ~dns_liveliness_address
+          http_client
+        >>= function
+        | Error (`Msg err) -> aux_check (err :: failed_checks) rest
+        | Ok () -> aux_check failed_checks rest)
+  in
+  aux_check [] [ 1; 2; 5; 9; 14; 20; 27; 35; 44; 54 ]
