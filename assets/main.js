@@ -941,7 +941,8 @@ async function updateUnikernel(job, to_be_updated_unikernel, currently_running_u
 	const liveliness_toggle = document.getElementById("liveliness-toggle").checked;
 	const http_toggle = document.getElementById("http-toggle").checked;
 	const dns_toggle = document.getElementById("dns-toggle").checked;
-	const dns_address = document.getElementById("dns-name").value.trim();
+	const dns_address = document.getElementById("dns-address").value.trim();
+	const dns_name = document.getElementById("dns-name").value.trim();
 	const http_address = document.getElementById("http-address").value.trim();
 
 	if (argumentsToggle && !unikernelArguments) {
@@ -960,10 +961,10 @@ async function updateUnikernel(job, to_be_updated_unikernel, currently_running_u
 		return;
 	}
 
-	if (dns_toggle && !dns_address) {
+	if (dns_toggle && !(dns_address && dns_name)) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Error: DNS is enabled, but no DNS name is provided."
+		formAlert.textContent = "Error: DNS is enabled, but DNS name and DNS address is not provided."
 		buttonLoading(updateButton, false, "Proceed to update")
 		return;
 	}
@@ -993,6 +994,7 @@ async function updateUnikernel(job, to_be_updated_unikernel, currently_running_u
 					"unikernel_arguments": argumentsToggle ? JSON.parse(unikernelArguments) : null,
 					"http_liveliness_address": http_address ?? null,
 					"dns_liveliness_address": dns_address ?? null,
+					"dns_liveliness_name": dns_name ?? null,
 					"molly_csrf": molly_csrf
 				})
 		})

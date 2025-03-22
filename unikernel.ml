@@ -1403,6 +1403,7 @@ struct
           get "unikernel_name" json_dict,
           get "http_liveliness_address" json_dict,
           get "dns_liveliness_address" json_dict,
+          get "dns_liveliness_name" json_dict,
           get "unikernel_arguments" json_dict )
     with
     | ( Some (`String job),
@@ -1411,6 +1412,7 @@ struct
         Some (`String unikernel_name),
         http_liveliness_address,
         dns_liveliness_address,
+        dns_liveliness_name,
         configuration ) -> (
         match config_or_none "unikernel_arguments" configuration with
         | Error (`Msg err) ->
@@ -1421,7 +1423,7 @@ struct
               `Bad_request
         | Ok None -> (
             Liveliness_checks.liveliness_checks ~http_liveliness_address
-              ~dns_liveliness_address http_client
+              ~dns_liveliness_address ~dns_liveliness_name http_client
             >>= function
             | Ok () -> (
                 user_unikernel albatross ~user_name:user.name ~unikernel_name
@@ -1493,7 +1495,7 @@ struct
                   `Bad_request)
         | Ok (Some cfg) -> (
             Liveliness_checks.liveliness_checks ~http_liveliness_address
-              ~dns_liveliness_address http_client
+              ~dns_liveliness_address ~dns_liveliness_name http_client
             >>= function
             | Ok () -> (
                 process_change ~unikernel_name ~job ~to_be_updated_unikernel
@@ -1507,7 +1509,8 @@ struct
                     | Ok _res -> (
                         Liveliness_checks.interval_liveliness_checks
                           ~unikernel_name ~http_liveliness_address
-                          ~dns_liveliness_address http_client
+                          ~dns_liveliness_address ~dns_liveliness_name
+                          http_client
                         >>= function
                         | Error (`Msg err) ->
                             Logs.err (fun m ->

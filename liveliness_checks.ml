@@ -2,7 +2,7 @@ open Lwt.Infix
 
 let ( let* ) = Result.bind
 
-type checks = [ `HTTP of string | `DNS of string ]
+type checks = [ `HTTP of string | `DNS of string * string ]
 
 let check_http http_client base_url =
   Utils.send_http_request http_client ~base_url >>= function
@@ -20,9 +20,12 @@ let check_http http_client base_url =
 
 let check_type http_client = function
   | `HTTP address -> check_http http_client address
-  | `DNS address ->
+  | `DNS (address, domain_name) ->
       Error
-        (`Msg (address ^ ": Can't handle DNS liveliness checks at the moment"))
+        (`Msg
+           (domain_name
+          ^ ": Can't handle DNS liveliness checks at the moment with address "
+          ^ address))
       |> Lwt.return
 
 let rec perform_checks http_client failed = function
@@ -42,12 +45,13 @@ let rec perform_checks http_client failed = function
           let failed_desc =
             match check with
             | `HTTP url -> "HTTP (" ^ url ^ "): " ^ err
-            | `DNS domain -> "DNS (" ^ domain ^ "): " ^ err
+            | `DNS (address, domain_name) ->
+                "DNS (" ^ domain_name ^ ", " ^ address ^ "): " ^ err
           in
           perform_checks http_client (failed_desc :: failed) rest)
 
 let liveliness_checks ~http_liveliness_address ~dns_liveliness_address
-    http_client =
+    ~dns_liveliness_name http_client =
   Lwt.return
     (let* http_liveliness_address =
        Utils.Json.string_or_none "http_liveliness_address"
@@ -56,15 +60,23 @@ let liveliness_checks ~http_liveliness_address ~dns_liveliness_address
      let* dns_liveliness_address =
        Utils.Json.string_or_none "dns_liveliness_address" dns_liveliness_address
      in
+     let* dns_liveliness_name =
+       Utils.Json.string_or_none "dns_liveliness_name" dns_liveliness_name
+     in
      let validated_checks =
        List.filter_map
-         (fun (constructor, value) ->
-           match value with
-           | Some addr -> Some (constructor addr)
-           | None -> None)
+         (fun kind ->
+           match kind with
+           | `HTTP addr -> (
+               match addr with Some addr -> Some (`HTTP addr) | None -> None)
+           | `DNS (address, domain_name) -> (
+               match (address, domain_name) with
+               | Some address, Some domain_name ->
+                   Some (`DNS (address, domain_name))
+               | _ -> None))
          [
-           ((fun addr -> `HTTP addr), http_liveliness_address);
-           ((fun addr -> `DNS addr), dns_liveliness_address);
+           `HTTP http_liveliness_address;
+           `DNS (dns_liveliness_address, dns_liveliness_name);
          ]
      in
      Ok validated_checks)
@@ -80,7 +92,7 @@ let liveliness_checks ~http_liveliness_address ~dns_liveliness_address
           Lwt.return (Error (`Msg err)))
 
 let interval_liveliness_checks ~unikernel_name ~http_liveliness_address
-    ~dns_liveliness_address http_client =
+    ~dns_liveliness_address ~dns_liveliness_name http_client =
   let rec aux_check failed_checks delay_intervals =
     match delay_intervals with
     | [] ->
@@ -101,7 +113,7 @@ let interval_liveliness_checks ~unikernel_name ~http_liveliness_address
             m "Performing liveliness check of %s after %d second delay."
               unikernel_name delay);
         liveliness_checks ~http_liveliness_address ~dns_liveliness_address
-          http_client
+          ~dns_liveliness_name http_client
         >>= function
         | Error (`Msg err) -> aux_check (err :: failed_checks) rest
         | Ok () -> aux_check failed_checks rest)

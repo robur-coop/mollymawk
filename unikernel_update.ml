@@ -77,6 +77,45 @@ let arg_modal ~unikernel_name ~(to_be_updated_unikernel : Builder_web.build)
                                         a_autocomplete `On;
                                         a_input_type `Text;
                                         a_name "dns_name";
+                                        a_id "dns-name";
+                                        a_placeholder "e.g robur.coop";
+                                        a_class
+                                          [
+                                            "ring-primary-100 mt-1.5 \
+                                             transition appearance-none block \
+                                             w-full px-3 py-3 rounded-xl \
+                                             shadow-sm border \
+                                             hover:border-primary-200\n\
+                                            \                                           \
+                                             focus:border-primary-300 \
+                                             bg-primary-50 bg-opacity-0 \
+                                             hover:bg-opacity-50 \
+                                             focus:bg-opacity-50 \
+                                             ring-primary-200 \
+                                             focus:ring-primary-200\n\
+                                            \                                           \
+                                             focus:ring-[1px] \
+                                             focus:outline-none";
+                                          ];
+                                      ]
+                                    ();
+                                  label
+                                    ~a:
+                                      [
+                                        a_class [ "block text-sm font-medium" ];
+                                        a_label_for "dns_name";
+                                      ]
+                                    [
+                                      txt
+                                        "Domain IP address for liveliness check";
+                                    ];
+                                  input
+                                    ~a:
+                                      [
+                                        a_autocomplete `On;
+                                        a_input_type `Text;
+                                        a_name "dns_address";
+                                        a_placeholder "e.g 127.0.0.1";
                                         a_id "dns-address";
                                         a_class
                                           [
