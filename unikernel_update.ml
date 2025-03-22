@@ -8,6 +8,144 @@ let arg_modal ~unikernel_name ~(to_be_updated_unikernel : Builder_web.build)
         div
           ~a:[ a_class [ "my-4" ] ]
           [
+            Utils.switch_button ~switch_id:"liveliness-toggle"
+              ~switch_label:"Perform a liveliness check after updating"
+              (div
+                 ~a:[ a_class [ "px-4" ] ]
+                 [
+                   div
+                     [
+                       Utils.switch_button ~switch_id:"http-toggle"
+                         ~switch_label:"HTTP check"
+                         (div
+                            [
+                              div
+                                [
+                                  label
+                                    ~a:
+                                      [
+                                        a_class [ "block text-sm font-medium" ];
+                                        a_label_for "http_address";
+                                      ]
+                                    [ txt "HTTP address for liveliness check" ];
+                                  input
+                                    ~a:
+                                      [
+                                        a_autocomplete `On;
+                                        a_input_type `Text;
+                                        a_name "http_address";
+                                        a_id "http-address";
+                                        a_class
+                                          [
+                                            "ring-primary-100 mt-1.5 \
+                                             transition appearance-none block \
+                                             w-full px-3 py-3 rounded-xl \
+                                             shadow-sm border \
+                                             hover:border-primary-200\n\
+                                            \                                           \
+                                             focus:border-primary-300 \
+                                             bg-primary-50 bg-opacity-0 \
+                                             hover:bg-opacity-50 \
+                                             focus:bg-opacity-50 \
+                                             ring-primary-200 \
+                                             focus:ring-primary-200\n\
+                                            \                                           \
+                                             focus:ring-[1px] \
+                                             focus:outline-none";
+                                          ];
+                                      ]
+                                    ();
+                                ];
+                            ]);
+                       hr ();
+                       Utils.switch_button ~switch_id:"dns-toggle"
+                         ~switch_label:"DNS check"
+                         (div
+                            [
+                              div
+                                [
+                                  label
+                                    ~a:
+                                      [
+                                        a_class [ "block text-sm font-medium" ];
+                                        a_label_for "dns_name";
+                                      ]
+                                    [ txt "Domain name for liveliness check" ];
+                                  input
+                                    ~a:
+                                      [
+                                        a_autocomplete `On;
+                                        a_input_type `Text;
+                                        a_name "dns_name";
+                                        a_id "dns-address";
+                                        a_class
+                                          [
+                                            "ring-primary-100 mt-1.5 \
+                                             transition appearance-none block \
+                                             w-full px-3 py-3 rounded-xl \
+                                             shadow-sm border \
+                                             hover:border-primary-200\n\
+                                            \                                           \
+                                             focus:border-primary-300 \
+                                             bg-primary-50 bg-opacity-0 \
+                                             hover:bg-opacity-50 \
+                                             focus:bg-opacity-50 \
+                                             ring-primary-200 \
+                                             focus:ring-primary-200\n\
+                                            \                                           \
+                                             focus:ring-[1px] \
+                                             focus:outline-none";
+                                          ];
+                                      ]
+                                    ();
+                                ];
+                            ]);
+                       hr ();
+                       Utils.switch_button ~switch_id:"tcp-toggle"
+                         ~switch_label:"TCP check"
+                         (div
+                            [
+                              div
+                                [
+                                  label
+                                    ~a:
+                                      [
+                                        a_class [ "block text-sm font-medium" ];
+                                        a_label_for "http_link";
+                                      ]
+                                    [ txt "TCP address for liveliness check" ];
+                                  input
+                                    ~a:
+                                      [
+                                        a_autocomplete `On;
+                                        a_input_type `Text;
+                                        a_name "tcp_address";
+                                        a_id "tcp-address";
+                                        a_class
+                                          [
+                                            "ring-primary-100 mt-1.5 \
+                                             transition appearance-none block \
+                                             w-full px-3 py-3 rounded-xl \
+                                             shadow-sm border \
+                                             hover:border-primary-200\n\
+                                            \                                           \
+                                             focus:border-primary-300 \
+                                             bg-primary-50 bg-opacity-0 \
+                                             hover:bg-opacity-50 \
+                                             focus:bg-opacity-50 \
+                                             ring-primary-200 \
+                                             focus:ring-primary-200\n\
+                                            \                                           \
+                                             focus:ring-[1px] \
+                                             focus:outline-none";
+                                          ];
+                                      ]
+                                    ();
+                                ];
+                            ]);
+                     ];
+                 ]);
+            hr ();
             Utils.switch_button ~switch_id:"arguments-toggle"
               ~switch_label:"Update the configuration for this build"
               (div
