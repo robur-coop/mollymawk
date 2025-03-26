@@ -15,6 +15,7 @@ module Main
     (Http_client : Http_mirage_client.S) =
 struct
   module Paf = Paf_mirage.Make (S.TCP)
+  module Liveliness = Liveliness_checks.Make (S)
 
   let js_contents assets =
     KV_ASSETS.get assets (Mirage_kv.Key.v "main.js") >|= function
@@ -1381,8 +1382,8 @@ struct
               ^ " rollback failed. Could not find the build information."))
           `Internal_server_error
 
-  let unikernel_update albatross store http_client (user : User_model.user)
-      json_dict reqd =
+  let unikernel_update albatross store stack http_client
+      (user : User_model.user) json_dict reqd =
     let config_or_none field = function
       | None | Some `Null -> Ok None
       | Some json -> (
@@ -1422,8 +1423,8 @@ struct
                 (`String ("Could not get the unikernel arguments json: " ^ err))
               `Bad_request
         | Ok None -> (
-            Liveliness_checks.liveliness_checks ~http_liveliness_address
-              ~dns_liveliness_address ~dns_liveliness_name http_client
+            Liveliness.liveliness_checks ~http_liveliness_address
+              ~dns_liveliness_address ~dns_liveliness_name stack http_client
             >>= function
             | Ok () -> (
                 user_unikernel albatross ~user_name:user.name ~unikernel_name
@@ -1494,8 +1495,8 @@ struct
                          failed with error(s): " ^ err))
                   `Bad_request)
         | Ok (Some cfg) -> (
-            Liveliness_checks.liveliness_checks ~http_liveliness_address
-              ~dns_liveliness_address ~dns_liveliness_name http_client
+            Liveliness.liveliness_checks ~http_liveliness_address
+              ~dns_liveliness_address ~dns_liveliness_name stack http_client
             >>= function
             | Ok () -> (
                 process_change ~unikernel_name ~job ~to_be_updated_unikernel
@@ -1507,10 +1508,9 @@ struct
                       unikernel_cfg user albatross
                     >>= function
                     | Ok _res -> (
-                        Liveliness_checks.interval_liveliness_checks
-                          ~unikernel_name ~http_liveliness_address
-                          ~dns_liveliness_address ~dns_liveliness_name
-                          http_client
+                        Liveliness.interval_liveliness_checks ~unikernel_name
+                          ~http_liveliness_address ~dns_liveliness_address
+                          ~dns_liveliness_name stack http_client
                         >>= function
                         | Error (`Msg err) ->
                             Logs.err (fun m ->
@@ -2366,7 +2366,7 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (unikernel_update !albatross store http_client)))
+                     (unikernel_update !albatross store stack http_client)))
         | "/api/unikernel/rollback" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
