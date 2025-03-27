@@ -183,9 +183,6 @@ let bytes_to_megabytes bytes =
 (*10 minutes for a rollback to be valid*)
 let rollback_seconds_limit = 600
 
-(* 60 seconds wait time to start a liveliness check*)
-let liveliness_wait_period = 60
-
 let switch_button ~switch_id ~switch_label html_content =
   Tyxml_html.(
     div
