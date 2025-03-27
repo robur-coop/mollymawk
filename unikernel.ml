@@ -1382,6 +1382,50 @@ struct
               ^ " rollback failed. Could not find the build information."))
           `Internal_server_error
 
+  let process_unikernel_update ~unikernel_name ~job ~to_be_updated_unikernel
+      ~currently_running_unikernel ~http_liveliness_address
+      ~dns_liveliness_address ~dns_liveliness_name stack cfg user store
+      http_client albatross reqd =
+    process_change ~unikernel_name ~job ~to_be_updated_unikernel
+      ~currently_running_unikernel cfg user store http_client `Update
+    >>= function
+    | Ok (unikernel_image, unikernel_cfg) -> (
+        force_create_unikernel ~unikernel_name ~unikernel_image unikernel_cfg
+          user albatross
+        >>= function
+        | Ok _res -> (
+            Liveliness.interval_liveliness_checks ~unikernel_name
+              ~http_liveliness_address ~dns_liveliness_address
+              ~dns_liveliness_name stack http_client
+            >>= function
+            | Error (`Msg err) ->
+                Logs.err (fun m ->
+                    m
+                      "liveliness-checks for %s and build %s failed with \
+                       error(s) %s. now performing a rollback"
+                      unikernel_name to_be_updated_unikernel err);
+                process_rollback ~unikernel_name (Mirage_ptime.now ()) albatross
+                  store http_client reqd user
+            | Ok () ->
+                Middleware.http_response reqd ~title:"Update Successful"
+                  ~data:
+                    (`String
+                       ("Update succesful. " ^ unikernel_name
+                      ^ " is now running on build " ^ to_be_updated_unikernel))
+                  `OK)
+        | Error (`Msg err) ->
+            Middleware.http_response reqd ~title:"Update Error"
+              ~data:
+                (`String
+                   ("Update failed. " ^ unikernel_name
+                  ^ " failed to update to build " ^ to_be_updated_unikernel
+                  ^ " with error " ^ err))
+              `Internal_server_error)
+    | Error (`Msg err, status) ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:(`String (String.escaped err))
+          status
+
   let unikernel_update albatross store stack http_client
       (user : User_model.user) json_dict reqd =
     let config_or_none field = function
@@ -1445,88 +1489,23 @@ struct
                         unikernel_info (n, unikernel)
                         |> Yojson.Basic.to_string |> config_of_json)
                     with
-                    | Ok cfg -> (
-                        process_change ~unikernel_name ~job
+                    | Ok cfg ->
+                        process_unikernel_update ~unikernel_name ~job
                           ~to_be_updated_unikernel ~currently_running_unikernel
-                          cfg user store http_client `Update
-                        >>= function
-                        | Ok (unikernel_image, unikernel_cfg) -> (
-                            force_create_unikernel ~unikernel_name
-                              ~unikernel_image unikernel_cfg user albatross
-                            >>= function
-                            | Ok _res ->
-                                Middleware.http_response reqd
-                                  ~title:"Update Successful"
-                                  ~data:
-                                    (`String
-                                       ("Update succesful. " ^ unikernel_name
-                                      ^ " is now running on build "
-                                      ^ to_be_updated_unikernel))
-                                  `OK
-                            | Error (`Msg err) ->
-                                Middleware.http_response reqd
-                                  ~title:"Update Error"
-                                  ~data:
-                                    (`String
-                                       ("Update failed. " ^ unikernel_name
-                                      ^ " failed to update to build "
-                                      ^ to_be_updated_unikernel ^ " with error "
-                                      ^ err))
-                                  `Internal_server_error)
-                        | Error (`Msg err, status) ->
-                            Middleware.http_response reqd ~title:"Error"
-                              ~data:(`String (String.escaped err))
-                              status)
+                          ~http_liveliness_address ~dns_liveliness_address
+                          ~dns_liveliness_name stack cfg user store http_client
+                          albatross reqd
                     | Error (`Msg err) ->
                         Logs.warn (fun m -> m "Couldn't decode data %s" err);
                         Middleware.http_response reqd ~title:"Error"
                           ~data:(`String (String.escaped err))
                           `Internal_server_error))
-            | Ok (Some cfg) -> (
-                process_change ~unikernel_name ~job ~to_be_updated_unikernel
-                  ~currently_running_unikernel cfg user store http_client
-                  `Update
-                >>= function
-                | Ok (unikernel_image, unikernel_cfg) -> (
-                    force_create_unikernel ~unikernel_name ~unikernel_image
-                      unikernel_cfg user albatross
-                    >>= function
-                    | Ok _res -> (
-                        Liveliness.interval_liveliness_checks ~unikernel_name
-                          ~http_liveliness_address ~dns_liveliness_address
-                          ~dns_liveliness_name stack http_client
-                        >>= function
-                        | Error (`Msg err) ->
-                            Logs.err (fun m ->
-                                m
-                                  "liveliness-checks for %s and build %s \
-                                   failed with error(s) %s. now performing a \
-                                   rollback"
-                                  unikernel_name to_be_updated_unikernel err);
-                            process_rollback ~unikernel_name
-                              (Mirage_ptime.now ()) albatross store http_client
-                              reqd user
-                        | Ok () ->
-                            Middleware.http_response reqd
-                              ~title:"Update Successful"
-                              ~data:
-                                (`String
-                                   ("Update succesful. " ^ unikernel_name
-                                  ^ " is now running on build "
-                                  ^ to_be_updated_unikernel))
-                              `OK)
-                    | Error (`Msg err) ->
-                        Middleware.http_response reqd ~title:"Update Error"
-                          ~data:
-                            (`String
-                               ("Update failed. " ^ unikernel_name
-                              ^ " failed to update to build "
-                              ^ to_be_updated_unikernel ^ " with error " ^ err))
-                          `Internal_server_error)
-                | Error (`Msg err, status) ->
-                    Middleware.http_response reqd ~title:"Error"
-                      ~data:(`String (String.escaped err))
-                      status))
+            | Ok (Some cfg) ->
+                process_unikernel_update ~unikernel_name ~job
+                  ~to_be_updated_unikernel ~currently_running_unikernel
+                  ~http_liveliness_address ~dns_liveliness_address
+                  ~dns_liveliness_name stack cfg user store http_client
+                  albatross reqd)
         | Error (`Msg err) ->
             Logs.info (fun m ->
                 m
