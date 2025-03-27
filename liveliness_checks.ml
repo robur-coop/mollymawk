@@ -4,6 +4,9 @@ let ( let* ) = Result.bind
 
 type checks = [ `HTTP of string | `DNS of string * string ]
 
+let http_timeout = 15 (* 15seconds timeout for http requests *)
+let dns_timeout = 5 (* 5 seconds timeout for http requests *)
+
 module Make (S : Tcpip.Stack.V4V6) = struct
   module HE = Happy_eyeballs_mirage.Make (S)
   module Dns = Dns_client_mirage.Make (S) (HE)
@@ -43,20 +46,40 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     | Ok _response -> Ok ()
 
   let check_type stack http_client = function
-    | `HTTP address -> check_http http_client address
-    | `DNS (address, domain_name) -> check_dns stack address domain_name
+    | `HTTP address ->
+        Lwt.pick
+          [
+            (check_http http_client address >|= fun r -> `Result r);
+            ( Mirage_sleep.ns (Duration.of_sec http_timeout) >|= fun () ->
+              `Timeout );
+          ]
+    | `DNS (address, domain_name) ->
+        Lwt.pick
+          [
+            (check_dns stack address domain_name >|= fun r -> `Result r);
+            ( Mirage_sleep.ns (Duration.of_sec dns_timeout) >|= fun () ->
+              `Timeout );
+          ]
 
   let perform_checks stack http_client checks =
     Lwt_list.fold_left_s
       (fun failed check ->
         check_type stack http_client check >|= function
-        | Ok _ -> failed
-        | Error (`Msg err) ->
+        | `Result (Ok ()) -> failed
+        | `Result (Error (`Msg err)) ->
             let failed_desc =
               match check with
               | `HTTP url -> "HTTP (" ^ url ^ "): " ^ err
               | `DNS (address, domain_name) ->
                   "DNS (" ^ domain_name ^ ", " ^ address ^ "): " ^ err
+            in
+            failed_desc :: failed
+        | `Timeout ->
+            let failed_desc =
+              match check with
+              | `HTTP url -> "HTTP (" ^ url ^ "): timeout"
+              | `DNS (address, domain_name) ->
+                  "DNS (" ^ domain_name ^ ", " ^ address ^ "): timeout"
             in
             failed_desc :: failed)
       [] checks
@@ -69,6 +92,13 @@ module Make (S : Tcpip.Stack.V4V6) = struct
           ^ String.concat ", " (List.rev failed)
         in
         Error (`Msg err_msg)
+
+  let perform_checks_with_timeout ~timeout stack http_client checks =
+    Lwt.pick
+      [
+        (perform_checks stack http_client checks >|= fun r -> `Result r);
+        (Mirage_sleep.ns (Duration.of_sec timeout) >|= fun () -> `Timeout);
+      ]
 
   let prepare_liveliness_parameters ~http_liveliness_address ~dns_liveliness =
     let* http_liveliness_address =
