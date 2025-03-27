@@ -70,19 +70,18 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         in
         Error (`Msg err_msg)
 
-  let liveliness_checks ~http_liveliness_address ~dns_liveliness_address
-      ~dns_liveliness_name stack http_client =
+  let liveliness_checks ~http_liveliness_address ~dns_liveliness stack
+      http_client =
     Lwt.return
       (let* http_liveliness_address =
          Utils.Json.string_or_none "http_liveliness_address"
            http_liveliness_address
        in
        let* dns_liveliness_address =
-         Utils.Json.string_or_none "dns_liveliness_address"
-           dns_liveliness_address
+         Utils.Json.string_or_none "dns_address" dns_liveliness
        in
        let* dns_liveliness_name =
-         Utils.Json.string_or_none "dns_liveliness_name" dns_liveliness_name
+         Utils.Json.string_or_none "dns_name" dns_liveliness
        in
        let validated_checks =
          List.filter_map
@@ -113,7 +112,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             Error (`Msg err))
 
   let interval_liveliness_checks ~unikernel_name ~http_liveliness_address
-      ~dns_liveliness_address ~dns_liveliness_name stack http_client =
+      ~dns_liveliness stack http_client =
     let rec aux_check failed_checks delay_intervals =
       match delay_intervals with
       | [] ->
@@ -133,8 +132,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
           Logs.info (fun m ->
               m "Performing liveliness check of %s after %d second delay."
                 unikernel_name delay);
-          liveliness_checks ~http_liveliness_address ~dns_liveliness_address
-            ~dns_liveliness_name stack http_client
+          liveliness_checks ~http_liveliness_address ~dns_liveliness stack
+            http_client
           >>= function
           | Error (`Msg err) -> aux_check (err :: failed_checks) rest
           | Ok () -> aux_check failed_checks rest)

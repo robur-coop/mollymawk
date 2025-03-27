@@ -993,8 +993,7 @@ async function updateUnikernel(job, to_be_updated_unikernel, currently_running_u
 					"unikernel_name": unikernel_name,
 					"unikernel_arguments": argumentsToggle ? JSON.parse(unikernelArguments) : null,
 					"http_liveliness_address": http_address ?? null,
-					"dns_liveliness_address": dns_address ?? null,
-					"dns_liveliness_name": dns_name ?? null,
+					"dns_liveliness": { "dns_address": dns_address ?? null, "dns_name": dns_name ?? null },
 					"molly_csrf": molly_csrf
 				})
 		})

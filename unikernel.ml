@@ -1383,9 +1383,8 @@ struct
           `Internal_server_error
 
   let process_unikernel_update ~unikernel_name ~job ~to_be_updated_unikernel
-      ~currently_running_unikernel ~http_liveliness_address
-      ~dns_liveliness_address ~dns_liveliness_name stack cfg user store
-      http_client albatross reqd =
+      ~currently_running_unikernel ~http_liveliness_address ~dns_liveliness
+      stack cfg user store http_client albatross reqd =
     process_change ~unikernel_name ~job ~to_be_updated_unikernel
       ~currently_running_unikernel cfg user store http_client `Update
     >>= function
@@ -1395,8 +1394,7 @@ struct
         >>= function
         | Ok _res -> (
             Liveliness.interval_liveliness_checks ~unikernel_name
-              ~http_liveliness_address ~dns_liveliness_address
-              ~dns_liveliness_name stack http_client
+              ~http_liveliness_address ~dns_liveliness stack http_client
             >>= function
             | Error (`Msg err) ->
                 Logs.err (fun m ->
@@ -1447,8 +1445,7 @@ struct
           get "currently_running_unikernel" json_dict,
           get "unikernel_name" json_dict,
           get "http_liveliness_address" json_dict,
-          get "dns_liveliness_address" json_dict,
-          get "dns_liveliness_name" json_dict,
+          get "dns_liveliness" json_dict,
           get "unikernel_arguments" json_dict )
     with
     | ( Some (`String job),
@@ -1456,11 +1453,10 @@ struct
         Some (`String currently_running_unikernel),
         Some (`String unikernel_name),
         http_liveliness_address,
-        dns_liveliness_address,
-        dns_liveliness_name,
+        dns_liveliness,
         configuration ) -> (
-        Liveliness.liveliness_checks ~http_liveliness_address
-          ~dns_liveliness_address ~dns_liveliness_name stack http_client
+        Liveliness.liveliness_checks ~http_liveliness_address ~dns_liveliness
+          stack http_client
         >>= function
         | Ok () -> (
             match config_or_none "unikernel_arguments" configuration with
@@ -1492,9 +1488,8 @@ struct
                     | Ok cfg ->
                         process_unikernel_update ~unikernel_name ~job
                           ~to_be_updated_unikernel ~currently_running_unikernel
-                          ~http_liveliness_address ~dns_liveliness_address
-                          ~dns_liveliness_name stack cfg user store http_client
-                          albatross reqd
+                          ~http_liveliness_address ~dns_liveliness stack cfg
+                          user store http_client albatross reqd
                     | Error (`Msg err) ->
                         Logs.warn (fun m -> m "Couldn't decode data %s" err);
                         Middleware.http_response reqd ~title:"Error"
@@ -1503,9 +1498,8 @@ struct
             | Ok (Some cfg) ->
                 process_unikernel_update ~unikernel_name ~job
                   ~to_be_updated_unikernel ~currently_running_unikernel
-                  ~http_liveliness_address ~dns_liveliness_address
-                  ~dns_liveliness_name stack cfg user store http_client
-                  albatross reqd)
+                  ~http_liveliness_address ~dns_liveliness stack cfg user store
+                  http_client albatross reqd)
         | Error (`Msg err) ->
             Logs.info (fun m ->
                 m
