@@ -1415,18 +1415,19 @@ struct
         dns_liveliness_address,
         dns_liveliness_name,
         configuration ) -> (
-        match config_or_none "unikernel_arguments" configuration with
-        | Error (`Msg err) ->
-            Middleware.http_response reqd
-              ~title:"Error with Unikernel Arguments Json"
-              ~data:
-                (`String ("Could not get the unikernel arguments json: " ^ err))
-              `Bad_request
-        | Ok None -> (
-            Liveliness.liveliness_checks ~http_liveliness_address
-              ~dns_liveliness_address ~dns_liveliness_name stack http_client
-            >>= function
-            | Ok () -> (
+        Liveliness.liveliness_checks ~http_liveliness_address
+          ~dns_liveliness_address ~dns_liveliness_name stack http_client
+        >>= function
+        | Ok () -> (
+            match config_or_none "unikernel_arguments" configuration with
+            | Error (`Msg err) ->
+                Middleware.http_response reqd
+                  ~title:"Error with Unikernel Arguments Json"
+                  ~data:
+                    (`String
+                       ("Could not get the unikernel arguments json: " ^ err))
+                  `Bad_request
+            | Ok None -> (
                 user_unikernel albatross ~user_name:user.name ~unikernel_name
                 >>= fun unikernel_info ->
                 match unikernel_info with
@@ -1481,24 +1482,7 @@ struct
                         Middleware.http_response reqd ~title:"Error"
                           ~data:(`String (String.escaped err))
                           `Internal_server_error))
-            | Error (`Msg err) ->
-                Logs.info (fun m ->
-                    m
-                      "Liveliness check of currentyly running unikernel failed \
-                       with: %s"
-                      err);
-                Middleware.http_response reqd
-                  ~title:"Error: Liveliness check failed"
-                  ~data:
-                    (`String
-                       ("Liveliness check of currentyly running unikernel \
-                         failed with error(s): " ^ err))
-                  `Bad_request)
-        | Ok (Some cfg) -> (
-            Liveliness.liveliness_checks ~http_liveliness_address
-              ~dns_liveliness_address ~dns_liveliness_name stack http_client
-            >>= function
-            | Ok () -> (
+            | Ok (Some cfg) -> (
                 process_change ~unikernel_name ~job ~to_be_updated_unikernel
                   ~currently_running_unikernel cfg user store http_client
                   `Update
@@ -1542,20 +1526,20 @@ struct
                 | Error (`Msg err, status) ->
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(`String (String.escaped err))
-                      status)
-            | Error (`Msg err) ->
-                Logs.info (fun m ->
-                    m
-                      "Liveliness check of currentyly running unikernel failed \
-                       with: %s"
-                      err);
-                Middleware.http_response reqd
-                  ~title:"Error: Liveliness check failed"
-                  ~data:
-                    (`String
-                       ("Liveliness check of currentyly running unikernel \
-                         failed with error(s): " ^ err))
-                  `Bad_request))
+                      status))
+        | Error (`Msg err) ->
+            Logs.info (fun m ->
+                m
+                  "Liveliness check of currentyly running unikernel failed \
+                   with: %s"
+                  err);
+            Middleware.http_response reqd
+              ~title:"Error: Liveliness check failed"
+              ~data:
+                (`String
+                   ("Liveliness check of currentyly running unikernel failed \
+                     with error: " ^ err))
+              `Bad_request)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find job or build in json. Received ")
