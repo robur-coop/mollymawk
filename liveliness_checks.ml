@@ -29,18 +29,18 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     | Ok _response -> Ok ()
 
   let check_http http_client base_url =
-    Utils.send_http_request http_client ~base_url >>= function
+    Utils.send_http_request http_client ~base_url >|= function
     | Error (`Msg err) ->
         Logs.err (fun m ->
             m "http-liveliness-check: Error response of %s with error: %s"
               base_url err);
-        Lwt.return
-          (Error
-             (`Msg
-                (base_url
-               ^ " :an error occured while performing a liveliness check on \
-                  the http endpoint with error: " ^ err)))
-    | Ok _response -> Ok () |> Lwt.return
+
+        Error
+          (`Msg
+             (base_url
+            ^ " :an error occured while performing a liveliness check on the \
+               http endpoint with error: " ^ err))
+    | Ok _response -> Ok ()
 
   let check_type stack http_client = function
     | `HTTP address -> check_http http_client address
@@ -104,13 +104,13 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     >>= function
     | Error (`Msg msg) -> Lwt.return (Error (`Msg msg))
     | Ok checks -> (
-        perform_checks stack http_client checks >>= function
+        perform_checks stack http_client checks >|= function
         | Ok () ->
             Logs.info (fun m -> m "All liveliness checks passed.");
-            Lwt.return (Ok ())
+            Ok ()
         | Error (`Msg err) ->
             Logs.err (fun m -> m "liveliness-checks-failed with error %s" err);
-            Lwt.return (Error (`Msg err)))
+            Error (`Msg err))
 
   let interval_liveliness_checks ~unikernel_name ~http_liveliness_address
       ~dns_liveliness_address ~dns_liveliness_name stack http_client =
