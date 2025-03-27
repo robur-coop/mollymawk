@@ -46,19 +46,11 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     | `HTTP address -> check_http http_client address
     | `DNS (address, domain_name) -> check_dns stack address domain_name
 
-  let rec perform_checks stack http_client failed = function
-    | [] -> (
-        match failed with
-        | [] -> Lwt.return (Ok ())
-        | _ ->
-            let err_msg =
-              "Liveliness checks failed for: "
-              ^ String.concat ", " (List.rev failed)
-            in
-            Lwt.return (Error (`Msg err_msg)))
-    | check :: rest -> (
-        check_type stack http_client check >>= function
-        | Ok _ -> perform_checks stack http_client failed rest
+  let perform_checks stack http_client checks =
+    Lwt_list.fold_left_s
+      (fun failed check ->
+        check_type stack http_client check >|= function
+        | Ok _ -> failed
         | Error (`Msg err) ->
             let failed_desc =
               match check with
@@ -66,7 +58,17 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               | `DNS (address, domain_name) ->
                   "DNS (" ^ domain_name ^ ", " ^ address ^ "): " ^ err
             in
-            perform_checks stack http_client (failed_desc :: failed) rest)
+            failed_desc :: failed)
+      [] checks
+    >|= fun failed ->
+    match failed with
+    | [] -> Ok ()
+    | _ ->
+        let err_msg =
+          "Liveliness checks failed for: "
+          ^ String.concat ", " (List.rev failed)
+        in
+        Error (`Msg err_msg)
 
   let liveliness_checks ~http_liveliness_address ~dns_liveliness_address
       ~dns_liveliness_name stack http_client =
@@ -102,7 +104,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     >>= function
     | Error (`Msg msg) -> Lwt.return (Error (`Msg msg))
     | Ok checks -> (
-        perform_checks stack http_client [] checks >>= function
+        perform_checks stack http_client checks >>= function
         | Ok () ->
             Logs.info (fun m -> m "All liveliness checks passed.");
             Lwt.return (Ok ())
