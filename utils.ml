@@ -266,7 +266,7 @@ let send_http_request ?(path = "") ~base_url http_client =
   | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
   | Ok (resp, body) -> (
       match resp.Http_mirage_client.status with
-      | `Code 200 -> Lwt.return (Ok body)
+      | `OK | `Created | `Accepted -> Lwt.return (Ok body)
       | _ ->
           Lwt.return
             (Error
