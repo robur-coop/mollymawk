@@ -87,13 +87,6 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         in
         Error (`Msg err_msg)
 
-  let perform_checks_with_timeout ~timeout stack http_client checks =
-    Lwt.pick
-      [
-        (perform_checks stack http_client checks >|= fun r -> `Result r);
-        (Mirage_sleep.ns (Duration.of_sec timeout) >|= fun () -> `Timeout);
-      ]
-
   let prepare_liveliness_parameters ~http_liveliness_address ~dns_liveliness =
     let* http_liveliness_address =
       Utils.Json.string_or_none "http_liveliness_address"
