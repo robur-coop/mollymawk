@@ -173,6 +173,6 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               | Error (`Msg err) -> aux_check (err :: failed_checks) rest
               | Ok () -> Ok () |> Lwt.return)
         in
-        aux_check [] [ 1; 2; 5; 9; 14; 20; 27; 35; 44; 54 ]
+        aux_check [] [ 1; 1; 1; 2; 3; 3; 4; 5 ]
     | Error (`Msg err) -> Error (`Msg err) |> Lwt.return
 end
