@@ -93,9 +93,15 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     match Domain_name.of_string name with
     | Ok name -> (
         match Domain_name.host name with
-        | Ok host -> Some host
-        | Error _ -> None)
-    | Error _ -> None
+        | Ok host -> Ok host
+        | Error err -> Error err)
+    | Error (`Msg err) ->
+        Logs.err (fun m ->
+            m
+              "liveliness-checks-failed while parsing the host name with error \
+               %s"
+              err);
+        Error (`Msg err)
 
   let dns_liveliness_of_json json =
     match json with
@@ -133,7 +139,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               match (address, domain_name) with
               | Some address, Some domain_name -> (
                   match parse_domain_name domain_name with
-                  | Some name -> Some (`DNS (address, name))
+                  | Ok name -> Some (`DNS (address, name))
                   | _ -> None)
               | _ -> None))
         [
