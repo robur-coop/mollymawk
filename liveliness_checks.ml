@@ -129,24 +129,29 @@ module Make (S : Tcpip.Stack.V4V6) = struct
       Utils.Json.string_or_none "dns_address" dns_address
     in
     let* dns_liveliness_name = Utils.Json.string_or_none "dns_name" dns_name in
-    let validated_checks =
-      List.filter_map
-        (fun kind ->
-          match kind with
-          | `HTTP addr -> (
-              match addr with Some addr -> Some (`HTTP addr) | None -> None)
-          | `DNS (address, domain_name) -> (
-              match (address, domain_name) with
-              | Some address, Some domain_name -> (
-                  match parse_domain_name domain_name with
-                  | Ok name -> Some (`DNS (address, name))
-                  | _ -> None)
-              | _ -> None))
-        [
-          `HTTP http_liveliness_address;
-          `DNS (dns_liveliness_address, dns_liveliness_name);
-        ]
+    let http_check =
+      match http_liveliness_address with
+      | Some addr -> Ok (Some (`HTTP addr))
+      | None -> Ok None
     in
+    let dns_check =
+      match (dns_liveliness_address, dns_liveliness_name) with
+      | Some address, Some domain_name -> (
+          match parse_domain_name domain_name with
+          | Ok name -> Ok (Some (`DNS (address, name)))
+          | Error (`Msg err) -> Error (`Msg ("Invalid DNS name: " ^ err)))
+      | _ -> Ok None
+    in
+    let* validated_checks =
+      match (http_check, dns_check) with
+      | Ok None, Ok None -> Ok []
+      | Ok (Some http), Ok None -> Ok [ http ]
+      | Ok None, Ok (Some dns) -> Ok [ dns ]
+      | Ok (Some http), Ok (Some dns) -> Ok [ http; dns ]
+      | Error (`Msg e), _ -> Error (`Msg e)
+      | _, Error (`Msg e) -> Error (`Msg e)
+    in
+
     Ok validated_checks
 
   let liveliness_checks ~http_liveliness_address ~dns_liveliness stack
