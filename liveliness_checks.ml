@@ -97,17 +97,32 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         | Error _ -> None)
     | Error _ -> None
 
+  let dns_liveliness_of_json json =
+    match json with
+    | `Assoc r -> (
+        match Utils.Json.(get "dns_address" r, get "dns_name" r) with
+        | Some dns_address, Some dns_name -> Some (dns_address, dns_name)
+        | _ -> None)
+    | _ -> None
+
+  let dns_liveliness_or_none = function
+    | None | Some `Null -> None
+    | Some json -> dns_liveliness_of_json json
+
   let prepare_liveliness_parameters ~http_liveliness_address ~dns_liveliness =
     let* http_liveliness_address =
       Utils.Json.string_or_none "http_liveliness_address"
         http_liveliness_address
     in
+    let dns_address, dns_name =
+      match dns_liveliness_or_none dns_liveliness with
+      | Some (address, name) -> (Some address, Some name)
+      | None -> (None, None)
+    in
     let* dns_liveliness_address =
-      Utils.Json.string_or_none "dns_address" dns_liveliness
+      Utils.Json.string_or_none "dns_address" dns_address
     in
-    let* dns_liveliness_name =
-      Utils.Json.string_or_none "dns_name" dns_liveliness
-    in
+    let* dns_liveliness_name = Utils.Json.string_or_none "dns_name" dns_name in
     let validated_checks =
       List.filter_map
         (fun kind ->
