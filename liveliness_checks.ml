@@ -45,21 +45,15 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                http endpoint with error: " ^ err))
     | Ok _response -> Ok ()
 
-  let check_type stack http_client = function
-    | `HTTP address ->
-        Lwt.pick
-          [
-            (check_http http_client address >|= fun r -> `Result r);
-            ( Mirage_sleep.ns (Duration.of_sec http_timeout) >|= fun () ->
-              `Timeout );
-          ]
-    | `DNS (address, domain_name) ->
-        Lwt.pick
-          [
-            (check_dns stack address domain_name >|= fun r -> `Result r);
-            ( Mirage_sleep.ns (Duration.of_sec dns_timeout) >|= fun () ->
-              `Timeout );
-          ]
+  let check_type stack http_client typ =
+    Lwt.pick
+      [
+        (Mirage_sleep.ns (Duration.of_sec timeout) >|= fun () -> `Timeout);
+        (match typ with
+        | `HTTP address -> check_http http_client address >|= fun r -> `Result r
+        | `DNS (address, domain_name) ->
+            check_dns stack address domain_name >|= fun r -> `Result r);
+      ]
 
   let perform_checks stack http_client checks =
     Lwt_list.fold_left_s
