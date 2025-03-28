@@ -4,7 +4,7 @@ let ( let* ) = Result.bind
 
 type checks = [ `HTTP of string | `DNS of string * string ]
 
-let http_timeout = 15 (* 15seconds timeout for http requests *)
+let http_timeout = 15 (* 15 seconds timeout for http requests *)
 let dns_timeout = 5 (* 5 seconds timeout for dns requests *)
 
 module Make (S : Tcpip.Stack.V4V6) = struct
