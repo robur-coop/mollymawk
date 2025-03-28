@@ -2,7 +2,7 @@ open Lwt.Infix
 
 let ( let* ) = Result.bind
 
-type checks = [ `HTTP of string | `DNS of string * string ]
+type checks = [ `HTTP of string | `DNS of string * [ `host ] Domain_name.t ]
 
 let timeout = 5 (* 5 seconds timeout for one check *)
 
@@ -16,18 +16,17 @@ module Make (S : Tcpip.Stack.V4V6) = struct
       ~nameservers:[ "tcp:" ^ dns_server; "udp:" ^ dns_server ]
       (stack, he)
     >>= fun dns_client ->
-    Dns.gethostbyname dns_client
-      (Domain_name.of_string_exn domain_name |> Domain_name.host_exn)
-    >|= function
+    Dns.gethostbyname dns_client domain_name >|= function
     | Error (`Msg err) ->
         Logs.err (fun m ->
             m "dns-liveliness-check: Error response of %s with error: %s"
-              domain_name err);
+              (Domain_name.to_string domain_name)
+              err);
         Error
           (`Msg
-             (domain_name
-            ^ " :an error occured while performing a liveliness check on the \
-               DNS endpoint with error: " ^ err))
+             (Domain_name.to_string domain_name
+             ^ " :an error occured while performing a liveliness check on the \
+                DNS endpoint with error: " ^ err))
     | Ok _response -> Ok ()
 
   let check_http http_client base_url =
@@ -64,7 +63,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               match check with
               | `HTTP url -> "HTTP (" ^ url ^ "): " ^ err
               | `DNS (address, domain_name) ->
-                  "DNS (" ^ domain_name ^ ", " ^ address ^ "): " ^ err
+                  "DNS ("
+                  ^ Domain_name.to_string domain_name
+                  ^ ", " ^ address ^ "): " ^ err
             in
             failed_desc :: failed
         | `Timeout ->
@@ -72,7 +73,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               match check with
               | `HTTP url -> "HTTP (" ^ url ^ "): timeout"
               | `DNS (address, domain_name) ->
-                  "DNS (" ^ domain_name ^ ", " ^ address ^ "): timeout"
+                  "DNS ("
+                  ^ Domain_name.to_string domain_name
+                  ^ ", " ^ address ^ "): timeout"
             in
             failed_desc :: failed)
       [] checks
@@ -85,6 +88,14 @@ module Make (S : Tcpip.Stack.V4V6) = struct
           ^ String.concat ", " (List.rev failed)
         in
         Error (`Msg err_msg)
+
+  let parse_domain_name name =
+    match Domain_name.of_string name with
+    | Ok name -> (
+        match Domain_name.host name with
+        | Ok host -> Some host
+        | Error _ -> None)
+    | Error _ -> None
 
   let prepare_liveliness_parameters ~http_liveliness_address ~dns_liveliness =
     let* http_liveliness_address =
@@ -105,8 +116,10 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               match addr with Some addr -> Some (`HTTP addr) | None -> None)
           | `DNS (address, domain_name) -> (
               match (address, domain_name) with
-              | Some address, Some domain_name ->
-                  Some (`DNS (address, domain_name))
+              | Some address, Some domain_name -> (
+                  match parse_domain_name domain_name with
+                  | Some name -> Some (`DNS (address, name))
+                  | _ -> None)
               | _ -> None))
         [
           `HTTP http_liveliness_address;
