@@ -35,6 +35,7 @@ let arg_modal ~unikernel_name ~(to_be_updated_unikernel : Builder_web.build)
                                         a_input_type `Text;
                                         a_name "http_address";
                                         a_id "http-address";
+                                        a_placeholder "https://example.com";
                                         a_class
                                           [
                                             "ring-primary-100 mt-1.5 \
