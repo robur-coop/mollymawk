@@ -932,17 +932,51 @@ async function updateToken(value) {
 	}
 }
 
-async function updateUnikernel(job, latest_build, current_build, unikernel_name) {
+async function updateUnikernel(job, to_be_updated_unikernel, currently_running_unikernel, unikernel_name) {
 	const updateButton = document.getElementById("update-unikernel-button");
 	const unikernelArguments = document.getElementById("unikernel-arguments").value;
 	const argumentsToggle = document.getElementById("arguments-toggle").checked;
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	const formAlert = document.getElementById("unikernel-arguments-alert");
+	const liveliness_toggle = document.getElementById("liveliness-toggle").checked;
+	const http_toggle = document.getElementById("http-toggle").checked;
+	const dns_toggle = document.getElementById("dns-toggle").checked;
+	const dns_address = document.getElementById("dns-address").value.trim();
+	const dns_name = document.getElementById("dns-name").value.trim();
+	const http_address = document.getElementById("http-address").value.trim();
+
 	if (argumentsToggle && !unikernelArguments) {
-		postAlert("bg-secondary-300", "You must give arguments for this build else switch 'Update the configuration for this build' off");
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "You must give arguments for this build else switch 'Update the configuration for this build' off"
 		buttonLoading(updateButton, false, "Proceed to update")
 		return;
 	}
+
+	if (liveliness_toggle && !(http_toggle || dns_toggle)) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Error: If liveliness is enabled, at least one of HTTP or DNS must be activated."
+		buttonLoading(updateButton, false, "Proceed to update")
+		return;
+	}
+
+	if (dns_toggle && !(dns_address && dns_name)) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Error: DNS is enabled, but DNS name and DNS address is not provided."
+		buttonLoading(updateButton, false, "Proceed to update")
+		return;
+	}
+
+	if (http_toggle && !http_address) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Error: HTTP is enabled, but no HTTP address is provided."
+		buttonLoading(updateButton, false, "Proceed to update")
+		return;
+	}
+
 	try {
 		buttonLoading(updateButton, true, "Updating...")
 		const response = await fetch("/api/unikernel/update", {
@@ -954,10 +988,15 @@ async function updateUnikernel(job, latest_build, current_build, unikernel_name)
 			body: JSON.stringify(
 				{
 					"job": job,
-					"latest_build": latest_build,
-					"current_build": current_build,
+					"to_be_updated_unikernel": to_be_updated_unikernel,
+					"currently_running_unikernel": currently_running_unikernel,
 					"unikernel_name": unikernel_name,
 					"unikernel_arguments": argumentsToggle ? JSON.parse(unikernelArguments) : null,
+					"http_liveliness_address": http_toggle ? (http_address ? http_address : null) : null,
+					"dns_liveliness": dns_toggle ? ({
+						"dns_address": dns_address ? dns_address : null,
+						"dns_name": dns_name ? dns_name : null
+					}) : null,
 					"molly_csrf": molly_csrf
 				})
 		})
