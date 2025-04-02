@@ -265,9 +265,9 @@ let send_http_request ?(path = "") ~base_url http_client =
   | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
   | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
   | Ok (resp, body) -> (
-      match resp.Http_mirage_client.status with
-      | `OK | `Created | `Accepted -> Lwt.return (Ok body)
-      | _ ->
+      if Http_mirage_client.Status.is_successful resp.Http_mirage_client.status then
+        Lwt.return (Ok body)
+      else
           Lwt.return
             (Error
                (`Msg
