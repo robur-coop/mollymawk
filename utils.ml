@@ -264,13 +264,13 @@ let send_http_request ?(path = "") ~base_url http_client =
   | Error (`Msg err) -> Lwt.return (Error (`Msg err))
   | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
   | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
-  | Ok (resp, body) -> (
-      if Http_mirage_client.Status.is_successful resp.Http_mirage_client.status then
-        Lwt.return (Ok body)
+  | Ok (resp, body) ->
+      if Http_mirage_client.Status.is_successful resp.Http_mirage_client.status
+      then Lwt.return (Ok body)
       else
-          Lwt.return
-            (Error
-               (`Msg
-                  ("accessing " ^ url ^ " resulted in an error: "
-                  ^ Http_mirage_client.Status.to_string resp.status
-                  ^ " " ^ resp.reason))))
+        Lwt.return
+          (Error
+             (`Msg
+                ("accessing " ^ url ^ " resulted in an error: "
+                ^ Http_mirage_client.Status.to_string resp.status
+                ^ " " ^ resp.reason)))
