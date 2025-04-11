@@ -412,7 +412,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
       ]
     >|= fun output -> Result.map (fun r -> (r, output)) (decode_reply d)
 
-  let raw_query t ?(name = Vmm_core.Name.root) certificates cmd f =
+  let raw_query t ?(name = Vmm_core.Name.root) certificates cmd push f =
     let open Lwt.Infix in
     if Ipaddr.compare (fst t.remote) Ipaddr.(V4 V4.any) = 0 then
       Lwt.return (Error "albatross not configured")
@@ -452,6 +452,29 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                        (Vmm_commands.pp ~verbose:false)
                        cmd TLS.pp_write_error e)
               | Ok tls_flow -> (
+                  let sent = ref false in
+                  let rec send_data () =
+                    push () >>= function
+                    | None ->
+                      if !sent then
+                        (* send trailing 0 byte chunk *)
+                        let buf = Cstruct.create 4 in
+                        Cstruct.BE.set_uint32 buf 0 0l;
+                        TLS.write tls_flow buf >>= function
+                        | Error _ -> assert false
+                        | Ok () -> Lwt.return_unit
+                      else
+                        Lwt.return_unit
+                    | Some data ->
+                      sent := true;
+                      let buf = Cstruct.create (4 + String.length data) in
+                      Cstruct.BE.set_uint32 buf 0 (Int32.of_int (String.length data));
+                      Cstruct.blit_from_string data 0 buf 4 (String.length data);
+                      TLS.write tls_flow buf >>= function
+                      | Error _ -> assert false
+                      | Ok () -> send_data ()
+                  in
+                  send_data () >>= fun () ->
                   TLS.read tls_flow >>= fun r ->
                   match r with
                   | Ok (`Data d) -> f tls_flow (Cstruct.to_string d)
@@ -483,7 +506,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     match gen_cert t cmd "." with
     | Error s -> invalid_arg s
     | Ok certificates -> (
-        raw_query t certificates cmd reply >|= function
+        raw_query t certificates cmd (fun () -> Lwt.return None) reply >|= function
         | Ok (_hdr, `Success (`Policies ps)) ->
             let ps =
               List.fold_left
@@ -511,17 +534,17 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     | Ok vmm_name ->
         Result.map (fun c -> (vmm_name, c)) (gen_cert t ~domain cmd name)
 
-  let query t ~domain ?(name = ".") cmd =
+  let query t ~domain ?(name = ".") ?(push = fun () -> Lwt.return None) cmd =
     match certs t domain name cmd with
     | Error str -> Lwt.return (Error str)
-    | Ok (name, certificates) -> raw_query t ~name certificates cmd reply
+    | Ok (name, certificates) -> raw_query t ~name certificates cmd push reply
 
   let query_console t ~domain ~name =
     let cmd = `Console_cmd (`Console_subscribe (`Count 20)) in
     match certs t domain name cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (name, certificates) ->
-        raw_query t ~name certificates cmd (console name)
+        raw_query t ~name certificates cmd (fun () -> Lwt.return None) (console name)
 
   let set_policy t ~domain policy =
     let open Lwt.Infix in
