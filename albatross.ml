@@ -456,23 +456,24 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                   let rec send_data () =
                     push () >>= function
                     | None ->
-                      if !sent then
-                        (* send trailing 0 byte chunk *)
-                        let buf = Cstruct.create 4 in
-                        Cstruct.BE.set_uint32 buf 0 0l;
+                        if !sent then (
+                          (* send trailing 0 byte chunk *)
+                          let buf = Cstruct.create 4 in
+                          Cstruct.BE.set_uint32 buf 0 0l;
+                          TLS.write tls_flow buf >>= function
+                          | Error _ -> assert false
+                          | Ok () -> Lwt.return_unit)
+                        else Lwt.return_unit
+                    | Some data -> (
+                        sent := true;
+                        let buf = Cstruct.create (4 + String.length data) in
+                        Cstruct.BE.set_uint32 buf 0
+                          (Int32.of_int (String.length data));
+                        Cstruct.blit_from_string data 0 buf 4
+                          (String.length data);
                         TLS.write tls_flow buf >>= function
                         | Error _ -> assert false
-                        | Ok () -> Lwt.return_unit
-                      else
-                        Lwt.return_unit
-                    | Some data ->
-                      sent := true;
-                      let buf = Cstruct.create (4 + String.length data) in
-                      Cstruct.BE.set_uint32 buf 0 (Int32.of_int (String.length data));
-                      Cstruct.blit_from_string data 0 buf 4 (String.length data);
-                      TLS.write tls_flow buf >>= function
-                      | Error _ -> assert false
-                      | Ok () -> send_data ()
+                        | Ok () -> send_data ())
                   in
                   send_data () >>= fun () ->
                   TLS.read tls_flow >>= fun r ->
@@ -506,7 +507,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     match gen_cert t cmd "." with
     | Error s -> invalid_arg s
     | Ok certificates -> (
-        raw_query t certificates cmd (fun () -> Lwt.return None) reply >|= function
+        raw_query t certificates cmd (fun () -> Lwt.return None) reply
+        >|= function
         | Ok (_hdr, `Success (`Policies ps)) ->
             let ps =
               List.fold_left
@@ -544,7 +546,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     match certs t domain name cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (name, certificates) ->
-        raw_query t ~name certificates cmd (fun () -> Lwt.return None) (console name)
+        raw_query t ~name certificates cmd
+          (fun () -> Lwt.return None)
+          (console name)
 
   let set_policy t ~domain policy =
     let open Lwt.Infix in
