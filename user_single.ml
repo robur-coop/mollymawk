@@ -87,7 +87,7 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                     a
                       ~a:
                         [
-                          a_href "#settings";
+                          a_href "#policy";
                           a_class
                             [
                               "my-2 block border-x-0 border-b-2 border-t-0 \
@@ -99,10 +99,10 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                                active";
                             ];
                           a_role [ "tab" ];
-                          a_aria "controls" [ "tabs-settings" ];
+                          a_aria "controls" [ "tabs-policy" ];
                           a_aria "selected" [ "false" ];
                         ]
-                      [ txt "Settings" ];
+                      [ txt "Resource policy" ];
                   ];
               ];
           ];
@@ -216,7 +216,7 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                 Unikernel_index.unikernel_index_layout unikernels current_time;
               ];
             section
-              ~a:[ a_id "settings"; a_class [ "my-5 tab-pane hidden" ] ]
+              ~a:[ a_id "policy"; a_class [ "my-5 tab-pane hidden" ] ]
               [
                 section
                   ~a:[ a_id "policy-table" ]
