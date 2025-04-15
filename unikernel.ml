@@ -1219,9 +1219,9 @@ struct
   let force_create_unikernel ~unikernel_name ~unikernel_image
       (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user)
       albatross =
-    let unikernel_config = { unikernel_cfg with image = unikernel_image } in
-    Albatross.query albatross ~domain:user.name ~name:unikernel_name
-      (`Unikernel_cmd (`Unikernel_force_create unikernel_config))
+    let push () = Lwt.return (Some unikernel_image) in
+    Albatross.query albatross ~domain:user.name ~name:unikernel_name ~push
+      (`Unikernel_cmd (`Unikernel_force_create unikernel_cfg))
     >>= function
     | Error err ->
         Logs.warn (fun m ->
@@ -1585,10 +1585,10 @@ struct
     | Some (_, args), Some (_, name), Some (_, binary) -> (
         match Albatross_json.config_of_json args with
         | Ok cfg -> (
-            let config = { cfg with image = binary } in
+            let push () = Lwt.return (Some binary) in
             (* TODO use uuid in the future *)
-            Albatross.query albatross ~domain:user.name ~name
-              (`Unikernel_cmd (`Unikernel_create config))
+            Albatross.query albatross ~domain:user.name ~name ~push
+              (`Unikernel_cmd (`Unikernel_create cfg))
             >>= function
             | Error err ->
                 Logs.warn (fun m -> m "Error querying albatross: %s" err);
