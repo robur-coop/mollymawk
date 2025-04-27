@@ -272,7 +272,7 @@ async function deployUnikernel() {
 	let formData = new FormData();
 	const unikernel_config = {
 		cpuid: Number(cpuid),
-		fail_behaviour: { "restart": fail_behaviour },
+		fail_behaviour: fail_behaviour ? { "restart": fail_behaviour } : "quit",
 		memory: Number(memory),
 		...networkData,
 		...blockData,
