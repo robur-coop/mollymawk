@@ -939,14 +939,24 @@ struct
           ~data:(`String (String.escaped err))
           reqd `Bad_request
 
-  let deploy_form store _ (user : User_model.user) reqd =
+  let deploy_form store albatross _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
+    user_unikernels albatross user.name >>= fun unikernels ->
+    user_volumes albatross user.name >>= fun blocks ->
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
+        let user_policy =
+          match Albatross.policy albatross ~domain:user.name with
+          | Ok p -> (
+              match p with Some p -> p | None -> Albatross.empty_policy)
+          | Error _ -> Albatross.empty_policy
+        in
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
              ~page_title:"Deploy a Unikernel | Mollymawk"
-             ~content:Unikernel_create.unikernel_create_layout
+             ~content:
+               (Unikernel_create.unikernel_create_layout ~user_policy unikernels
+                  blocks)
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
@@ -2291,7 +2301,7 @@ struct
                   (unikernel_info_one !albatross store unikernel_name))
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
-                authenticate store reqd (deploy_form store))
+                authenticate store reqd (deploy_form store !albatross))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
