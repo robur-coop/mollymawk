@@ -254,7 +254,8 @@ async function deployUnikernel() {
 		return;
 	}
 
-	const arguments = document.getElementById("unikernel-arguments").value;
+	const argumentsString = document.getElementById("unikernel-arguments").value.trim();
+	const argumentsList = argumentsString ? argumentsString.split(/\s+/) : [];
 	const binary = document.getElementById("unikernel-binary").files[0];
 	const molly_csrf = document.getElementById("molly-csrf").value;
 
@@ -270,20 +271,18 @@ async function deployUnikernel() {
 
 	let formData = new FormData();
 	const unikernel_config = {
-		name,
 		cpuid: Number(cpuid),
 		fail_behaviour: { "restart": fail_behaviour },
 		memory: Number(memory),
 		...networkData,
 		...blockData,
-		arguments
+		arguments: argumentsList
 	};
 
-	formData.append("unikernel_config", unikernel_config);
+	formData.append("unikernel_name", name,);
+	formData.append("unikernel_config", JSON.stringify(unikernel_config));
 	formData.append("binary", binary);
 	formData.append("molly_csrf", molly_csrf);
-
-	console.log(formData, unikernel_config);
 
 	try {
 		const response = await fetch("/api/unikernel/create", {
