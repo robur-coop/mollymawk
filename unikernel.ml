@@ -1588,16 +1588,17 @@ struct
 
   let unikernel_create albatross (user : User_model.user) m reqd =
     match
-      ( Map.find_opt "arguments" m,
-        Map.find_opt "name" m,
+      ( Map.find_opt "unikernel_name" m,
+        Map.find_opt "unikernel_config" m,
         Map.find_opt "binary" m )
     with
-    | Some (_, args), Some (_, name), Some (_, binary) -> (
-        match Albatross_json.config_of_json args with
+    | Some (_, unikernel_name), Some (_, unikernel_config), Some (_, binary)
+      -> (
+        match Albatross_json.config_of_json unikernel_config with
         | Ok cfg -> (
             let config = { cfg with image = binary } in
             (* TODO use uuid in the future *)
-            Albatross.query albatross ~domain:user.name ~name
+            Albatross.query albatross ~domain:user.name ~name:unikernel_name
               (`Unikernel_cmd (`Unikernel_create config))
             >>= function
             | Error err ->
