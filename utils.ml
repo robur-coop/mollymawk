@@ -253,6 +253,108 @@ let switch_button ~switch_id ~switch_label html_content =
           [ html_content ];
       ])
 
+let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
+    ~(get_value : 'a -> string) ~(id : string) =
+  let alpine_options =
+    "["
+    ^ String.concat ", "
+        (List.map
+           (fun item ->
+             Printf.sprintf "{ label: '%s', value: '%s' }"
+               (String.escaped (get_label item))
+               (String.escaped (get_value item)))
+           items)
+    ^ "]"
+  in
+  Tyxml_html.(
+    div
+      ~a:
+        [
+          Unsafe.string_attrib "x-data"
+            ("{ fields: [], options: " ^ alpine_options ^ ", field_id: '" ^ id
+           ^ "' }");
+        ]
+      [
+        Unsafe.data "<template x-for='(field, index) in fields' :key='index'>";
+        div
+          ~a:[ a_class [ "flex items-center space-x-2 my-2" ] ]
+          [
+            (* Dropdown select with dynamic ID *)
+            select
+              ~a:
+                [
+                  a_class
+                    [
+                      "ring-primary-100 mt-1.5 transition block w-full px-3 \
+                       py-3 rounded-xl shadow-sm border";
+                      "hover:border-primary-200 focus:border-primary-300 \
+                       bg-primary-50 bg-opacity-0";
+                      "hover:bg-opacity-50 focus:bg-opacity-50 \
+                       ring-primary-200 focus:ring-primary-200";
+                      "focus:ring-[1px] focus:outline-none";
+                    ];
+                  Unsafe.string_attrib ":id" "field_id + '-select-' + index";
+                ]
+              [
+                Unsafe.data
+                  {|
+            <template x-for="option in options" :key="option.value">
+              <option :value="option.value" x-text="option.label"></option>
+            </template>
+          |};
+              ];
+            (* Text input with dynamic ID *)
+            input
+              ~a:
+                [
+                  a_input_type `Text;
+                  a_name "name";
+                  a_required ();
+                  a_placeholder "Name of this device in your unikernel";
+                  a_class
+                    [
+                      "ring-primary-100 mt-1.5 transition appearance-none \
+                       block w-full px-3 py-3 rounded-xl shadow-sm border";
+                      "hover:border-primary-200 focus:border-primary-300 \
+                       bg-primary-50 bg-opacity-0";
+                      "hover:bg-opacity-50 focus:bg-opacity-50 \
+                       ring-primary-200 focus:ring-primary-200";
+                      "focus:ring-[1px] focus:outline-none";
+                    ];
+                  Unsafe.string_attrib ":id" "field_id + '-input-' + index";
+                  Unsafe.string_attrib "x-model" "field.title";
+                ]
+              ();
+            (* Remove button *)
+            Unsafe.data
+              {|
+                  <button type="button" @click="fields.splice(index, 1)"
+                    class="text-secondary-500 hover:text-secondary-700 font-bold">
+                    &times;
+                  </button>
+                |};
+          ];
+        Unsafe.data "</template>";
+        (* Add button *)
+        button
+          ~a:
+            [
+              a_button_type `Button;
+              Unsafe.string_attrib "@click"
+                "fields.push({ selected: '', title: '' })";
+              a_class
+                [
+                  "bg-primary-500 text-gray-100 px-3 py-1 rounded \
+                   hover:bg-primary-600";
+                ];
+            ]
+          [ txt "+ Add" ];
+      ])
+
+let cpuid_to_array_string lst =
+  if lst = [] then "[]"
+  else "[\"" ^ String.concat "\", \"" (List.map string_of_int lst) ^ "\"]"
+
 let send_http_request ?(path = "") ~base_url http_client =
   let url = base_url ^ path in
   let body = "" in
