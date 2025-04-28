@@ -80,7 +80,10 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                              (txt
                                 ("CPU " ^ string_of_int cpu_id ^ " (used by "
                                ^ string_of_int count ^ " unikernels)")))
-                         cpu_usage_count);
+                         (List.sort
+                            (fun (_, count1) (_, count2) ->
+                              Int.compare count1 count2)
+                            cpu_usage_count));
                   ];
                 div
                   ~a:[ a_class [ "" ] ]
