@@ -377,78 +377,96 @@ let send_http_request ?(path = "") ~base_url http_client =
                 ^ Http_mirage_client.Status.to_string resp.status
                 ^ " " ^ resp.reason)))
 
-let user_policy_usage policy unikernels blocks =
-  let deployed_unikernels = List.length unikernels in
-  let total_volume_used =
-    List.fold_left (fun total_size (_, size, _) -> total_size + size) 0 blocks
-  in
-  let total_free_space =
-    Option.value ~default:0 policy.Vmm_core.Policy.block - total_volume_used
-  in
-  let total_memory_used =
-    List.fold_left
-      (fun total_memory (_, unikernel) ->
-        total_memory + unikernel.Vmm_core.Unikernel.memory)
-      0 unikernels
-  in
-  let count_cpuid_usage =
-    let cpuid_count = Hashtbl.create (List.length unikernels) in
-    (* count usage of each cpuid in unikernels *)
-    List.iter
-      (fun (_, unikernel) ->
-        let cpuid = unikernel.Vmm_core.Unikernel.cpuid in
-        let count =
-          Hashtbl.find_opt cpuid_count cpuid |> Option.value ~default:0
-        in
-        Hashtbl.replace cpuid_count cpuid (count + 1))
-      unikernels;
-    (* Prepare list of all cpuids from policy *)
-    let policy_cpuids = Vmm_core.IS.elements policy.cpuids in
-    (* Generate the list with all policy.cpuids and their respective counts *)
-    List.map
-      (fun cpuid ->
-        let count =
-          Hashtbl.find_opt cpuid_count cpuid |> Option.value ~default:0
-        in
-        (cpuid, count))
-      policy_cpuids
-  in
-  let count_bridge_usage =
-    let bridge_count =
-      Hashtbl.create (Vmm_core.String_set.cardinal policy.bridges)
-    in
-    (* Initialize all policy bridges with a count of 0 *)
-    Vmm_core.String_set.iter
-      (fun bridge -> Hashtbl.replace bridge_count bridge 0)
-      policy.bridges;
+type user_policy_usage = {
+  deployed_unikernels : int;
+  total_volume_used : int;
+  total_free_space : int;
+  total_memory_used : int;
+  cpu_usage_count : (int * int) list;
+  bridge_usage_count : (string * int) list;
+}
 
-    (* Count each bridge usage from unikernel.bridges, but only if it's in policy.bridges *)
-    List.iter
-      (fun (_, unikernel) ->
-        List.iter
-          (fun { Vmm_core.Unikernel.host_device; _ } ->
-            (* Only count if the bridge is in policy.bridges *)
-            if Vmm_core.String_set.mem host_device policy.bridges then
-              let count =
-                Hashtbl.find_opt bridge_count host_device
-                |> Option.value ~default:0
-              in
-              Hashtbl.replace bridge_count host_device (count + 1))
-          unikernel.Vmm_core.Unikernel.bridges)
-      unikernels;
+let deployed_unikernels unikernels = List.length unikernels
 
-    (* Convert the hash table to a sorted list of (bridge_name, count) *)
-    let bridge_usage_list =
-      Hashtbl.fold
-        (fun bridge count acc -> (bridge, count) :: acc)
-        bridge_count []
-    in
-    (* Sort the list by bridge name *)
-    List.sort (fun (b1, _) (b2, _) -> String.compare b1 b2) bridge_usage_list
+let cpu_usage_count policy unikernels =
+  let cpuid_count = Hashtbl.create (List.length unikernels) in
+  (* count usage of each cpuid in unikernels *)
+  List.iter
+    (fun (_, unikernel) ->
+      let cpuid = unikernel.Vmm_core.Unikernel.cpuid in
+      let count =
+        Hashtbl.find_opt cpuid_count cpuid |> Option.value ~default:0
+      in
+      Hashtbl.replace cpuid_count cpuid (count + 1))
+    unikernels;
+  (* Prepare list of all cpuids from policy *)
+  let policy_cpuids = Vmm_core.IS.elements policy.Vmm_core.Policy.cpuids in
+  (* Generate the list with all policy.cpuids and their respective counts *)
+  List.map
+    (fun cpuid ->
+      let count =
+        Hashtbl.find_opt cpuid_count cpuid |> Option.value ~default:0
+      in
+      (cpuid, count))
+    policy_cpuids
+
+let total_volume_used blocks =
+  List.fold_left (fun total_size (_, size, _) -> total_size + size) 0 blocks
+
+let total_free_space policy total_volume_used =
+  Option.value ~default:0 policy.Vmm_core.Policy.block - total_volume_used
+
+let total_memory_used unikernels =
+  List.fold_left
+    (fun total_memory (_, unikernel) ->
+      total_memory + unikernel.Vmm_core.Unikernel.memory)
+    0 unikernels
+
+let bridge_usage_count policy unikernels =
+  let bridge_count =
+    Hashtbl.create (Vmm_core.String_set.cardinal policy.Vmm_core.Policy.bridges)
   in
-  ( deployed_unikernels,
-    total_volume_used,
-    total_free_space,
-    total_memory_used,
-    count_cpuid_usage,
-    count_bridge_usage )
+  (* Initialize all policy bridges with a count of 0 *)
+  Vmm_core.String_set.iter
+    (fun bridge -> Hashtbl.replace bridge_count bridge 0)
+    policy.bridges;
+
+  (* Count each bridge usage from unikernel.bridges, but only if it's in policy.bridges *)
+  List.iter
+    (fun (_, unikernel) ->
+      List.iter
+        (fun { Vmm_core.Unikernel.host_device; _ } ->
+          (* Only count if the bridge is in policy.bridges *)
+          if Vmm_core.String_set.mem host_device policy.bridges then
+            let count =
+              Hashtbl.find_opt bridge_count host_device
+              |> Option.value ~default:0
+            in
+            Hashtbl.replace bridge_count host_device (count + 1))
+        unikernel.Vmm_core.Unikernel.bridges)
+    unikernels;
+
+  (* Convert the hash table to a sorted list of (bridge_name, count) *)
+  let bridge_usage_list =
+    Hashtbl.fold
+      (fun bridge count acc -> (bridge, count) :: acc)
+      bridge_count []
+  in
+  (* Sort the list by bridge name *)
+  List.sort (fun (b1, _) (b2, _) -> String.compare b1 b2) bridge_usage_list
+
+let user_policy_usage policy unikernels blocks : user_policy_usage =
+  let deployed_unikernels = deployed_unikernels unikernels in
+  let total_volume_used = total_volume_used blocks in
+  let total_free_space = total_free_space policy total_volume_used in
+  let total_memory_used = total_memory_used unikernels in
+  let cpu_usage_count = cpu_usage_count policy unikernels in
+  let bridge_usage_count = bridge_usage_count policy unikernels in
+  {
+    deployed_unikernels;
+    total_volume_used;
+    total_free_space;
+    total_memory_used;
+    cpu_usage_count;
+    bridge_usage_count;
+  }

@@ -1,8 +1,7 @@
 let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
     (blocks : (Vmm_core.Name.t * int * bool) list) =
-  let _, _, _, total_memory_used, count_cpuid_usage, _ =
-    Utils.user_policy_usage user_policy unikernels blocks
-  in
+  let total_memory_used = Utils.total_memory_used unikernels in
+  let cpu_usage_count = Utils.cpu_usage_count user_policy unikernels in
   let memory_left = user_policy.memory - total_memory_used in
   Tyxml_html.(
     section
@@ -81,7 +80,7 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                              (txt
                                 ("CPU " ^ string_of_int cpu_id ^ " (used by "
                                ^ string_of_int count ^ " unikernels)")))
-                         count_cpuid_usage);
+                         cpu_usage_count);
                   ];
                 div
                   ~a:[ a_class [ "" ] ]

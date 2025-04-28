@@ -1,12 +1,5 @@
 let account_usage_layout policy unikernels blocks =
-  let ( deployed_unikernels,
-        total_volume_used,
-        total_free_space,
-        total_memory_used,
-        count_cpuid_usage,
-        count_bridge_usage ) =
-    Utils.user_policy_usage policy unikernels blocks
-  in
+  let user_policy_usage = Utils.user_policy_usage policy unikernels blocks in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -33,16 +26,20 @@ let account_usage_layout policy unikernels blocks =
                          \                  type: 'pie',\n\
                          \                  data: {\n\
                          \                    labels: ['Available ("
-                        ^ string_of_int (policy.unikernels - deployed_unikernels)
+                        ^ string_of_int
+                            (policy.unikernels
+                           - user_policy_usage.deployed_unikernels)
                         ^ ")','Running ("
-                        ^ string_of_int deployed_unikernels
+                        ^ string_of_int user_policy_usage.deployed_unikernels
                         ^ ")'],\n\
                           \                    datasets: [{\n\
                           \                      label: 'Allocated',\n\
                           \                      data: ["
-                        ^ string_of_int (policy.unikernels - deployed_unikernels)
+                        ^ string_of_int
+                            (policy.unikernels
+                           - user_policy_usage.deployed_unikernels)
                         ^ ", "
-                        ^ string_of_int deployed_unikernels
+                        ^ string_of_int user_policy_usage.deployed_unikernels
                         ^ "],\n\
                           \                      backgroundColor: ['rgb(156, \
                            156, 156)','rgb(54, 156, 140)'],\n\
@@ -72,16 +69,16 @@ let account_usage_layout policy unikernels blocks =
                          \                  type: 'pie',\n\
                          \                  data: {\n\
                          \                    labels: ['Free ("
-                        ^ string_of_int total_free_space
+                        ^ string_of_int user_policy_usage.total_free_space
                         ^ "MB)','Used ("
-                        ^ string_of_int total_volume_used
+                        ^ string_of_int user_policy_usage.total_volume_used
                         ^ "MB)'],\n\
                           \                    datasets: [{\n\
                           \                      label: 'Size',\n\
                           \                      data: ["
-                        ^ string_of_int total_free_space
+                        ^ string_of_int user_policy_usage.total_free_space
                         ^ ", "
-                        ^ string_of_int total_volume_used
+                        ^ string_of_int user_policy_usage.total_volume_used
                         ^ "],\n\
                           \                      backgroundColor: ['rgb(156, \
                            156, 156)','rgb(54, 156, 140)'],\n\
@@ -111,16 +108,18 @@ let account_usage_layout policy unikernels blocks =
                          \                  type: 'pie',\n\
                          \                  data: {\n\
                          \                    labels: ['Free ("
-                        ^ string_of_int (policy.memory - total_memory_used)
+                        ^ string_of_int
+                            (policy.memory - user_policy_usage.total_memory_used)
                         ^ "MB)','Assigned ("
-                        ^ string_of_int total_memory_used
+                        ^ string_of_int user_policy_usage.total_memory_used
                         ^ "MB)'],\n\
                           \                    datasets: [{\n\
                           \                      label: 'Allocated',\n\
                           \                      data: ["
-                        ^ string_of_int (policy.memory - total_memory_used)
+                        ^ string_of_int
+                            (policy.memory - user_policy_usage.total_memory_used)
                         ^ ", "
-                        ^ string_of_int total_memory_used
+                        ^ string_of_int user_policy_usage.total_memory_used
                         ^ "],\n\
                           \                      backgroundColor: ['rgb(156, \
                            156, 156)','rgb(54, 156, 140)'],\n\
@@ -171,7 +170,7 @@ let account_usage_layout policy unikernels blocks =
                             (List.map
                                (fun (_, count) ->
                                  "\"" ^ string_of_int count ^ "\"")
-                               count_cpuid_usage)
+                               user_policy_usage.cpu_usage_count)
                         ^ "\n\
                           \                                ],\n\
                           \                                backgroundColor: \
@@ -255,7 +254,7 @@ let account_usage_layout policy unikernels blocks =
                             (List.map
                                (fun (_, count) ->
                                  "\"" ^ string_of_int count ^ "\"")
-                               count_bridge_usage)
+                               user_policy_usage.bridge_usage_count)
                         ^ "\n\
                           \          ],\n\
                           \          backgroundColor: ['rgb(54, 156, 140)'],\n\
