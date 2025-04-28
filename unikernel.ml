@@ -944,22 +944,45 @@ struct
     user_unikernels albatross user.name >>= fun unikernels ->
     user_volumes albatross user.name >>= fun blocks ->
     generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        let user_policy =
-          match Albatross.policy albatross ~domain:user.name with
-          | Ok p -> (
-              match p with Some p -> p | None -> Albatross.empty_policy)
-          | Error _ -> Albatross.empty_policy
+    | Ok csrf -> (
+        let missing_policy_error ?(err = None) () =
+          {
+            Utils.Status.code = 500;
+            title = "Resource policy error";
+            data = `String (Option.value err ~default:"No policy found");
+            success = false;
+          }
         in
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:"Deploy a Unikernel | Mollymawk"
-             ~content:
-               (Unikernel_create.unikernel_create_layout ~user_policy unikernels
-                  blocks)
-             ~icon:"/images/robur.png" ())
-          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-          `OK
+        match Albatross.policy albatross ~domain:user.name with
+        | Ok p -> (
+            match p with
+            | Some user_policy ->
+                reply reqd ~content_type:"text/html"
+                  (Dashboard.dashboard_layout ~csrf user
+                     ~page_title:"Deploy a Unikernel | Mollymawk"
+                     ~content:
+                       (Unikernel_create.unikernel_create_layout ~user_policy
+                          unikernels blocks)
+                     ~icon:"/images/robur.png" ())
+                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                  `OK
+            | None ->
+                reply reqd ~content_type:"text/html"
+                  (Guest_layout.guest_layout
+                     ~page_title:"Resource policy error | Mollymawk"
+                     ~content:
+                       (Error_page.error_layout (missing_policy_error ()))
+                     ~icon:"/images/robur.png" ())
+                  `Internal_server_error)
+        | Error err ->
+            reply reqd ~content_type:"text/html"
+              (Guest_layout.guest_layout
+                 ~page_title:"Resource policy error | Mollymawk"
+                 ~content:
+                   (Error_page.error_layout
+                      (missing_policy_error ~err:(Some err) ()))
+                 ~icon:"/images/robur.png" ())
+              `Internal_server_error)
     | Error err ->
         reply reqd ~content_type:"text/html"
           (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
