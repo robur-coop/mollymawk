@@ -183,12 +183,15 @@ let bytes_to_megabytes bytes =
 (*10 minutes for a rollback to be valid*)
 let rollback_seconds_limit = 600
 
-let switch_button ~switch_id ~switch_label html_content =
+let switch_button ~switch_id ~switch_label ?(initial_state = false) html_content
+    =
   Tyxml_html.(
     div
       ~a:
         [
-          a_class [ "my-6" ]; Unsafe.string_attrib "x-data" "{ toggle: false }";
+          a_class [ "my-6" ];
+          Unsafe.string_attrib "x-data"
+            ("{ toggle: " ^ string_of_bool initial_state ^ " }");
         ]
       [
         label
@@ -206,6 +209,7 @@ let switch_button ~switch_id ~switch_label html_content =
                   a_class [ "peer sr-only" ];
                   a_role [ "switch" ];
                   Unsafe.string_attrib "x-model" "toggle";
+                  (if initial_state then a_checked () else a_alt "");
                 ]
               ();
             span

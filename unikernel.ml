@@ -1613,30 +1613,50 @@ struct
     match
       ( Map.find_opt "unikernel_name" m,
         Map.find_opt "unikernel_config" m,
+        Map.find_opt "unikernel_force_create" m,
         Map.find_opt "binary" m )
     with
-    | Some (_, unikernel_name), Some (_, unikernel_config), Some (_, binary)
-      -> (
+    | ( Some (_, unikernel_name),
+        Some (_, unikernel_config),
+        Some (_, force_create),
+        Some (_, binary) ) -> (
         match Albatross_json.config_of_json unikernel_config with
         | Ok cfg -> (
             let config = { cfg with image = binary } in
             (* TODO use uuid in the future *)
-            Albatross.query albatross ~domain:user.name ~name:unikernel_name
-              (`Unikernel_cmd (`Unikernel_create config))
-            >>= function
-            | Error err ->
-                Logs.warn (fun m -> m "Error querying albatross: %s" err);
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:(`String ("Error while querying Albatross: " ^ err))
-                  `Internal_server_error
-            | Ok (_hdr, res) -> (
-                match Albatross_json.res res with
-                | Ok res ->
-                    Middleware.http_response reqd ~title:"Success" ~data:res `OK
-                | Error (`String err) ->
-                    Middleware.http_response reqd ~title:"Error"
-                      ~data:(`String (String.escaped err))
-                      `Internal_server_error))
+            if bool_of_string force_create then (
+              force_create_unikernel ~unikernel_name ~unikernel_image:binary cfg
+                user albatross
+              >>= function
+              | Ok res ->
+                  Middleware.http_response reqd ~title:"Success"
+                    ~data:
+                      (`String
+                         ("Unikernel has been force created succesfully: " ^ res))
+                    `OK
+              | Error (`Msg err) ->
+                  Logs.warn (fun m -> m "Error querying albatross: %s" err);
+                  Middleware.http_response reqd ~title:"Error"
+                    ~data:(`String ("Error while querying Albatross: " ^ err))
+                    `Internal_server_error)
+            else
+              Albatross.query albatross ~domain:user.name ~name:unikernel_name
+                (`Unikernel_cmd (`Unikernel_create config))
+              >>= function
+              | Error err ->
+                  Logs.warn (fun m -> m "Error querying albatross: %s" err);
+                  Middleware.http_response reqd ~title:"Error"
+                    ~data:(`String ("Error while querying Albatross: " ^ err))
+                    `Internal_server_error
+              | Ok (_hdr, res) -> (
+                  match Albatross_json.res res with
+                  | Ok res ->
+                      Middleware.http_response reqd ~title:"Success" ~data:res
+                        `OK
+                  | Error (`String err) ->
+                      Middleware.http_response reqd ~title:"Error"
+                        ~data:(`String (String.escaped err))
+                        `Internal_server_error))
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "couldn't decode data %s" err);
             Middleware.http_response reqd ~title:"Error"

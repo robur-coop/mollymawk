@@ -252,6 +252,35 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                   ();
               ];
             div
+              ~a:[ a_class [ "" ] ]
+              [
+                label
+                  ~a:[ a_class [ "block font-medium" ] ]
+                  [ txt "Force create" ];
+                div
+                  ~a:[ a_class [ "" ] ]
+                  [
+                    Utils.switch_button ~initial_state:true
+                      ~switch_id:"force-create"
+                      ~switch_label:"Force create this unikernel"
+                      (div
+                         [
+                           label
+                             ~a:
+                               [
+                                 a_class [ "block text-sm font-medium" ];
+                                 a_label_for "restart_description";
+                               ]
+                             [
+                               txt
+                                 "If a unikernel exist with this same name, it \
+                                  will be destroyed first and this one \
+                                  created.";
+                             ];
+                         ]);
+                  ];
+              ];
+            div
               ~a:[ a_class [ "flex justify-items-center mx-auto w-60" ] ]
               [
                 Utils.button_component

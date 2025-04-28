@@ -243,6 +243,7 @@ async function deployUnikernel() {
 	const name = document.getElementById("unikernel-name").value;
 	const cpuid = document.getElementById("cpuid").value;
 	const fail_behaviour = document.getElementById("restart-on-fail").checked;
+	const force_create = document.getElementById("force-create").checked;
 	const memory = document.getElementById("unikernel-memory").innerText;
 
 	const networkData = gatherFieldsForDevices("network", "network_interfaces", formAlert);
@@ -259,10 +260,18 @@ async function deployUnikernel() {
 	const binary = document.getElementById("unikernel-binary").files[0];
 	const molly_csrf = document.getElementById("molly-csrf").value;
 
-	if (!isValidName(name) || !binary) {
+	if (!isValidName(name)) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please fill in the required data";
+		formAlert.textContent = "Please fill in a valid name";
+		buttonLoading(deployButton, false, "Deploy");
+		return;
+	}
+
+	if (!binary) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Please upload the unikernel image";
 		buttonLoading(deployButton, false, "Deploy");
 		return;
 	}
@@ -282,6 +291,7 @@ async function deployUnikernel() {
 	formData.append("unikernel_name", name,);
 	formData.append("unikernel_config", JSON.stringify(unikernel_config));
 	formData.append("binary", binary);
+	formData.append("unikernel_force_create", force_create);
 	formData.append("molly_csrf", molly_csrf);
 
 	try {
