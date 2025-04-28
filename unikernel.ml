@@ -939,17 +939,50 @@ struct
           ~data:(`String (String.escaped err))
           reqd `Bad_request
 
-  let deploy_form store _ (user : User_model.user) reqd =
+  let deploy_form store albatross _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
+    user_unikernels albatross user.name >>= fun unikernels ->
+    user_volumes albatross user.name >>= fun blocks ->
     generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:"Deploy a Unikernel | Mollymawk"
-             ~content:Unikernel_create.unikernel_create_layout
-             ~icon:"/images/robur.png" ())
-          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-          `OK
+    | Ok csrf -> (
+        let missing_policy_error ?(err = None) () =
+          {
+            Utils.Status.code = 500;
+            title = "Resource policy error";
+            data = `String (Option.value err ~default:"No policy found");
+            success = false;
+          }
+        in
+        match Albatross.policy albatross ~domain:user.name with
+        | Ok p -> (
+            match p with
+            | Some user_policy ->
+                reply reqd ~content_type:"text/html"
+                  (Dashboard.dashboard_layout ~csrf user
+                     ~page_title:"Deploy a Unikernel | Mollymawk"
+                     ~content:
+                       (Unikernel_create.unikernel_create_layout ~user_policy
+                          unikernels blocks)
+                     ~icon:"/images/robur.png" ())
+                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                  `OK
+            | None ->
+                reply reqd ~content_type:"text/html"
+                  (Guest_layout.guest_layout
+                     ~page_title:"Resource policy error | Mollymawk"
+                     ~content:
+                       (Error_page.error_layout (missing_policy_error ()))
+                     ~icon:"/images/robur.png" ())
+                  `Internal_server_error)
+        | Error err ->
+            reply reqd ~content_type:"text/html"
+              (Guest_layout.guest_layout
+                 ~page_title:"Resource policy error | Mollymawk"
+                 ~content:
+                   (Error_page.error_layout
+                      (missing_policy_error ~err:(Some err) ()))
+                 ~icon:"/images/robur.png" ())
+              `Internal_server_error)
     | Error err ->
         reply reqd ~content_type:"text/html"
           (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
@@ -1578,31 +1611,53 @@ struct
 
   let unikernel_create albatross (user : User_model.user) m reqd =
     match
-      ( Map.find_opt "arguments" m,
-        Map.find_opt "name" m,
+      ( Map.find_opt "unikernel_name" m,
+        Map.find_opt "unikernel_config" m,
+        Map.find_opt "unikernel_force_create" m,
         Map.find_opt "binary" m )
     with
-    | Some (_, args), Some (_, name), Some (_, binary) -> (
-        match Albatross_json.config_of_json args with
+    | ( Some (_, unikernel_name),
+        Some (_, unikernel_config),
+        Some (_, force_create),
+        Some (_, binary) ) -> (
+        match Albatross_json.config_of_json unikernel_config with
         | Ok cfg -> (
             let config = { cfg with image = binary } in
             (* TODO use uuid in the future *)
-            Albatross.query albatross ~domain:user.name ~name
-              (`Unikernel_cmd (`Unikernel_create config))
-            >>= function
-            | Error err ->
-                Logs.warn (fun m -> m "Error querying albatross: %s" err);
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:(`String ("Error while querying Albatross: " ^ err))
-                  `Internal_server_error
-            | Ok (_hdr, res) -> (
-                match Albatross_json.res res with
-                | Ok res ->
-                    Middleware.http_response reqd ~title:"Success" ~data:res `OK
-                | Error (`String err) ->
-                    Middleware.http_response reqd ~title:"Error"
-                      ~data:(`String (String.escaped err))
-                      `Internal_server_error))
+            if bool_of_string_opt force_create |> Option.value ~default:false
+            then (
+              force_create_unikernel ~unikernel_name ~unikernel_image:binary cfg
+                user albatross
+              >>= function
+              | Ok res ->
+                  Middleware.http_response reqd ~title:"Success"
+                    ~data:
+                      (`String
+                         ("Unikernel has been force created succesfully: " ^ res))
+                    `OK
+              | Error (`Msg err) ->
+                  Logs.warn (fun m -> m "Error querying albatross: %s" err);
+                  Middleware.http_response reqd ~title:"Error"
+                    ~data:(`String ("Error while querying Albatross: " ^ err))
+                    `Internal_server_error)
+            else
+              Albatross.query albatross ~domain:user.name ~name:unikernel_name
+                (`Unikernel_cmd (`Unikernel_create config))
+              >>= function
+              | Error err ->
+                  Logs.warn (fun m -> m "Error querying albatross: %s" err);
+                  Middleware.http_response reqd ~title:"Error"
+                    ~data:(`String ("Error while querying Albatross: " ^ err))
+                    `Internal_server_error
+              | Ok (_hdr, res) -> (
+                  match Albatross_json.res res with
+                  | Ok res ->
+                      Middleware.http_response reqd ~title:"Success" ~data:res
+                        `OK
+                  | Error (`String err) ->
+                      Middleware.http_response reqd ~title:"Error"
+                        ~data:(`String (String.escaped err))
+                        `Internal_server_error))
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "couldn't decode data %s" err);
             Middleware.http_response reqd ~title:"Error"
@@ -2291,7 +2346,7 @@ struct
                   (unikernel_info_one !albatross store unikernel_name))
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
-                authenticate store reqd (deploy_form store))
+                authenticate store reqd (deploy_form store !albatross))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd

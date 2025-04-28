@@ -190,53 +190,137 @@ function postAlert(bg_color, content) {
 	}, 4000);
 }
 
+function gatherFieldsForDevices(fieldId, targetKey, formAlert) {
+	const result = [];
+	let index = 0;
+	let loop = true;
+
+	while (loop) {
+		const selectEl = document.getElementById(`${fieldId}-select-${index}`);
+		const inputEl = document.getElementById(`${fieldId}-input-${index}`);
+
+		// Case: One of them exists but the other doesn't
+		if ((selectEl && !inputEl) || (!selectEl && inputEl)) {
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = `Please fill in both the ${fieldId} device and its associated name.`;
+			postAlert("bg-secondary-300", `Please fill in both the ${fieldId} device and its associated name.`);
+			return null;
+		}
+
+		// Case: both don't exist => end loop
+		if (!selectEl && !inputEl) {
+			break;
+		}
+
+		// Otherwise, both exist -> proceed
+		const selectValue = selectEl.value.trim();
+		const inputValue = inputEl.value.trim();
+
+		// check for empty strings:
+		if (!selectValue || !inputValue) {
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = `Please fill in both the ${fieldId} device and its associated name.`;
+			postAlert("bg-secondary-300", `Please fill in both the ${fieldId} device and its associated name.`);
+			return null;
+		}
+
+		result.push({
+			name: inputValue,
+			host_device: selectValue,
+		});
+
+		index++;
+	}
+
+	return { [targetKey]: result };
+}
+
 async function deployUnikernel() {
+	const formAlert = document.getElementById("form-alert");
 	const deployButton = document.getElementById("deploy-button");
 	const name = document.getElementById("unikernel-name").value;
-	const arguments = document.getElementById("unikernel-arguments").value;
+	const cpuid = document.getElementById("cpuid").value;
+	const fail_behaviour = document.getElementById("restart-on-fail").checked;
+	const force_create = document.getElementById("force-create").checked;
+	const memory = document.getElementById("unikernel-memory").innerText;
+
+	const networkData = gatherFieldsForDevices("network", "network_interfaces", formAlert);
+	const blockData = gatherFieldsForDevices("block", "block_devices", formAlert);
+
+	// Abort immediately if a device field is invalid
+	if (networkData === null || blockData === null) {
+		buttonLoading(deployButton, false, "Deploy");
+		return;
+	}
+
+	const argumentsString = document.getElementById("unikernel-arguments").value.trim();
+	const argumentsList = argumentsString ? argumentsString.split(/\s+/) : [];
 	const binary = document.getElementById("unikernel-binary").files[0];
 	const molly_csrf = document.getElementById("molly-csrf").value;
-	const formAlert = document.getElementById("form-alert");
-	if (!isValidName(name) || !binary) {
+
+	if (!isValidName(name)) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please fill in the required data"
-		buttonLoading(deployButton, false, "Deploy")
-	} else {
-		buttonLoading(deployButton, true, "Deploying...")
-		let formData = new FormData();
-		formData.append("name", name);
-		formData.append("arguments", arguments);
-		formData.append("binary", binary);
-		formData.append("molly_csrf", molly_csrf)
-		try {
-			const response = await fetch("/api/unikernel/create", {
-				method: 'POST',
-				body: formData
-			})
-			const data = await response.json();
-			if (data.status === 200 && data.success) {
-				formAlert.classList.remove("hidden", "text-secondary-500");
-				formAlert.classList.add("text-primary-500");
-				formAlert.textContent = "Succesfully updated";
-				postAlert("bg-primary-300", `${name} has been deployed succesfully.`);
-				setTimeout(function () {
-					window.location.href = "/dashboard";
-				}, 2000);
-			} else {
-				postAlert("bg-secondary-300", data.data);
-				formAlert.classList.remove("hidden", "text-primary-500");
-				formAlert.classList.add("text-secondary-500");
-				formAlert.textContent = data.data
-				buttonLoading(deployButton, false, "Deploy")
-			}
-		} catch (error) {
-			postAlert("bg-secondary-300", error);
-			formAlert.classList.remove("hidden");
+		formAlert.textContent = "Please fill in a valid name";
+		buttonLoading(deployButton, false, "Deploy");
+		return;
+	}
+
+	if (!binary) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Please upload the unikernel image";
+		buttonLoading(deployButton, false, "Deploy");
+		return;
+	}
+
+	buttonLoading(deployButton, true, "Deploying...");
+
+	let formData = new FormData();
+	const unikernel_config = {
+		cpuid: Number(cpuid),
+		fail_behaviour: fail_behaviour ? { "restart": fail_behaviour } : "quit",
+		memory: Number(memory),
+		...networkData,
+		...blockData,
+		arguments: argumentsList
+	};
+
+	formData.append("unikernel_name", name,);
+	formData.append("unikernel_config", JSON.stringify(unikernel_config));
+	formData.append("binary", binary);
+	formData.append("unikernel_force_create", force_create);
+	formData.append("molly_csrf", molly_csrf);
+
+	try {
+		const response = await fetch("/api/unikernel/create", {
+			method: 'POST',
+			body: formData
+		})
+		const data = await response.json();
+		if (data.status === 200 && data.success) {
+			formAlert.classList.remove("hidden", "text-secondary-500");
+			formAlert.classList.add("text-primary-500");
+			formAlert.textContent = "Successfully updated";
+			postAlert("bg-primary-300", `${name} has been deployed successfully.`);
+			setTimeout(function () {
+				window.location.href = "/dashboard";
+			}, 2000);
+		} else {
+			postAlert("bg-secondary-300", data.data);
+			formAlert.classList.remove("hidden", "text-primary-500");
 			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = error
-			buttonLoading(deployButton, false, "Deploy")
+			formAlert.textContent = data.data;
+			buttonLoading(deployButton, false, "Deploy");
 		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+		formAlert.classList.remove("hidden");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = error;
+		buttonLoading(deployButton, false, "Deploy");
 	}
 }
 

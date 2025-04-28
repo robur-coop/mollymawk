@@ -205,25 +205,17 @@ let update_policy_layout (user : User_model.user) ~user_policy
             label ~a:[ a_class [ "block font-medium" ] ] [ txt "CPU IDs" ];
             div
               ~a:
-                (let cpuid_to_array_string lst =
-                   if lst = [] then "[]"
-                   else
-                     "[\""
-                     ^ String.concat "\", \"" (List.map string_of_int lst)
-                     ^ "\"]"
-                 in
-
-                 [
-                   Unsafe.string_attrib "x-data"
-                     ("multiselect("
-                     ^ cpuid_to_array_string
-                         (Vmm_core.IS.elements user_policy.cpuids)
-                     ^ ", "
-                     ^ cpuid_to_array_string
-                         (Vmm_core.IS.elements unallocated_resources.cpuids)
-                     ^ ")");
-                   a_class [ "multiselect border my-4 p-4 rounded" ];
-                 ])
+                [
+                  Unsafe.string_attrib "x-data"
+                    ("multiselect("
+                    ^ Utils.cpuid_to_array_string
+                        (Vmm_core.IS.elements user_policy.cpuids)
+                    ^ ", "
+                    ^ Utils.cpuid_to_array_string
+                        (Vmm_core.IS.elements unallocated_resources.cpuids)
+                    ^ ")");
+                  a_class [ "multiselect border my-4 p-4 rounded" ];
+                ]
               [
                 div
                   ~a:[ a_class [ "selected-items" ] ]

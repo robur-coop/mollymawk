@@ -183,12 +183,15 @@ let bytes_to_megabytes bytes =
 (*10 minutes for a rollback to be valid*)
 let rollback_seconds_limit = 600
 
-let switch_button ~switch_id ~switch_label html_content =
+let switch_button ~switch_id ~switch_label ?(initial_state = false) html_content
+    =
   Tyxml_html.(
     div
       ~a:
         [
-          a_class [ "my-6" ]; Unsafe.string_attrib "x-data" "{ toggle: false }";
+          a_class [ "my-6" ];
+          Unsafe.string_attrib "x-data"
+            ("{ toggle: " ^ string_of_bool initial_state ^ " }");
         ]
       [
         label
@@ -206,6 +209,7 @@ let switch_button ~switch_id ~switch_label html_content =
                   a_class [ "peer sr-only" ];
                   a_role [ "switch" ];
                   Unsafe.string_attrib "x-model" "toggle";
+                  (if initial_state then a_checked () else a_alt "");
                 ]
               ();
             span
@@ -253,6 +257,108 @@ let switch_button ~switch_id ~switch_label html_content =
           [ html_content ];
       ])
 
+let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
+    ~(get_value : 'a -> string) ~(id : string) =
+  let alpine_options =
+    "["
+    ^ String.concat ", "
+        (List.map
+           (fun item ->
+             Printf.sprintf "{ label: '%s', value: '%s' }"
+               (String.escaped (get_label item))
+               (String.escaped (get_value item)))
+           items)
+    ^ "]"
+  in
+  Tyxml_html.(
+    div
+      ~a:
+        [
+          Unsafe.string_attrib "x-data"
+            ("{ fields: [], options: " ^ alpine_options ^ ", field_id: '" ^ id
+           ^ "' }");
+        ]
+      [
+        Unsafe.data "<template x-for='(field, index) in fields' :key='index'>";
+        div
+          ~a:[ a_class [ "flex items-center space-x-2 my-2" ] ]
+          [
+            (* Dropdown select with dynamic ID *)
+            select
+              ~a:
+                [
+                  a_class
+                    [
+                      "ring-primary-100 mt-1.5 transition block w-full px-3 \
+                       py-3 rounded-xl shadow-sm border";
+                      "hover:border-primary-200 focus:border-primary-300 \
+                       bg-primary-50 bg-opacity-0";
+                      "hover:bg-opacity-50 focus:bg-opacity-50 \
+                       ring-primary-200 focus:ring-primary-200";
+                      "focus:ring-[1px] focus:outline-none";
+                    ];
+                  Unsafe.string_attrib ":id" "field_id + '-select-' + index";
+                ]
+              [
+                Unsafe.data
+                  {|
+            <template x-for="option in options" :key="option.value">
+              <option :value="option.value" x-text="option.label"></option>
+            </template>
+          |};
+              ];
+            (* Text input with dynamic ID *)
+            input
+              ~a:
+                [
+                  a_input_type `Text;
+                  a_name "name";
+                  a_required ();
+                  a_placeholder "Name of this device in your unikernel";
+                  a_class
+                    [
+                      "ring-primary-100 mt-1.5 transition appearance-none \
+                       block w-full px-3 py-3 rounded-xl shadow-sm border";
+                      "hover:border-primary-200 focus:border-primary-300 \
+                       bg-primary-50 bg-opacity-0";
+                      "hover:bg-opacity-50 focus:bg-opacity-50 \
+                       ring-primary-200 focus:ring-primary-200";
+                      "focus:ring-[1px] focus:outline-none";
+                    ];
+                  Unsafe.string_attrib ":id" "field_id + '-input-' + index";
+                  Unsafe.string_attrib "x-model" "field.title";
+                ]
+              ();
+            (* Remove button *)
+            Unsafe.data
+              {|
+                  <button type="button" @click="fields.splice(index, 1)"
+                    class="text-secondary-500 hover:text-secondary-700 font-bold">
+                    &times;
+                  </button>
+                |};
+          ];
+        Unsafe.data "</template>";
+        (* Add button *)
+        button
+          ~a:
+            [
+              a_button_type `Button;
+              Unsafe.string_attrib "@click"
+                "fields.push({ selected: '', title: '' })";
+              a_class
+                [
+                  "bg-primary-500 text-gray-100 px-3 py-1 rounded \
+                   hover:bg-primary-600";
+                ];
+            ]
+          [ txt "+ Add" ];
+      ])
+
+let cpuid_to_array_string lst =
+  if lst = [] then "[]"
+  else "[\"" ^ String.concat "\", \"" (List.map string_of_int lst) ^ "\"]"
+
 let send_http_request ?(path = "") ~base_url http_client =
   let url = base_url ^ path in
   let body = "" in
@@ -274,3 +380,97 @@ let send_http_request ?(path = "") ~base_url http_client =
                 ("accessing " ^ url ^ " resulted in an error: "
                 ^ Http_mirage_client.Status.to_string resp.status
                 ^ " " ^ resp.reason)))
+
+type user_policy_usage = {
+  deployed_unikernels : int;
+  total_volume_used : int;
+  total_free_space : int;
+  total_memory_used : int;
+  cpu_usage_count : (int * int) list;
+  bridge_usage_count : (string * int) list;
+}
+
+let deployed_unikernels unikernels = List.length unikernels
+
+let cpu_usage_count policy unikernels =
+  let cpuid_count = Hashtbl.create (List.length unikernels) in
+  (* count usage of each cpuid in unikernels *)
+  List.iter
+    (fun (_, unikernel) ->
+      let cpuid = unikernel.Vmm_core.Unikernel.cpuid in
+      let count =
+        Hashtbl.find_opt cpuid_count cpuid |> Option.value ~default:0
+      in
+      Hashtbl.replace cpuid_count cpuid (count + 1))
+    unikernels;
+  (* Prepare list of all cpuids from policy *)
+  let policy_cpuids = Vmm_core.IS.elements policy.Vmm_core.Policy.cpuids in
+  (* Generate the list with all policy.cpuids and their respective counts *)
+  List.map
+    (fun cpuid ->
+      let count =
+        Hashtbl.find_opt cpuid_count cpuid |> Option.value ~default:0
+      in
+      (cpuid, count))
+    policy_cpuids
+
+let total_volume_used blocks =
+  List.fold_left (fun total_size (_, size, _) -> total_size + size) 0 blocks
+
+let total_free_space policy total_volume_used =
+  Option.value ~default:0 policy.Vmm_core.Policy.block - total_volume_used
+
+let total_memory_used unikernels =
+  List.fold_left
+    (fun total_memory (_, unikernel) ->
+      total_memory + unikernel.Vmm_core.Unikernel.memory)
+    0 unikernels
+
+let bridge_usage_count policy unikernels =
+  let bridge_count =
+    Hashtbl.create (Vmm_core.String_set.cardinal policy.Vmm_core.Policy.bridges)
+  in
+  (* Initialize all policy bridges with a count of 0 *)
+  Vmm_core.String_set.iter
+    (fun bridge -> Hashtbl.replace bridge_count bridge 0)
+    policy.bridges;
+
+  (* Count each bridge usage from unikernel.bridges, but only if it's in policy.bridges *)
+  List.iter
+    (fun (_, unikernel) ->
+      List.iter
+        (fun { Vmm_core.Unikernel.host_device; _ } ->
+          (* Only count if the bridge is in policy.bridges *)
+          if Vmm_core.String_set.mem host_device policy.bridges then
+            let count =
+              Hashtbl.find_opt bridge_count host_device
+              |> Option.value ~default:0
+            in
+            Hashtbl.replace bridge_count host_device (count + 1))
+        unikernel.Vmm_core.Unikernel.bridges)
+    unikernels;
+
+  (* Convert the hash table to a sorted list of (bridge_name, count) *)
+  let bridge_usage_list =
+    Hashtbl.fold
+      (fun bridge count acc -> (bridge, count) :: acc)
+      bridge_count []
+  in
+  (* Sort the list by bridge name *)
+  List.sort (fun (b1, _) (b2, _) -> String.compare b1 b2) bridge_usage_list
+
+let user_policy_usage policy unikernels blocks : user_policy_usage =
+  let deployed_unikernels = deployed_unikernels unikernels in
+  let total_volume_used = total_volume_used blocks in
+  let total_free_space = total_free_space policy total_volume_used in
+  let total_memory_used = total_memory_used unikernels in
+  let cpu_usage_count = cpu_usage_count policy unikernels in
+  let bridge_usage_count = bridge_usage_count policy unikernels in
+  {
+    deployed_unikernels;
+    total_volume_used;
+    total_free_space;
+    total_memory_used;
+    cpu_usage_count;
+    bridge_usage_count;
+  }
