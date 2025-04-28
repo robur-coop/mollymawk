@@ -1624,7 +1624,8 @@ struct
         | Ok cfg -> (
             let config = { cfg with image = binary } in
             (* TODO use uuid in the future *)
-            if bool_of_string force_create then (
+            if bool_of_string_opt force_create |> Option.value ~default:false
+            then (
               force_create_unikernel ~unikernel_name ~unikernel_image:binary cfg
                 user albatross
               >>= function
