@@ -143,7 +143,8 @@ let bridge_of_json (js : Yojson.Basic.t) =
   | `Assoc xs -> (
       match (get "name" xs, get "host_device" xs, get "mac" xs) with
       | None, _, _ -> Error (`Msg "name must be present in the json")
-      | Some (`String name), (None | Some `Null), (None | Some `Null) -> Ok (name, None, None)
+      | Some (`String name), (None | Some `Null), (None | Some `Null) ->
+          Ok (name, None, None)
       | Some (`String name), Some (`String host), (None | Some `Null) ->
           Ok (name, Some host, None)
       | Some (`String name), (None | Some `Null), Some (`String mac) ->
@@ -162,7 +163,8 @@ let block_device_of_json js =
   | `Assoc xs -> (
       match (get "name" xs, get "host_device" xs, get "sector_size" xs) with
       | None, _, _ -> Error (`Msg "name must be present in the json")
-      | Some (`String name), (None | Some `Null), (None | Some `Null) -> Ok (name, None, None)
+      | Some (`String name), (None | Some `Null), (None | Some `Null) ->
+          Ok (name, None, None)
       | Some (`String name), Some (`String host), (None | Some `Null) ->
           Ok (name, Some host, None)
       | Some (`String name), (None | Some `Null), Some (`Int sector_size) ->
