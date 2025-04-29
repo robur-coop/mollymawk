@@ -131,10 +131,11 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                     Utils.button_component
                       ~attribs:
                         [
-                          Unsafe.string_attrib "x-on:click" "count = count + 32";
+                          Unsafe.string_attrib "x-on:click"
+                            "if (count > 32) count = count - 32";
                         ]
-                      ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                      ~btn_type:`Primary_outlined ();
+                      ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+                      ~btn_type:`Danger_outlined ();
                     span
                       ~a:
                         [
@@ -158,11 +159,10 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                     Utils.button_component
                       ~attribs:
                         [
-                          Unsafe.string_attrib "x-on:click"
-                            "if (count > 32) count = count - 32";
+                          Unsafe.string_attrib "x-on:click" "count = count + 32";
                         ]
-                      ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                      ~btn_type:`Danger_outlined ();
+                      ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                      ~btn_type:`Primary_outlined ();
                   ];
               ];
             hr ();

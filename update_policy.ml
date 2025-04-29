@@ -36,9 +36,12 @@ let update_policy_layout (user : User_model.user) ~user_policy
                 ]
               [
                 Utils.button_component
-                  ~attribs:[ Unsafe.string_attrib "x-on:click" "count++" ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                  ~btn_type:`Primary_outlined ();
+                  ~attribs:
+                    [
+                      Unsafe.string_attrib "x-on:click" "if (count > 0) count--";
+                    ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+                  ~btn_type:`Danger_outlined ();
                 span
                   ~a:
                     [
@@ -59,12 +62,9 @@ let update_policy_layout (user : User_model.user) ~user_policy
                     ]
                   [];
                 Utils.button_component
-                  ~attribs:
-                    [
-                      Unsafe.string_attrib "x-on:click" "if (count > 0) count--";
-                    ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                  ~btn_type:`Danger_outlined ();
+                  ~attribs:[ Unsafe.string_attrib "x-on:click" "count++" ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                  ~btn_type:`Primary_outlined ();
               ];
           ];
         hr ();
@@ -96,9 +96,12 @@ let update_policy_layout (user : User_model.user) ~user_policy
               [
                 Utils.button_component
                   ~attribs:
-                    [ Unsafe.string_attrib "x-on:click" "count = count + 50" ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                  ~btn_type:`Primary_outlined ();
+                    [
+                      Unsafe.string_attrib "x-on:click"
+                        "if (count > 0) count = count - 50";
+                    ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+                  ~btn_type:`Danger_outlined ();
                 span
                   ~a:
                     [
@@ -121,12 +124,9 @@ let update_policy_layout (user : User_model.user) ~user_policy
                 span ~a:[ a_class [ "text-4xl" ] ] [ txt " MB" ];
                 Utils.button_component
                   ~attribs:
-                    [
-                      Unsafe.string_attrib "x-on:click"
-                        "if (count > 0) count = count - 50";
-                    ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                  ~btn_type:`Danger_outlined ();
+                    [ Unsafe.string_attrib "x-on:click" "count = count + 50" ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                  ~btn_type:`Primary_outlined ();
               ];
           ];
         hr ();
@@ -166,9 +166,12 @@ let update_policy_layout (user : User_model.user) ~user_policy
               [
                 Utils.button_component
                   ~attribs:
-                    [ Unsafe.string_attrib "x-on:click" "count = count + 50" ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                  ~btn_type:`Primary_outlined ();
+                    [
+                      Unsafe.string_attrib "x-on:click"
+                        "if (count > 0) count = count - 50";
+                    ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+                  ~btn_type:`Danger_outlined ();
                 span
                   ~a:
                     [
@@ -191,12 +194,9 @@ let update_policy_layout (user : User_model.user) ~user_policy
                 span ~a:[ a_class [ "text-4xl" ] ] [ txt "MB" ];
                 Utils.button_component
                   ~attribs:
-                    [
-                      Unsafe.string_attrib "x-on:click"
-                        "if (count > 0) count = count - 50";
-                    ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                  ~btn_type:`Danger_outlined ();
+                    [ Unsafe.string_attrib "x-on:click" "count = count + 50" ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                  ~btn_type:`Primary_outlined ();
               ];
           ];
         div
