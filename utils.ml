@@ -283,6 +283,28 @@ let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
         div
           ~a:[ a_class [ "flex items-center space-x-2 my-2" ] ]
           [
+            (* Text input with dynamic ID *)
+            input
+              ~a:
+                [
+                  a_input_type `Text;
+                  a_name "name";
+                  a_required ();
+                  a_placeholder "Name of this device in your unikernel";
+                  a_class
+                    [
+                      "ring-primary-100 mt-1.5 transition appearance-none \
+                       block w-full px-3 py-3 rounded-xl shadow-sm border";
+                      "hover:border-primary-200 focus:border-primary-300 \
+                       bg-primary-50 bg-opacity-0";
+                      "hover:bg-opacity-50 focus:bg-opacity-50 \
+                       ring-primary-200 focus:ring-primary-200";
+                      "focus:ring-[1px] focus:outline-none";
+                    ];
+                  Unsafe.string_attrib ":id" "field_id + '-input-' + index";
+                  Unsafe.string_attrib "x-model" "field.title";
+                ]
+              ();
             (* Dropdown select with dynamic ID *)
             select
               ~a:
@@ -307,28 +329,6 @@ let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
             </template>
           |};
               ];
-            (* Text input with dynamic ID *)
-            input
-              ~a:
-                [
-                  a_input_type `Text;
-                  a_name "name";
-                  a_required ();
-                  a_placeholder "Name of this device in your unikernel";
-                  a_class
-                    [
-                      "ring-primary-100 mt-1.5 transition appearance-none \
-                       block w-full px-3 py-3 rounded-xl shadow-sm border";
-                      "hover:border-primary-200 focus:border-primary-300 \
-                       bg-primary-50 bg-opacity-0";
-                      "hover:bg-opacity-50 focus:bg-opacity-50 \
-                       ring-primary-200 focus:ring-primary-200";
-                      "focus:ring-[1px] focus:outline-none";
-                    ];
-                  Unsafe.string_attrib ":id" "field_id + '-input-' + index";
-                  Unsafe.string_attrib "x-model" "field.title";
-                ]
-              ();
             (* Remove button *)
             Unsafe.data
               {|
