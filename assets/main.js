@@ -57,6 +57,27 @@ document.addEventListener('DOMContentLoaded', function () {
 			diff2htmlUi.highlightCode();
 		});
 	}
+
+	if (window.location.pathname.startsWith("/unikernel/info/")) {
+		const unikernel_name = window.location.pathname.slice("/unikernel/info/".length);
+		const console_output = document.getElementById("console-output");
+		const events = new EventSource(`/api/unikernel/console/${unikernel_name}`);
+
+		events.onmessage = function (event) {
+			try {
+				const parsed = JSON.parse(event.data);
+				if (Array.isArray(parsed)) {
+					const newText = parsed.map(entry => `[${entry.timestamp}] ${entry.line}`).join("\n");
+					console_output.value = newText + "\n" + console_output.value;
+				} else {
+					console_output.innerText += "Wrong response format";
+				}
+			} catch (err) {
+				console.error("Error parsing SSE data:", err, event.data);
+				console_output.innerText += "Error parsing server response.";
+			}
+		};
+	}
 });
 
 function getCookie(name) {
@@ -1175,3 +1196,4 @@ function areCharactersValid(s) {
 	}
 	return true;
 }
+
