@@ -118,6 +118,22 @@ let http_response ~title ?(header_list = []) ?(data = `String "") reqd
   H1.Reqd.respond_with_string reqd response data;
   Lwt.return_unit
 
+let http_event_source_response
+    ?(header_list = [ ("Content-Type", "text/event-stream") ])
+    ?(data = `String "") reqd http_status =
+  let data = "data:" ^ Yojson.Basic.to_string data ^ "\n\n" in
+  let headers =
+    H1.Headers.(
+      add_list
+        (of_list [ ("Content-length", string_of_int (String.length data)) ])
+        header_list)
+  in
+  let response = H1.Response.create ~headers http_status in
+  let writer = H1.Reqd.respond_with_streaming reqd response in
+  let _ = H1.Body.Writer.write_string writer data in
+  let _ = H1.Body.Writer.flush writer (function () -> ()) in
+  H1.Body.Writer.close writer
+
 let cookie_value cookie =
   match String.split_on_char '=' cookie with
   | _ :: s :: _ -> Ok s
