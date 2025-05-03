@@ -2335,7 +2335,7 @@ struct
                   (extract_json_csrf_token (toggle_admin_activation store)))
         | "/api/unikernels" ->
             check_meth `GET (fun () ->
-                authenticate ~api_meth:true store reqd
+                authenticate ~api_meth:true ~check_token:true store reqd
                   (unikernel_info !albatross))
         | path when String.starts_with ~prefix:"/unikernel/info/" path ->
             check_meth `GET (fun () ->
