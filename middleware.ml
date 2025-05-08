@@ -129,10 +129,7 @@ let http_event_source_response
         header_list)
   in
   let response = H1.Response.create ~headers http_status in
-  let writer = H1.Reqd.respond_with_streaming reqd response in
-  let _ = H1.Body.Writer.write_string writer data in
-  let _ = H1.Body.Writer.flush writer (function () -> ()) in
-  H1.Body.Writer.close writer
+  H1.Reqd.respond_with_string reqd response data
 
 let cookie_value cookie =
   match String.split_on_char '=' cookie with
