@@ -401,16 +401,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
 
   let console name tls_flow d =
     let open Lwt.Infix in
-    Lwt.choose
-      [
-        continue_reading name tls_flow;
-        ( Mirage_sleep.ns (Duration.of_sec 1) >>= fun () ->
-          TLS.close tls_flow >|= fun () ->
-          Logs.warn (fun m ->
-              m "albatross: timeout after 1 second reading console");
-          [] );
-      ]
-    >|= fun output -> Result.map (fun r -> (r, output)) (decode_reply d)
+    continue_reading name tls_flow >|= fun output ->
+    Result.map (fun r -> (r, output)) (decode_reply d)
 
   let raw_query t ?(name = Vmm_core.Name.root) certificates cmd f =
     let open Lwt.Infix in
