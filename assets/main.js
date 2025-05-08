@@ -61,20 +61,33 @@ document.addEventListener('DOMContentLoaded', function () {
 	if (window.location.pathname.startsWith("/unikernel/info/")) {
 		const unikernel_name = window.location.pathname.slice("/unikernel/info/".length);
 		const console_output = document.getElementById("console-output");
-		const events = new EventSource(`/api/unikernel/console/${unikernel_name}`);
+		const event = new EventSource(`/api/unikernel/console/${unikernel_name}`);
 
-		events.onmessage = function (event) {
+		const MAX_LOG_ENTRIES = 20;
+		let logBuffer = [];
+
+		const render = () => {
+			console_output.value = logBuffer.join("\n");
+		};
+
+		event.onmessage = ({ data }) => {
 			try {
-				const parsed = JSON.parse(event.data);
-				if (Array.isArray(parsed)) {
-					const newText = parsed.map(entry => `[${entry.timestamp}] ${entry.line}`).join("\n");
-					console_output.value = newText + "\n" + console_output.value;
-				} else {
-					console_output.innerText += "Wrong response format";
+				const payload = JSON.parse(data);
+
+				if (!Array.isArray(payload)) {
+					console.warn("Unexpected response format:", payload);
+					return;
 				}
+
+				logBuffer = [
+					...payload
+						.map(({ timestamp, line }) => `[${timestamp}] ${line}`)
+						.reverse(), // ensure newest entries are prepended
+					...logBuffer,
+				].slice(0, MAX_LOG_ENTRIES);
+				render();
 			} catch (err) {
-				console.error("Error parsing SSE data:", err, event.data);
-				console_output.innerText += "Error parsing server response.";
+				console.error("Failed to parse SSE payload:", err, data);
 			}
 		};
 	}
@@ -1196,4 +1209,3 @@ function areCharactersValid(s) {
 	}
 	return true;
 }
-
