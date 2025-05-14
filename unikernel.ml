@@ -8,6 +8,14 @@ type images = {
   dashboard_img : string;
 }
 
+module K = struct
+  open Cmdliner
+
+  let port =
+    let doc = Arg.info ~doc:"HTTP listen port." ["port"] in
+    Mirage_runtime.register_arg Arg.(value & opt int 80 doc)
+end
+
 module Main
     (S : Tcpip.Stack.V4V6)
     (KV_ASSETS : Mirage_kv.RO)
@@ -2421,7 +2429,7 @@ struct
           c.certificate c.private_key
         >>= fun albatross ->
         let albatross = ref albatross in
-        let port = 8080 in
+        let port = K.port () in
         Logs.info (fun m ->
             m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
               port);
