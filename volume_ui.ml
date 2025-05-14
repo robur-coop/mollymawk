@@ -70,17 +70,18 @@ let create_volume total_free_space =
                       a_id "block_size";
                       a_contenteditable true;
                       a_class [ "text-4xl border px-4" ];
-                      a_user_data "x-on:keydown.enter.prevent" "";
-                      Unsafe.string_attrib "x-on:input"
-                        "let value = \
-                         $event.target.innerText.replace(/[^0-9]/g,'');\n\
-                        \                                     \
-                         $event.target.innerText = value;\n\
-                        \                                     count = \
-                         parseInt(value) || 1;";
+                      Unsafe.string_attrib "@keydown.enter.prevent" "";
                       Unsafe.string_attrib "x-text" "count";
                       Unsafe.string_attrib "x-on:blur"
-                        "$event.target.innerText = count;";
+                            "\n\
+                            \                        count = \
+                             parseInt($event.target.innerText.replace(/[^0-9]/g,'')) \
+                             || 0;\n\
+                            \                        let value = \
+                             $event.target.innerText.replace(/[^0-9]/g,'');count \
+                             = parseInt(value) || 0;$event.target.innerText = \
+                             count;";
+                      Unsafe.string_attrib "x-init" "$el.innerText = count";
                     ]
                   [];
                 span ~a:[ a_class [ "text-4xl" ] ] [ txt "MB" ];
