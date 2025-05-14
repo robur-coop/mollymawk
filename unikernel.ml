@@ -12,7 +12,7 @@ module K = struct
   open Cmdliner
 
   let port =
-    let doc = Arg.info ~doc:"HTTP listen port." ["port"] in
+    let doc = Arg.info ~doc:"HTTP listen port." [ "port" ] in
     Mirage_runtime.register_arg Arg.(value & opt int 80 doc)
 end
 
