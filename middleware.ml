@@ -121,7 +121,7 @@ let http_response ~title ?(header_list = []) ?(data = `String "") reqd
 let http_event_source_response
     ?(header_list = [ ("Content-Type", "text/event-stream") ])
     ?(data = `String "") reqd http_status =
-  let data = "data:" ^ Yojson.Basic.to_string data ^ "\n\n" in
+  let data = "data:" ^ Yojson.Basic.to_string data ^ "\nretry: 500\n\n" in
   let headers =
     H1.Headers.(
       add_list
