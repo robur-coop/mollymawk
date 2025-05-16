@@ -1,3 +1,5 @@
+let consoleLogEvent = null;
+
 document.addEventListener('DOMContentLoaded', function () {
 	AOS.init();
 
@@ -59,9 +61,16 @@ document.addEventListener('DOMContentLoaded', function () {
 	}
 
 	if (window.location.pathname.startsWith("/unikernel/info/")) {
+		startEventSource();
+	}
+});
+
+function startEventSource() {
+	if (consoleLogEvent) return;
+
+	if (window.location.pathname.startsWith("/unikernel/info/")) {
 		const unikernel_name = window.location.pathname.slice("/unikernel/info/".length);
 		const console_output = document.getElementById("console-output");
-		const event = new EventSource(`/api/unikernel/console/${unikernel_name}`);
 
 		const MAX_LOG_ENTRIES = 20;
 		let logBuffer = [];
@@ -70,26 +79,48 @@ document.addEventListener('DOMContentLoaded', function () {
 			console_output.value = logBuffer.join("\n");
 		};
 
-		event.onmessage = ({ data }) => {
+		consoleLogEvent = new EventSource(`/api/unikernel/console/${unikernel_name}`);
+
+		consoleLogEvent.onmessage = ({ data }) => {
 			try {
 				const payload = JSON.parse(data);
-
 				if (!Array.isArray(payload)) {
 					console.warn("Unexpected response format:", payload);
 					return;
 				}
 
 				logBuffer = [
-					...payload
-						.map(({ timestamp, line }) => `[${timestamp}] ${line}`)
-						.reverse(), // ensure newest entries are prepended
+					...payload.map(({ timestamp, line }) => `[${timestamp}] ${line}`),
 					...logBuffer,
 				].slice(0, MAX_LOG_ENTRIES);
+
 				render();
 			} catch (err) {
 				console.error("Failed to parse SSE payload:", err, data);
 			}
 		};
+
+		// consoleLogEvent.onerror = (err) => {
+		// 	console.error("SSE connection error:", err);
+		// 	//stopEventSource();
+		// };
+	}
+}
+
+function stopEventSource() {
+	if (consoleLogEvent) {
+		consoleLogEvent.close();
+		consoleLogEvent = null;
+	}
+}
+
+document.addEventListener("visibilitychange", () => {
+	if (document.visibilityState === "visible") {
+		console.log("Resuming SSE stream...");
+		startEventSource();
+	} else {
+		console.log("Pausing SSE stream...");
+		stopEventSource();
 	}
 });
 
