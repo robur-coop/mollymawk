@@ -1036,13 +1036,6 @@ struct
              ~icon:"/images/robur.png" ())
           `Internal_server_error
     | Ok unikernel -> (
-        ( Albatross.query_console ~domain:user.name albatross ~name >|= function
-          | Error err ->
-              Logs.warn (fun m ->
-                  m "error querying console of albatross: %s" err);
-              []
-          | Ok (_, console_output) -> console_output )
-        >>= fun console_output ->
         let now = Mirage_ptime.now () in
         generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
@@ -1061,7 +1054,7 @@ struct
                  ~content:
                    (Unikernel_single.unikernel_single_layout
                       ~unikernel_name:name unikernel ~last_update_time
-                      ~current_time:now console_output)
+                      ~current_time:now)
                  ~icon:"/images/robur.png" ())
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
@@ -1678,19 +1671,16 @@ struct
 
   let unikernel_console albatross name _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    Albatross.query_console ~domain:user.name albatross ~name >>= function
+    let response = Middleware.http_event_source_response reqd `OK in
+    let f (ts, data) =
+      let json = Albatross_json.console_data_to_json (ts, data) in
+      response (Yojson.Basic.to_string json)
+    in
+    Albatross.query_console ~domain:user.name albatross ~name f >>= function
     | Error err ->
         Logs.warn (fun m -> m "error querying albatross: %s" err);
-        Middleware.http_response reqd ~title:"Error"
-          ~data:(`String ("Error while querying Albatross: " ^ err))
-          `Internal_server_error
-    | Ok (_, console_output) ->
-        let console_output =
-          List.map Albatross_json.console_data_to_json console_output
-        in
-        reply reqd ~content_type:"application/json"
-          (Yojson.Basic.to_string (`List console_output))
-          `OK
+        Lwt.return_unit
+    | Ok () -> Lwt.return_unit
 
   let view_user albatross store uuid _ (user : User_model.user) reqd =
     match Store.find_by_uuid store uuid with
@@ -2343,7 +2333,7 @@ struct
                   (extract_json_csrf_token (toggle_admin_activation store)))
         | "/api/unikernels" ->
             check_meth `GET (fun () ->
-                authenticate ~api_meth:true store reqd
+                authenticate ~api_meth:true ~check_token:true store reqd
                   (unikernel_info !albatross))
         | path when String.starts_with ~prefix:"/unikernel/info/" path ->
             check_meth `GET (fun () ->
@@ -2363,12 +2353,12 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token (unikernel_restart !albatross)))
-        | path when String.starts_with ~prefix:"/unikernel/console/" path ->
+        | path when String.starts_with ~prefix:"/api/unikernel/console/" path ->
             check_meth `GET (fun () ->
                 let unikernel_name =
-                  String.sub path 19 (String.length path - 19)
+                  String.sub path 23 (String.length path - 23)
                 in
-                authenticate store reqd
+                authenticate store reqd ~check_token:true ~api_meth:true
                   (unikernel_console !albatross unikernel_name))
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->

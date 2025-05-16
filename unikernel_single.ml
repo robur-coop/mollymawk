@@ -1,5 +1,5 @@
 let unikernel_single_layout ~unikernel_name ?(last_update_time = None)
-    ~current_time unikernel console_output =
+    ~current_time unikernel =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
@@ -483,7 +483,7 @@ let unikernel_single_layout ~unikernel_name ?(last_update_time = None)
                           ];
                       ];
                     div
-                      ~a:[ a_class [ "text-left p-4 overflow-hidden" ] ]
+                      ~a:[ a_class [ "text-left p-4" ] ]
                       [
                         p
                           ~a:[ a_class [ "text-xl font-semibold" ] ]
@@ -491,25 +491,21 @@ let unikernel_single_layout ~unikernel_name ?(last_update_time = None)
                         div
                           ~a:[ a_id "console-container" ]
                           [
-                            div
+                            textarea
                               ~a:
                                 [
+                                  a_id "console-output";
+                                  a_rows 42;
+                                  a_readonly ();
+                                  a_disabled ();
                                   a_class
                                     [
                                       "w-full bg-transparent border-0 h-screen \
-                                       overflow-hidden";
+                                       overflow-auto whitespace-pre-wrap \
+                                       font-mono";
                                     ];
                                 ]
-                              (List.map
-                                 (fun (ts, data) ->
-                                   p
-                                     ~a:
-                                       [
-                                         a_class
-                                           [ "text-white font-mono text-sm" ];
-                                       ]
-                                     [ txt (Ptime.to_rfc3339 ts); txt data ])
-                                 console_output);
+                              (txt "");
                           ];
                       ];
                   ];

@@ -118,6 +118,21 @@ let http_response ~title ?(header_list = []) ?(data = `String "") reqd
   H1.Reqd.respond_with_string reqd response data;
   Lwt.return_unit
 
+let http_event_source_response
+    ?(header_list = [ ("Content-Type", "text/event-stream") ]) reqd http_status
+    =
+  let headers = H1.Headers.(of_list header_list) in
+  let response = H1.Response.create ~headers http_status in
+  let writer = H1.Reqd.respond_with_streaming reqd response in
+  let response data =
+    if H1.Body.Writer.is_closed writer then Error ()
+    else (
+      H1.Body.Writer.write_string writer ("data:" ^ data ^ "\n\n");
+      H1.Body.Writer.flush writer Fun.id;
+      Ok ())
+  in
+  response
+
 let cookie_value cookie =
   match String.split_on_char '=' cookie with
   | _ :: s :: _ -> Ok s

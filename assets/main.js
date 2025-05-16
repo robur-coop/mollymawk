@@ -1,3 +1,5 @@
+let consoleLogEvent = null;
+
 document.addEventListener('DOMContentLoaded', function () {
 	AOS.init();
 
@@ -56,6 +58,60 @@ document.addEventListener('DOMContentLoaded', function () {
 			diff2htmlUi.draw();
 			diff2htmlUi.highlightCode();
 		});
+	}
+
+	if (window.location.pathname.startsWith("/unikernel/info/")) {
+		startEventSource();
+	}
+});
+
+function startEventSource() {
+	if (consoleLogEvent) return;
+
+	if (window.location.pathname.startsWith("/unikernel/info/")) {
+		const unikernel_name = window.location.pathname.slice("/unikernel/info/".length);
+		const console_output = document.getElementById("console-output");
+
+		const MAX_LOG_ENTRIES = 40;
+		let logBuffer = [];
+
+		const render = () => {
+			console_output.value = logBuffer.join("\n");
+		};
+
+		consoleLogEvent = new EventSource(`/api/unikernel/console/${unikernel_name}`);
+
+		consoleLogEvent.onmessage = ({ data }) => {
+			try {
+				const payload = JSON.parse(data);
+
+				logBuffer = [
+					`[${payload.timestamp}] ${payload.line}`,
+					...logBuffer.reverse(),
+				].slice(0, MAX_LOG_ENTRIES);
+				logBuffer.reverse()
+				render();
+			} catch (err) {
+				console.error("Failed to parse SSE payload:", err, data);
+			}
+		};
+	}
+}
+
+function stopEventSource() {
+	if (consoleLogEvent) {
+		consoleLogEvent.close();
+		consoleLogEvent = null;
+	}
+}
+
+document.addEventListener("visibilitychange", () => {
+	if (document.visibilityState === "visible") {
+		console.log("Resuming SSE stream...");
+		startEventSource();
+	} else {
+		console.log("Pausing SSE stream...");
+		stopEventSource();
 	}
 });
 
