@@ -1663,21 +1663,16 @@ struct
 
   let unikernel_console albatross name _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    Albatross.query_console ~domain:user.name albatross ~name >>= function
+    let response = Middleware.http_event_source_response reqd `OK in
+    let f (ts, data) =
+      let json = Albatross_json.console_data_to_json (ts, data) in
+      response (Yojson.Basic.to_string json)
+    in
+    Albatross.query_console ~domain:user.name albatross ~name f >>= function
     | Error err ->
         Logs.warn (fun m -> m "error querying albatross: %s" err);
-        Middleware.http_response reqd ~title:"Error"
-          ~data:(`String ("Error while querying Albatross: " ^ err))
-          ~header_list:[ ("Content-type", "text/event-stream") ]
-          `Internal_server_error
-    | Ok (_, console_output) ->
-        let console_output =
-          List.map Albatross_json.console_data_to_json console_output
-        in
-        Middleware.http_event_source_response ~data:(`List console_output)
-          ~header_list:[ ("Content-type", "text/event-stream") ]
-          reqd `OK
-        |> Lwt.return
+        Lwt.return_unit
+    | Ok () -> Lwt.return_unit
 
   let view_user albatross store uuid _ (user : User_model.user) reqd =
     match Store.find_by_uuid store uuid with

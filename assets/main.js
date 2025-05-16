@@ -72,7 +72,7 @@ function startEventSource() {
 		const unikernel_name = window.location.pathname.slice("/unikernel/info/".length);
 		const console_output = document.getElementById("console-output");
 
-		const MAX_LOG_ENTRIES = 20;
+		const MAX_LOG_ENTRIES = 40;
 		let logBuffer = [];
 
 		const render = () => {
@@ -84,26 +84,17 @@ function startEventSource() {
 		consoleLogEvent.onmessage = ({ data }) => {
 			try {
 				const payload = JSON.parse(data);
-				if (!Array.isArray(payload)) {
-					console.warn("Unexpected response format:", payload);
-					return;
-				}
 
 				logBuffer = [
-					...payload.map(({ timestamp, line }) => `[${timestamp}] ${line}`),
-					...logBuffer,
+					`[${payload.timestamp}] ${payload.line}`,
+					...logBuffer.reverse(),
 				].slice(0, MAX_LOG_ENTRIES);
-
+				logBuffer.reverse()
 				render();
 			} catch (err) {
 				console.error("Failed to parse SSE payload:", err, data);
 			}
 		};
-
-		// consoleLogEvent.onerror = (err) => {
-		// 	console.error("SSE connection error:", err);
-		// 	//stopEventSource();
-		// };
 	}
 }
 
