@@ -91,6 +91,52 @@ struct
             |> Lwt.return
         | Ok (m, assoc) -> Ok (m, assoc) |> Lwt.return)
 
+  let get_multipart_request_as_stream reqd =
+    match Middleware.header "Content-Type" reqd with
+    | None -> Lwt.return_error "Missing Content-Type header"
+    | Some content_type_str
+      when not
+             (String.starts_with ~prefix:"multipart/form-data" content_type_str)
+      ->
+        Lwt.return_error "Expected multipart/form-data"
+    | Some content_type_str -> (
+        match
+          Multipart_form.Content_type.of_string (content_type_str ^ "\r\n")
+        with
+        | Error (`Msg msg) -> Lwt.return_error ("Invalid Content-Type: " ^ msg)
+        | Ok ct ->
+            let request_body_stream, push_to_parser_input =
+              Lwt_stream.create ()
+            in
+            let body_reader = H1.Reqd.request_body reqd in
+            let rec feed_body () =
+              H1.Body.Reader.schedule_read body_reader
+                ~on_read:(fun bs ~off ~len ->
+                  push_to_parser_input
+                    (Some (Bigstringaf.substring ~off ~len bs));
+                  feed_body ())
+                ~on_eof:(fun () ->
+                  Logs.debug (fun m -> m "feed_body: EOF");
+                  push_to_parser_input None)
+            in
+            feed_body ();
+            let identify hdrs =
+              let open Multipart_form in
+              let filename =
+                Option.bind
+                  (Header.content_disposition hdrs)
+                  Content_disposition.filename
+              in
+              let name =
+                Option.bind
+                  (Header.content_disposition hdrs)
+                  Content_disposition.name
+              in
+              (name, filename)
+            in
+            Lwt.return_ok
+              (Multipart_form_lwt.stream ~identify request_body_stream ct))
+
   let to_map ~assoc m =
     let open Multipart_form in
     let rec go (map, rest) = function
