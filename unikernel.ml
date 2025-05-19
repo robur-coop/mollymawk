@@ -24,6 +24,7 @@ module Main
 struct
   module Paf = Paf_mirage.Make (S.TCP)
   module Liveliness = Liveliness_checks.Make (S)
+  module Albatross = Albatross.Make (S)
 
   let js_contents assets =
     KV_ASSETS.get assets (Mirage_kv.Key.v "main.js") >|= function
@@ -54,6 +55,10 @@ struct
 
   module Store = Storage.Make (BLOCK)
   module Map = Map.Make (String)
+
+  let csrf_verification f user csrf reqd =
+    let now = Mirage_ptime.now () in
+    Middleware.csrf_verification user now csrf f reqd
 
   let read_multipart_data reqd =
     let response_body = H1.Reqd.request_body reqd in
