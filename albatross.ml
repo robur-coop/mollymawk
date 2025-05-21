@@ -454,17 +454,16 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                     let buf = Cstruct.create (4 + String.length data) in
                     Cstruct.BE.set_uint32 buf 0
                       (Int32.of_int (String.length data));
-                    Cstruct.blit_from_string data 0 buf 4
-                      (String.length data);
+                    Cstruct.blit_from_string data 0 buf 4 (String.length data);
                     TLS.write tls_flow buf >>= function
                     | Error `Closed ->
-                      Logs.info (fun m -> m "tls got closed");
-                      assert false
+                        Logs.info (fun m -> m "tls got closed");
+                        assert false
                     | Error (`Write s) ->
-                      Logs.info (fun m ->
-                          m "tls write error which is: %a"
-                            S.TCP.pp_write_error s);
-                      assert false
+                        Logs.info (fun m ->
+                            m "tls write error which is: %a"
+                              S.TCP.pp_write_error s);
+                        assert false
                     | Error _ -> assert false
                     | Ok () -> Lwt.return_unit
                   in
@@ -478,17 +477,15 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                         | Error _ -> assert false
                         | Ok () -> Lwt.return_unit)
                     | Some data ->
-                        write_one data >>= fun () ->
-                        send_more_data ()
+                        write_one data >>= fun () -> send_more_data ()
                   in
                   let send_data () =
                     push () >>= function
                     | None ->
-                      (* If we don't send data we don't send a trailing 0 byte chunk *)
-                      Lwt.return_unit
+                        (* If we don't send data we don't send a trailing 0 byte chunk *)
+                        Lwt.return_unit
                     | Some data ->
-                        write_one data >>= fun () ->
-                        send_more_data ()
+                        write_one data >>= fun () -> send_more_data ()
                   in
                   send_data () >>= fun () ->
                   TLS.read tls_flow >>= fun r ->
