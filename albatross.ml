@@ -477,8 +477,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                         | Error _ -> assert false
                         | Ok () -> Lwt.return_unit)
                     | Some data ->
-                      write_one data >>= fun () ->
-                      send_more_data push
+                        write_one data >>= fun () -> send_more_data push
                   in
                   let send_data () =
                     match push with
@@ -517,8 +516,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     match gen_cert t cmd "." with
     | Error s -> invalid_arg s
     | Ok certificates -> (
-        raw_query t certificates cmd reply
-        >|= function
+        raw_query t certificates cmd reply >|= function
         | Ok (_hdr, `Success (`Policies ps)) ->
             let ps =
               List.fold_left
@@ -556,8 +554,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     match certs t domain name cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (name, certificates) ->
-        raw_query t ~name certificates cmd
-          (console name f)
+        raw_query t ~name certificates cmd (console name f)
 
   let set_policy t ~domain policy =
     let open Lwt.Infix in
