@@ -476,12 +476,12 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                         TLS.write tls_flow buf >>= function
                         | Error _ -> assert false
                         | Ok () -> Lwt.return_unit)
-                    | Some data ->
-                        write_one data >>= fun () -> send_data push
+                    | Some data -> write_one data >>= fun () -> send_data push
                   in
                   (match push with
-                   | None -> Lwt.return_unit
-                   | Some f -> send_data f) >>= fun () ->
+                  | None -> Lwt.return_unit
+                  | Some f -> send_data f)
+                  >>= fun () ->
                   TLS.read tls_flow >>= fun r ->
                   match r with
                   | Ok (`Data d) -> f tls_flow (Cstruct.to_string d)
