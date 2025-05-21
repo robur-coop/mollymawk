@@ -477,7 +477,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                         TLS.write tls_flow buf >>= function
                         | Error _ -> assert false
                         | Ok () -> Lwt.return_unit)
-                    | Some data -> (
+                    | Some data ->
                         write_one data >>= fun () ->
                         send_more_data ()
                   in
@@ -486,7 +486,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                     | None ->
                       (* If we don't send data we don't send a trailing 0 byte chunk *)
                       Lwt.return_unit
-                    | Some data -> (
+                    | Some data ->
                         write_one data >>= fun () ->
                         send_more_data ()
                   in
