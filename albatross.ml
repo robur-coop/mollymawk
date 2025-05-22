@@ -450,59 +450,72 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                        (Vmm_commands.pp ~verbose:false)
                        cmd TLS.pp_write_error e)
               | Ok tls_flow -> (
+                  let handle_res () = function
+                    | Ok () -> Lwt.return (Ok ())
+                    | Error `Closed ->
+                        let err = "TLS write error: connection closed" in
+                        Logs.err (fun m -> m "Albatross: %s" err);
+                        Lwt.return (Error err)
+                    | Error (`Write err) ->
+                        let err =
+                          Fmt.str "TLS write error (underlying TCP): %a"
+                            S.TCP.pp_write_error err
+                        in
+                        Logs.err (fun m -> m "Albatross: %s" err);
+                        Lwt.return (Error err)
+                    | Error e ->
+                        let err =
+                          Fmt.str "TLS write error: %a" TLS.pp_write_error e
+                        in
+                        Logs.err (fun m -> m "Albatross: %s" err);
+                        Lwt.return (Error err)
+                  in
                   let write_one data =
                     let buf = Cstruct.create (4 + String.length data) in
                     Cstruct.BE.set_uint32 buf 0
                       (Int32.of_int (String.length data));
                     Cstruct.blit_from_string data 0 buf 4 (String.length data);
-                    TLS.write tls_flow buf >>= function
-                    | Error `Closed ->
-                        Logs.info (fun m -> m "tls got closed");
-                        assert false
-                    | Error (`Write s) ->
-                        Logs.info (fun m ->
-                            m "tls write error which is: %a"
-                              S.TCP.pp_write_error s);
-                        assert false
-                    | Error _ -> assert false
-                    | Ok () -> Lwt.return_unit
+                    TLS.write tls_flow buf >>= handle_res ()
                   in
                   let rec send_data push =
                     push () >>= function
-                    | None -> (
+                    | None ->
                         (* send trailing 0 byte chunk *)
                         let buf = Cstruct.create 4 in
                         Cstruct.BE.set_uint32 buf 0 0l;
-                        TLS.write tls_flow buf >>= function
-                        | Error _ -> assert false
-                        | Ok () -> Lwt.return_unit)
-                    | Some data -> write_one data >>= fun () -> send_data push
+                        TLS.write tls_flow buf >>= handle_res ()
+                    | Some data -> (
+                        write_one data >>= function
+                        | Error err -> Lwt.return (Error err)
+                        | Ok () -> send_data push)
                   in
                   (match push with
-                  | None -> Lwt.return_unit
+                  | None -> Lwt.return (Ok ())
                   | Some f -> send_data f)
-                  >>= fun () ->
-                  TLS.read tls_flow >>= fun r ->
-                  match r with
-                  | Ok (`Data d) -> f tls_flow (Cstruct.to_string d)
-                  | Ok `Eof ->
-                      TLS.close tls_flow >|= fun () ->
-                      Error
-                        (Fmt.str "eof from albatross %a querying %a %a"
-                           Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                           t.remote Vmm_core.Name.pp name
-                           (Vmm_commands.pp ~verbose:false)
-                           cmd)
-                  | Error e ->
-                      TLS.close tls_flow >|= fun () ->
-                      Error
-                        (Fmt.str
-                           "albatross received error reading from %a querying \
-                            %a %a: %a"
-                           Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                           t.remote Vmm_core.Name.pp name
-                           (Vmm_commands.pp ~verbose:false)
-                           cmd TLS.pp_error e))))
+                  >>= function
+                  | Ok () -> (
+                      TLS.read tls_flow >>= fun r ->
+                      match r with
+                      | Ok (`Data d) -> f tls_flow (Cstruct.to_string d)
+                      | Ok `Eof ->
+                          TLS.close tls_flow >|= fun () ->
+                          Error
+                            (Fmt.str "eof from albatross %a querying %a %a"
+                               Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                               t.remote Vmm_core.Name.pp name
+                               (Vmm_commands.pp ~verbose:false)
+                               cmd)
+                      | Error e ->
+                          TLS.close tls_flow >|= fun () ->
+                          Error
+                            (Fmt.str
+                               "albatross received error reading from %a \
+                                querying %a %a: %a"
+                               Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
+                               t.remote Vmm_core.Name.pp name
+                               (Vmm_commands.pp ~verbose:false)
+                               cmd TLS.pp_error e))
+                  | Error err -> Lwt.return_error err)))
 
   let init stack server ?(port = 1025) cert key =
     let open Lwt.Infix in
