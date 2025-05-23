@@ -1298,7 +1298,26 @@ struct
   let force_create_unikernel ~unikernel_name ~unikernel_image
       (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user)
       albatross =
-    let push () = Lwt.return (Some unikernel_image) in
+    let image_data_stream, push_chunks_into_stream = Lwt_stream.create () in
+    let feed_image_into_stream () =
+      let chunk_size = 4096 in
+      let current_pos = ref 0 in
+      let total_len = String.length unikernel_image in
+      let rec loop () =
+        if !current_pos >= total_len then (
+          push_chunks_into_stream None;
+          Lwt.return_unit)
+        else
+          let len_to_read = min chunk_size (total_len - !current_pos) in
+          let chunk = String.sub unikernel_image !current_pos len_to_read in
+          current_pos := !current_pos + len_to_read;
+          push_chunks_into_stream (Some chunk);
+          Lwt.pause () >>= fun () -> loop ()
+      in
+      loop ()
+    in
+    Lwt.async feed_image_into_stream;
+    let push () = Lwt_stream.get image_data_stream in
     Albatross.query albatross ~domain:user.name ~name:unikernel_name ~push
       (`Unikernel_cmd (`Unikernel_force_create unikernel_cfg))
     >>= function
