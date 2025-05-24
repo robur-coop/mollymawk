@@ -64,19 +64,26 @@ struct
     let response_body = H1.Reqd.request_body reqd in
     let finished, notify_finished = Lwt.wait () in
     let wakeup v = Lwt.wakeup_later notify_finished v in
-    let on_eof data () = wakeup data in
+    let on_eof data () = wakeup (Buffer.contents data) in
+    let request = H1.Reqd.request reqd in
+    let initial_size =
+      Option.bind
+        (H1.Headers.get request.headers "content-length")
+        int_of_string_opt
+      |> Option.value ~default:65536
+    in
     let rec on_read on_eof acc bs ~off ~len =
       let str = Bigstringaf.substring ~off ~len bs in
-      let acc = acc ^ str in
+      Buffer.add_string acc str;
       H1.Body.Reader.schedule_read response_body ~on_read:(on_read on_eof acc)
         ~on_eof:(on_eof acc)
     in
-    let f_init = "" in
+    let f_init = Buffer.create initial_size in
     H1.Body.Reader.schedule_read response_body ~on_read:(on_read on_eof f_init)
       ~on_eof:(on_eof f_init);
     finished >>= fun data ->
     let content_type =
-      H1.(Headers.get_exn (Reqd.request reqd).Request.headers "content-type")
+      H1.(Headers.get_exn request.Request.headers "content-type")
     in
     let ct = Multipart_form.Content_type.of_string (content_type ^ "\r\n") in
     match ct with
@@ -188,14 +195,21 @@ struct
     let request_body = H1.Reqd.request_body reqd in
     let finished, notify_finished = Lwt.wait () in
     let wakeup v = Lwt.wakeup_later notify_finished v in
-    let on_eof data () = wakeup data in
+    let on_eof data () = wakeup (Buffer.contents data) in
+    let request = H1.Reqd.request reqd in
+    let initial_size =
+      Option.bind
+        (H1.Headers.get request.headers "content-length")
+        int_of_string_opt
+      |> Option.value ~default:65536
+    in
     let rec on_read on_eof acc bs ~off ~len =
       let str = Bigstringaf.substring ~off ~len bs in
-      let acc = acc ^ str in
+      Buffer.add_string acc str;
       H1.Body.Reader.schedule_read request_body ~on_read:(on_read on_eof acc)
         ~on_eof:(on_eof acc)
     in
-    let f_init = "" in
+    let f_init = Buffer.create initial_size in
     H1.Body.Reader.schedule_read request_body ~on_read:(on_read on_eof f_init)
       ~on_eof:(on_eof f_init);
     finished
