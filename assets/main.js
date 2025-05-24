@@ -822,9 +822,9 @@ async function createVolume() {
 				"block_size": Number(block_size),
 				"block_compressed": block_compressed
 			})
-		formData.append("block_data", block_data)
 		formData.append("molly_csrf", molly_csrf)
 		formData.append("json_data", json_data)
+		formData.append("block_data", block_data)
 		const response = await fetch("/api/volume/create", {
 			method: 'POST',
 			body: formData
