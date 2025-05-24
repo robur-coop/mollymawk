@@ -1681,8 +1681,7 @@ struct
     in
     get_multipart_request_as_stream reqd >>= function
     | Error msg -> generate_http_error_response msg `Bad_request
-    | Ok body_components -> (
-        let `Parse th, stream = body_components in
+    | Ok (`Parse th, stream) -> (
         let consume_part_content contents =
           Lwt_stream.to_list contents >|= String.concat ""
         in
