@@ -1383,11 +1383,16 @@ struct
           Builder_web.base_url ^ "/job/" ^ job ^ "/build/"
           ^ to_be_updated_unikernel ^ "/main-binary"
         in
-        let f _response _acc chunk = Lwt.return (push_chunks (Some chunk)) in
+        let f resp _acc chunk =
+          if
+            Http_mirage_client.Status.is_successful
+              resp.Http_mirage_client.status
+          then Lwt.return (push_chunks (Some chunk))
+          else Lwt.return_unit
+        in
+
         Lwt.both
-          ( Http_mirage_client.request http_client ~follow_redirect:true
-              ~headers:[ ("Accept", "application/json") ]
-              url f ()
+          ( Http_mirage_client.request http_client ~follow_redirect:true url f ()
           >>= fun e ->
             push_chunks None;
             match e with
