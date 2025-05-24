@@ -1993,9 +1993,13 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
 
-  let upload_to_volume token_or_cookie albatross (user : User_model.user) reqd =
+  let create_or_upload_volume c_or_u token_or_cookie albatross
+      (user : User_model.user) reqd =
+    let cmd_name =
+      match c_or_u with `Create -> "create" | `Upload -> "upload"
+    in
     let generate_http_error_response msg code =
-      Logs.warn (fun m -> m "Block_upload error: %s" msg);
+      Logs.warn (fun m -> m "Block %s error: %s" cmd_name msg);
       Middleware.http_response reqd ~title:"Error" ~data:(`String msg) code
     in
     get_multipart_request_as_stream reqd >>= function
@@ -2020,6 +2024,33 @@ struct
               | (Some "block_data", _), _, contents -> (
                   match (!csrf_ref, !json_data_ref) with
                   | Some csrf, Some json -> (
+                      let cmd block_size block_compressed =
+                        match c_or_u with
+                        | `Create ->
+                            `Block_add (block_size, block_compressed, Some "")
+                        | `Upload -> `Block_set (block_compressed, "")
+                      in
+                      let stream_to_albatross block_name block_size
+                          block_compressed _reqd =
+                        let push () = Lwt_stream.get contents in
+                        Albatross.query albatross ~domain:user.name
+                          ~name:block_name ~push
+                          (`Block_cmd (cmd block_size block_compressed))
+                        >>= function
+                        | Error err ->
+                            generate_http_error_response
+                              (Fmt.str "an error with albatross. got %s" err)
+                              `Bad_request
+                        | Ok (_hdr, res) -> (
+                            match Albatross_json.res res with
+                            | Error (`String err) ->
+                                generate_http_error_response
+                                  (Fmt.str "unexpected field. got %s" err)
+                                  `Bad_request
+                            | Ok res ->
+                                Middleware.http_response reqd ~title:"Success"
+                                  ~data:res `OK)
+                      in
                       let json =
                         try Ok (Yojson.Basic.from_string json)
                         with Yojson.Json_error s -> Error (`Msg s)
@@ -2027,52 +2058,45 @@ struct
                       match json with
                       | Ok (`Assoc json_dict) -> (
                           match
-                            Utils.Json.
-                              ( get "block_name" json_dict,
-                                get "block_compressed" json_dict )
+                            ( c_or_u,
+                              Utils.Json.
+                                ( get "block_name" json_dict,
+                                  get "block_compressed" json_dict,
+                                  get "block_size" json_dict ) )
                           with
-                          | ( Some (`String block_name),
-                              Some (`Bool block_compressed) ) -> (
-                              let upload_data _reqd =
-                                let push () = Lwt_stream.get contents in
-                                Albatross.query albatross ~domain:user.name
-                                  ~name:block_name ~push
-                                  (`Block_cmd
-                                     (`Block_set (block_compressed, "")))
-                                >>= function
-                                | Error err ->
-                                    generate_http_error_response
-                                      (Fmt.str
-                                         "Upload to volume: an error with \
-                                          albatross. got %s"
-                                         err)
-                                      `Bad_request
-                                | Ok (_hdr, res) -> (
-                                    match Albatross_json.res res with
-                                    | Error (`String err) ->
-                                        generate_http_error_response
-                                          (Fmt.str
-                                             "Upload to volume: unexpected \
-                                              field. got %s"
-                                             err)
-                                          `Bad_request
-                                    | Ok res ->
-                                        Middleware.http_response reqd
-                                          ~title:"Success" ~data:res `OK)
-                              in
+                          | ( `Create,
+                              ( Some (`String block_name),
+                                Some (`Int block_size),
+                                Some (`Bool block_compressed) ) ) -> (
                               match token_or_cookie with
-                              | `Token -> upload_data reqd
+                              | `Token ->
+                                  stream_to_albatross block_name block_size
+                                    block_compressed reqd
                               | `Cookie ->
-                                  csrf_verification upload_data user csrf reqd)
+                                  csrf_verification
+                                    (stream_to_albatross block_name block_size
+                                       block_compressed)
+                                    user csrf reqd)
+                          | ( `Upload,
+                              ( Some (`String block_name),
+                                Some (`Bool block_compressed),
+                                None ) ) -> (
+                              match token_or_cookie with
+                              | `Token ->
+                                  stream_to_albatross block_name 0
+                                    block_compressed reqd
+                              | `Cookie ->
+                                  csrf_verification
+                                    (stream_to_albatross block_name 0
+                                       block_compressed)
+                                    user csrf reqd)
                           | _ ->
                               generate_http_error_response
-                                (Fmt.str
-                                   "Upload to volume: unexpected field. got %s"
+                                (Fmt.str "unexpected field. got %s"
                                    (Yojson.Basic.to_string (`Assoc json_dict)))
                                 `Bad_request)
                       | _ ->
-                          generate_http_error_response
-                            "Upload to volume: expected a dictionary"
+                          generate_http_error_response "expected a dictionary"
                             `Bad_request)
                   | _ ->
                       Logs.info (fun m -> m "Missing Fields");
@@ -2091,110 +2115,7 @@ struct
             Logs.info (fun m -> m "Multipart parser thread error: %s" e);
             Lwt.return_unit
         | Ok _ ->
-            Logs.info (fun m -> m "Data uploaded to volume succesfully.");
-            Lwt.return_unit)
-
-  let create_volume token_or_cookie albatross (user : User_model.user) reqd =
-    let generate_http_error_response msg code =
-      Logs.warn (fun m -> m "Block_create error: %s" msg);
-      Middleware.http_response reqd ~title:"Error" ~data:(`String msg) code
-    in
-    get_multipart_request_as_stream reqd >>= function
-    | Error msg -> generate_http_error_response msg `Bad_request
-    | Ok (`Parse th, stream) -> (
-        let consume_part_content contents =
-          Lwt_stream.to_list contents >|= String.concat ""
-        in
-        let json_data_ref = ref None in
-        let csrf_ref = ref None in
-        let process_stream () =
-          Lwt_stream.iter_s
-            (function
-              | (Some "molly_csrf", _), _, contents ->
-                  consume_part_content contents >>= fun v ->
-                  csrf_ref := Some v;
-                  Lwt.return_unit
-              | (Some "json_data", _), _, contents ->
-                  consume_part_content contents >>= fun v ->
-                  json_data_ref := Some v;
-                  Lwt.return_unit
-              | (Some "block_data", _), _, contents -> (
-                  match (!csrf_ref, !json_data_ref) with
-                  | Some csrf, Some json -> (
-                      let json =
-                        try Ok (Yojson.Basic.from_string json)
-                        with Yojson.Json_error s -> Error (`Msg s)
-                      in
-                      match json with
-                      | Ok (`Assoc json_dict) -> (
-                          match
-                            Utils.Json.
-                              ( get "block_name" json_dict,
-                                get "block_size" json_dict,
-                                get "block_compressed" json_dict )
-                          with
-                          | ( Some (`String block_name),
-                              Some (`Int block_size),
-                              Some (`Bool block_compressed) ) -> (
-                              let create_block _reqd =
-                                let push () = Lwt_stream.get contents in
-                                Albatross.query albatross ~domain:user.name
-                                  ~name:block_name ~push
-                                  (`Block_cmd
-                                     (`Block_add
-                                        (block_size, block_compressed, Some "")))
-                                >>= function
-                                | Error err ->
-                                    generate_http_error_response
-                                      (Fmt.str
-                                         "Create_volume: an error with \
-                                          albatross. got %s"
-                                         err)
-                                      `Bad_request
-                                | Ok (_hdr, res) -> (
-                                    match Albatross_json.res res with
-                                    | Error (`String err) ->
-                                        generate_http_error_response
-                                          (Fmt.str
-                                             "Create_volume: unexpected field. \
-                                              got %s"
-                                             err)
-                                          `Bad_request
-                                    | Ok res ->
-                                        Middleware.http_response reqd
-                                          ~title:"Success" ~data:res `OK)
-                              in
-                              match token_or_cookie with
-                              | `Token -> create_block reqd
-                              | `Cookie ->
-                                  csrf_verification create_block user csrf reqd)
-                          | _ ->
-                              generate_http_error_response
-                                (Fmt.str
-                                   "Create_volume: unexpected field. got %s"
-                                   (Yojson.Basic.to_string (`Assoc json_dict)))
-                                `Bad_request)
-                      | _ ->
-                          generate_http_error_response
-                            "Create_volume: expected a dictionary" `Bad_request)
-                  | _ ->
-                      Logs.info (fun m -> m "Missing Fields");
-                      generate_http_error_response
-                        "One or more required fields are missing." `Bad_request)
-              | (opt_n, _), _, contents ->
-                  Logs.debug (fun m ->
-                      m "Junking unexpected part: %s"
-                        (Option.value ~default:"<unnamed>" opt_n));
-                  Lwt_stream.junk_while (Fun.const true) contents)
-            stream
-        in
-        Lwt.both th (process_stream ()) >>= fun (_res, ()) ->
-        th >>= function
-        | Error (`Msg e) ->
-            Logs.info (fun m -> m "Multipart parser thread error: %s" e);
-            Lwt.return_unit
-        | Ok _ ->
-            Logs.info (fun m -> m "Volume created succesfully.");
+            Logs.info (fun m -> m "Data %s to volume succesfully." cmd_name);
             Lwt.return_unit)
 
   let download_volume albatross (user : User_model.user) json_dict reqd =
@@ -2466,7 +2387,8 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (fun token_or_cookie user reqd ->
-                    create_volume token_or_cookie !albatross user reqd))
+                    create_or_upload_volume `Create token_or_cookie !albatross
+                      user reqd))
         | "/api/volume/download" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -2475,7 +2397,8 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (fun token_or_cookie user reqd ->
-                    upload_to_volume token_or_cookie !albatross user reqd))
+                    create_or_upload_volume `Upload token_or_cookie !albatross
+                      user reqd))
         | "/tokens" ->
             check_meth `GET (fun () ->
                 authenticate store reqd (api_tokens store))
