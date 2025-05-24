@@ -896,7 +896,7 @@ async function downloadVolume(block_name) {
 async function uploadToVolume(block_name) {
 	const uploadButton = document.getElementById(`upload-block-button-${block_name}`);
 	const block_compressed = document.getElementById("block_compressed").checked;
-	const block_data = document.getElementById("block_data").files[0];
+	const block_data = document.getElementById("block_data_upload").files[0];
 	const molly_csrf = document.getElementById("molly-csrf").value;
 
 	if (!block_data) {

@@ -2061,8 +2061,8 @@ struct
                             ( c_or_u,
                               Utils.Json.
                                 ( get "block_name" json_dict,
-                                  get "block_compressed" json_dict,
-                                  get "block_size" json_dict ) )
+                                  get "block_size" json_dict,
+                                  get "block_compressed" json_dict ) )
                           with
                           | ( `Create,
                               ( Some (`String block_name),
@@ -2079,8 +2079,8 @@ struct
                                     user csrf reqd)
                           | ( `Upload,
                               ( Some (`String block_name),
-                                Some (`Bool block_compressed),
-                                None ) ) -> (
+                                None,
+                                Some (`Bool block_compressed) ) ) -> (
                               match token_or_cookie with
                               | `Token ->
                                   stream_to_albatross block_name 0
