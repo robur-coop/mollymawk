@@ -343,12 +343,11 @@ async function deployUnikernel() {
 		...blockData,
 		arguments: argumentsList
 	};
-
 	formData.append("unikernel_name", name,);
 	formData.append("unikernel_config", JSON.stringify(unikernel_config));
-	formData.append("binary", binary);
 	formData.append("unikernel_force_create", force_create);
 	formData.append("molly_csrf", molly_csrf);
+	formData.append("binary", binary);
 
 	try {
 		const response = await fetch("/api/unikernel/create", {

@@ -24,6 +24,7 @@ module Main
 struct
   module Paf = Paf_mirage.Make (S.TCP)
   module Liveliness = Liveliness_checks.Make (S)
+  module Albatross = Albatross.Make (S)
 
   let js_contents assets =
     KV_ASSETS.get assets (Mirage_kv.Key.v "main.js") >|= function
@@ -54,6 +55,10 @@ struct
 
   module Store = Storage.Make (BLOCK)
   module Map = Map.Make (String)
+
+  let csrf_verification f user csrf reqd =
+    let now = Mirage_ptime.now () in
+    Middleware.csrf_verification user now csrf f reqd
 
   let read_multipart_data reqd =
     let response_body = H1.Reqd.request_body reqd in
@@ -90,6 +95,52 @@ struct
             Error (`Msg ("Couldn't decode multipart data: " ^ msg))
             |> Lwt.return
         | Ok (m, assoc) -> Ok (m, assoc) |> Lwt.return)
+
+  let get_multipart_request_as_stream reqd =
+    match Middleware.header "Content-Type" reqd with
+    | None -> Lwt.return_error "Missing Content-Type header"
+    | Some content_type_str
+      when not
+             (String.starts_with ~prefix:"multipart/form-data" content_type_str)
+      ->
+        Lwt.return_error "Expected multipart/form-data"
+    | Some content_type_str -> (
+        match
+          Multipart_form.Content_type.of_string (content_type_str ^ "\r\n")
+        with
+        | Error (`Msg msg) -> Lwt.return_error ("Invalid Content-Type: " ^ msg)
+        | Ok ct ->
+            let request_body_stream, push_to_parser_input =
+              Lwt_stream.create ()
+            in
+            let body_reader = H1.Reqd.request_body reqd in
+            let rec feed_body () =
+              H1.Body.Reader.schedule_read body_reader
+                ~on_read:(fun bs ~off ~len ->
+                  push_to_parser_input
+                    (Some (Bigstringaf.substring ~off ~len bs));
+                  feed_body ())
+                ~on_eof:(fun () ->
+                  Logs.debug (fun m -> m "feed_body: EOF");
+                  push_to_parser_input None)
+            in
+            feed_body ();
+            let identify hdrs =
+              let open Multipart_form in
+              let filename =
+                Option.bind
+                  (Header.content_disposition hdrs)
+                  Content_disposition.filename
+              in
+              let name =
+                Option.bind
+                  (Header.content_disposition hdrs)
+                  Content_disposition.name
+              in
+              (name, filename)
+            in
+            Lwt.return_ok
+              (Multipart_form_lwt.stream ~identify request_body_stream ct))
 
   let to_map ~assoc m =
     let open Multipart_form in
@@ -166,10 +217,6 @@ struct
         Logs.warn (fun m -> m "JSON is not a dictionary: %s" data);
         Lwt.return (Error (`Msg "not a dictionary"))
 
-  let csrf_verification f user csrf reqd =
-    let now = Mirage_ptime.now () in
-    Middleware.csrf_verification user now csrf f reqd
-
   let extract_json_csrf_token f token_or_cookie user reqd =
     extract_json_body reqd >>= function
     | Error (`Msg err) ->
@@ -215,8 +262,6 @@ struct
         Logs.warn (fun m -> m "Not a multipart request");
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Expected multipart form data") `Bad_request
-
-  module Albatross = Albatross.Make (S)
 
   let email_verification f _ user reqd =
     if false (* TODO *) then
@@ -1250,12 +1295,11 @@ struct
                                     ~api_meth:false `Internal_server_error reqd
                                     ()))))))
 
-  let force_create_unikernel ~unikernel_name ~unikernel_image
+  let force_create_unikernel ~unikernel_name ~push
       (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user)
       albatross =
-    let unikernel_config = { unikernel_cfg with image = unikernel_image } in
-    Albatross.query albatross ~domain:user.name ~name:unikernel_name
-      (`Unikernel_cmd (`Unikernel_force_create unikernel_config))
+    Albatross.query albatross ~domain:user.name ~name:unikernel_name ~push
+      (`Unikernel_cmd (`Unikernel_force_create unikernel_cfg))
     >>= function
     | Error err ->
         Logs.warn (fun m ->
@@ -1264,7 +1308,9 @@ struct
                %s: %s"
               unikernel_name err);
         Lwt.return
-          (Error (`Msg ("Force create: Error querying albatross: " ^ err)))
+          (Error
+             ( `Msg ("Force create: Error querying albatross: " ^ err),
+               `Internal_server_error ))
     | Ok (_hdr, res) -> (
         match Albatross_json.res res with
         | Error (`String err) ->
@@ -1273,7 +1319,7 @@ struct
                   "albatross-force-create: albatross_json.res error parsing \
                    albatross response for creating %s: %s"
                   unikernel_name err);
-            Lwt.return (Error (`Msg err))
+            Lwt.return (Error (`Msg err, `Internal_server_error))
         | Ok res ->
             Logs.info (fun m ->
                 m
@@ -1281,12 +1327,12 @@ struct
                    %s"
                   unikernel_name
                   (Yojson.Basic.to_string res));
-            Lwt.return (Ok (Yojson.Basic.to_string res)))
+            Lwt.return (Ok ()))
 
   let process_change ~unikernel_name ~job ~to_be_updated_unikernel
       ~currently_running_unikernel (unikernel_cfg : Vmm_core.Unikernel.config)
       (user : User_model.user) store http_client
-      (change_kind : [ `Rollback | `Update ]) =
+      (change_kind : [ `Rollback | `Update ]) albatross =
     let change_string = function
       | `Rollback -> "rollback"
       | `Update -> "update"
@@ -1320,12 +1366,39 @@ struct
                  ),
                (`Internal_server_error : H1.Status.t) ))
     | Ok () -> (
-        Utils.send_http_request http_client ~base_url:Builder_web.base_url
-          ~path:
-            ("/job/" ^ job ^ "/build/" ^ to_be_updated_unikernel
-           ^ "/main-binary")
+        let data_stream, push_chunks = Lwt_stream.create () in
+        let push () = Lwt_stream.get data_stream in
+        let url =
+          Builder_web.base_url ^ "/job/" ^ job ^ "/build/"
+          ^ to_be_updated_unikernel ^ "/main-binary"
+        in
+        let f _response _acc chunk = Lwt.return (push_chunks (Some chunk)) in
+        Lwt.both
+          ( Http_mirage_client.request http_client ~follow_redirect:true
+              ~headers:[ ("Accept", "application/json") ]
+              url f ()
+          >>= fun e ->
+            push_chunks None;
+            match e with
+            | Error (`Msg err) -> Lwt.return (Error (`Msg err))
+            | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
+            | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
+            | Ok (resp, ()) ->
+                if
+                  Http_mirage_client.Status.is_successful
+                    resp.Http_mirage_client.status
+                then Lwt.return (Ok ())
+                else
+                  Lwt.return
+                    (Error
+                       (`Msg
+                          ("accessing " ^ url ^ " resulted in an error: "
+                          ^ Http_mirage_client.Status.to_string resp.status
+                          ^ " " ^ resp.reason))) )
+          (force_create_unikernel ~unikernel_name ~push unikernel_cfg user
+             albatross)
         >>= function
-        | Error (`Msg err) ->
+        | Error (`Msg err), _ ->
             Logs.err (fun m ->
                 m
                   "%s: builds.robur.coop: Error while fetching the binary of \
@@ -1339,7 +1412,9 @@ struct
                     ^ " :an error occured while fetching the binary from \
                        builds.robur.coop with error: " ^ err),
                    `Internal_server_error ))
-        | Ok unikernel_image -> (
+        | Ok (), Error (msg, status) -> Lwt.return (Error (msg, status))
+        | Ok (), Ok () -> Lwt.return (Ok ()))
+  (* TODO: check manifest in a streaming fashion
             match
               Albatross.manifest_devices_match ~bridges:unikernel_cfg.bridges
                 ~block_devices:unikernel_cfg.block_devices unikernel_image
@@ -1352,7 +1427,7 @@ struct
                         ^ " :an error occured with the unikernel \
                            configuration: " ^ err),
                        `Bad_request ))
-            | Ok () -> Lwt.return (Ok (unikernel_image, unikernel_cfg))))
+              | Ok () -> *)
 
   let process_rollback ~unikernel_name current_time albatross store http_client
       reqd (user : User_model.user) =
@@ -1371,35 +1446,23 @@ struct
           process_change ~unikernel_name ~job:old_unikernel.name
             ~to_be_updated_unikernel:old_unikernel.uuid
             ~currently_running_unikernel:old_unikernel.uuid old_unikernel.config
-            user store http_client `Rollback
+            user store http_client `Rollback albatross
           >>= function
-          | Ok (unikernel_image, unikernel_cfg) -> (
-              force_create_unikernel ~unikernel_name ~unikernel_image
-                unikernel_cfg user albatross
-              >>= function
-              | Ok _res ->
-                  Middleware.http_response reqd ~title:"Rollback Successful"
-                    ~data:
-                      (`String
-                         ("Rollback succesful. " ^ unikernel_name
-                        ^ " is now running on build " ^ old_unikernel.uuid))
-                    `OK
-              | Error (`Msg err) ->
-                  Middleware.http_response reqd ~title:"Rollback Error"
-                    ~data:
-                      (`String
-                         ("Rollback failed. " ^ unikernel_name
-                        ^ " failed to revert to build " ^ old_unikernel.uuid
-                        ^ " with error " ^ err))
-                    `Internal_server_error)
-          | Error (`Msg err, status) ->
+          | Ok _res ->
+              Middleware.http_response reqd ~title:"Rollback Successful"
+                ~data:
+                  (`String
+                     ("Rollback succesful. " ^ unikernel_name
+                    ^ " is now running on build " ^ old_unikernel.uuid))
+                `OK
+          | Error (`Msg err, http_status) ->
               Middleware.http_response reqd ~title:"Rollback Error"
                 ~data:
                   (`String
                      ("Rollback failed. " ^ unikernel_name
                     ^ " failed to revert to build " ^ old_unikernel.uuid
                     ^ " with error " ^ err))
-                status
+                http_status
         else
           Middleware.http_response reqd ~title:"Rollback Failed"
             ~data:
@@ -1420,43 +1483,35 @@ struct
       ~currently_running_unikernel ~http_liveliness_address ~dns_liveliness
       stack cfg user store http_client albatross reqd =
     process_change ~unikernel_name ~job ~to_be_updated_unikernel
-      ~currently_running_unikernel cfg user store http_client `Update
+      ~currently_running_unikernel cfg user store http_client `Update albatross
     >>= function
-    | Ok (unikernel_image, unikernel_cfg) -> (
-        force_create_unikernel ~unikernel_name ~unikernel_image unikernel_cfg
-          user albatross
+    | Ok _res -> (
+        Liveliness.interval_liveliness_checks ~unikernel_name
+          ~http_liveliness_address ~dns_liveliness stack http_client
         >>= function
-        | Ok _res -> (
-            Liveliness.interval_liveliness_checks ~unikernel_name
-              ~http_liveliness_address ~dns_liveliness stack http_client
-            >>= function
-            | Error (`Msg err) ->
-                Logs.err (fun m ->
-                    m
-                      "liveliness-checks for %s and build %s failed with \
-                       error(s) %s. now performing a rollback"
-                      unikernel_name to_be_updated_unikernel err);
-                process_rollback ~unikernel_name (Mirage_ptime.now ()) albatross
-                  store http_client reqd user
-            | Ok () ->
-                Middleware.http_response reqd ~title:"Update Successful"
-                  ~data:
-                    (`String
-                       ("Update succesful. " ^ unikernel_name
-                      ^ " is now running on build " ^ to_be_updated_unikernel))
-                  `OK)
         | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Update Error"
+            Logs.err (fun m ->
+                m
+                  "liveliness-checks for %s and build %s failed with error(s) \
+                   %s. now performing a rollback"
+                  unikernel_name to_be_updated_unikernel err);
+            process_rollback ~unikernel_name (Mirage_ptime.now ()) albatross
+              store http_client reqd user
+        | Ok () ->
+            Middleware.http_response reqd ~title:"Update Successful"
               ~data:
                 (`String
-                   ("Update failed. " ^ unikernel_name
-                  ^ " failed to update to build " ^ to_be_updated_unikernel
-                  ^ " with error " ^ err))
-              `Internal_server_error)
-    | Error (`Msg err, status) ->
-        Middleware.http_response reqd ~title:"Error"
-          ~data:(`String (String.escaped err))
-          status
+                   ("Update succesful. " ^ unikernel_name
+                  ^ " is now running on build " ^ to_be_updated_unikernel))
+              `OK)
+    | Error (`Msg err, http_status) ->
+        Middleware.http_response reqd ~title:"Update Error"
+          ~data:
+            (`String
+               ("Update failed. " ^ unikernel_name
+              ^ " failed to update to build " ^ to_be_updated_unikernel
+              ^ " with error " ^ err))
+          http_status
 
   let unikernel_update albatross store stack http_client
       (user : User_model.user) json_dict reqd =
@@ -1610,64 +1665,104 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_create albatross (user : User_model.user) m reqd =
-    match
-      ( Map.find_opt "unikernel_name" m,
-        Map.find_opt "unikernel_config" m,
-        Map.find_opt "unikernel_force_create" m,
-        Map.find_opt "binary" m )
-    with
-    | ( Some (_, unikernel_name),
-        Some (_, unikernel_config),
-        Some (_, force_create),
-        Some (_, binary) ) -> (
-        match Albatross_json.config_of_json unikernel_config with
-        | Ok cfg -> (
-            let config = { cfg with image = binary } in
-            (* TODO use uuid in the future *)
-            if bool_of_string_opt force_create |> Option.value ~default:false
-            then (
-              force_create_unikernel ~unikernel_name ~unikernel_image:binary cfg
-                user albatross
-              >>= function
-              | Ok res ->
-                  Middleware.http_response reqd ~title:"Success"
-                    ~data:
-                      (`String
-                         ("Unikernel has been force created succesfully: " ^ res))
-                    `OK
-              | Error (`Msg err) ->
-                  Logs.warn (fun m -> m "Error querying albatross: %s" err);
-                  Middleware.http_response reqd ~title:"Error"
-                    ~data:(`String ("Error while querying Albatross: " ^ err))
-                    `Internal_server_error)
-            else
-              Albatross.query albatross ~domain:user.name ~name:unikernel_name
-                (`Unikernel_cmd (`Unikernel_create config))
-              >>= function
-              | Error err ->
-                  Logs.warn (fun m -> m "Error querying albatross: %s" err);
-                  Middleware.http_response reqd ~title:"Error"
-                    ~data:(`String ("Error while querying Albatross: " ^ err))
-                    `Internal_server_error
-              | Ok (_hdr, res) -> (
-                  match Albatross_json.res res with
-                  | Ok res ->
-                      Middleware.http_response reqd ~title:"Success" ~data:res
-                        `OK
-                  | Error (`String err) ->
-                      Middleware.http_response reqd ~title:"Error"
-                        ~data:(`String (String.escaped err))
-                        `Internal_server_error))
-        | Error (`Msg err) ->
-            Logs.warn (fun m -> m "couldn't decode data %s" err);
-            Middleware.http_response reqd ~title:"Error"
-              ~data:(`String (String.escaped err))
-              `Internal_server_error)
-    | _ ->
-        Logs.warn (fun m -> m "couldn't find fields");
-        Middleware.http_response reqd ~title:"Error"
-          ~data:(`String "Couldn't find fields") `Bad_request
+  let unikernel_create token_or_cookie (user : User_model.user) albatross reqd =
+    let generate_http_error_response msg code =
+      Logs.warn (fun m -> m "Unikernel_create error: %s" msg);
+      Middleware.http_response reqd ~title:"Error" ~data:(`String msg) code
+    in
+    get_multipart_request_as_stream reqd >>= function
+    | Error msg -> generate_http_error_response msg `Bad_request
+    | Ok (`Parse th, stream) -> (
+        let consume_part_content contents =
+          Lwt_stream.to_list contents >|= String.concat ""
+        in
+        let name_ref = ref None in
+        let cfg_ref = ref None in
+        let force_ref = ref None in
+        let csrf_ref = ref None in
+        let process_stream () =
+          Lwt_stream.iter_s
+            (function
+              | (Some "unikernel_name", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  name_ref := Some v;
+                  Lwt.return_unit
+              | (Some "unikernel_config", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  cfg_ref := Some v;
+                  Lwt.return_unit
+              | (Some "unikernel_force_create", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  force_ref := Some v;
+                  Lwt.return_unit
+              | (Some "molly_csrf", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  csrf_ref := Some v;
+                  Lwt.return_unit
+              | (Some "binary", _), _, contents -> (
+                  match (!name_ref, !cfg_ref, !force_ref, !csrf_ref) with
+                  | Some unikernel_name, Some cfg, Some force_create, Some csrf
+                    -> (
+                      let process_unikernel_create _reqd =
+                        match Albatross_json.config_of_json cfg with
+                        | Error (`Msg err) ->
+                            generate_http_error_response
+                              ("Invalid unikernel arguments: " ^ err)
+                              `Bad_request
+                        | Ok cfg -> (
+                            let albatross_cmd =
+                              if bool_of_string force_create then
+                                `Unikernel_cmd (`Unikernel_force_create cfg)
+                              else `Unikernel_cmd (`Unikernel_create cfg)
+                            in
+                            Albatross.query albatross ~domain:user.name
+                              ~name:unikernel_name
+                              ~push:(fun () -> Lwt_stream.get contents)
+                              albatross_cmd
+                            >>= function
+                            | Error err ->
+                                generate_http_error_response
+                                  ("Albatross Query Error: " ^ err)
+                                  `Internal_server_error
+                            | Ok (_hdr, res) -> (
+                                match Albatross_json.res res with
+                                | Ok res_json ->
+                                    Middleware.http_response reqd
+                                      ~title:"Success" ~data:res_json `OK
+                                | Error (`String err_str) ->
+                                    generate_http_error_response
+                                      ("Albatross Response Error: " ^ err_str)
+                                      `Internal_server_error
+                                | Error (`Msg err_msg) ->
+                                    generate_http_error_response
+                                      ("Albatross JSON Error: " ^ err_msg)
+                                      `Internal_server_error))
+                      in
+                      match token_or_cookie with
+                      | `Token -> process_unikernel_create reqd
+                      | `Cookie ->
+                          csrf_verification process_unikernel_create user csrf
+                            reqd)
+                  | _ ->
+                      Logs.info (fun m -> m "Missing Fields");
+                      generate_http_error_response
+                        "One or more required fields are missing." `Bad_request)
+              | (opt_n, _), _, contents ->
+                  Logs.debug (fun m ->
+                      m "Junking unexpected part: %s"
+                        (Option.value ~default:"<unnamed>" opt_n));
+                  Lwt_stream.junk_while (Fun.const true) contents)
+            stream
+        in
+        Lwt.both th (process_stream ()) >>= fun (_res, ()) ->
+        th >>= function
+        | Error (`Msg e) ->
+            Logs.info (fun m -> m "Multipart parser thread error: %s" e);
+            Lwt.return_unit
+        | Ok _ ->
+            Logs.info (fun m ->
+                m "Multipart streamed correctly and unikernel created.");
+            Lwt.return_unit)
 
   let unikernel_console albatross name _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
@@ -2363,7 +2458,8 @@ struct
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_multipart_csrf_token (unikernel_create !albatross)))
+                  (fun token_or_cookie user reqd ->
+                    unikernel_create token_or_cookie user !albatross reqd))
         | path when String.starts_with ~prefix:"/unikernel/update/" path ->
             check_meth `GET (fun () ->
                 let unikernel_name =
