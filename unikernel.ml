@@ -65,18 +65,16 @@ struct
     let finished, notify_finished = Lwt.wait () in
     let wakeup v = Lwt.wakeup_later notify_finished v in
     let on_eof data () = wakeup data in
-    let f acc s = acc ^ s in
     let rec on_read on_eof acc bs ~off ~len =
       let str = Bigstringaf.substring ~off ~len bs in
-      let acc = acc >>= fun acc -> Lwt.return (f acc str) in
+      let acc = acc ^ str in
       H1.Body.Reader.schedule_read response_body ~on_read:(on_read on_eof acc)
         ~on_eof:(on_eof acc)
     in
-    let f_init = Lwt.return "" in
+    let f_init = "" in
     H1.Body.Reader.schedule_read response_body ~on_read:(on_read on_eof f_init)
       ~on_eof:(on_eof f_init);
     finished >>= fun data ->
-    data >>= fun data ->
     let content_type =
       H1.(Headers.get_exn (Reqd.request reqd).Request.headers "content-type")
     in
@@ -191,17 +189,16 @@ struct
     let finished, notify_finished = Lwt.wait () in
     let wakeup v = Lwt.wakeup_later notify_finished v in
     let on_eof data () = wakeup data in
-    let f acc s = acc ^ s in
     let rec on_read on_eof acc bs ~off ~len =
       let str = Bigstringaf.substring ~off ~len bs in
-      let acc = acc >>= fun acc -> Lwt.return (f acc str) in
+      let acc = acc ^ str in
       H1.Body.Reader.schedule_read request_body ~on_read:(on_read on_eof acc)
         ~on_eof:(on_eof acc)
     in
-    let f_init = Lwt.return "" in
+    let f_init = "" in
     H1.Body.Reader.schedule_read request_body ~on_read:(on_read on_eof f_init)
       ~on_eof:(on_eof f_init);
-    finished >>= fun data -> data
+    finished
 
   let extract_json_body reqd =
     decode_request_body reqd >>= fun data ->
