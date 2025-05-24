@@ -24,6 +24,7 @@ let mollymawk =
       package ~min:"0.2.0" "ohex";
       package "http-mirage-client";
       package "solo5-elftool" ~min:"0.4.0";
+      package "multipart_form-lwt";
     ]
   in
   main ~packages "Unikernel.Main"

@@ -24,6 +24,7 @@ module Main
 struct
   module Paf = Paf_mirage.Make (S.TCP)
   module Liveliness = Liveliness_checks.Make (S)
+  module Albatross = Albatross.Make (S)
 
   let js_contents assets =
     KV_ASSETS.get assets (Mirage_kv.Key.v "main.js") >|= function
@@ -54,6 +55,10 @@ struct
 
   module Store = Storage.Make (BLOCK)
   module Map = Map.Make (String)
+
+  let csrf_verification f user csrf reqd =
+    let now = Mirage_ptime.now () in
+    Middleware.csrf_verification user now csrf f reqd
 
   let read_multipart_data reqd =
     let response_body = H1.Reqd.request_body reqd in
@@ -90,6 +95,52 @@ struct
             Error (`Msg ("Couldn't decode multipart data: " ^ msg))
             |> Lwt.return
         | Ok (m, assoc) -> Ok (m, assoc) |> Lwt.return)
+
+  let get_multipart_request_as_stream reqd =
+    match Middleware.header "Content-Type" reqd with
+    | None -> Lwt.return_error "Missing Content-Type header"
+    | Some content_type_str
+      when not
+             (String.starts_with ~prefix:"multipart/form-data" content_type_str)
+      ->
+        Lwt.return_error "Expected multipart/form-data"
+    | Some content_type_str -> (
+        match
+          Multipart_form.Content_type.of_string (content_type_str ^ "\r\n")
+        with
+        | Error (`Msg msg) -> Lwt.return_error ("Invalid Content-Type: " ^ msg)
+        | Ok ct ->
+            let request_body_stream, push_to_parser_input =
+              Lwt_stream.create ()
+            in
+            let body_reader = H1.Reqd.request_body reqd in
+            let rec feed_body () =
+              H1.Body.Reader.schedule_read body_reader
+                ~on_read:(fun bs ~off ~len ->
+                  push_to_parser_input
+                    (Some (Bigstringaf.substring ~off ~len bs));
+                  feed_body ())
+                ~on_eof:(fun () ->
+                  Logs.debug (fun m -> m "feed_body: EOF");
+                  push_to_parser_input None)
+            in
+            feed_body ();
+            let identify hdrs =
+              let open Multipart_form in
+              let filename =
+                Option.bind
+                  (Header.content_disposition hdrs)
+                  Content_disposition.filename
+              in
+              let name =
+                Option.bind
+                  (Header.content_disposition hdrs)
+                  Content_disposition.name
+              in
+              (name, filename)
+            in
+            Lwt.return_ok
+              (Multipart_form_lwt.stream ~identify request_body_stream ct))
 
   let to_map ~assoc m =
     let open Multipart_form in
@@ -166,10 +217,6 @@ struct
         Logs.warn (fun m -> m "JSON is not a dictionary: %s" data);
         Lwt.return (Error (`Msg "not a dictionary"))
 
-  let csrf_verification f user csrf reqd =
-    let now = Mirage_ptime.now () in
-    Middleware.csrf_verification user now csrf f reqd
-
   let extract_json_csrf_token f token_or_cookie user reqd =
     extract_json_body reqd >>= function
     | Error (`Msg err) ->
@@ -215,8 +262,6 @@ struct
         Logs.warn (fun m -> m "Not a multipart request");
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Expected multipart form data") `Bad_request
-
-  module Albatross = Albatross.Make (S)
 
   let email_verification f _ user reqd =
     if false (* TODO *) then
@@ -1253,9 +1298,28 @@ struct
   let force_create_unikernel ~unikernel_name ~unikernel_image
       (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user)
       albatross =
-    let unikernel_config = { unikernel_cfg with image = unikernel_image } in
-    Albatross.query albatross ~domain:user.name ~name:unikernel_name
-      (`Unikernel_cmd (`Unikernel_force_create unikernel_config))
+    let image_data_stream, push_chunks_into_stream = Lwt_stream.create () in
+    let feed_image_into_stream () =
+      let chunk_size = 4096 in
+      let current_pos = ref 0 in
+      let total_len = String.length unikernel_image in
+      let rec loop () =
+        if !current_pos >= total_len then (
+          push_chunks_into_stream None;
+          Lwt.return_unit)
+        else
+          let len_to_read = min chunk_size (total_len - !current_pos) in
+          let chunk = String.sub unikernel_image !current_pos len_to_read in
+          current_pos := !current_pos + len_to_read;
+          push_chunks_into_stream (Some chunk);
+          Lwt.pause () >>= fun () -> loop ()
+      in
+      loop ()
+    in
+    Lwt.async feed_image_into_stream;
+    let push () = Lwt_stream.get image_data_stream in
+    Albatross.query albatross ~domain:user.name ~name:unikernel_name ~push
+      (`Unikernel_cmd (`Unikernel_force_create unikernel_cfg))
     >>= function
     | Error err ->
         Logs.warn (fun m ->
@@ -1610,64 +1674,104 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_create albatross (user : User_model.user) m reqd =
-    match
-      ( Map.find_opt "unikernel_name" m,
-        Map.find_opt "unikernel_config" m,
-        Map.find_opt "unikernel_force_create" m,
-        Map.find_opt "binary" m )
-    with
-    | ( Some (_, unikernel_name),
-        Some (_, unikernel_config),
-        Some (_, force_create),
-        Some (_, binary) ) -> (
-        match Albatross_json.config_of_json unikernel_config with
-        | Ok cfg -> (
-            let config = { cfg with image = binary } in
-            (* TODO use uuid in the future *)
-            if bool_of_string_opt force_create |> Option.value ~default:false
-            then (
-              force_create_unikernel ~unikernel_name ~unikernel_image:binary cfg
-                user albatross
-              >>= function
-              | Ok res ->
-                  Middleware.http_response reqd ~title:"Success"
-                    ~data:
-                      (`String
-                         ("Unikernel has been force created succesfully: " ^ res))
-                    `OK
-              | Error (`Msg err) ->
-                  Logs.warn (fun m -> m "Error querying albatross: %s" err);
-                  Middleware.http_response reqd ~title:"Error"
-                    ~data:(`String ("Error while querying Albatross: " ^ err))
-                    `Internal_server_error)
-            else
-              Albatross.query albatross ~domain:user.name ~name:unikernel_name
-                (`Unikernel_cmd (`Unikernel_create config))
-              >>= function
-              | Error err ->
-                  Logs.warn (fun m -> m "Error querying albatross: %s" err);
-                  Middleware.http_response reqd ~title:"Error"
-                    ~data:(`String ("Error while querying Albatross: " ^ err))
-                    `Internal_server_error
-              | Ok (_hdr, res) -> (
-                  match Albatross_json.res res with
-                  | Ok res ->
-                      Middleware.http_response reqd ~title:"Success" ~data:res
-                        `OK
-                  | Error (`String err) ->
-                      Middleware.http_response reqd ~title:"Error"
-                        ~data:(`String (String.escaped err))
-                        `Internal_server_error))
-        | Error (`Msg err) ->
-            Logs.warn (fun m -> m "couldn't decode data %s" err);
-            Middleware.http_response reqd ~title:"Error"
-              ~data:(`String (String.escaped err))
-              `Internal_server_error)
-    | _ ->
-        Logs.warn (fun m -> m "couldn't find fields");
-        Middleware.http_response reqd ~title:"Error"
-          ~data:(`String "Couldn't find fields") `Bad_request
+  let unikernel_create token_or_cookie (user : User_model.user) albatross reqd =
+    let generate_http_error_response msg code =
+      Logs.warn (fun m -> m "Unikernel_create error: %s" msg);
+      Middleware.http_response reqd ~title:"Error" ~data:(`String msg) code
+    in
+    get_multipart_request_as_stream reqd >>= function
+    | Error msg -> generate_http_error_response msg `Bad_request
+    | Ok (`Parse th, stream) -> (
+        let consume_part_content contents =
+          Lwt_stream.to_list contents >|= String.concat ""
+        in
+        let name_ref = ref None in
+        let cfg_ref = ref None in
+        let force_ref = ref None in
+        let csrf_ref = ref None in
+        let process_stream () =
+          Lwt_stream.iter_s
+            (function
+              | (Some "unikernel_name", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  name_ref := Some v;
+                  Lwt.return_unit
+              | (Some "unikernel_config", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  cfg_ref := Some v;
+                  Lwt.return_unit
+              | (Some "unikernel_force_create", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  force_ref := Some v;
+                  Lwt.return_unit
+              | (Some "molly_csrf", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  csrf_ref := Some v;
+                  Lwt.return_unit
+              | (Some "binary", _), _, contents -> (
+                  match (!name_ref, !cfg_ref, !force_ref, !csrf_ref) with
+                  | Some unikernel_name, Some cfg, Some force_create, Some csrf
+                    -> (
+                      let process_unikernel_create _reqd =
+                        match Albatross_json.config_of_json cfg with
+                        | Error (`Msg err) ->
+                            generate_http_error_response
+                              ("Invalid unikernel arguments: " ^ err)
+                              `Bad_request
+                        | Ok cfg -> (
+                            let albatross_cmd =
+                              if bool_of_string force_create then
+                                `Unikernel_cmd (`Unikernel_force_create cfg)
+                              else `Unikernel_cmd (`Unikernel_create cfg)
+                            in
+                            Albatross.query albatross ~domain:user.name
+                              ~name:unikernel_name
+                              ~push:(fun () -> Lwt_stream.get contents)
+                              albatross_cmd
+                            >>= function
+                            | Error err ->
+                                generate_http_error_response
+                                  ("Albatross Query Error: " ^ err)
+                                  `Internal_server_error
+                            | Ok (_hdr, res) -> (
+                                match Albatross_json.res res with
+                                | Ok res_json ->
+                                    Middleware.http_response reqd
+                                      ~title:"Success" ~data:res_json `OK
+                                | Error (`String err_str) ->
+                                    generate_http_error_response
+                                      ("Albatross Response Error: " ^ err_str)
+                                      `Internal_server_error
+                                | Error (`Msg err_msg) ->
+                                    generate_http_error_response
+                                      ("Albatross JSON Error: " ^ err_msg)
+                                      `Internal_server_error))
+                      in
+                      match token_or_cookie with
+                      | `Token -> process_unikernel_create reqd
+                      | `Cookie ->
+                          csrf_verification process_unikernel_create user csrf
+                            reqd)
+                  | _ ->
+                      Logs.info (fun m -> m "Missing Fields");
+                      generate_http_error_response
+                        "One or more required fields are missing." `Bad_request)
+              | (opt_n, _), _, contents ->
+                  Logs.debug (fun m ->
+                      m "Junking unexpected part: %s"
+                        (Option.value ~default:"<unnamed>" opt_n));
+                  Lwt_stream.junk_while (Fun.const true) contents)
+            stream
+        in
+        Lwt.both th (process_stream ()) >>= fun (_res, ()) ->
+        th >>= function
+        | Error (`Msg e) ->
+            Logs.info (fun m -> m "Multipart parser thread error: %s" e);
+            Lwt.return_unit
+        | Ok _ ->
+            Logs.info (fun m ->
+                m "Multipart streamed correctly and unikernel created.");
+            Lwt.return_unit)
 
   let unikernel_console albatross name _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
@@ -2363,7 +2467,8 @@ struct
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_multipart_csrf_token (unikernel_create !albatross)))
+                  (fun token_or_cookie user reqd ->
+                    unikernel_create token_or_cookie user !albatross reqd))
         | path when String.starts_with ~prefix:"/unikernel/update/" path ->
             check_meth `GET (fun () ->
                 let unikernel_name =
