@@ -1796,7 +1796,7 @@ struct
   let view_user albatross store uuid _ (user : User_model.user) reqd =
     match Store.find_by_uuid store uuid with
     | Some u -> (
-        user_unikernels albatross user.name >>= fun unikernels ->
+        user_unikernels albatross u.name >>= fun unikernels ->
         let policy =
           match Albatross.policy ~domain:u.name albatross with
           | Ok p -> p
