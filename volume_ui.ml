@@ -61,9 +61,12 @@ let create_volume total_free_space =
               [
                 Utils.button_component
                   ~attribs:
-                    [ Unsafe.string_attrib "x-on:click" "count = count + 50" ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                  ~btn_type:`Primary_outlined ();
+                    [
+                      Unsafe.string_attrib "x-on:click"
+                        "if (count > 1) count = count - 50";
+                    ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+                  ~btn_type:`Danger_outlined ();
                 span
                   ~a:
                     [
@@ -86,12 +89,9 @@ let create_volume total_free_space =
                 span ~a:[ a_class [ "text-4xl" ] ] [ txt "MB" ];
                 Utils.button_component
                   ~attribs:
-                    [
-                      Unsafe.string_attrib "x-on:click"
-                        "if (count > 1) count = count - 50";
-                    ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                  ~btn_type:`Danger_outlined ();
+                    [ Unsafe.string_attrib "x-on:click" "count = count + 50" ]
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                  ~btn_type:`Primary_outlined ();
               ];
           ];
         Utils.switch_button ~switch_id:"dataToggle"
@@ -252,8 +252,8 @@ let upload_to_volume name =
               ~a:
                 [
                   a_input_type `File;
-                  a_name "block_data";
-                  a_id "block_data";
+                  a_name "block_data_upload";
+                  a_id "block_data_upload";
                   a_class
                     [
                       "ring-primary-100 mt-1.5 transition appearance-none \

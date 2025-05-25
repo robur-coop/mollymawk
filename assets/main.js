@@ -822,9 +822,9 @@ async function createVolume() {
 				"block_size": Number(block_size),
 				"block_compressed": block_compressed
 			})
-		formData.append("block_data", block_data)
 		formData.append("molly_csrf", molly_csrf)
 		formData.append("json_data", json_data)
+		formData.append("block_data", block_data)
 		const response = await fetch("/api/volume/create", {
 			method: 'POST',
 			body: formData
@@ -896,7 +896,7 @@ async function downloadVolume(block_name) {
 async function uploadToVolume(block_name) {
 	const uploadButton = document.getElementById(`upload-block-button-${block_name}`);
 	const block_compressed = document.getElementById("block_compressed").checked;
-	const block_data = document.getElementById("block_data").files[0];
+	const block_data = document.getElementById("block_data_upload").files[0];
 	const molly_csrf = document.getElementById("molly-csrf").value;
 
 	if (!block_data) {
@@ -913,9 +913,9 @@ async function uploadToVolume(block_name) {
 				"block_name": block_name,
 				"block_compressed": block_compressed
 			})
-		formData.append("block_data", block_data)
 		formData.append("json_data", json_data)
 		formData.append("molly_csrf", molly_csrf)
+		formData.append("block_data", block_data)
 		const response = await fetch("/api/volume/upload", {
 			method: 'POST',
 			body: formData
