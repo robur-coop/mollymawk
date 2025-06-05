@@ -226,7 +226,7 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                         a
                           ~a:
                             [
-                              a_href ("/admin/u/policy/edit/" ^ user.uuid ^ "");
+                              a_href ("/admin/u/policy/edit/" ^ user.uuid);
                               a_class
                                 [
                                   "border border-primary-500 \
