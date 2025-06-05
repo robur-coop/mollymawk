@@ -222,7 +222,20 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                   ~a:[ a_id "policy-table" ]
                   [
                     (match policy with
-                    | None -> h2 [ txt "No policy" ]
+                    | None ->
+                        a
+                          ~a:
+                            [
+                              a_href ("/admin/u/policy/edit/" ^ user.uuid);
+                              a_class
+                                [
+                                  "border border-primary-500 \
+                                   hover:bg-primary-700 px-2 py-1 \
+                                   text-primary-800 hover:text-primary-50 \
+                                   rounded";
+                                ];
+                            ]
+                          [ txt "Add Policy" ]
                     | Some policy ->
                         div
                           [
