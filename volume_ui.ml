@@ -95,7 +95,7 @@ let create_volume total_free_space =
               ];
           ];
         Utils.switch_button ~switch_id:"dataToggle"
-          ~switch_label:"Dumb data to this volume"
+          ~switch_label:"Dump data to this volume"
           (div
              [
                div

@@ -808,7 +808,7 @@ async function createVolume() {
 	if (data_toggle && !block_data) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "You must upload a file else switch 'Dumb data to this volume' off"
+		formAlert.textContent = "You must upload a file else switch 'Dump data to this volume' off"
 		buttonLoading(createButton, false, "Create volume")
 		return;
 	}
