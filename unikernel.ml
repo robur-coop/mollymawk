@@ -2040,18 +2040,31 @@ struct
               | (Some "block_data", _), _, contents -> (
                   match (!csrf_ref, !json_data_ref) with
                   | Some csrf, Some json -> (
-                      let cmd block_size block_compressed =
-                        match c_or_u with
-                        | `Create ->
-                            `Block_add (block_size, block_compressed, Some "")
-                        | `Upload -> `Block_set (block_compressed, "")
+                      let add_block block_name block_size =
+                        Albatross.query albatross ~domain:user.name
+                          ~name:block_name
+                          (`Block_cmd (`Block_add block_size))
+                        >>= function
+                        | Error err ->
+                            generate_http_error_response
+                              (Fmt.str "an error with albatross. got %s" err)
+                              `Bad_request >|= fun () ->
+                            Error ()
+                        | Ok (_hdr, res) -> (
+                            match Albatross_json.res res with
+                            | Error (`String err) ->
+                                generate_http_error_response
+                                  (Fmt.str "unexpected field. got %s" err)
+                                  `Bad_request >|= fun () ->
+                                Error ()
+                            | Ok res ->
+                                Lwt.return (Ok ()))
                       in
-                      let stream_to_albatross block_name block_size
-                          block_compressed _reqd =
+                      let stream_to_albatross block_name block_compressed =
                         let push () = Lwt_stream.get contents in
                         Albatross.query albatross ~domain:user.name
                           ~name:block_name ~push
-                          (`Block_cmd (cmd block_size block_compressed))
+                          (`Block_cmd (`Block_set block_compressed))
                         >>= function
                         | Error err ->
                             generate_http_error_response
@@ -2086,12 +2099,17 @@ struct
                                 Some (`Bool block_compressed) ) ) -> (
                               match token_or_cookie with
                               | `Token ->
-                                  stream_to_albatross block_name block_size
-                                    block_compressed reqd
+                                begin
+                                  add_block block_name block_size >>= function
+                                  | Ok () -> stream_to_albatross block_name block_compressed
+                                  | Error () -> Lwt.return_unit
+                                end
                               | `Cookie ->
                                   csrf_verification
-                                    (stream_to_albatross block_name block_size
-                                       block_compressed)
+                                    (fun _reqd ->
+                                       add_block block_name block_size >>= function
+                                       | Ok () -> stream_to_albatross block_name block_compressed
+                                       | Error () -> Lwt.return_unit)
                                     user csrf reqd)
                           | ( `Upload,
                               ( Some (`String block_name),
@@ -2099,11 +2117,11 @@ struct
                                 Some (`Bool block_compressed) ) ) -> (
                               match token_or_cookie with
                               | `Token ->
-                                  stream_to_albatross block_name 0
-                                    block_compressed reqd
+                                  stream_to_albatross block_name
+                                    block_compressed
                               | `Cookie ->
                                   csrf_verification
-                                    (stream_to_albatross block_name 0
+                                    (fun _reqd -> stream_to_albatross block_name
                                        block_compressed)
                                     user csrf reqd)
                           | _ ->
