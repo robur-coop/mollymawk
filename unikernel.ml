@@ -2048,17 +2048,16 @@ struct
                         | Error err ->
                             generate_http_error_response
                               (Fmt.str "an error with albatross. got %s" err)
-                              `Bad_request >|= fun () ->
-                            Error ()
+                              `Bad_request
+                            >|= fun () -> Error ()
                         | Ok (_hdr, res) -> (
                             match Albatross_json.res res with
                             | Error (`String err) ->
                                 generate_http_error_response
                                   (Fmt.str "unexpected field. got %s" err)
-                                  `Bad_request >|= fun () ->
-                                Error ()
-                            | Ok res ->
-                                Lwt.return (Ok ()))
+                                  `Bad_request
+                                >|= fun () -> Error ()
+                            | Ok res -> Lwt.return (Ok ()))
                       in
                       let stream_to_albatross block_name block_compressed =
                         let push () = Lwt_stream.get contents in
@@ -2098,18 +2097,21 @@ struct
                                 Some (`Int block_size),
                                 Some (`Bool block_compressed) ) ) -> (
                               match token_or_cookie with
-                              | `Token ->
-                                begin
+                              | `Token -> (
                                   add_block block_name block_size >>= function
-                                  | Ok () -> stream_to_albatross block_name block_compressed
-                                  | Error () -> Lwt.return_unit
-                                end
+                                  | Ok () ->
+                                      stream_to_albatross block_name
+                                        block_compressed
+                                  | Error () -> Lwt.return_unit)
                               | `Cookie ->
                                   csrf_verification
                                     (fun _reqd ->
-                                       add_block block_name block_size >>= function
-                                       | Ok () -> stream_to_albatross block_name block_compressed
-                                       | Error () -> Lwt.return_unit)
+                                      add_block block_name block_size
+                                      >>= function
+                                      | Ok () ->
+                                          stream_to_albatross block_name
+                                            block_compressed
+                                      | Error () -> Lwt.return_unit)
                                     user csrf reqd)
                           | ( `Upload,
                               ( Some (`String block_name),
@@ -2121,8 +2123,9 @@ struct
                                     block_compressed
                               | `Cookie ->
                                   csrf_verification
-                                    (fun _reqd -> stream_to_albatross block_name
-                                       block_compressed)
+                                    (fun _reqd ->
+                                      stream_to_albatross block_name
+                                        block_compressed)
                                     user csrf reqd)
                           | _ ->
                               generate_http_error_response

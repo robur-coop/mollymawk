@@ -4,9 +4,7 @@ open Mirage
 let assets = crunch "assets"
 
 let mollymawk =
-  let albatross_pin =
-    "git+https://github.com/robur-coop/albatross.git"
-  in
+  let albatross_pin = "git+https://github.com/robur-coop/albatross.git" in
   let packages =
     [
       package "logs";
