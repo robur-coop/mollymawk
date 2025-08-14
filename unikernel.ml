@@ -2160,8 +2160,27 @@ struct
       Utils.Json.(get "block_name" json_dict, get "compression_level" json_dict)
     with
     | Some (`String block_name), Some (`Int compression_level) -> (
-        Albatross.query albatross ~domain:user.name ~name:block_name
-          (`Block_cmd (`Block_dump compression_level))
+        let filename = block_name ^ "_dump" in
+        let disposition = "attachment; filename=\"" ^ filename ^ "\"" in
+        let headers = [ "Content-type", "application/octet-stream" ;
+                        "Content-Disposition", disposition ]
+        in
+        let headers = H1.Headers.(of_list headers) in
+        let response = H1.Response.create ~headers `OK in
+        let writer = H1.Reqd.respond_with_streaming reqd response in
+        let response data =
+          match data with
+          | None ->
+            H1.Body.Writer.close writer; Ok ()
+          | Some data ->
+            if H1.Body.Writer.is_closed writer then Error ()
+            else (
+              H1.Body.Writer.write_string writer data;
+              H1.Body.Writer.flush writer Fun.id;
+              Ok ())
+        in
+        Albatross.query_block_dump albatross ~domain:user.name ~name:block_name
+          compression_level response
         >>= function
         | Error err ->
             Logs.err (fun m ->
@@ -2170,19 +2189,7 @@ struct
               ~data:
                 (`String ("Error querying albatross: " ^ String.escaped err))
               `Internal_server_error
-        | Ok (_hdr, res) -> (
-            match Albatross_json.res res with
-            | Ok res ->
-                let file_content = Yojson.Basic.to_string res in
-                let filename = block_name ^ "_dump" in
-                let disposition = "attachment; filename=\"" ^ filename ^ "\"" in
-                reply reqd ~content_type:"application/octet-stream"
-                  ~header_list:[ ("Content-Disposition", disposition) ]
-                  file_content `OK
-            | Error (`String err) ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:(`String (String.escaped err))
-                  `Internal_server_error))
+        | Ok () -> Lwt.return_unit)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
