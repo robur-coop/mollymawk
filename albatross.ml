@@ -364,9 +364,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     let r =
       List.fold_left
         (fun acc d ->
-          match acc with
-          | Error () -> Error ()
-          | Ok () -> f (decode d))
+          match acc with Error () -> Error () | Ok () -> f (decode d))
         (Ok ()) bufs
     in
     match r with
@@ -395,39 +393,35 @@ module Make (S : Tcpip.Stack.V4V6) = struct
   let console name f tls_flow d =
     let dec = function
       | Error s ->
-        Logs.err (fun m ->
-            m "albatross stop reading console %a: error %s"
-              Vmm_core.Name.pp name s);
-        Error ()
+          Logs.err (fun m ->
+              m "albatross stop reading console %a: error %s" Vmm_core.Name.pp
+                name s);
+          Error ()
       | Ok (_, `Data (`Console_data (ts, data))) -> f (ts, data)
       | Ok (_, `Data (`Utc_console_data (ts, data))) -> f (ts, data)
       | Ok w ->
-        Logs.warn (fun m ->
-            m
-              "albatross unexpected reply, need console output, got \
-               %a"
-              (Vmm_commands.pp_wire ~verbose:false)
-              w);
-        Ok ()
+          Logs.warn (fun m ->
+              m "albatross unexpected reply, need console output, got %a"
+                (Vmm_commands.pp_wire ~verbose:false)
+                w);
+          Ok ()
     in
     continue_reading name dec d tls_flow
 
   let block_data name f tls_flow d =
     let dec = function
       | Error s ->
-        Logs.err (fun m ->
-            m "albatross stop reading block data %a: error %s"
-              Vmm_core.Name.pp name s);
-        Error ()
+          Logs.err (fun m ->
+              m "albatross stop reading block data %a: error %s"
+                Vmm_core.Name.pp name s);
+          Error ()
       | Ok (_, `Data (`Block_data d)) -> f d
       | Ok w ->
-        Logs.warn (fun m ->
-            m
-              "albatross unexpected reply, need block data, got \
-                         %a"
-                        (Vmm_commands.pp_wire ~verbose:false)
-                        w);
-        Ok ()
+          Logs.warn (fun m ->
+              m "albatross unexpected reply, need block data, got %a"
+                (Vmm_commands.pp_wire ~verbose:false)
+                w);
+          Ok ()
     in
     continue_reading name dec d tls_flow
 

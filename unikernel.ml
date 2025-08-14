@@ -2162,8 +2162,11 @@ struct
     | Some (`String block_name), Some (`Int compression_level) -> (
         let filename = block_name ^ "_dump" in
         let disposition = "attachment; filename=\"" ^ filename ^ "\"" in
-        let headers = [ "Content-type", "application/octet-stream" ;
-                        "Content-Disposition", disposition ]
+        let headers =
+          [
+            ("Content-type", "application/octet-stream");
+            ("Content-Disposition", disposition);
+          ]
         in
         let headers = H1.Headers.(of_list headers) in
         let response = H1.Response.create ~headers `OK in
@@ -2171,13 +2174,14 @@ struct
         let response data =
           match data with
           | None ->
-            H1.Body.Writer.close writer; Ok ()
+              H1.Body.Writer.close writer;
+              Ok ()
           | Some data ->
-            if H1.Body.Writer.is_closed writer then Error ()
-            else (
-              H1.Body.Writer.write_string writer data;
-              H1.Body.Writer.flush writer Fun.id;
-              Ok ())
+              if H1.Body.Writer.is_closed writer then Error ()
+              else (
+                H1.Body.Writer.write_string writer data;
+                H1.Body.Writer.flush writer Fun.id;
+                Ok ())
         in
         Albatross.query_block_dump albatross ~domain:user.name ~name:block_name
           compression_level response
