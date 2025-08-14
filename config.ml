@@ -4,12 +4,15 @@ open Mirage
 let assets = crunch "assets"
 
 let mollymawk =
+  let albatross_pin =
+    "git+https://github.com/robur-coop/albatross.git"
+  in
   let packages =
     [
       package "logs";
       package "x509";
       package "tls-mirage";
-      package ~min:"2.4.0" "albatross";
+      package ~pin:albatross_pin ~min:"2.4.0" "albatross";
       package "yojson";
       package "uri";
       package "tyxml";
