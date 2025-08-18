@@ -364,25 +364,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     let r =
       List.fold_left
         (fun acc d ->
-          match acc with
-          | Error () -> Error ()
-          | Ok () -> (
-              match decode d with
-              | Error s ->
-                  Logs.err (fun m ->
-                      m "albatross stop reading console %a: error %s"
-                        Vmm_core.Name.pp name s);
-                  Error ()
-              | Ok (_, `Data (`Console_data (ts, data))) -> f (ts, data)
-              | Ok (_, `Data (`Utc_console_data (ts, data))) -> f (ts, data)
-              | Ok w ->
-                  Logs.warn (fun m ->
-                      m
-                        "albatross unexpected reply, need console output, got \
-                         %a"
-                        (Vmm_commands.pp_wire ~verbose:false)
-                        w);
-                  Ok ()))
+          match acc with Error () -> Error () | Ok () -> f (decode d))
         (Ok ()) bufs
     in
     match r with
@@ -393,13 +375,13 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         | Ok (`Data d) -> continue_reading name f (Cstruct.to_string d) flow
         | Ok `Eof ->
             Logs.info (fun m ->
-                m "albatross received eof while reading console %a"
+                m "albatross received eof while reading stream %a"
                   Vmm_core.Name.pp name);
             TLS.close flow >>= fun () ->
-            Lwt.return (Error "albatross received eof while reading console")
+            Lwt.return (Error "albatross received eof while reading stream")
         | Error e ->
             Logs.err (fun m ->
-                m "albatross received error while reading console %a: %a"
+                m "albatross received error while reading stream %a: %a"
                   Vmm_core.Name.pp name TLS.pp_error e);
             TLS.close flow >>= fun () ->
             Lwt.return (Error "albatross received an error"))
@@ -408,7 +390,46 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     let open Lwt.Infix in
     TLS.close tls_flow >|= fun () -> decode_reply d
 
-  let console name f tls_flow d = continue_reading name f d tls_flow
+  let console name f tls_flow d =
+    let dec = function
+      | Error s ->
+          Logs.err (fun m ->
+              m "albatross stop reading console %a: error %s" Vmm_core.Name.pp
+                name s);
+          Error ()
+      | Ok (_, `Data (`Console_data (ts, data))) -> f (ts, data)
+      | Ok (_, `Data (`Utc_console_data (ts, data))) -> f (ts, data)
+      | Ok (_, `Success (`String _)) ->
+          (* ignore the success subscribed *)
+          Ok ()
+      | Ok w ->
+          Logs.warn (fun m ->
+              m "albatross unexpected reply, need console output, got %a"
+                (Vmm_commands.pp_wire ~verbose:false)
+                w);
+          Ok ()
+    in
+    continue_reading name dec d tls_flow
+
+  let block_data name f tls_flow d =
+    let dec = function
+      | Error s ->
+          Logs.err (fun m ->
+              m "albatross stop reading block data %a: error %s"
+                Vmm_core.Name.pp name s);
+          Error ()
+      | Ok (_, `Data (`Block_data d)) -> f d
+      | Ok (_, `Success (`Block_device_image _)) ->
+          (* ignore the success block_device_image *)
+          Ok ()
+      | Ok w ->
+          Logs.warn (fun m ->
+              m "albatross unexpected reply, need block data, got %a"
+                (Vmm_commands.pp_wire ~verbose:false)
+                w);
+          Ok ()
+    in
+    continue_reading name dec d tls_flow
 
   let raw_query t ?(name = Vmm_core.Name.root) certificates cmd ?push f =
     let open Lwt.Infix in
@@ -565,6 +586,13 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     | Error str -> Lwt.return (Error str)
     | Ok (name, certificates) ->
         raw_query t ~name certificates cmd (console name f)
+
+  let query_block_dump t ~domain ~name compression f =
+    let cmd = `Block_cmd (`Block_dump compression) in
+    match certs t domain name cmd with
+    | Error str -> Lwt.return (Error str)
+    | Ok (name, certificates) ->
+        raw_query t ~name certificates cmd (block_data name f)
 
   let set_policy t ~domain policy =
     let open Lwt.Infix in

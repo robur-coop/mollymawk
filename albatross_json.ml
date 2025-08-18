@@ -97,7 +97,8 @@ let success = function
   | `Block_devices bs -> block_infos bs
   | `Old_unikernels _ -> `String "old unikernels not supported"
   | `Unikernel_image _ -> `String "unikernel image not supported"
-  | `Block_device_image (_, bd) -> `String bd
+  | `Old_block_device_image (_, bd) -> `String bd
+  | `Block_device_image _compressed -> `String "block device image"
 
 let console_data_to_json (ts, data) =
   `Assoc
@@ -110,6 +111,7 @@ let res = function
   | `Data (`Console_data (ts, data)) -> Ok (console_data_to_json (ts, data))
   | `Data (`Utc_console_data (ts, data)) -> Ok (console_data_to_json (ts, data))
   | `Data (`Stats_data _) -> Error (`String "stats not supported")
+  | `Data (`Block_data _) -> Error (`String "block data not supported")
 
 let fail_behaviour_of_json js =
   let ( let* ) = Result.bind in

@@ -808,7 +808,7 @@ async function createVolume() {
 	if (data_toggle && !block_data) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "You must upload a file else switch 'Dumb data to this volume' off"
+		formAlert.textContent = "You must upload a file else switch 'Dump data to this volume' off"
 		buttonLoading(createButton, false, "Create volume")
 		return;
 	}
@@ -853,7 +853,7 @@ async function createVolume() {
 
 async function downloadVolume(block_name) {
 	const downloadButton = document.getElementById(`download-block-button-${block_name}`);
-	const compression_level = document.getElementById("compression-level").innerText;
+	const compression_level = document.getElementById(`compression-level-${block_name}`).innerText;
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	try {
 		buttonLoading(downloadButton, true, "Downloading...")
@@ -895,8 +895,8 @@ async function downloadVolume(block_name) {
 
 async function uploadToVolume(block_name) {
 	const uploadButton = document.getElementById(`upload-block-button-${block_name}`);
-	const block_compressed = document.getElementById("block_compressed").checked;
-	const block_data = document.getElementById("block_data_upload").files[0];
+	const block_compressed = document.getElementById(`block_compressed-${block_name}`).checked;
+	const block_data = document.getElementById(`block_data_upload-${block_name}`).files[0];
 	const molly_csrf = document.getElementById("molly-csrf").value;
 
 	if (!block_data) {

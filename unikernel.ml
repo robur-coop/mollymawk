@@ -295,7 +295,7 @@ struct
     let check_cookie reqd =
       match Middleware.session_cookie_value reqd with
       | Error (`Msg err) ->
-          Error (`Cookie, "No molly-session in cookie header. %s" ^ err)
+          Error (`Cookie, "No molly-session in cookie header. " ^ err)
       | Ok cookie_value -> (
           match Store.find_by_cookie store cookie_value with
           | None ->
@@ -2040,18 +2040,30 @@ struct
               | (Some "block_data", _), _, contents -> (
                   match (!csrf_ref, !json_data_ref) with
                   | Some csrf, Some json -> (
-                      let cmd block_size block_compressed =
-                        match c_or_u with
-                        | `Create ->
-                            `Block_add (block_size, block_compressed, Some "")
-                        | `Upload -> `Block_set (block_compressed, "")
+                      let add_block block_name block_size =
+                        Albatross.query albatross ~domain:user.name
+                          ~name:block_name
+                          (`Block_cmd (`Block_add block_size))
+                        >>= function
+                        | Error err ->
+                            generate_http_error_response
+                              (Fmt.str "an error with albatross. got %s" err)
+                              `Bad_request
+                            >|= fun () -> Error ()
+                        | Ok (_hdr, res) -> (
+                            match Albatross_json.res res with
+                            | Error (`String err) ->
+                                generate_http_error_response
+                                  (Fmt.str "unexpected field. got %s" err)
+                                  `Bad_request
+                                >|= fun () -> Error ()
+                            | Ok res -> Lwt.return (Ok ()))
                       in
-                      let stream_to_albatross block_name block_size
-                          block_compressed _reqd =
+                      let stream_to_albatross block_name block_compressed =
                         let push () = Lwt_stream.get contents in
                         Albatross.query albatross ~domain:user.name
                           ~name:block_name ~push
-                          (`Block_cmd (cmd block_size block_compressed))
+                          (`Block_cmd (`Block_set block_compressed))
                         >>= function
                         | Error err ->
                             generate_http_error_response
@@ -2085,13 +2097,21 @@ struct
                                 Some (`Int block_size),
                                 Some (`Bool block_compressed) ) ) -> (
                               match token_or_cookie with
-                              | `Token ->
-                                  stream_to_albatross block_name block_size
-                                    block_compressed reqd
+                              | `Token -> (
+                                  add_block block_name block_size >>= function
+                                  | Ok () ->
+                                      stream_to_albatross block_name
+                                        block_compressed
+                                  | Error () -> Lwt.return_unit)
                               | `Cookie ->
                                   csrf_verification
-                                    (stream_to_albatross block_name block_size
-                                       block_compressed)
+                                    (fun _reqd ->
+                                      add_block block_name block_size
+                                      >>= function
+                                      | Ok () ->
+                                          stream_to_albatross block_name
+                                            block_compressed
+                                      | Error () -> Lwt.return_unit)
                                     user csrf reqd)
                           | ( `Upload,
                               ( Some (`String block_name),
@@ -2099,12 +2119,13 @@ struct
                                 Some (`Bool block_compressed) ) ) -> (
                               match token_or_cookie with
                               | `Token ->
-                                  stream_to_albatross block_name 0
-                                    block_compressed reqd
+                                  stream_to_albatross block_name
+                                    block_compressed
                               | `Cookie ->
                                   csrf_verification
-                                    (stream_to_albatross block_name 0
-                                       block_compressed)
+                                    (fun _reqd ->
+                                      stream_to_albatross block_name
+                                        block_compressed)
                                     user csrf reqd)
                           | _ ->
                               generate_http_error_response
@@ -2139,29 +2160,40 @@ struct
       Utils.Json.(get "block_name" json_dict, get "compression_level" json_dict)
     with
     | Some (`String block_name), Some (`Int compression_level) -> (
-        Albatross.query albatross ~domain:user.name ~name:block_name
-          (`Block_cmd (`Block_dump compression_level))
+        let filename = block_name ^ "_dump" in
+        let disposition = "attachment; filename=\"" ^ filename ^ "\"" in
+        let headers =
+          [
+            ("Content-type", "application/octet-stream");
+            ("Content-Disposition", disposition);
+          ]
+        in
+        let headers = H1.Headers.(of_list headers) in
+        let response = H1.Response.create ~headers `OK in
+        let writer = H1.Reqd.respond_with_streaming reqd response in
+        let fini = ref false in
+        let response data =
+          match data with
+          | None ->
+              H1.Body.Writer.close writer;
+              fini := true;
+              Ok ()
+          | Some data ->
+              if H1.Body.Writer.is_closed writer then Error ()
+              else (
+                H1.Body.Writer.write_string writer data;
+                H1.Body.Writer.flush writer Fun.id;
+                Ok ())
+        in
+        Albatross.query_block_dump albatross ~domain:user.name ~name:block_name
+          compression_level response
         >>= function
         | Error err ->
-            Logs.err (fun m ->
-                m "Error querying albatross: %s" (String.escaped err));
-            Middleware.http_response reqd ~title:"Error"
-              ~data:
-                (`String ("Error querying albatross: " ^ String.escaped err))
-              `Internal_server_error
-        | Ok (_hdr, res) -> (
-            match Albatross_json.res res with
-            | Ok res ->
-                let file_content = Yojson.Basic.to_string res in
-                let filename = block_name ^ "_dump" in
-                let disposition = "attachment; filename=\"" ^ filename ^ "\"" in
-                reply reqd ~content_type:"application/octet-stream"
-                  ~header_list:[ ("Content-Disposition", disposition) ]
-                  file_content `OK
-            | Error (`String err) ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:(`String (String.escaped err))
-                  `Internal_server_error))
+            if not !fini then
+              Logs.err (fun m ->
+                  m "Error querying albatross: %s" (String.escaped err));
+            Lwt.return_unit
+        | Ok () -> Lwt.return_unit)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
@@ -2319,7 +2351,7 @@ struct
           `Bad_request
 
   let request_handler stack albatross js_file css_file imgs store http_client
-      (_ipaddr, _port) reqd =
+      flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
           Middleware.http_response reqd ~title:"Error"
@@ -2409,6 +2441,7 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token (download_volume !albatross)))
+            >>= fun () -> Paf.TCP.close flow
         | "/api/volume/upload" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -2559,7 +2592,7 @@ struct
         Logs.info (fun m ->
             m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
               port);
-        let request_handler _flow =
+        let request_handler =
           request_handler stack albatross js_file css_file imgs store
             http_client
         in

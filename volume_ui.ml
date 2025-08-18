@@ -95,7 +95,7 @@ let create_volume total_free_space =
               ];
           ];
         Utils.switch_button ~switch_id:"dataToggle"
-          ~switch_label:"Dumb data to this volume"
+          ~switch_label:"Dump data to this volume"
           (div
              [
                div
@@ -163,7 +163,7 @@ let create_volume total_free_space =
 let download_volume name =
   Tyxml_html.(
     section
-      ~a:[ a_id "block-download"; a_class [ "w-full mx-auto" ] ]
+      ~a:[ a_id ("block-download-" ^ name); a_class [ "w-full mx-auto" ] ]
       [
         div
           [
@@ -185,21 +185,21 @@ let download_volume name =
               ~a:
                 [
                   a_class [ "space-x-5 my-4" ];
-                  Unsafe.string_attrib "x-data" "{level : 1}";
+                  Unsafe.string_attrib "x-data" "{level : 0}";
                 ]
               [
                 Utils.button_component
                   ~attribs:
                     [
                       Unsafe.string_attrib "x-on:click"
-                        "if (level < 9) level = level + 1";
+                        "if (level >= 1) level = level - 1";
                     ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                  ~btn_type:`Primary_outlined ();
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+                  ~btn_type:`Danger_outlined ();
                 span
                   ~a:
                     [
-                      a_id "compression-level";
+                      a_id ("compression-level-" ^ name);
                       a_contenteditable true;
                       a_class [ "text-4xl border px-4" ];
                       a_user_data "x-on:keydown.enter.prevent" "";
@@ -210,7 +210,7 @@ let download_volume name =
                         \                                                                  \
                          $event.target.innerText = value;\n\
                         \                                                                  \
-                         level = parseInt(value) || 1;";
+                         level = parseInt(value) || 0;";
                       Unsafe.string_attrib "x-text" "level";
                       Unsafe.string_attrib "x-on:blur"
                         "$event.target.innerText = level;";
@@ -220,10 +220,10 @@ let download_volume name =
                   ~attribs:
                     [
                       Unsafe.string_attrib "x-on:click"
-                        "if (level > 1) level = level - 1";
+                        "if (level < 9) level = level + 1";
                     ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                  ~btn_type:`Danger_outlined ();
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                  ~btn_type:`Primary_outlined ();
               ];
             Utils.button_component
               ~attribs:
@@ -240,7 +240,7 @@ let download_volume name =
 let upload_to_volume name =
   Tyxml_html.(
     section
-      ~a:[ a_id "block-upload"; a_class [ "w-full mx-auto" ] ]
+      ~a:[ a_id ("block-upload-" ^ name); a_class [ "w-full mx-auto" ] ]
       [
         div
           ~a:[ a_class [ "my-4" ] ]
@@ -252,8 +252,8 @@ let upload_to_volume name =
               ~a:
                 [
                   a_input_type `File;
-                  a_name "block_data_upload";
-                  a_id "block_data_upload";
+                  a_name ("block_data_upload-" ^ name);
+                  a_id ("block_data_upload-" ^ name);
                   a_class
                     [
                       "ring-primary-100 mt-1.5 transition appearance-none \
@@ -276,8 +276,8 @@ let upload_to_volume name =
               ~a:
                 [
                   a_input_type `Checkbox;
-                  a_name "block_compressed";
-                  a_id "block_compressed";
+                  a_name ("block_compressed-" ^ name);
+                  a_id ("block_compressed-" ^ name);
                   a_class [ "accent-primary-500 mr-2 w-6 h-6" ];
                 ]
               ();
