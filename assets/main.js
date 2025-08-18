@@ -853,7 +853,7 @@ async function createVolume() {
 
 async function downloadVolume(block_name) {
 	const downloadButton = document.getElementById(`download-block-button-${block_name}`);
-	const compression_level = document.getElementById("compression-level").innerText;
+	const compression_level = document.getElementById(`compression-level-${block_name}`).innerText;
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	try {
 		buttonLoading(downloadButton, true, "Downloading...")

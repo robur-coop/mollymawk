@@ -163,7 +163,7 @@ let create_volume total_free_space =
 let download_volume name =
   Tyxml_html.(
     section
-      ~a:[ a_id "block-download"; a_class [ "w-full mx-auto" ] ]
+      ~a:[ a_id ("block-download-" ^ name); a_class [ "w-full mx-auto" ] ]
       [
         div
           [
@@ -199,7 +199,7 @@ let download_volume name =
                 span
                   ~a:
                     [
-                      a_id "compression-level";
+                      a_id ("compression-level-" ^ name);
                       a_contenteditable true;
                       a_class [ "text-4xl border px-4" ];
                       a_user_data "x-on:keydown.enter.prevent" "";
