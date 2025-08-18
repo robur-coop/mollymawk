@@ -399,6 +399,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
           Error ()
       | Ok (_, `Data (`Console_data (ts, data))) -> f (ts, data)
       | Ok (_, `Data (`Utc_console_data (ts, data))) -> f (ts, data)
+      | Ok (_, `Success `String _) ->
+        (* ignore the success subscribed *)
+        Ok ()
       | Ok w ->
           Logs.warn (fun m ->
               m "albatross unexpected reply, need console output, got %a"
@@ -415,7 +418,13 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               m "albatross stop reading block data %a: error %s"
                 Vmm_core.Name.pp name s);
           Error ()
-      | Ok (_, `Data (`Block_data d)) -> f d
+      | Ok (_, `Data (`Block_data d)) ->
+        Logs.info (fun m -> m "read some block data %u"
+                      (String.length (Option.value ~default:"" d)));
+        f d
+      | Ok (_, `Success `Block_device_image _) ->
+        (* ignore the success block_device_image *)
+        Ok ()
       | Ok w ->
           Logs.warn (fun m ->
               m "albatross unexpected reply, need block data, got %a"
