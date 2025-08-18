@@ -192,10 +192,10 @@ let download_volume name =
                   ~attribs:
                     [
                       Unsafe.string_attrib "x-on:click"
-                        "if (level < 9) level = level + 1";
+                        "if (level >= 1) level = level - 1";
                     ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                  ~btn_type:`Primary_outlined ();
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+                  ~btn_type:`Danger_outlined ();
                 span
                   ~a:
                     [
@@ -220,10 +220,10 @@ let download_volume name =
                   ~attribs:
                     [
                       Unsafe.string_attrib "x-on:click"
-                        "if (level >= 1) level = level - 1";
+                        "if (level < 9) level = level + 1";
                     ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                  ~btn_type:`Danger_outlined ();
+                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+                  ~btn_type:`Primary_outlined ();
               ];
             Utils.button_component
               ~attribs:
