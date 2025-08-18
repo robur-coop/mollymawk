@@ -240,7 +240,7 @@ let download_volume name =
 let upload_to_volume name =
   Tyxml_html.(
     section
-      ~a:[ a_id "block-upload"; a_class [ "w-full mx-auto" ] ]
+      ~a:[ a_id ("block-upload-" ^ name); a_class [ "w-full mx-auto" ] ]
       [
         div
           ~a:[ a_class [ "my-4" ] ]
@@ -252,8 +252,8 @@ let upload_to_volume name =
               ~a:
                 [
                   a_input_type `File;
-                  a_name "block_data_upload";
-                  a_id "block_data_upload";
+                  a_name ("block_data_upload-" ^ name);
+                  a_id ("block_data_upload-" ^ name);
                   a_class
                     [
                       "ring-primary-100 mt-1.5 transition appearance-none \
@@ -276,8 +276,8 @@ let upload_to_volume name =
               ~a:
                 [
                   a_input_type `Checkbox;
-                  a_name "block_compressed";
-                  a_id "block_compressed";
+                  a_name ("block_compressed-" ^ name);
+                  a_id ("block_compressed-" ^ name);
                   a_class [ "accent-primary-500 mr-2 w-6 h-6" ];
                 ]
               ();
