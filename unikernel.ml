@@ -2193,8 +2193,7 @@ struct
               Logs.err (fun m ->
                   m "Error querying albatross: %s" (String.escaped err));
             Lwt.return_unit
-        | Ok () ->
-          Lwt.return_unit)
+        | Ok () -> Lwt.return_unit)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
@@ -2351,8 +2350,8 @@ struct
                   (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let request_handler stack albatross js_file css_file imgs store http_client flow
-      (_ipaddr, _port) reqd =
+  let request_handler stack albatross js_file css_file imgs store http_client
+      flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
           Middleware.http_response reqd ~title:"Error"
@@ -2441,8 +2440,8 @@ struct
         | "/api/volume/download" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_json_csrf_token (download_volume !albatross))) >>= fun () ->
-            Paf.TCP.close flow
+                  (extract_json_csrf_token (download_volume !albatross)))
+            >>= fun () -> Paf.TCP.close flow
         | "/api/volume/upload" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
