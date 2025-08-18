@@ -295,7 +295,7 @@ struct
     let check_cookie reqd =
       match Middleware.session_cookie_value reqd with
       | Error (`Msg err) ->
-          Error (`Cookie, "No molly-session in cookie header. %s" ^ err)
+          Error (`Cookie, "No molly-session in cookie header. " ^ err)
       | Ok cookie_value -> (
           match Store.find_by_cookie store cookie_value with
           | None ->
@@ -2171,10 +2171,12 @@ struct
         let headers = H1.Headers.(of_list headers) in
         let response = H1.Response.create ~headers `OK in
         let writer = H1.Reqd.respond_with_streaming reqd response in
+        let fini = ref false in
         let response data =
           match data with
           | None ->
               H1.Body.Writer.close writer;
+              fini := true;
               Ok ()
           | Some data ->
               if H1.Body.Writer.is_closed writer then Error ()
@@ -2187,13 +2189,14 @@ struct
           compression_level response
         >>= function
         | Error err ->
-            Logs.err (fun m ->
-                m "Error querying albatross: %s" (String.escaped err));
-            Middleware.http_response reqd ~title:"Error"
-              ~data:
-                (`String ("Error querying albatross: " ^ String.escaped err))
-              `Internal_server_error
-        | Ok () -> Lwt.return_unit)
+            if not !fini then
+              Logs.err (fun m ->
+                  m "Error querying albatross: %s" (String.escaped err));
+            Logs.app (fun m -> m "download finished");
+            Lwt.return_unit
+        | Ok () ->
+          Logs.app (fun m -> m "download finished");
+          Lwt.return_unit)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
@@ -2350,7 +2353,7 @@ struct
                   (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let request_handler stack albatross js_file css_file imgs store http_client
+  let request_handler stack albatross js_file css_file imgs store http_client flow
       (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
@@ -2440,7 +2443,8 @@ struct
         | "/api/volume/download" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_json_csrf_token (download_volume !albatross)))
+                  (extract_json_csrf_token (download_volume !albatross))) >>= fun () ->
+            Paf.TCP.close flow
         | "/api/volume/upload" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -2591,7 +2595,7 @@ struct
         Logs.info (fun m ->
             m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
               port);
-        let request_handler _flow =
+        let request_handler =
           request_handler stack albatross js_file css_file imgs store
             http_client
         in
