@@ -2192,10 +2192,8 @@ struct
             if not !fini then
               Logs.err (fun m ->
                   m "Error querying albatross: %s" (String.escaped err));
-            Logs.app (fun m -> m "download finished");
             Lwt.return_unit
         | Ok () ->
-          Logs.app (fun m -> m "download finished");
           Lwt.return_unit)
     | _ ->
         Middleware.http_response reqd ~title:"Error"

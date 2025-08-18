@@ -418,10 +418,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               m "albatross stop reading block data %a: error %s"
                 Vmm_core.Name.pp name s);
           Error ()
-      | Ok (_, `Data (`Block_data d)) ->
-        Logs.info (fun m -> m "read some block data %u"
-                      (String.length (Option.value ~default:"" d)));
-        f d
+      | Ok (_, `Data (`Block_data d)) -> f d
       | Ok (_, `Success `Block_device_image _) ->
         (* ignore the success block_device_image *)
         Ok ()
