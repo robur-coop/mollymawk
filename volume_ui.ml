@@ -185,7 +185,7 @@ let download_volume name =
               ~a:
                 [
                   a_class [ "space-x-5 my-4" ];
-                  Unsafe.string_attrib "x-data" "{level : 1}";
+                  Unsafe.string_attrib "x-data" "{level : 0}";
                 ]
               [
                 Utils.button_component
@@ -210,7 +210,7 @@ let download_volume name =
                         \                                                                  \
                          $event.target.innerText = value;\n\
                         \                                                                  \
-                         level = parseInt(value) || 1;";
+                         level = parseInt(value) || 0;";
                       Unsafe.string_attrib "x-text" "level";
                       Unsafe.string_attrib "x-on:blur"
                         "$event.target.innerText = level;";
@@ -220,7 +220,7 @@ let download_volume name =
                   ~attribs:
                     [
                       Unsafe.string_attrib "x-on:click"
-                        "if (level > 1) level = level - 1";
+                        "if (level >= 1) level = level - 1";
                     ]
                   ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
                   ~btn_type:`Danger_outlined ();
