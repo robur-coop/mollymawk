@@ -1,4 +1,4 @@
-let create_volume total_free_space =
+let create_volume total_free_space albatross_instance =
   Tyxml_html.(
     section
       ~a:[ a_id "block-create"; a_class [ "w-full mx-auto" ] ]

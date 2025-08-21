@@ -1,16 +1,76 @@
-let volume_index_layout volumes policy =
-  let total_volume_used =
-    List.fold_left (fun total_size (_, size, _) -> total_size + size) 0 volumes
+let volume_index_layout
+    (volumes_by_instance : (string * (Vmm_core.Name.t * int * bool) list) list)
+    (policies : (string * Vmm_core.Policy.t) list) =
+  let instance_data_json =
+    let open Yojson.Basic in
+    let data =
+      List.filter_map
+        (fun (name, policy) ->
+          let volumes =
+            List.assoc_opt name volumes_by_instance |> Option.value ~default:[]
+          in
+          let total_volume_used =
+            List.fold_left (fun acc (_, size, _) -> acc + size) 0 volumes
+          in
+          let total_free_space =
+            Option.value ~default:0 policy.Vmm_core.Policy.block
+            - total_volume_used
+          in
+          let volumes_json =
+            `List
+              (List.map
+                 (fun (n, size, used) ->
+                   `Assoc
+                     [
+                       ("name", `String (Vmm_core.Name.to_string n));
+                       ("size", `Int size);
+                       ("used", `Bool used);
+                     ])
+                 volumes)
+          in
+          Some
+            ( name,
+              `Assoc
+                [
+                  ("volumes", volumes_json);
+                  ("policy", Albatross_json.policy_to_json policy);
+                  ( "stats",
+                    `Assoc
+                      [
+                        ("total_volume_used", `Int total_volume_used);
+                        ("total_free_space", `Int total_free_space);
+                        ("volume_count", `Int (List.length volumes));
+                      ] );
+                ] ))
+        policies
+    in
+    `Assoc data |> to_string
   in
-  let total_free_space =
-    match policy with
-    | Some policy ->
-        Option.value ~default:0 policy.Vmm_core.Policy.block - total_volume_used
-    | None -> 0
+  let initial_instance_name =
+    match policies with (name, _) :: _ -> name | [] -> ""
   in
   Tyxml_html.(
     section
-      ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
+      ~a:
+        [
+          a_class [ "col-span-7 p-4 bg-gray-50 my-1" ];
+          Unsafe.string_attrib "x-data"
+            (Fmt.str
+               "{ instanceData: %s, selectedInstance: '%s', chart: null, get \
+                selected() { return this.instanceData[this.selectedInstance] \
+                }, updateChart() { if (this.chart) { this.chart.destroy(); } \
+                const stats = this.selected.stats; this.chart = new \
+                Chart(document.getElementById('usageChart').getContext('2d'), \
+                { type: 'pie', data: { labels: [`Free \
+                (${stats.total_free_space}MB)`, `Used \
+                (${stats.total_volume_used}MB)`], datasets: [{ data: \
+                [stats.total_free_space, stats.total_volume_used], \
+                backgroundColor: ['rgb(156, 156, 156)','rgb(54, 156, 140)'], \
+                hoverOffset: 4 }] } }); } }"
+               instance_data_json initial_instance_name);
+          Unsafe.string_attrib "x-init"
+            "$watch('selectedInstance', () => updateChart()); updateChart()";
+        ]
       [
         section
           ~a:[ a_id "block-display"; a_class [ "block" ] ]
@@ -19,21 +79,50 @@ let volume_index_layout volumes policy =
               ~a:[ a_class [ "px-3 flex justify-between items-center" ] ]
               [
                 div
+                  ~a:[ a_class [ "flex items-center space-x-4" ] ]
                   [
                     p
                       ~a:[ a_class [ "font-bold text-gray-700" ] ]
                       [
-                        txt
-                          ("Volumes ("
-                          ^ string_of_int (List.length volumes)
-                          ^ ")");
+                        txt "Volumes (";
+                        span
+                          ~a:
+                            [
+                              Unsafe.string_attrib "x-text"
+                                "selected.stats.volume_count";
+                            ]
+                          [];
+                        txt ")";
                       ];
+                    select
+                      ~a:
+                        [
+                          Unsafe.string_attrib "x-model" "selectedInstance";
+                          a_class
+                            [
+                              "rounded py-2 px-3 border border-primary-200 \
+                               focus:border-primary-500 outline-0";
+                            ];
+                        ]
+                      (List.map
+                         (fun (name, _) ->
+                           option ~a:[ a_value name ] (txt name))
+                         policies);
                   ];
                 div
+                  ~a:[ Unsafe.string_attrib "x-show" "selected" ]
                   [
                     Modal_dialog.modal_dialog ~modal_title:"Create a volume"
                       ~button_content:(txt "Create block device")
-                      ~content:(Volume_ui.create_volume total_free_space)
+                      ~content:
+                        (div
+                           ~a:
+                             [
+                               Unsafe.string_attrib "x-data"
+                                 "{ free_space: \
+                                  selected.stats.total_free_space }";
+                             ]
+                           [ Volume_ui.create_volume ])
                       ();
                   ];
               ];
@@ -43,34 +132,6 @@ let volume_index_layout volumes policy =
                 div
                   ~a:
                     [
-                      Unsafe.string_attrib "x-data" "chart: null";
-                      Unsafe.string_attrib "x-init"
-                        ("\n\
-                         \                  chart = new \
-                          Chart(document.getElementById('usageChart').getContext('2d'), \
-                          {\n\
-                         \                  type: 'pie',\n\
-                         \                  data: {\n\
-                         \                    labels: ['Free storage ("
-                        ^ string_of_int total_free_space
-                        ^ "MB)','Used storage ("
-                        ^ string_of_int total_volume_used
-                        ^ "MB)'],\n\
-                          \                    datasets: [{\n\
-                          \                      label: 'Size',\n\
-                          \                      data: ["
-                        ^ string_of_int total_free_space
-                        ^ ", "
-                        ^ string_of_int total_volume_used
-                        ^ "],\n\
-                          \                      backgroundColor: ['rgb(156, \
-                           156, 156)','rgb(54, 156, 140)'],\n\
-                          \                      hoverOffset: 4,\n\
-                          \                    }]\n\
-                          \                  },\n\
-                          \                  options: {}\n\
-                          \                });\n\
-                          \              ");
                       a_class [ "flex justify-center items-center" ];
                       a_style "position: relative; height:30vh; width:70vw;";
                     ]

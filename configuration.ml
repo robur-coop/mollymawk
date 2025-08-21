@@ -3,6 +3,7 @@ open Utils.Json
 let current_version = 1
 
 type t = {
+  name : string;
   certificate : X509.Certificate.t;
   private_key : X509.Private_key.t;
   server_ip : Ipaddr.t;
@@ -28,6 +29,7 @@ let empty () =
       (X509.Signing_request.sign csr ~valid_from ~valid_until key dn)
   in
   {
+    name;
     certificate = cert;
     private_key = key;
     server_ip = Ipaddr.(V4 V4.any);
@@ -48,12 +50,14 @@ let to_json t =
 
 let of_json_from_http json_dict now =
   match
-    ( get "certificate" json_dict,
+    ( get "name" json_dict,
+      get "certificate" json_dict,
       get "private_key" json_dict,
       get "server_ip" json_dict,
       get "server_port" json_dict )
   with
-  | ( Some (`String cert),
+  | ( Some (`String name),
+      Some (`String cert),
       Some (`String key),
       Some (`String server_ip),
       Some (`Int server_port) ) ->
@@ -72,7 +76,15 @@ let of_json_from_http json_dict now =
         else Ok ()
       in
       let* server_ip = Ipaddr.of_string server_ip in
-      Ok { certificate; private_key; server_ip; server_port; updated_at = now }
+      Ok
+        {
+          name;
+          certificate;
+          private_key;
+          server_ip;
+          server_port;
+          updated_at = now;
+        }
   | _ ->
       Error
         (`Msg
@@ -87,13 +99,15 @@ let of_json json =
       | Some (`Int v) ->
           if v = current_version then
             match
-              ( get "certificate" xs,
+              ( get "name" xs,
+                get "certificate" xs,
                 get "private_key" xs,
                 get "server_ip" xs,
                 get "server_port" xs,
                 get "updated_at" xs )
             with
-            | ( Some (`String cert),
+            | ( Some (`String name),
+                Some (`String cert),
                 Some (`String key),
                 Some (`String server_ip),
                 Some (`Int server_port),
@@ -117,6 +131,7 @@ let of_json json =
 
                 Ok
                   {
+                    name;
                     certificate;
                     private_key;
                     server_ip;

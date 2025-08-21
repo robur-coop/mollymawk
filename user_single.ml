@@ -1,4 +1,5 @@
-let user_single_layout (user : User_model.user) unikernels policy current_time =
+let user_single_layout (user : User_model.user) unikernels policies current_time
+    =
   Tyxml_html.(
     section
       ~a:[ a_class [ "p-4 bg-gray-50 my-1" ] ]
@@ -221,8 +222,8 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                 section
                   ~a:[ a_id "policy-table" ]
                   [
-                    (match policy with
-                    | None ->
+                    (match policies with
+                    | [] ->
                         a
                           ~a:
                             [
@@ -236,9 +237,49 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                                 ];
                             ]
                           [ txt "Add Policy" ]
-                    | Some policy ->
+                    | (initial_instance, _) :: _ ->
+                        let policies_json =
+                          let open Yojson.Basic in
+                          `Assoc
+                            (List.map
+                               (fun (name, p) ->
+                                 (name, Albatross_json.policy_to_json p))
+                               policies)
+                          |> to_string
+                        in
                         div
+                          ~a:
+                            [
+                              Unsafe.string_attrib "x-data"
+                                (Fmt.str
+                                   "{ policies: %s, selectedInstance: '%s', \
+                                    get selectedPolicy() { return \
+                                    this.policies[this.selectedInstance] } }"
+                                   policies_json initial_instance);
+                            ]
                           [
+                            div
+                              ~a:[ a_class [ "mb-4" ] ]
+                              [
+                                label
+                                  ~a:[ a_class [ "block font-medium mb-1" ] ]
+                                  [ txt "Showing policy for instance:" ];
+                                select
+                                  ~a:
+                                    [
+                                      Unsafe.string_attrib "x-model"
+                                        "selectedInstance";
+                                      a_class
+                                        [
+                                          "rounded py-2 px-3 border \
+                                           border-primary-200 ...";
+                                        ];
+                                    ]
+                                  (List.map
+                                     (fun (name, _) ->
+                                       option ~a:[ a_value name ] (txt name))
+                                     policies);
+                              ];
                             table
                               ~a:
                                 [
@@ -335,9 +376,13 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                                             ];
                                         ]
                                       [
-                                        txt
-                                          (string_of_int
-                                             policy.Vmm_core.Policy.unikernels);
+                                        span
+                                          ~a:
+                                            [
+                                              Unsafe.string_attrib "x-text"
+                                                "selectedPolicy.unikernels";
+                                            ]
+                                          [];
                                       ];
                                     td
                                       ~a:
@@ -350,7 +395,13 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                                             ];
                                         ]
                                       [
-                                        txt (string_of_int policy.memory ^ " MB");
+                                        span
+                                          ~a:
+                                            [
+                                              Unsafe.string_attrib "x-text"
+                                                "selectedPolicy.memory + ' MB'";
+                                            ]
+                                          [];
                                       ];
                                     td
                                       ~a:
@@ -363,11 +414,13 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                                             ];
                                         ]
                                       [
-                                        txt
-                                          (string_of_int
-                                             (Option.value policy.block
-                                                ~default:0)
-                                          ^ " MB");
+                                        span
+                                          ~a:
+                                            [
+                                              Unsafe.string_attrib "x-text"
+                                                "selectedPolicy.block + ' MB'";
+                                            ]
+                                          [];
                                       ];
                                     td
                                       ~a:
@@ -380,11 +433,13 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                                             ];
                                         ]
                                       [
-                                        txt
-                                          (String.concat ", "
-                                             (List.map string_of_int
-                                                (Vmm_core.IS.elements
-                                                   policy.cpuids)));
+                                        span
+                                          ~a:
+                                            [
+                                              Unsafe.string_attrib "x-text"
+                                                "selectedPolicy.cpuids";
+                                            ]
+                                          [];
                                       ];
                                     td
                                       ~a:
@@ -397,11 +452,13 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                                             ];
                                         ]
                                       [
-                                        txt
-                                          (String.concat ", "
-                                             (List.map string_of_uri
-                                                (Vmm_core.String_set.elements
-                                                   policy.bridges)));
+                                        span
+                                          ~a:
+                                            [
+                                              Unsafe.string_attrib "x-text"
+                                                "selectedPolicy.bridges";
+                                            ]
+                                          [];
                                       ];
                                     td
                                       ~a:
@@ -417,9 +474,11 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                                         a
                                           ~a:
                                             [
-                                              a_href
-                                                ("/admin/u/policy/edit/"
-                                               ^ user.uuid ^ "");
+                                              Unsafe.string_attrib "x-bind:href"
+                                                (Fmt.str
+                                                   "'/admin/u/policy/edit/%s?instance=' \
+                                                    + selectedInstance"
+                                                   user.uuid);
                                               a_class
                                                 [
                                                   "border border-primary-500 \

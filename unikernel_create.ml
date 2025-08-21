@@ -1,11 +1,60 @@
-let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
-    (blocks : (Vmm_core.Name.t * int * bool) list) =
-  let total_memory_used = Utils.total_memory_used unikernels in
-  let cpu_usage_count = Utils.cpu_usage_count user_policy unikernels in
-  let memory_left = user_policy.memory - total_memory_used in
+let unikernel_create_layout ~(policies : (string * Vmm_core.Policy.t) list)
+    unikernels_by_instance
+    (blocks : (string * (Vmm_core.Name.t * int * bool) list) list) =
+  let instance_data =
+    List.map
+      (fun (name, policy) ->
+        let unikernels_on_instance =
+          Option.value ~default:[] (List.assoc_opt name unikernels_by_instance)
+        in
+        let total_memory_used =
+          Utils.total_memory_used unikernels_on_instance
+        in
+        let cpu_usage_count =
+          Utils.cpu_usage_count policy unikernels_on_instance
+        in
+        let memory_left = policy.memory - total_memory_used in
+        (name, (policy, memory_left, cpu_usage_count)))
+      policies
+  in
+  let instance_data_json =
+    let open Yojson.Basic in
+    `Assoc
+      (List.map
+         (fun (name, (policy, memory_left, cpu_usage)) ->
+           let cpu_usage_json =
+             `List
+               (List.map
+                  (fun (cpu, count) ->
+                    `Assoc [ ("cpu", `Int cpu); ("count", `Int count) ])
+                  cpu_usage)
+           in
+           ( name,
+             `Assoc
+               [
+                 ("policy", Albatross_json.policy_to_json policy);
+                 ( "stats",
+                   `Assoc
+                     [
+                       ("memory_left", `Int memory_left);
+                       ("cpu_usage_count", cpu_usage_json);
+                     ] );
+               ] ))
+         instance_data)
+    |> to_string
+  in
+  let initial_instance_name, _ = List.hd policies in
   Tyxml_html.(
     section
-      ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
+      ~a:
+        [
+          a_class [ "col-span-7 p-4 bg-gray-50 my-1" ];
+          Unsafe.string_attrib "x-data"
+            (Fmt.str
+               "{ instanceData: %s, selectedInstance: '%s', get selected() { \
+                return this.instanceData[this.selectedInstance] } }"
+               instance_data_json initial_instance_name);
+        ]
       [
         div
           ~a:[ a_class [ "px-3 flex justify-between items-center" ] ]
@@ -24,6 +73,34 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
               [
                 div
                   [
+                    label
+                      ~a:[ a_class [ "block font-medium" ] ]
+                      [ txt "Albatross Instance*" ];
+                    select
+                      ~a:
+                        [
+                          a_id "albatross-instance";
+                          Unsafe.string_attrib "x-model" "selectedInstance";
+                          a_class
+                            [
+                              "ring-primary-100 mt-1.5 transition \
+                               appearance-none block w-full px-3 py-3 \
+                               rounded-xl shadow-sm border \
+                               hover:border-primary-200 \
+                               focus:border-primary-300 bg-primary-50 \
+                               bg-opacity-0 hover:bg-opacity-50 \
+                               focus:bg-opacity-50 ring-primary-200 \
+                               focus:ring-primary-200 focus:ring-[1px] \
+                               focus:outline-none";
+                            ];
+                        ]
+                      (List.map
+                         (fun (name, _) ->
+                           option ~a:[ a_value name ] (txt name))
+                         policies);
+                  ];
+                div
+                  [
                     label ~a:[ a_class [ "block font-medium" ] ] [ txt "Name*" ];
                     input
                       ~a:
@@ -37,14 +114,12 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                               "ring-primary-100 mt-1.5 transition \
                                appearance-none block w-full px-3 py-3 \
                                rounded-xl shadow-sm border \
-                               hover:border-primary-200\n\
-                              \                                           \
+                               hover:border-primary-200 \
                                focus:border-primary-300 bg-primary-50 \
                                bg-opacity-0 hover:bg-opacity-50 \
                                focus:bg-opacity-50 ring-primary-200 \
-                               focus:ring-primary-200\n\
-                              \                                           \
-                               focus:ring-[1px] focus:outline-none";
+                               focus:ring-primary-200 focus:ring-[1px] \
+                               focus:outline-none";
                             ];
                         ]
                       ();
@@ -53,7 +128,7 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                   [
                     label
                       ~a:[ a_class [ "block font-medium" ] ]
-                      [ txt "CPU Id" ];
+                      [ txt "CPU ID" ];
                     select
                       ~a:
                         [
@@ -61,29 +136,26 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                           a_name "cpuid";
                           a_class
                             [
-                              "ring-primary-100 mt-1.5 transition block w-full \
-                               px-3 py-3 rounded-xl shadow-sm border \
-                               hover:border-primary-200\n\
-                              \                                           \
+                              "ring-primary-100 mt-1.5 transition \
+                               appearance-none block w-full px-3 py-3 \
+                               rounded-xl shadow-sm border \
+                               hover:border-primary-200 \
                                focus:border-primary-300 bg-primary-50 \
                                bg-opacity-0 hover:bg-opacity-50 \
                                focus:bg-opacity-50 ring-primary-200 \
-                               focus:ring-primary-200\n\
-                              \                                           \
-                               focus:ring-[1px] focus:outline-none";
+                               focus:ring-primary-200 focus:ring-[1px] \
+                               focus:outline-none";
                             ];
                         ]
-                      (List.map
-                         (fun (cpu_id, count) ->
-                           option
-                             ~a:[ a_value (string_of_int cpu_id) ]
-                             (txt
-                                ("CPU " ^ string_of_int cpu_id ^ " (used by "
-                               ^ string_of_int count ^ " unikernels)")))
-                         (List.sort
-                            (fun (_, count1) (_, count2) ->
-                              Int.compare count1 count2)
-                            cpu_usage_count));
+                      [
+                        Unsafe.data
+                          "<template x-for=\"cpu in \
+                           selected.stats.cpu_usage_count\">\n\
+                          \             <option :value=\"cpu.cpu\" \
+                           :text=\"`CPU ${cpu.cpu} (used by \
+                           ${cpu.count})`\"></option>\n\
+                          \           </template>";
+                      ];
                   ];
                 div
                   ~a:[ a_class [ "" ] ]
@@ -116,17 +188,21 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                   ~a:
                     [
                       a_class [ "space-x-5" ];
-                      Unsafe.string_attrib "x-data"
-                        ("{count : "
-                        ^ (if memory_left >= 32 then string_of_int 32
-                           else string_of_int memory_left)
-                        ^ "}");
+                      Unsafe.string_attrib "x-data" "{ count: 32 }";
                     ]
                   [
                     label
                       ~a:[ a_class [ "block font-medium" ] ]
                       [
-                        txt ("Memory (max " ^ string_of_int memory_left ^ "MB)");
+                        txt "Memory (max ";
+                        span
+                          ~a:
+                            [
+                              Unsafe.string_attrib "x-text"
+                                "selected.stats.memory_left";
+                            ]
+                          [];
+                        txt "MB available)";
                       ];
                     Utils.button_component
                       ~attribs:
@@ -172,11 +248,23 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                 label
                   ~a:[ a_class [ "block font-medium" ] ]
                   [ txt "Network Interfaces" ];
-                Utils.dynamic_dropdown_form
-                  (Vmm_core.String_set.elements user_policy.bridges)
-                  ~get_label:(fun bridge -> bridge)
-                  ~get_value:(fun bridge -> bridge)
-                  ~id:"network";
+                div
+                  (List.map
+                     (fun (name, (policy : Vmm_core.Policy.t)) ->
+                       div
+                         ~a:
+                           [
+                             Unsafe.string_attrib "x-show"
+                               (Fmt.str "selectedInstance === '%s'" name);
+                           ]
+                         [
+                           Utils.dynamic_dropdown_form
+                             (Vmm_core.String_set.elements policy.bridges)
+                             ~get_label:(fun b -> b)
+                             ~get_value:(fun b -> b)
+                             ~id:("network-" ^ name);
+                         ])
+                     policies);
               ];
             hr ();
             div
@@ -184,14 +272,27 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                 label
                   ~a:[ a_class [ "block font-medium" ] ]
                   [ txt "Block devices" ];
-                Utils.dynamic_dropdown_form blocks
-                  ~get_label:(fun (name, size, used) ->
-                    Option.value ~default:"" (Vmm_core.Name.name name)
-                    ^ " - " ^ Int.to_string size ^ "MB (used: "
-                    ^ Bool.to_string used ^ ")")
-                  ~get_value:(fun (name, _, _) ->
-                    Option.value ~default:"" (Vmm_core.Name.name name))
-                  ~id:"block";
+                div
+                  (List.map
+                     (fun (instance_name, blocks_list) ->
+                       div
+                         ~a:
+                           [
+                             Unsafe.string_attrib "x-show"
+                               (Fmt.str "selectedInstance === '%s'"
+                                  instance_name);
+                           ]
+                         [
+                           Utils.dynamic_dropdown_form blocks_list
+                             ~get_label:(fun (name, size, used) ->
+                               Vmm_core.Name.to_string name
+                               ^ " - " ^ Int.to_string size ^ "MB (used: "
+                               ^ Bool.to_string used ^ ")")
+                             ~get_value:(fun (name, _, _) ->
+                               Vmm_core.Name.to_string name)
+                             ~id:("block-" ^ instance_name);
+                         ])
+                     blocks);
               ];
             hr ();
             div

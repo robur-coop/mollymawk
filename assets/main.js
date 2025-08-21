@@ -170,59 +170,85 @@ function openConfigForm(ip, port, certificate, p_key) {
 	}
 }
 
-async function saveConfig() {
+function openConfigForm(name, ip, port, certificate, privateKey) {
+	const form = document.getElementById('config-form');
+	form.classList.remove('hidden');
+	document.getElementById('config-name').value = name;
+	document.getElementById('server-ip').value = ip;
+	document.getElementById('server-port').value = port;
+	document.getElementById('certificate').value = certificate;
+	document.getElementById('private-key').value = privateKey;
+	document.getElementById('config-name-edit').value = name;
+	document.getElementById('config-name').disabled = (name !== '');
+	const button = document.getElementById('config-button');
+	button.textContent = (name === '') ? 'Add Configuration' : 'Update Configuration';
+}
 
+
+async function saveConfig() {
+	const nameInput = document.getElementById("config-name").value;
 	const ipInput = document.getElementById("server-ip").value;
 	const portInput = document.getElementById("server-port").value;
 	const certificateInput = document.getElementById("certificate").value;
 	const pkeyInput = document.getElementById("private-key").value;
+
+	const originalName = document.getElementById("config-name-edit").value;
+
 	const formAlert = document.getElementById("form-alert");
 	const formButton = document.getElementById('config-button');
 	const molly_csrf = document.getElementById("molly-csrf").value;
+
 	formButton.classList.add("disabled");
-	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
+	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`;
 	formButton.disabled = true;
-	if (ipInput === '' || portInput === '' || certificateInput === '' || pkeyInput === '') {
+
+	if (nameInput === '' || ipInput === '' || portInput === '' || certificateInput === '' || pkeyInput === '') {
 		formAlert.classList.remove("hidden");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = "Please fill all fields";
-	} else {
-		try {
-			const response = await fetch("/api/admin/settings/update", {
-				method: 'POST',
-				headers: {
-					"Content-Type": "application/json",
-					"Accept": "application/json",
-				},
-				body: JSON.stringify({
-					"server_ip": ipInput,
-					"server_port": Number(portInput),
-					"certificate": certificateInput,
-					"private_key": pkeyInput,
-					"molly_csrf": molly_csrf
-				})
-			})
-			const data = await response.json();
-			if (data.status === 200) {
-				formAlert.classList.remove("hidden", "text-secondary-500");
-				formAlert.classList.add("text-primary-500");
-				formAlert.textContent = "Succesfully updated";
-				postAlert("bg-primary-300", data.data);
-				setTimeout(function () {
-					window.location.reload();
-				}, 2000);
-			} else {
-				formAlert.classList.remove("hidden", "text-primary-500");
-				formAlert.classList.add("text-secondary-500");
-				formAlert.textContent = data.data
-			}
-		} catch (error) {
-			formAlert.classList.remove("hidden");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = error
-		}
+		formButton.innerHTML = originalName ? "Update" : "Add Configuration";
+		formButton.disabled = false;
+		return;
 	}
-	formButton.innerHTML = "Update"
+
+	try {
+		const response = await fetch("/api/admin/settings/update", {
+			method: 'POST',
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json",
+			},
+			body: JSON.stringify({
+				"name": nameInput,
+				"original_name": originalName,
+				"server_ip": ipInput,
+				"server_port": Number(portInput),
+				"certificate": certificateInput,
+				"private_key": pkeyInput,
+				"molly_csrf": molly_csrf
+			})
+		});
+
+		const data = await response.json();
+		if (data.status === 200) {
+			formAlert.classList.remove("hidden", "text-secondary-500");
+			formAlert.classList.add("text-primary-500");
+			formAlert.textContent = "Successfully updated";
+			postAlert("bg-primary-300", data.data);
+			setTimeout(() => window.location.reload(), 1500);
+		} else {
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = data.data;
+		}
+	} catch (error) {
+		formAlert.classList.remove("hidden");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = error.toString();
+	}
+
+	// Reset button state
+	formButton.innerHTML = originalName ? "Update" : "Add Configuration";
 	formButton.disabled = false;
 }
 
@@ -305,6 +331,12 @@ async function deployUnikernel() {
 	const networkData = gatherFieldsForDevices("network", "network_interfaces", formAlert);
 	const blockData = gatherFieldsForDevices("block", "block_devices", formAlert);
 
+	const instance = document.getElementById("albatross-instance").value;
+	if (!instance) {
+		buttonLoading(deployButton, false, "Deploy");
+		return;
+	}
+
 	// Abort immediately if a device field is invalid
 	if (networkData === null || blockData === null) {
 		buttonLoading(deployButton, false, "Deploy");
@@ -343,6 +375,7 @@ async function deployUnikernel() {
 		...blockData,
 		arguments: argumentsList
 	};
+	formData.append("albatross_instance", instance);
 	formData.append("unikernel_name", name,);
 	formData.append("unikernel_config", JSON.stringify(unikernel_config));
 	formData.append("unikernel_force_create", force_create);

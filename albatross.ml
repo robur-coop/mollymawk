@@ -5,13 +5,16 @@ module String_set = Set.Make (String)
 module Make (S : Tcpip.Stack.V4V6) = struct
   module TLS = Tls_mirage.Make (S.TCP)
 
-  type t = {
+  type albatross_instance = {
+    name : string;
     stack : S.t;
     remote : Ipaddr.t * int;
     cert : X509.Certificate.t;
     key : X509.Private_key.t;
     mutable policies : Vmm_core.Policy.t Vmm_trie.t;
   }
+
+  type t = albatross_instance list
 
   let empty_policy =
     Vmm_core.Policy.
@@ -517,33 +520,39 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                                cmd TLS.pp_error e))
                   | Error err -> Lwt.return_error err)))
 
-  let init stack server ?(port = 1025) cert key =
+  let init stack (configs : Configuration.t list) =
     let open Lwt.Infix in
-    let t =
-      { stack; remote = (server, port); cert; key; policies = Vmm_trie.empty }
-    in
-    let cmd = `Policy_cmd `Policy_info in
-    match gen_cert t cmd "." with
-    | Error s -> invalid_arg s
-    | Ok certificates -> (
-        raw_query t certificates cmd reply >|= function
-        | Ok (_hdr, `Success (`Policies ps)) ->
-            let ps =
-              List.fold_left
-                (fun acc (name, p) -> fst (Vmm_trie.insert name p acc))
-                Vmm_trie.empty ps
+    Lwt_list.fold_left_s
+      (fun acc (config : Configuration.t) ->
+        match acc with
+        | Error e -> Lwt.return (Error e)
+        | Ok initialized_configs -> (
+            let t =
+              {
+                name = config.name;
+                stack;
+                remote = (config.server_ip, config.server_port);
+                cert = config.certificate;
+                key = config.private_key;
+                policies = Vmm_trie.empty;
+              }
             in
-            t.policies <- ps;
-            t
-        | Ok w ->
-            Logs.err (fun m ->
-                m "albatross expected success policies, got reply %a"
-                  (Vmm_commands.pp_wire ~verbose:false)
-                  w);
-            t
-        | Error str ->
-            Logs.err (fun m -> m "albatross: error querying policies: %s" str);
-            t)
+            let cmd = `Policy_cmd `Policy_info in
+            match gen_cert t cmd t.name with
+            | Error s -> Lwt.return (Error s)
+            | Ok certificates -> (
+                raw_query t certificates cmd reply >|= function
+                | Ok (_hdr, `Success (`Policies ps)) ->
+                    let ps =
+                      List.fold_left
+                        (fun acc (name, p) -> fst (Vmm_trie.insert name p acc))
+                        Vmm_trie.empty ps
+                    in
+                    t.policies <- ps;
+                    Ok (t :: initialized_configs)
+                | Ok _w -> Error "Failed to init"
+                | Error str -> Error str)))
+      (Ok []) configs
 
   let certs t domain name cmd =
     match
@@ -583,4 +592,12 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             Logs.warn (fun m -> m "error updating policies: %s" msg);
             t.policies <- old_policies;
             Error msg)
+
+  let find_instance_by_name (instances : t) name :
+      (albatross_instance, string) result =
+    match
+      List.find_opt (fun instance -> String.equal instance.name name) instances
+    with
+    | Some instance -> Ok instance
+    | None -> Error (Fmt.str "No albatross config found with the name %s" name)
 end

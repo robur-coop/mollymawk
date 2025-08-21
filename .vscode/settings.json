@@ -1,0 +1,54 @@
+{
+    "ocaml.sandbox": {
+        "kind": "opam",
+        "switch": "${workspaceFolder:mollymawk}"
+    }
+}
+
+
+{
+    "name": "roburtls",
+    "fail_behaviour": {
+        "restart": null,
+        "exit_code": [],
+        "all_exit_codes": true
+    },
+    "cpuid": 10,
+    "memory": 512,
+    "block_devices": [
+        {
+            "name": "storage",
+            "host_device": "tlstunnel",
+            "sector_size": 512,
+            "size": 0
+        }
+    ],
+    "network_interfaces": [
+        {
+            "name": "service",
+            "host_device": "service"
+        },
+        {
+            "name": "private",
+            "host_device": "internal"
+        },
+        {
+            "name": "management",
+            "host_device": "management"
+        }
+    ],
+    "arguments": [
+        "--management-ipv4=192.168.42.7/24",
+        "--ipv4=193.30.40.138/24",
+        "--ipv4-gateway=193.30.40.1",
+        "--ipv6=2a0f:7cc7:7cc7:7c40::138/64",
+        "--ipv6-gateway=2a0f:7cc7:7cc7:7c40::1",
+        "--private-ipv4=192.168.0.6/24",
+        "--name=roburtls",
+        "--domains=robur.coop",
+        "--key-seed=ZhGyYzXHvLJvUNxPXOYSdkZf5WgP3LNMmgkX6Kflu/Q",
+        "--key=Y68VA4Fs7M3hri0UQbXOPvpq2y4MaK3wU7JT0Czy5to",
+        "--dns-server=193.30.40.137",
+        "--dns-key=tlstunnel._update.robur.coop:SHA256:8CSFth8gbA9jx/7MWhY1EeVSLHmeNM5U1QN3pufjrRE="
+    ]
+}
