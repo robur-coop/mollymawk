@@ -42,10 +42,12 @@ struct
     | Ok img -> img
 
   let images assets =
-    let molly_img = read_image assets "molly_bird.jpeg" in
+    let molly_img = read_image assets "mollymawk_bird_by_katelyn.jpg" in
     let robur_img = read_image assets "robur.png" in
-    let albatross_img = read_image assets "albatross_1.png" in
-    let mirage_img = read_image assets "mirage_os_1.png" in
+    let albatross_img =
+      read_image assets "interconnections_by_guerrillabuzz.jpg"
+    in
+    let mirage_img = read_image assets "server_room_by_yuriy-vertikov.jpg" in
     let dashboard_img = read_image assets "dashboard_1.png" in
     Lwt.all [ molly_img; robur_img; albatross_img; mirage_img; dashboard_img ]
     >|= function
@@ -2057,7 +2059,7 @@ struct
                                   (Fmt.str "unexpected field. got %s" err)
                                   `Bad_request
                                 >|= fun () -> Error ()
-                            | Ok res -> Lwt.return (Ok ()))
+                            | Ok _res -> Lwt.return (Ok ()))
                       in
                       let stream_to_albatross block_name block_compressed =
                         let push () = Lwt_stream.get contents in
@@ -2376,13 +2378,13 @@ struct
                 reply reqd ~content_type:"image/jpeg" imgs.molly_img `OK)
         | "/images/albatross_1.png" ->
             check_meth `GET (fun () ->
-                reply reqd ~content_type:"image/png" imgs.albatross_img `OK)
+                reply reqd ~content_type:"image/jpeg" imgs.albatross_img `OK)
         | "/images/dashboard_1.png" ->
             check_meth `GET (fun () ->
                 reply reqd ~content_type:"image/png" imgs.dashboard_img `OK)
         | "/images/mirage_os_1.png" ->
             check_meth `GET (fun () ->
-                reply reqd ~content_type:"image/png" imgs.mirage_img `OK)
+                reply reqd ~content_type:"image/jpeg" imgs.mirage_img `OK)
         | "/images/robur.png" ->
             check_meth `GET (fun () ->
                 reply reqd ~content_type:"image/png" imgs.robur_img `OK)
