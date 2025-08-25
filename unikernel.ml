@@ -983,19 +983,23 @@ struct
              ~icon:"/images/robur.png" ())
           `Internal_server_error
 
-  let update_settings stack store albatross _user json_dict reqd =
+  let update_settings stack store albatross_instances _user json_dict reqd =
     match Configuration.of_json_from_http json_dict (Mirage_ptime.now ()) with
     | Ok configuration_settings -> (
         Store.update_configuration store configuration_settings >>= function
-        | Ok () ->
-            Albatross.init stack configuration_settings.server_ip
-              ~port:configuration_settings.server_port
-              configuration_settings.certificate
-              configuration_settings.private_key
-            >>= fun new_albatross ->
-            albatross := new_albatross;
-            Middleware.http_response reqd ~title:"Success"
-              ~data:(`String "Configuration updated successfully") `OK
+        | Ok new_configurations -> (
+            Albatross.init stack new_configurations
+            >>= fun new_albatross_instances ->
+            match new_albatross_instances with
+            | Ok new_instances ->
+                albatross_instances := new_instances;
+                Middleware.http_response reqd ~title:"Success"
+                  ~data:(`String "Configuration updated successfully") `OK
+            | Error err ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:
+                    (`String ("Failed to initialize albatross instances" ^ err))
+                  `Internal_server_error)
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:(`String (String.escaped err))
