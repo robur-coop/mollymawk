@@ -5,13 +5,16 @@ module String_set = Set.Make (String)
 module Make (S : Tcpip.Stack.V4V6) = struct
   module TLS = Tls_mirage.Make (S.TCP)
 
-  type t = {
+  type albatross_instance = {
+    name : string;
     stack : S.t;
     remote : Ipaddr.t * int;
     cert : X509.Certificate.t;
     key : X509.Private_key.t;
     mutable policies : Vmm_core.Policy.t Vmm_trie.t;
   }
+
+  type t = albatross_instance list
 
   let empty_policy =
     Vmm_core.Policy.
