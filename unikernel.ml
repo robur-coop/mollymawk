@@ -376,33 +376,47 @@ struct
     H1.Reqd.respond_with_string reqd resp data;
     Lwt.return_unit
 
-  let user_volumes albatross user_name =
-    Albatross.query albatross ~domain:user_name (`Block_cmd `Block_info)
-    >|= function
-    | Error msg ->
-        Logs.err (fun m -> m "error while communicating with albatross: %s" msg);
-        []
-    | Ok (_hdr, `Success (`Block_devices blocks)) -> blocks
-    | Ok reply ->
-        Logs.err (fun m ->
-            m "expected a block info reply, received %a"
-              (Vmm_commands.pp_wire ~verbose:false)
-              reply);
-        []
+  let user_volumes albatross_instances user_name =
+    Lwt_list.map_p
+      (fun (albatross_instance : Albatross.albatross_instance) ->
+        Albatross.query albatross_instance ~domain:user_name
+          (`Block_cmd `Block_info)
+        >|= function
+        | Error msg ->
+            Logs.err (fun m ->
+                m "error while communicating with albatross: %s" msg);
+            (albatross_instance.name, [])
+        | Ok (_hdr, `Success (`Block_devices blocks)) ->
+            (albatross_instance.name, blocks)
+        | Ok reply ->
+            Logs.err (fun m ->
+                m "expected a block info reply, received %a"
+                  (Vmm_commands.pp_wire ~verbose:false)
+                  reply);
+            (albatross_instance.name, []))
+      albatross_instances
 
-  let user_unikernels albatross user_name =
-    Albatross.query albatross ~domain:user_name (`Unikernel_cmd `Unikernel_info)
-    >|= function
-    | Error msg ->
-        Logs.err (fun m -> m "error while communicating with albatross: %s" msg);
-        []
-    | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels)) -> unikernels
-    | Ok reply ->
-        Logs.err (fun m ->
-            m "expected a unikernel info reply, received %a"
-              (Vmm_commands.pp_wire ~verbose:false)
-              reply);
-        []
+  let user_unikernels (albatross_instances : Albatross.t) user_name =
+    Lwt_list.map_p
+      (fun (albatross_instance : Albatross.albatross_instance) ->
+        Albatross.query albatross_instance ~domain:user_name
+          (`Unikernel_cmd `Unikernel_info)
+        >|= function
+        | Error msg ->
+            Logs.err (fun m ->
+                m "Error while communicatiing with albatross instance '%s': %s"
+                  albatross_instance.name msg);
+            (albatross_instance.name, [])
+        | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels)) ->
+            (albatross_instance.name, unikernels)
+        | Ok reply ->
+            Logs.err (fun m ->
+                m "Expected a unikernel info reply from '%s', got %a"
+                  albatross_instance.name
+                  (Vmm_commands.pp_wire ~verbose:false)
+                  reply);
+            (albatross_instance.name, []))
+      albatross_instances
 
   let user_unikernel albatross ~user_name ~unikernel_name =
     Albatross.query albatross ~domain:user_name ~name:unikernel_name
