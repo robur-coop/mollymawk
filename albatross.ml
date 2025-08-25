@@ -541,33 +541,39 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                                cmd TLS.pp_error e))
                   | Error err -> Lwt.return_error err)))
 
-  let init stack server ?(port = 1025) cert key =
+  let init stack (configs : Configuration.t list) =
     let open Lwt.Infix in
-    let t =
-      { stack; remote = (server, port); cert; key; policies = Vmm_trie.empty }
-    in
-    let cmd = `Policy_cmd `Policy_info in
-    match gen_cert t cmd "." with
-    | Error s -> invalid_arg s
-    | Ok certificates -> (
-        raw_query t certificates cmd reply >|= function
-        | Ok (_hdr, `Success (`Policies ps)) ->
-            let ps =
-              List.fold_left
-                (fun acc (name, p) -> fst (Vmm_trie.insert name p acc))
-                Vmm_trie.empty ps
+    Lwt_list.fold_left_s
+      (fun acc (config : Configuration.t) ->
+        match acc with
+        | Error e -> Lwt.return (Error e)
+        | Ok initialized_configs -> (
+            let t =
+              {
+                name = config.name;
+                stack;
+                remote = (config.server_ip, config.server_port);
+                cert = config.certificate;
+                key = config.private_key;
+                policies = Vmm_trie.empty;
+              }
             in
-            t.policies <- ps;
-            t
-        | Ok w ->
-            Logs.err (fun m ->
-                m "albatross expected success policies, got reply %a"
-                  (Vmm_commands.pp_wire ~verbose:false)
-                  w);
-            t
-        | Error str ->
-            Logs.err (fun m -> m "albatross: error querying policies: %s" str);
-            t)
+            let cmd = `Policy_cmd `Policy_info in
+            match gen_cert t cmd t.name with
+            | Error s -> Lwt.return (Error s)
+            | Ok certificates -> (
+                raw_query t certificates cmd reply >|= function
+                | Ok (_hdr, `Success (`Policies ps)) ->
+                    let ps =
+                      List.fold_left
+                        (fun acc (name, p) -> fst (Vmm_trie.insert name p acc))
+                        Vmm_trie.empty ps
+                    in
+                    t.policies <- ps;
+                    Ok (t :: initialized_configs)
+                | Ok _w -> Error "Failed to init"
+                | Error str -> Error str)))
+      (Ok []) configs
 
   let certs t domain name cmd =
     match
