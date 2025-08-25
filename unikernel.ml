@@ -2588,22 +2588,23 @@ struct
     images assets >>= fun imgs ->
     Store.connect storage >>= function
     | Error (`Msg msg) -> failwith msg
-    | Ok store ->
-        let c = Store.configuration store in
-        Albatross.init stack c.Configuration.server_ip ~port:c.server_port
-          c.certificate c.private_key
-        >>= fun albatross ->
-        let albatross = ref albatross in
-        let port = K.port () in
-        Logs.info (fun m ->
-            m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
-              port);
-        let request_handler =
-          request_handler stack albatross js_file css_file imgs store
-            http_client
-        in
-        Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
-        let http = Paf.http_service ~error_handler request_handler in
-        let (`Initialized th) = Paf.serve http service in
-        th
+    | Ok store -> (
+        let c = Store.configurations store in
+        Albatross.init stack c >>= fun albatross_instances ->
+        match albatross_instances with
+        | Ok albatross_instances ->
+            let albatross_instances = ref albatross_instances in
+            let port = K.port () in
+            Logs.info (fun m ->
+                m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
+                  port);
+            let request_handler =
+              request_handler stack albatross_instances js_file css_file imgs
+                store http_client
+            in
+            Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
+            let http = Paf.http_service ~error_handler request_handler in
+            let (`Initialized th) = Paf.serve http service in
+            th
+        | Error err -> failwith err)
 end
