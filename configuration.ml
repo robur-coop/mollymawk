@@ -1,5 +1,6 @@
 open Utils.Json
 
+(* TODO: increment version number and handle backwards compatibility *)
 let current_version = 1
 
 type t = {
