@@ -755,15 +755,18 @@ struct
       (fun user -> user.super_user && Store.count_superusers store <= 1)
       ~error_message:(`String "Cannot remove last administrator")
 
-  let dashboard store albatross _ (user : User_model.user) reqd =
+  let dashboard store albatross_instances _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         (* TODO use uuid in the future *)
-        user_unikernels albatross user.name >>= fun unikernels ->
+        user_unikernels albatross_instances user.name
+        >>= fun unikernels_by_albatross_instance ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
-             ~content:(Unikernel_index.unikernel_index_layout unikernels now)
+             ~content:
+               (Unikernel_index.unikernel_index_layout
+                  unikernels_by_albatross_instance now)
              ~icon:"/images/robur.png" ())
           `OK
     | Error err ->
