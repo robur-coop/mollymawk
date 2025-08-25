@@ -1,4 +1,4 @@
-let create_volume total_free_space albatross_instance =
+let create_volume all_instances_data =
   Tyxml_html.(
     section
       ~a:[ a_id "block-create"; a_class [ "w-full mx-auto" ] ]
@@ -7,6 +7,18 @@ let create_volume total_free_space albatross_instance =
         div
           ~a:[ a_class [ "my-6" ] ]
           [
+            label
+              ~a:
+                [
+                  a_class [ "block text-sm font-medium" ];
+                  a_label_for "albatross instance";
+                ]
+              [ txt "Albatross Instance" ];
+            select
+              (List.map
+                 (fun (albatross_name, policy) ->
+                   option ~a:[ a_value albatross_name ] (txt albatross_name))
+                 policies);
             label
               ~a:
                 [
@@ -160,7 +172,7 @@ let create_volume total_free_space albatross_instance =
           ];
       ])
 
-let download_volume name =
+let download_volume ~block_name ~instance_name () =
   Tyxml_html.(
     section
       ~a:[ a_id "block-download"; a_class [ "w-full mx-auto" ] ]
@@ -172,7 +184,7 @@ let download_volume name =
                 [
                   a_class [ "block my-2 font-medium" ]; a_label_for "block name";
                 ]
-              [ txt name ];
+              [ txt block_name ];
             p ~a:[ a_id "download-alert"; a_class [ "my-2 hidden" ] ] [];
             label
               ~a:
@@ -228,11 +240,11 @@ let download_volume name =
             Utils.button_component
               ~attribs:
                 [
-                  a_id ("download-block-button-" ^ name);
-                  a_onclick ("downloadVolume('" ^ name ^ "')");
+                  a_id ("download-block-button-" ^ block_name);
+                  a_onclick ("downloadVolume('" ^ block_name ^ "')");
                 ]
               ~extra_css:"my-4"
-              ~content:(txt ("Download " ^ name))
+              ~content:(txt ("Download " ^ block_name))
               ~btn_type:`Primary_full ();
           ];
       ])

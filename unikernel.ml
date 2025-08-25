@@ -999,12 +999,19 @@ struct
     match Configuration.of_json_from_http json_dict (Mirage_ptime.now ()) with
     | Ok configuration_settings -> (
         Store.update_configuration store configuration_settings >>= function
-        | Ok new_configurations ->
+        | Ok new_configurations -> (
             Albatross.init stack new_configurations
             >>= fun new_albatross_instances ->
-            albatross_instances := new_albatross_instances;
-            Middleware.http_response reqd ~title:"Success"
-              ~data:(`String "Configuration updated successfully") `OK
+            match new_albatross_instances with
+            | Ok new_instances ->
+                albatross_instances := new_instances;
+                Middleware.http_response reqd ~title:"Success"
+                  ~data:(`String "Configuration updated successfully") `OK
+            | Error err ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:
+                    (`String ("Failed to initialize albatross instances" ^ err))
+                  `Internal_server_error)
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:(`String (String.escaped err))
@@ -1782,7 +1789,7 @@ struct
         let process_stream () =
           Lwt_stream.iter_s
             (function
-              | (Some "albatross_instance", _), _, contents ->
+              | (Some "instance_name", _), _, contents ->
                   consume_part_content contents >>= fun v ->
                   instance_ref := Some v;
                   Lwt.return_unit
@@ -1946,7 +1953,7 @@ struct
              ~icon:"/images/robur.png" ())
           `Not_found
 
-  let edit_policy albatross_instances store ~user_uuid ~instance_name _
+  let edit_policy albatross_instances store ~user_uuid ?instance_name _
       (user : User_model.user) reqd =
     match Store.find_by_uuid store user_uuid with
     | Some u -> (
@@ -2120,16 +2127,13 @@ struct
           | _ -> None)
         albatross_instances
     in
-
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
              ~page_title:(String.capitalize_ascii user.name ^ " | Mollymawk")
-             ~content:
-               (Volume_index.volume_index_layout albatross_instances blocks
-                  policies)
+             ~content:(Volume_index.volume_index_layout blocks policies)
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
@@ -2140,27 +2144,39 @@ struct
              ~icon:"/images/robur.png" ())
           `Internal_server_error
 
-  let delete_volume albatross (user : User_model.user) json_dict reqd =
-    match Utils.Json.get "block_name" json_dict with
-    | Some (`String block_name) -> (
-        Albatross.query albatross ~domain:user.name ~name:block_name
-          (`Block_cmd `Block_remove)
-        >>= function
+  let delete_volume albatross_instances (user : User_model.user) json_dict reqd
+      =
+    match
+      Utils.Json.(get "block_name" json_dict, get "instance_name" json_dict)
+    with
+    | Some (`String block_name), Some (`String instance_name) -> (
+        match
+          Albatross.find_instance_by_name albatross_instances instance_name
+        with
+        | Ok albatross -> (
+            Albatross.query albatross ~domain:user.name ~name:block_name
+              (`Block_cmd `Block_remove)
+            >>= function
+            | Error err ->
+                Logs.err (fun m ->
+                    m "Error querying albatross: %s" (String.escaped err));
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:
+                    (`String ("Error querying albatross: " ^ String.escaped err))
+                  `Internal_server_error
+            | Ok (_hdr, res) -> (
+                match Albatross_json.res res with
+                | Ok res ->
+                    Middleware.http_response reqd ~title:"Success" ~data:res `OK
+                | Error (`String err) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(`String (String.escaped err))
+                      `Internal_server_error))
         | Error err ->
-            Logs.err (fun m ->
-                m "Error querying albatross: %s" (String.escaped err));
             Middleware.http_response reqd ~title:"Error"
               ~data:
-                (`String ("Error querying albatross: " ^ String.escaped err))
-              `Internal_server_error
-        | Ok (_hdr, res) -> (
-            match Albatross_json.res res with
-            | Ok res ->
-                Middleware.http_response reqd ~title:"Success" ~data:res `OK
-            | Error (`String err) ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:(`String (String.escaped err))
-                  `Internal_server_error))
+                (`String ("Albatross instance not found with error: " ^ err))
+              `Bad_request)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
@@ -2182,7 +2198,7 @@ struct
         in
         let json_data_ref = ref None in
         let csrf_ref = ref None in
-        let albatross_instance = ref None in
+        let instance_name = ref None in
         let process_stream () =
           Lwt_stream.iter_s
             (function
@@ -2190,17 +2206,17 @@ struct
                   consume_part_content contents >>= fun v ->
                   csrf_ref := Some v;
                   Lwt.return_unit
-              | (Some "albatross_instance", _), _, contents ->
+              | (Some "instance_name", _), _, contents ->
                   consume_part_content contents >>= fun v ->
-                  albatross_instance := Some v;
+                  instance_name := Some v;
                   Lwt.return_unit
               | (Some "json_data", _), _, contents ->
                   consume_part_content contents >>= fun v ->
                   json_data_ref := Some v;
                   Lwt.return_unit
               | (Some "block_data", _), _, contents -> (
-                  match (!csrf_ref, !albatross_instance, !json_data_ref) with
-                  | Some csrf, albatross_instance, Some json -> (
+                  match (!csrf_ref, !instance_name, !json_data_ref) with
+                  | Some csrf, Some instance_name, Some json -> (
                       let cmd block_size block_compressed =
                         match c_or_u with
                         | `Create ->
@@ -2210,23 +2226,34 @@ struct
                       let stream_to_albatross block_name block_size
                           block_compressed _reqd =
                         let push () = Lwt_stream.get contents in
-                        Albatross.query albatross ~domain:user.name
-                          ~name:block_name ~push
-                          (`Block_cmd (cmd block_size block_compressed))
-                        >>= function
+                        match
+                          Albatross.find_instance_by_name albatross_instances
+                            instance_name
+                        with
+                        | Ok albatross -> (
+                            Albatross.query albatross ~domain:user.name
+                              ~name:block_name ~push
+                              (`Block_cmd (cmd block_size block_compressed))
+                            >>= function
+                            | Error err ->
+                                generate_http_error_response
+                                  (Fmt.str "an error with albatross. got %s" err)
+                                  `Bad_request
+                            | Ok (_hdr, res) -> (
+                                match Albatross_json.res res with
+                                | Error (`String err) ->
+                                    generate_http_error_response
+                                      (Fmt.str "unexpected field. got %s" err)
+                                      `Bad_request
+                                | Ok res ->
+                                    Middleware.http_response reqd
+                                      ~title:"Success" ~data:res `OK))
                         | Error err ->
                             generate_http_error_response
-                              (Fmt.str "an error with albatross. got %s" err)
+                              (Fmt.str
+                                 "Albatross instance not found with error: %s"
+                                 err)
                               `Bad_request
-                        | Ok (_hdr, res) -> (
-                            match Albatross_json.res res with
-                            | Error (`String err) ->
-                                generate_http_error_response
-                                  (Fmt.str "unexpected field. got %s" err)
-                                  `Bad_request
-                            | Ok res ->
-                                Middleware.http_response reqd ~title:"Success"
-                                  ~data:res `OK)
                       in
                       let json =
                         try Ok (Yojson.Basic.from_string json)
@@ -2295,34 +2322,51 @@ struct
             Logs.info (fun m -> m "Data %s to volume succesfully." cmd_name);
             Lwt.return_unit)
 
-  let download_volume albatross (user : User_model.user) json_dict reqd =
+  let download_volume albatross_instances (user : User_model.user) json_dict
+      reqd =
     match
-      Utils.Json.(get "block_name" json_dict, get "compression_level" json_dict)
+      Utils.Json.
+        ( get "block_name" json_dict,
+          get "compression_level" json_dict,
+          get "instance_name" json_dict )
     with
-    | Some (`String block_name), Some (`Int compression_level) -> (
-        Albatross.query albatross ~domain:user.name ~name:block_name
-          (`Block_cmd (`Block_dump compression_level))
-        >>= function
+    | ( Some (`String block_name),
+        Some (`Int compression_level),
+        Some (`String instance_name) ) -> (
+        match
+          Albatross.find_instance_by_name albatross_instances instance_name
+        with
+        | Ok albatross -> (
+            Albatross.query albatross ~domain:user.name ~name:block_name
+              (`Block_cmd (`Block_dump compression_level))
+            >>= function
+            | Error err ->
+                Logs.err (fun m ->
+                    m "Error querying albatross: %s" (String.escaped err));
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:
+                    (`String ("Error querying albatross: " ^ String.escaped err))
+                  `Internal_server_error
+            | Ok (_hdr, res) -> (
+                match Albatross_json.res res with
+                | Ok res ->
+                    let file_content = Yojson.Basic.to_string res in
+                    let filename = block_name ^ "_dump" in
+                    let disposition =
+                      "attachment; filename=\"" ^ filename ^ "\""
+                    in
+                    reply reqd ~content_type:"application/octet-stream"
+                      ~header_list:[ ("Content-Disposition", disposition) ]
+                      file_content `OK
+                | Error (`String err) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(`String (String.escaped err))
+                      `Internal_server_error))
         | Error err ->
-            Logs.err (fun m ->
-                m "Error querying albatross: %s" (String.escaped err));
             Middleware.http_response reqd ~title:"Error"
               ~data:
-                (`String ("Error querying albatross: " ^ String.escaped err))
-              `Internal_server_error
-        | Ok (_hdr, res) -> (
-            match Albatross_json.res res with
-            | Ok res ->
-                let file_content = Yojson.Basic.to_string res in
-                let filename = block_name ^ "_dump" in
-                let disposition = "attachment; filename=\"" ^ filename ^ "\"" in
-                reply reqd ~content_type:"application/octet-stream"
-                  ~header_list:[ ("Content-Disposition", disposition) ]
-                  file_content `OK
-            | Error (`String err) ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:(`String (String.escaped err))
-                  `Internal_server_error))
+                (`String ("Albatross instance not found with error: " ^ err))
+              `Bad_request)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
@@ -2733,20 +2777,23 @@ struct
     images assets >>= fun imgs ->
     Store.connect storage >>= function
     | Error (`Msg msg) -> failwith msg
-    | Ok store ->
+    | Ok store -> (
         let c = Store.configurations store in
         Albatross.init stack c >>= fun albatross_instances ->
-        let albatross_instances = ref albatross_instances in
-        let port = K.port () in
-        Logs.info (fun m ->
-            m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
-              port);
-        let request_handler _flow =
-          request_handler stack albatross_instances js_file css_file imgs store
-            http_client
-        in
-        Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
-        let http = Paf.http_service ~error_handler request_handler in
-        let (`Initialized th) = Paf.serve http service in
-        th
+        match albatross_instances with
+        | Ok albatross_instances ->
+            let albatross_instances = ref albatross_instances in
+            let port = K.port () in
+            Logs.info (fun m ->
+                m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
+                  port);
+            let request_handler _flow =
+              request_handler stack albatross_instances js_file css_file imgs
+                store http_client
+            in
+            Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
+            let http = Paf.http_service ~error_handler request_handler in
+            let (`Initialized th) = Paf.serve http service in
+            th
+        | Error err -> failwith err)
 end
