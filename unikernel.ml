@@ -42,10 +42,12 @@ struct
     | Ok img -> img
 
   let images assets =
-    let molly_img = read_image assets "molly_bird.jpeg" in
+    let molly_img = read_image assets "mollymawk_bird_by_katelyn.jpg" in
     let robur_img = read_image assets "robur.png" in
-    let albatross_img = read_image assets "albatross_1.png" in
-    let mirage_img = read_image assets "mirage_os_1.png" in
+    let albatross_img =
+      read_image assets "interconnections_by_guerrillabuzz.jpg"
+    in
+    let mirage_img = read_image assets "server_room_by_yuriy-vertikov.jpg" in
     let dashboard_img = read_image assets "dashboard_1.png" in
     Lwt.all [ molly_img; robur_img; albatross_img; mirage_img; dashboard_img ]
     >|= function
