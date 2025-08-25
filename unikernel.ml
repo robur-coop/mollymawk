@@ -972,7 +972,7 @@ struct
           (Dashboard.dashboard_layout ~csrf user
              ~page_title:"Settings | Mollymawk"
              ~content:
-               (Settings_page.settings_layout (Store.configuration store))
+               (Settings_page.settings_layout (Store.configurations store))
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
