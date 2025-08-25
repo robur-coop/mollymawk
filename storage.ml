@@ -1,5 +1,6 @@
 open Utils.Json
 
+(* TODO: increment version number *)
 let current_version = 7
 (* version history:
    1 was initial (fields until email_verification_uuid)
@@ -11,20 +12,20 @@ let current_version = 7
    7 added unikernel_updates to keep track of when unikernels are updated
 *)
 
-let t_to_json users configuration =
+let t_to_json users configurations =
   `Assoc
     [
       ("version", `Int current_version);
       ("users", `List (List.map User_model.user_to_json users));
-      ("configuration", Configuration.to_json configuration);
+      ("configurations", `List (List.map Configuration.to_json configurations));
     ]
 
 let t_of_json json =
   match json with
   | `Assoc xs -> (
       let ( let* ) = Result.bind in
-      match (get "version" xs, get "users" xs, get "configuration" xs) with
-      | Some (`Int v), Some (`List users), Some configuration ->
+      match (get "version" xs, get "users" xs, get "configurations" xs) with
+      | Some (`Int v), Some (`List users), Some (`List configurations) ->
           let* () =
             if v = current_version then Ok ()
             else if v = 6 then Ok ()
@@ -55,8 +56,15 @@ let t_of_json json =
                 Ok (user :: acc))
               (Ok []) users
           in
-          let* configuration = Configuration.of_json configuration in
-          Ok (users, configuration)
+          let* configurations =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* config = Configuration.of_json js in
+                Ok (config :: acc))
+              (Ok []) configurations
+          in
+          Ok (users, configurations)
       | _ -> Error (`Msg "invalid data: no version and users field"))
   | _ -> Error (`Msg "invalid data: not an assoc")
 
@@ -69,12 +77,12 @@ module Make (BLOCK : Mirage_block.S) = struct
   type t = {
     disk : Stored_data.t;
     mutable users : User_model.user list;
-    mutable configuration : Configuration.t;
+    mutable configurations : Configuration.t list;
   }
 
   let write_data t =
     Stored_data.write t.disk
-      (Yojson.Basic.to_string (t_to_json t.users t.configuration))
+      (Yojson.Basic.to_string (t_to_json t.users t.configurations))
 
   let read_data disk =
     Stored_data.read disk >|= function
@@ -86,7 +94,7 @@ module Make (BLOCK : Mirage_block.S) = struct
         in
         let* t = t_of_json json in
         Ok t
-    | Ok None -> Ok ([], Configuration.empty ())
+    | Ok None -> Ok ([], [ Configuration.empty () ])
     | Error e ->
         error_msgf "error while reading storage: %a" Stored_data.pp_error e
 
@@ -94,16 +102,22 @@ module Make (BLOCK : Mirage_block.S) = struct
     Stored_data.connect block >>= fun disk ->
     read_data disk >|= function
     | Error _ as e -> e
-    | Ok (users, configuration) -> Ok { disk; users; configuration }
+    | Ok (users, configurations) -> Ok { disk; users; configurations }
 
-  let configuration { configuration; _ } = configuration
+  let configurations { configurations; _ } = configurations
 
   let update_configuration t (configuration : Configuration.t) =
-    let t' = { t with configuration } in
+    let configurations =
+      List.map
+        (fun (c : Configuration.t) ->
+          if String.equal c.name configuration.name then configuration else c)
+        t.configurations
+    in
+    let t' = { t with configurations } in
     write_data t' >|= function
     | Ok () ->
-        t.configuration <- configuration;
-        Ok ()
+        t.configurations <- configurations;
+        Ok t.configurations
     | Error we ->
         error_msgf "error while writing storage: %a" Stored_data.pp_write_error
           we
