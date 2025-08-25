@@ -620,4 +620,14 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             Logs.warn (fun m -> m "error updating policies: %s" msg);
             t.policies <- old_policies;
             Error msg)
+
+  let find_instance_by_name (albatross_instances : t) name =
+    match
+      List.find_opt
+        (fun albatross_instance -> String.equal albatross_instance.name name)
+        albatross_instances
+    with
+    | Some albatross_instance -> Ok albatross_instance
+    | None ->
+        Error (Fmt.str "No albatross instance found with the name %s" name)
 end
