@@ -2356,8 +2356,8 @@ struct
                   (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let request_handler stack albatross js_file css_file imgs store http_client
-      flow (_ipaddr, _port) reqd =
+  let request_handler stack albatross_instances js_file css_file imgs store
+      http_client flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
           Middleware.http_response reqd ~title:"Error"
@@ -2410,7 +2410,7 @@ struct
                   (email_verification (verify_email_token store token)))
         | "/dashboard" ->
             check_meth `GET (fun () ->
-                authenticate store reqd (dashboard store !albatross))
+                authenticate store reqd (dashboard store !albatross_instances))
         | "/account" ->
             check_meth `GET (fun () ->
                 authenticate store reqd (account_page store))
@@ -2432,28 +2432,29 @@ struct
                   (extract_json_csrf_token (close_session store)))
         | "/volumes" ->
             check_meth `GET (fun () ->
-                authenticate store reqd (volumes store !albatross))
+                authenticate store reqd (volumes store !albatross_instances))
         | "/api/volume/delete" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_json_csrf_token (delete_volume !albatross)))
+                  (extract_json_csrf_token (delete_volume !albatross_instances)))
         | "/api/volume/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (fun token_or_cookie user reqd ->
-                    create_or_upload_volume `Create token_or_cookie !albatross
-                      user reqd))
+                    create_or_upload_volume `Create token_or_cookie
+                      !albatross_instances user reqd))
         | "/api/volume/download" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_json_csrf_token (download_volume !albatross)))
+                  (extract_json_csrf_token
+                     (download_volume !albatross_instances)))
             >>= fun () -> Paf.TCP.close flow
         | "/api/volume/upload" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (fun token_or_cookie user reqd ->
-                    create_or_upload_volume `Upload token_or_cookie !albatross
-                      user reqd))
+                    create_or_upload_volume `Upload token_or_cookie
+                      !albatross_instances user reqd))
         | "/tokens" ->
             check_meth `GET (fun () ->
                 authenticate store reqd (api_tokens store))
@@ -2474,17 +2475,18 @@ struct
                 authenticate ~check_admin:true store reqd (users store))
         | "/usage" ->
             check_meth `GET (fun () ->
-                authenticate store reqd (account_usage store !albatross))
+                authenticate store reqd
+                  (account_usage store !albatross_instances))
         | path when String.starts_with ~prefix:"/admin/user/" path ->
             check_meth `GET (fun () ->
                 let uuid = String.sub path 12 (String.length path - 12) in
                 authenticate ~check_admin:true store reqd
-                  (view_user !albatross store uuid))
+                  (view_user !albatross_instances store uuid))
         | path when String.starts_with ~prefix:"/admin/u/policy/edit/" path ->
             check_meth `GET (fun () ->
                 let uuid = String.sub path 21 (String.length path - 21) in
                 authenticate ~check_admin:true store reqd
-                  (edit_policy !albatross store uuid))
+                  (edit_policy !albatross_instances store uuid))
         | "/admin/settings" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (settings store))
@@ -2496,7 +2498,8 @@ struct
         | "/api/admin/u/policy/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
-                  (extract_json_csrf_token (update_policy store !albatross)))
+                  (extract_json_csrf_token
+                     (update_policy store !albatross_instances)))
         | "/api/admin/user/activate/toggle" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
@@ -2508,55 +2511,59 @@ struct
         | "/api/unikernels" ->
             check_meth `GET (fun () ->
                 authenticate ~api_meth:true ~check_token:true store reqd
-                  (unikernel_info !albatross))
+                  (unikernel_info !albatross_instances))
         | path when String.starts_with ~prefix:"/unikernel/info/" path ->
             check_meth `GET (fun () ->
                 let unikernel_name =
                   String.sub path 16 (String.length path - 16)
                 in
                 authenticate store reqd
-                  (unikernel_info_one !albatross store unikernel_name))
+                  (unikernel_info_one !albatross_instances store unikernel_name))
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
-                authenticate store reqd (deploy_form store !albatross))
+                authenticate store reqd (deploy_form store !albatross_instances))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_json_csrf_token (unikernel_destroy !albatross)))
+                  (extract_json_csrf_token
+                     (unikernel_destroy !albatross_instances)))
         | "/api/unikernel/restart" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_json_csrf_token (unikernel_restart !albatross)))
+                  (extract_json_csrf_token
+                     (unikernel_restart !albatross_instances)))
         | path when String.starts_with ~prefix:"/api/unikernel/console/" path ->
             check_meth `GET (fun () ->
                 let unikernel_name =
                   String.sub path 23 (String.length path - 23)
                 in
                 authenticate store reqd ~check_token:true ~api_meth:true
-                  (unikernel_console !albatross unikernel_name))
+                  (unikernel_console !albatross_instances unikernel_name))
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (fun token_or_cookie user reqd ->
-                    unikernel_create token_or_cookie user !albatross reqd))
+                    unikernel_create token_or_cookie user !albatross_instances
+                      reqd))
         | path when String.starts_with ~prefix:"/unikernel/update/" path ->
             check_meth `GET (fun () ->
                 let unikernel_name =
                   String.sub path 18 (String.length path - 18)
                 in
                 authenticate store reqd
-                  (unikernel_prepare_update !albatross store unikernel_name
-                     http_client))
+                  (unikernel_prepare_update !albatross_instances store
+                     unikernel_name http_client))
         | "/api/unikernel/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (unikernel_update !albatross store stack http_client)))
+                     (unikernel_update !albatross_instances store stack
+                        http_client)))
         | "/api/unikernel/rollback" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (unikernel_rollback !albatross store http_client)))
+                     (unikernel_rollback !albatross_instances store http_client)))
         | _ ->
             let error =
               {
