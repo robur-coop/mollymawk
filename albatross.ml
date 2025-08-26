@@ -26,7 +26,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         bridges = Vmm_core.String_set.empty;
       }
 
-  let policy ?domain t =
+  let policy ?domain albatross_instance =
     let ( let* ) = Result.bind in
     let* path =
       match domain with
@@ -38,9 +38,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
           | Ok path -> Ok (Vmm_core.Name.create_of_path path))
     in
-    Ok (Vmm_trie.find path t.policies)
+    Ok (Vmm_trie.find path albatross_instance.policies)
 
-  let policies ?domain t =
+  let policies ?domain albatross_instance =
     let ( let* ) = Result.bind in
     let* path =
       match domain with
@@ -52,7 +52,16 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
           | Ok path -> Ok path)
     in
-    Ok (Vmm_trie.fold path t.policies (fun name p acc -> (name, p) :: acc) [])
+    Ok
+      (Vmm_trie.fold path albatross_instance.policies
+         (fun name p acc -> (name, p) :: acc)
+         [])
+
+  let all_policies ?domain t =
+    List.map
+      (fun albatross_instance ->
+        (albatross_instance.name, policy ?domain albatross_instance))
+      t
 
   let policy_resource_avalaible t =
     let root_policy =
