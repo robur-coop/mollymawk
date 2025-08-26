@@ -1026,10 +1026,12 @@ struct
           ~data:(`String (String.escaped err))
           reqd `Bad_request
 
-  let deploy_form store albatross _ (user : User_model.user) reqd =
+  let deploy_form store albatross_instances _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    user_unikernels albatross user.name >>= fun unikernels ->
-    user_volumes albatross user.name >>= fun blocks ->
+    user_unikernels albatross_instances user.name
+    >>= fun unikernels_by_albatross_instance ->
+    user_volumes albatross_instances user.name
+    >>= fun blocks_by_albatros_instance ->
     generate_csrf_token store user now reqd >>= function
     | Ok csrf -> (
         let missing_policy_error ?(err = None) () =
@@ -1040,36 +1042,25 @@ struct
             success = false;
           }
         in
-        match Albatross.policy albatross ~domain:user.name with
-        | Ok p -> (
-            match p with
-            | Some user_policy ->
-                reply reqd ~content_type:"text/html"
-                  (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:"Deploy a Unikernel | Mollymawk"
-                     ~content:
-                       (Unikernel_create.unikernel_create_layout ~user_policy
-                          unikernels blocks)
-                     ~icon:"/images/robur.png" ())
-                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-                  `OK
-            | None ->
-                reply reqd ~content_type:"text/html"
-                  (Guest_layout.guest_layout
-                     ~page_title:"Resource policy error | Mollymawk"
-                     ~content:
-                       (Error_page.error_layout (missing_policy_error ()))
-                     ~icon:"/images/robur.png" ())
-                  `Internal_server_error)
-        | Error err ->
+        match Albatross.all_policies albatross_instances ~domain:user.name with
+        | [] ->
             reply reqd ~content_type:"text/html"
               (Guest_layout.guest_layout
                  ~page_title:"Resource policy error | Mollymawk"
-                 ~content:
-                   (Error_page.error_layout
-                      (missing_policy_error ~err:(Some err) ()))
+                 ~content:(Error_page.error_layout (missing_policy_error ()))
                  ~icon:"/images/robur.png" ())
-              `Internal_server_error)
+              `Internal_server_error
+        | policies ->
+            reply reqd ~content_type:"text/html"
+              (Dashboard.dashboard_layout ~csrf user
+                 ~page_title:"Deploy a Unikernel | Mollymawk"
+                 ~content:
+                   (Unikernel_create.unikernel_create_layout policies
+                      unikernels_by_albatross_instance
+                      blocks_by_albatros_instance)
+                 ~icon:"/images/robur.png" ())
+              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+              `OK)
     | Error err ->
         reply reqd ~content_type:"text/html"
           (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
