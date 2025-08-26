@@ -1998,27 +1998,44 @@ struct
              ~icon:"/images/robur.png" ())
           `Internal_server_error
 
-  let delete_volume albatross (user : User_model.user) json_dict reqd =
-    match Utils.Json.get "block_name" json_dict with
-    | Some (`String block_name) -> (
-        Albatross.query albatross ~domain:user.name ~name:block_name
-          (`Block_cmd `Block_remove)
-        >>= function
+  let delete_volume albatross_instances (user : User_model.user) json_dict reqd
+      =
+    match
+      Utils.Json.(get "block_name" json_dict, get "albatross_instance" json_dict)
+    with
+    | Some (`String block_name), Some (`String instance_name) -> (
+        match
+          Albatross.find_instance_by_name albatross_instances instance_name
+        with
         | Error err ->
             Logs.err (fun m ->
-                m "Error querying albatross: %s" (String.escaped err));
+                m "Couldn't find albatross instance with name %s: and error: %s"
+                  instance_name err);
             Middleware.http_response reqd ~title:"Error"
               ~data:
-                (`String ("Error querying albatross: " ^ String.escaped err))
-              `Internal_server_error
-        | Ok (_hdr, res) -> (
-            match Albatross_json.res res with
-            | Ok res ->
-                Middleware.http_response reqd ~title:"Success" ~data:res `OK
-            | Error (`String err) ->
+                (`String
+                   ("Couldn't find albatross instance with name: "
+                  ^ instance_name ^ " and error: " ^ err))
+              `Bad_request
+        | Ok albatross -> (
+            Albatross.query albatross ~domain:user.name ~name:block_name
+              (`Block_cmd `Block_remove)
+            >>= function
+            | Error err ->
+                Logs.err (fun m ->
+                    m "Error querying albatross: %s" (String.escaped err));
                 Middleware.http_response reqd ~title:"Error"
-                  ~data:(`String (String.escaped err))
-                  `Internal_server_error))
+                  ~data:
+                    (`String ("Error querying albatross: " ^ String.escaped err))
+                  `Internal_server_error
+            | Ok (_hdr, res) -> (
+                match Albatross_json.res res with
+                | Ok res ->
+                    Middleware.http_response reqd ~title:"Success" ~data:res `OK
+                | Error (`String err) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(`String (String.escaped err))
+                      `Internal_server_error)))
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
