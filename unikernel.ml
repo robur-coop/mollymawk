@@ -2212,11 +2212,17 @@ struct
             Logs.info (fun m -> m "Data %s to volume successfully." cmd_name);
             Lwt.return_unit)
 
-  let download_volume albatross (user : User_model.user) json_dict reqd =
+  let download_volume albatross_instances (user : User_model.user) json_dict
+      reqd =
     match
-      Utils.Json.(get "block_name" json_dict, get "compression_level" json_dict)
+      Utils.Json.
+        ( get "albatross_instance" json_dict,
+          get "block_name" json_dict,
+          get "compression_level" json_dict )
     with
-    | Some (`String block_name), Some (`Int compression_level) -> (
+    | ( Some (`String instance_name),
+        Some (`String block_name),
+        Some (`Int compression_level) ) -> (
         let filename = block_name ^ "_dump" in
         let disposition = "attachment; filename=\"" ^ filename ^ "\"" in
         let headers =
@@ -2242,15 +2248,29 @@ struct
                 H1.Body.Writer.flush writer Fun.id;
                 Ok ())
         in
-        Albatross.query_block_dump albatross ~domain:user.name ~name:block_name
-          compression_level response
-        >>= function
+        match
+          Albatross.find_instance_by_name albatross_instances instance_name
+        with
         | Error err ->
-            if not !fini then
-              Logs.err (fun m ->
-                  m "Error querying albatross: %s" (String.escaped err));
-            Lwt.return_unit
-        | Ok () -> Lwt.return_unit)
+            Logs.err (fun m ->
+                m "Couldn't find albatross instance with name %s: and error: %s"
+                  instance_name err);
+            Middleware.http_response reqd ~title:"Error"
+              ~data:
+                (`String
+                   ("Couldn't find albatross instance with name: "
+                  ^ instance_name ^ " and error: " ^ err))
+              `Bad_request
+        | Ok albatross -> (
+            Albatross.query_block_dump albatross ~domain:user.name
+              ~name:block_name compression_level response
+            >>= function
+            | Error err ->
+                if not !fini then
+                  Logs.err (fun m ->
+                      m "Error querying albatross: %s" (String.escaped err));
+                Lwt.return_unit
+            | Ok () -> Lwt.return_unit))
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
