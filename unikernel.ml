@@ -2040,7 +2040,7 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
 
-  let create_or_upload_volume c_or_u token_or_cookie albatross
+  let create_or_upload_volume c_or_u token_or_cookie albatross_instances
       (user : User_model.user) reqd =
     let cmd_name =
       match c_or_u with `Create -> "create" | `Upload -> "upload"
@@ -2057,9 +2057,15 @@ struct
         in
         let json_data_ref = ref None in
         let csrf_ref = ref None in
+        let albatross_ref = ref None in
+
         let process_stream () =
           Lwt_stream.iter_s
             (function
+              | (Some "albatross_instance", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  albatross_ref := Some v;
+                  Lwt.return_unit
               | (Some "molly_csrf", _), _, contents ->
                   consume_part_content contents >>= fun v ->
                   csrf_ref := Some v;
@@ -2069,9 +2075,9 @@ struct
                   json_data_ref := Some v;
                   Lwt.return_unit
               | (Some "block_data", _), _, contents -> (
-                  match (!csrf_ref, !json_data_ref) with
-                  | Some csrf, Some json -> (
-                      let add_block block_name block_size =
+                  match (!albatross_ref, !csrf_ref, !json_data_ref) with
+                  | Some albatross_instance, Some csrf, Some json -> (
+                      let add_block albatross block_name block_size =
                         Albatross.query albatross ~domain:user.name
                           ~name:block_name
                           (`Block_cmd (`Block_add block_size))
@@ -2088,9 +2094,11 @@ struct
                                   (Fmt.str "unexpected field. got %s" err)
                                   `Bad_request
                                 >|= fun () -> Error ()
-                            | Ok _res -> Lwt.return (Ok ()))
+                            | Ok _ -> Lwt.return (Ok ()))
                       in
-                      let stream_to_albatross block_name block_compressed =
+
+                      let stream_to_albatross albatross block_name
+                          block_compressed =
                         let push () = Lwt_stream.get contents in
                         Albatross.query albatross ~domain:user.name
                           ~name:block_name ~push
@@ -2110,62 +2118,79 @@ struct
                                 Middleware.http_response reqd ~title:"Success"
                                   ~data:res `OK)
                       in
-                      let json =
+
+                      let parsed_json =
                         try Ok (Yojson.Basic.from_string json)
                         with Yojson.Json_error s -> Error (`Msg s)
                       in
-                      match json with
-                      | Ok (`Assoc json_dict) -> (
-                          match
-                            ( c_or_u,
-                              Utils.Json.
-                                ( get "block_name" json_dict,
-                                  get "block_size" json_dict,
-                                  get "block_compressed" json_dict ) )
-                          with
-                          | ( `Create,
-                              ( Some (`String block_name),
-                                Some (`Int block_size),
-                                Some (`Bool block_compressed) ) ) -> (
-                              match token_or_cookie with
-                              | `Token -> (
-                                  add_block block_name block_size >>= function
-                                  | Ok () ->
-                                      stream_to_albatross block_name
-                                        block_compressed
-                                  | Error () -> Lwt.return_unit)
-                              | `Cookie ->
-                                  csrf_verification
-                                    (fun _reqd ->
-                                      add_block block_name block_size
+
+                      match
+                        Albatross.find_instance_by_name albatross_instances
+                          albatross_instance
+                      with
+                      | Error err ->
+                          generate_http_error_response
+                            (Fmt.str
+                               "Couldn't find albatross instance with name %s: \
+                                and error: %s"
+                               albatross_instance err)
+                            `Bad_request
+                      | Ok albatross -> (
+                          match parsed_json with
+                          | Ok (`Assoc json_dict) -> (
+                              match
+                                ( c_or_u,
+                                  Utils.Json.
+                                    ( get "block_name" json_dict,
+                                      get "block_size" json_dict,
+                                      get "block_compressed" json_dict ) )
+                              with
+                              | ( `Create,
+                                  ( Some (`String block_name),
+                                    Some (`Int block_size),
+                                    Some (`Bool block_compressed) ) ) -> (
+                                  match token_or_cookie with
+                                  | `Token -> (
+                                      add_block albatross block_name block_size
                                       >>= function
                                       | Ok () ->
-                                          stream_to_albatross block_name
-                                            block_compressed
+                                          stream_to_albatross albatross
+                                            block_name block_compressed
                                       | Error () -> Lwt.return_unit)
-                                    user csrf reqd)
-                          | ( `Upload,
-                              ( Some (`String block_name),
-                                None,
-                                Some (`Bool block_compressed) ) ) -> (
-                              match token_or_cookie with
-                              | `Token ->
-                                  stream_to_albatross block_name
-                                    block_compressed
-                              | `Cookie ->
-                                  csrf_verification
-                                    (fun _reqd ->
-                                      stream_to_albatross block_name
-                                        block_compressed)
-                                    user csrf reqd)
+                                  | `Cookie ->
+                                      csrf_verification
+                                        (fun _reqd ->
+                                          add_block albatross block_name
+                                            block_size
+                                          >>= function
+                                          | Ok () ->
+                                              stream_to_albatross albatross
+                                                block_name block_compressed
+                                          | Error () -> Lwt.return_unit)
+                                        user csrf reqd)
+                              | ( `Upload,
+                                  ( Some (`String block_name),
+                                    None,
+                                    Some (`Bool block_compressed) ) ) -> (
+                                  match token_or_cookie with
+                                  | `Token ->
+                                      stream_to_albatross albatross block_name
+                                        block_compressed
+                                  | `Cookie ->
+                                      csrf_verification
+                                        (fun _reqd ->
+                                          stream_to_albatross albatross
+                                            block_name block_compressed)
+                                        user csrf reqd)
+                              | _ ->
+                                  generate_http_error_response
+                                    (Fmt.str "unexpected field. got %s"
+                                       (Yojson.Basic.to_string
+                                          (`Assoc json_dict)))
+                                    `Bad_request)
                           | _ ->
                               generate_http_error_response
-                                (Fmt.str "unexpected field. got %s"
-                                   (Yojson.Basic.to_string (`Assoc json_dict)))
-                                `Bad_request)
-                      | _ ->
-                          generate_http_error_response "expected a dictionary"
-                            `Bad_request)
+                                "expected a dictionary" `Bad_request))
                   | _ ->
                       Logs.info (fun m -> m "Missing Fields");
                       generate_http_error_response
@@ -2177,13 +2202,14 @@ struct
                   Lwt_stream.junk_while (Fun.const true) contents)
             stream
         in
-        Lwt.both th (process_stream ()) >>= fun (_res, ()) ->
-        th >>= function
+
+        Lwt.both th (process_stream ()) >>= fun (parse_res, ()) ->
+        match parse_res with
         | Error (`Msg e) ->
             Logs.info (fun m -> m "Multipart parser thread error: %s" e);
             Lwt.return_unit
         | Ok _ ->
-            Logs.info (fun m -> m "Data %s to volume succesfully." cmd_name);
+            Logs.info (fun m -> m "Data %s to volume successfully." cmd_name);
             Lwt.return_unit)
 
   let download_volume albatross (user : User_model.user) json_dict reqd =
