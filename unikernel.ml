@@ -1669,14 +1669,12 @@ struct
                     >>= fun unikernel_info ->
                     match unikernel_info with
                     | Error err ->
-                        Middleware.redirect_to_error
+                        Middleware.http_response reqd ~title:"Error"
                           ~data:
                             (`String
-                               ("An error occured while fetching "
-                              ^ unikernel_name ^ " from albatross with error "
-                              ^ err))
-                          ~title:"Albatross Error" ~api_meth:false
-                          `Internal_server_error reqd ()
+                               ("Couldn't find albatross instance, "
+                              ^ instance_name ^ " with error: " ^ err))
+                          `Bad_request
                     | Ok (n, unikernel) -> (
                         match
                           Albatross_json.(
@@ -1717,12 +1715,26 @@ struct
           ~data:(`String "Couldn't find job or build in json. Received ")
           `Bad_request
 
-  let unikernel_rollback albatross store http_client (user : User_model.user)
-      json_dict reqd =
-    match Utils.Json.get "unikernel_name" json_dict with
-    | Some (`String unikernel_name) ->
-        process_rollback ~unikernel_name (Mirage_ptime.now ()) albatross store
-          http_client reqd user
+  let unikernel_rollback albatross_instances store http_client
+      (user : User_model.user) json_dict reqd =
+    match
+      Utils.Json.
+        (get "unikernel_name" json_dict, get "albatross_instance" json_dict)
+    with
+    | Some (`String unikernel_name), Some (`String instance_name) -> (
+        match
+          Albatross.find_instance_by_name albatross_instances instance_name
+        with
+        | Error err ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:
+                (`String
+                   ("Couldn't find albatross instance, " ^ instance_name
+                  ^ " with error: " ^ err))
+              `Bad_request
+        | Ok albatross ->
+            process_rollback ~unikernel_name (Mirage_ptime.now ()) albatross
+              store http_client reqd user)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
