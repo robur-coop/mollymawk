@@ -1606,7 +1606,7 @@ struct
               ^ " with error " ^ err))
           http_status
 
-  let unikernel_update albatross store stack http_client
+  let unikernel_update albatross_instances store stack http_client
       (user : User_model.user) json_dict reqd =
     let config_or_none field = function
       | None | Some `Null -> Ok None
@@ -1622,7 +1622,8 @@ struct
     in
     match
       Utils.Json.
-        ( get "job" json_dict,
+        ( get "albatross_instance" json_dict,
+          get "job" json_dict,
           get "to_be_updated_unikernel" json_dict,
           get "currently_running_unikernel" json_dict,
           get "unikernel_name" json_dict,
@@ -1630,7 +1631,8 @@ struct
           get "dns_liveliness" json_dict,
           get "unikernel_arguments" json_dict )
     with
-    | ( Some (`String job),
+    | ( Some (`String instance_name),
+        Some (`String job),
         Some (`String to_be_updated_unikernel),
         Some (`String currently_running_unikernel),
         Some (`String unikernel_name),
@@ -1641,47 +1643,62 @@ struct
           stack http_client
         >>= function
         | Ok () -> (
-            match config_or_none "unikernel_arguments" configuration with
-            | Error (`Msg err) ->
-                Middleware.http_response reqd
-                  ~title:"Error with Unikernel Arguments Json"
+            match
+              Albatross.find_instance_by_name albatross_instances instance_name
+            with
+            | Error err ->
+                Middleware.redirect_to_error
                   ~data:
                     (`String
-                       ("Could not get the unikernel arguments json: " ^ err))
-                  `Bad_request
-            | Ok None -> (
-                user_unikernel albatross ~user_name:user.name ~unikernel_name
-                >>= fun unikernel_info ->
-                match unikernel_info with
-                | Error err ->
-                    Middleware.redirect_to_error
+                       ("An error occured while finding albatross instance "
+                      ^ instance_name ^ " with error " ^ err))
+                  ~title:"Albatross Instance Error" ~api_meth:false
+                  `Internal_server_error reqd ()
+            | Ok albatross -> (
+                match config_or_none "unikernel_arguments" configuration with
+                | Error (`Msg err) ->
+                    Middleware.http_response reqd
+                      ~title:"Error with Unikernel Arguments Json"
                       ~data:
                         (`String
-                           ("An error occured while fetching " ^ unikernel_name
-                          ^ " from albatross with error " ^ err))
-                      ~title:"Albatross Error" ~api_meth:false
-                      `Internal_server_error reqd ()
-                | Ok (n, unikernel) -> (
-                    match
-                      Albatross_json.(
-                        unikernel_info (n, unikernel)
-                        |> Yojson.Basic.to_string |> config_of_json)
-                    with
-                    | Ok cfg ->
-                        process_unikernel_update ~unikernel_name ~job
-                          ~to_be_updated_unikernel ~currently_running_unikernel
-                          ~http_liveliness_address ~dns_liveliness stack cfg
-                          user store http_client albatross reqd
-                    | Error (`Msg err) ->
-                        Logs.warn (fun m -> m "Couldn't decode data %s" err);
-                        Middleware.http_response reqd ~title:"Error"
-                          ~data:(`String (String.escaped err))
-                          `Internal_server_error))
-            | Ok (Some cfg) ->
-                process_unikernel_update ~unikernel_name ~job
-                  ~to_be_updated_unikernel ~currently_running_unikernel
-                  ~http_liveliness_address ~dns_liveliness stack cfg user store
-                  http_client albatross reqd)
+                           ("Could not get the unikernel arguments json: " ^ err))
+                      `Bad_request
+                | Ok None -> (
+                    user_unikernel albatross ~user_name:user.name
+                      ~unikernel_name
+                    >>= fun unikernel_info ->
+                    match unikernel_info with
+                    | Error err ->
+                        Middleware.redirect_to_error
+                          ~data:
+                            (`String
+                               ("An error occured while fetching "
+                              ^ unikernel_name ^ " from albatross with error "
+                              ^ err))
+                          ~title:"Albatross Error" ~api_meth:false
+                          `Internal_server_error reqd ()
+                    | Ok (n, unikernel) -> (
+                        match
+                          Albatross_json.(
+                            unikernel_info (n, unikernel)
+                            |> Yojson.Basic.to_string |> config_of_json)
+                        with
+                        | Ok cfg ->
+                            process_unikernel_update ~unikernel_name ~job
+                              ~to_be_updated_unikernel
+                              ~currently_running_unikernel
+                              ~http_liveliness_address ~dns_liveliness stack cfg
+                              user store http_client albatross reqd
+                        | Error (`Msg err) ->
+                            Logs.warn (fun m -> m "Couldn't decode data %s" err);
+                            Middleware.http_response reqd ~title:"Error"
+                              ~data:(`String (String.escaped err))
+                              `Internal_server_error))
+                | Ok (Some cfg) ->
+                    process_unikernel_update ~unikernel_name ~job
+                      ~to_be_updated_unikernel ~currently_running_unikernel
+                      ~http_liveliness_address ~dns_liveliness stack cfg user
+                      store http_client albatross reqd))
         | Error (`Msg err) ->
             Logs.info (fun m ->
                 m
