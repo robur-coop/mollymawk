@@ -1693,13 +1693,16 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_destroy albatross_instances (user : User_model.user) json_dict reqd =
+  let unikernel_destroy albatross_instances (user : User_model.user) json_dict
+      reqd =
     (* TODO use uuid in the future *)
     match
       Utils.Json.(get "name" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String unikernel_name), Some (`String instance_name) -> (
-        match Albatross.find_instance_by_name albatross_instances instance_name with
+        match
+          Albatross.find_instance_by_name albatross_instances instance_name
+        with
         | Error err ->
             Logs.err (fun m ->
                 m "Error finding albatross instance %s: %s" instance_name err);
@@ -1727,26 +1730,39 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_restart albatross_instances (user : User_model.user) json_dict reqd =
+  let unikernel_restart albatross_instances (user : User_model.user) json_dict
+      reqd =
     (* TODO use uuid in the future *)
-    match Utils.Json.get "name" json_dict with
-    | Some (`String unikernel_name) -> (
-        Albatross.query albatross ~domain:user.name ~name:unikernel_name
-          (`Unikernel_cmd (`Unikernel_restart None))
-        >>= function
-        | Error msg ->
-            Logs.err (fun m -> m "Error querying albatross: %s" msg);
+    match
+      Utils.Json.(get "name" json_dict, get "albatross_instance" json_dict)
+    with
+    | Some (`String unikernel_name), Some (`String instance_name) -> (
+        match
+          Albatross.find_instance_by_name albatross_instances instance_name
+        with
+        | Error err ->
+            Logs.err (fun m ->
+                m "Error finding albatross instance %s: %s" instance_name err);
             Middleware.http_response reqd ~title:"Error"
-              ~data:(`String ("Error querying albatross: " ^ msg))
+              ~data:(`String ("Error finding albatross instance: " ^ err))
               `Internal_server_error
-        | Ok (_hdr, res) -> (
-            match Albatross_json.res res with
-            | Ok res ->
-                Middleware.http_response reqd ~title:"Success" ~data:res `OK
-            | Error (`String err) ->
+        | Ok albatross -> (
+            Albatross.query albatross ~domain:user.name ~name:unikernel_name
+              (`Unikernel_cmd (`Unikernel_restart None))
+            >>= function
+            | Error msg ->
+                Logs.err (fun m -> m "Error querying albatross: %s" msg);
                 Middleware.http_response reqd ~title:"Error"
-                  ~data:(`String (String.escaped err))
-                  `Internal_server_error))
+                  ~data:(`String ("Error querying albatross: " ^ msg))
+                  `Internal_server_error
+            | Ok (_hdr, res) -> (
+                match Albatross_json.res res with
+                | Ok res ->
+                    Middleware.http_response reqd ~title:"Success" ~data:res `OK
+                | Error (`String err) ->
+                    Middleware.http_response reqd ~title:"Error"
+                      ~data:(`String (String.escaped err))
+                      `Internal_server_error)))
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
