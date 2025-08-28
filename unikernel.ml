@@ -2143,18 +2143,15 @@ struct
 
   let volumes store albatross_instances _ (user : User_model.user) reqd =
     user_volumes albatross_instances user.name >>= fun blocks ->
-    let policy =
-      Result.fold ~ok:Fun.id
-        ~error:(fun _ -> None)
-        (Albatross.all_policies ~domain:user.name albatross_instances)
-    in
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
              ~page_title:(String.capitalize_ascii user.name ^ " | Mollymawk")
-             ~content:(Volume_index.volume_index_layout blocks policy)
+             ~content:
+               (Volume_index.volume_index_layout blocks
+                  (Albatross.all_policies ~domain:user.name albatross_instances))
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
