@@ -1181,190 +1181,207 @@ struct
                      ~icon:"/images/robur.png" ())
                   `Internal_server_error))
 
-  let unikernel_prepare_update albatross store name http_client _
-      (user : User_model.user) reqd =
+  let unikernel_prepare_update albatross_instances store ~unikernel_name
+      ~instance_name http_client _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    user_unikernel albatross ~user_name:user.name ~unikernel_name:name
-    >>= fun unikernel_info ->
-    match unikernel_info with
+    let name = unikernel_name in
+    match Albatross.find_instance_by_name albatross_instances instance_name with
     | Error err ->
         Middleware.redirect_to_error
           ~data:
             (`String
-               ("An error occured while fetching " ^ name
-              ^ " from albatross with error " ^ err))
-          ~title:"Albatross Error" ~api_meth:false `Internal_server_error reqd
-          ()
-    | Ok (unikernel_name, unikernel) -> (
-        Utils.send_http_request http_client ~base_url:Builder_web.base_url
-          ~path:("/hash?sha256=" ^ Ohex.encode unikernel.digest)
-        >>= function
-        | Error (`Msg err) ->
-            Logs.err (fun m ->
-                m
-                  "builds.robur.coop: Error while fetching the current build \
-                   info of %s with error: %s"
-                  name err);
+               ("An error occured while finding albatross instance "
+              ^ instance_name ^ " with error " ^ err))
+          ~title:"Albatross Instance Error" ~api_meth:false
+          `Internal_server_error reqd ()
+    | Ok albatross -> (
+        user_unikernel albatross ~user_name:user.name ~unikernel_name
+        >>= fun unikernel_info ->
+        match unikernel_info with
+        | Error err ->
             Middleware.redirect_to_error
               ~data:
                 (`String
-                   ("An error occured while fetching the current build \
-                     information from builds.robur.coop. The error is: " ^ err))
-              ~title:(name ^ " update Error") ~api_meth:false
-              `Internal_server_error reqd ()
-        | Ok response_body -> (
-            match
-              Builder_web.build_of_json (Yojson.Basic.from_string response_body)
-            with
+                   ("An error occured while fetching " ^ unikernel_name
+                  ^ " from albatross with error " ^ err))
+              ~title:"Albatross Error" ~api_meth:false `Internal_server_error
+              reqd ()
+        | Ok (unikernel_name, unikernel) -> (
+            Utils.send_http_request http_client ~base_url:Builder_web.base_url
+              ~path:("/hash?sha256=" ^ Ohex.encode unikernel.digest)
+            >>= function
             | Error (`Msg err) ->
                 Logs.err (fun m ->
                     m
-                      "JSON parsing of the current build of %s from \
-                       builds.robur.coop failed with error: %s"
+                      "builds.robur.coop: Error while fetching the current \
+                       build info of %s with error: %s"
                       name err);
                 Middleware.redirect_to_error
                   ~data:
                     (`String
-                       ("An error occured while parsing the json of the \
-                         current build from builds.robur.coop. The error is: "
+                       ("An error occured while fetching the current build \
+                         information from builds.robur.coop. The error is: "
                       ^ err))
                   ~title:(name ^ " update Error") ~api_meth:false
                   `Internal_server_error reqd ()
-            | Ok current_job_data -> (
-                Utils.send_http_request http_client
-                  ~base_url:Builder_web.base_url
-                  ~path:("/job/" ^ current_job_data.job ^ "/build/latest")
-                >>= function
+            | Ok response_body -> (
+                match
+                  Builder_web.build_of_json
+                    (Yojson.Basic.from_string response_body)
+                with
                 | Error (`Msg err) ->
                     Logs.err (fun m ->
                         m
-                          "builds.robur.coop: Error while fetching the latest \
-                           build info of %s with error: %s"
+                          "JSON parsing of the current build of %s from \
+                           builds.robur.coop failed with error: %s"
                           name err);
                     Middleware.redirect_to_error
                       ~data:
                         (`String
-                           ("An error occured while fetching the latest build \
-                             information from builds.robur.coop. The error \
+                           ("An error occured while parsing the json of the \
+                             current build from builds.robur.coop. The error \
                              is: " ^ err))
                       ~title:(name ^ " update Error") ~api_meth:false
                       `Internal_server_error reqd ()
-                | Ok response_body -> (
-                    match
-                      Builder_web.build_of_json
-                        (Yojson.Basic.from_string response_body)
-                    with
+                | Ok current_job_data -> (
+                    Utils.send_http_request http_client
+                      ~base_url:Builder_web.base_url
+                      ~path:("/job/" ^ current_job_data.job ^ "/build/latest")
+                    >>= function
                     | Error (`Msg err) ->
                         Logs.err (fun m ->
                             m
-                              "JSON parsing of the latest build of %s from \
-                               builds.robur.coop failed with error: %s"
+                              "builds.robur.coop: Error while fetching the \
+                               latest build info of %s with error: %s"
                               name err);
                         Middleware.redirect_to_error
                           ~data:
                             (`String
-                               ("An error occured while parsing the json of \
-                                 the latest build from builds.robur.coop. The \
+                               ("An error occured while fetching the latest \
+                                 build information from builds.robur.coop. The \
                                  error is: " ^ err))
-                          ~title:(name ^ "update Error") ~api_meth:false
+                          ~title:(name ^ " update Error") ~api_meth:false
                           `Internal_server_error reqd ()
-                    | Ok latest_job_data -> (
-                        if
-                          String.equal latest_job_data.uuid
-                            current_job_data.uuid
-                        then (
-                          Logs.info (fun m ->
-                              m
-                                "There is no new update of %s found with uuid  \
-                                 %s"
-                                name latest_job_data.uuid);
-                          Middleware.redirect_to_page
-                            ~path:
-                              ("/unikernel/info/"
-                              ^ Option.value ~default:""
-                                  (Vmm_core.Name.name unikernel_name))
-                            reqd
-                            ~msg:
-                              ("There is no update of " ^ name
-                             ^ " found on builds.robur.coop")
-                            ())
-                        else
-                          Utils.send_http_request http_client
-                            ~base_url:Builder_web.base_url
-                            ~path:
-                              ("/compare/" ^ current_job_data.uuid ^ "/"
-                             ^ latest_job_data.uuid ^ "")
-                          >>= function
-                          | Error (`Msg err) ->
-                              Logs.err (fun m ->
+                    | Ok response_body -> (
+                        match
+                          Builder_web.build_of_json
+                            (Yojson.Basic.from_string response_body)
+                        with
+                        | Error (`Msg err) ->
+                            Logs.err (fun m ->
+                                m
+                                  "JSON parsing of the latest build of %s from \
+                                   builds.robur.coop failed with error: %s"
+                                  name err);
+                            Middleware.redirect_to_error
+                              ~data:
+                                (`String
+                                   ("An error occured while parsing the json \
+                                     of the latest build from \
+                                     builds.robur.coop. The error is: " ^ err))
+                              ~title:(name ^ "update Error") ~api_meth:false
+                              `Internal_server_error reqd ()
+                        | Ok latest_job_data -> (
+                            if
+                              String.equal latest_job_data.uuid
+                                current_job_data.uuid
+                            then (
+                              Logs.info (fun m ->
                                   m
-                                    "builds.robur.coop: Error while fetching \
-                                     the diff between the current and latest \
-                                     build info of %s with error: %s"
-                                    name err);
-                              Middleware.redirect_to_error
-                                ~data:
-                                  (`String
-                                     ("An error occured while fetching the \
-                                       diff between the latest and the current \
-                                       build information from \
-                                       builds.robur.coop. The error is: " ^ err
-                                     ))
-                                ~title:(name ^ " update Error") ~api_meth:false
-                                `Internal_server_error reqd ()
-                          | Ok response_body -> (
-                              match
-                                Builder_web.compare_of_json
-                                  (Yojson.Basic.from_string response_body)
-                              with
-                              | Ok build_comparison -> (
-                                  let now = Mirage_ptime.now () in
-                                  generate_csrf_token store user now reqd
-                                  >>= function
-                                  | Ok csrf ->
-                                      reply reqd ~content_type:"text/html"
-                                        (Dashboard.dashboard_layout ~csrf user
-                                           ~page_title:
-                                             (Vmm_core.Name.to_string
-                                                unikernel_name
-                                             ^ " Update | Mollymawk")
-                                           ~content:
-                                             (Unikernel_update
-                                              .unikernel_update_layout
-                                                ~unikernel_name:name
-                                                (unikernel_name, unikernel)
-                                                now build_comparison)
-                                           ~icon:"/images/robur.png" ())
-                                        ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-                                        `OK
-                                  | Error err ->
-                                      reply reqd ~content_type:"text/html"
-                                        (Guest_layout.guest_layout
-                                           ~page_title:
-                                             "CSRF Token Error | Mollymawk"
-                                           ~content:
-                                             (Error_page.error_layout err)
-                                           ~icon:"/images/robur.png" ())
-                                        `Internal_server_error)
+                                    "There is no new update of %s found with \
+                                     uuid  %s"
+                                    name latest_job_data.uuid);
+                              Middleware.redirect_to_page
+                                ~path:
+                                  ("/unikernel/info/"
+                                  ^ Option.value ~default:""
+                                      (Vmm_core.Name.name unikernel_name))
+                                reqd
+                                ~msg:
+                                  ("There is no update of " ^ name
+                                 ^ " found on builds.robur.coop")
+                                ())
+                            else
+                              Utils.send_http_request http_client
+                                ~base_url:Builder_web.base_url
+                                ~path:
+                                  ("/compare/" ^ current_job_data.uuid ^ "/"
+                                 ^ latest_job_data.uuid ^ "")
+                              >>= function
                               | Error (`Msg err) ->
                                   Logs.err (fun m ->
                                       m
-                                        "JSON parsing of the diff between the \
-                                         latest and current build of %s from \
-                                         builds.robur.coop failed with error: \
-                                         %s"
+                                        "builds.robur.coop: Error while \
+                                         fetching the diff between the current \
+                                         and latest build info of %s with \
+                                         error: %s"
                                         name err);
                                   Middleware.redirect_to_error
                                     ~data:
                                       (`String
-                                         ("An error occured while parsing the \
-                                           json of the diff between the latest \
-                                           and curent build from \
+                                         ("An error occured while fetching the \
+                                           diff between the latest and the \
+                                           current build information from \
                                            builds.robur.coop. The error is: "
                                         ^ err))
                                     ~title:(name ^ " update Error")
                                     ~api_meth:false `Internal_server_error reqd
-                                    ()))))))
+                                    ()
+                              | Ok response_body -> (
+                                  match
+                                    Builder_web.compare_of_json
+                                      (Yojson.Basic.from_string response_body)
+                                  with
+                                  | Ok build_comparison -> (
+                                      let now = Mirage_ptime.now () in
+                                      generate_csrf_token store user now reqd
+                                      >>= function
+                                      | Ok csrf ->
+                                          reply reqd ~content_type:"text/html"
+                                            (Dashboard.dashboard_layout ~csrf
+                                               user
+                                               ~page_title:
+                                                 (Vmm_core.Name.to_string
+                                                    unikernel_name
+                                                 ^ " Update | Mollymawk")
+                                               ~content:
+                                                 (Unikernel_update
+                                                  .unikernel_update_layout
+                                                    ~unikernel_name:name
+                                                    (unikernel_name, unikernel)
+                                                    now build_comparison)
+                                               ~icon:"/images/robur.png" ())
+                                            ~header_list:
+                                              [ ("X-MOLLY-CSRF", csrf) ]
+                                            `OK
+                                      | Error err ->
+                                          reply reqd ~content_type:"text/html"
+                                            (Guest_layout.guest_layout
+                                               ~page_title:
+                                                 "CSRF Token Error | Mollymawk"
+                                               ~content:
+                                                 (Error_page.error_layout err)
+                                               ~icon:"/images/robur.png" ())
+                                            `Internal_server_error)
+                                  | Error (`Msg err) ->
+                                      Logs.err (fun m ->
+                                          m
+                                            "JSON parsing of the diff between \
+                                             the latest and current build of \
+                                             %s from builds.robur.coop failed \
+                                             with error: %s"
+                                            name err);
+                                      Middleware.redirect_to_error
+                                        ~data:
+                                          (`String
+                                             ("An error occured while parsing \
+                                               the json of the diff between \
+                                               the latest and curent build \
+                                               from builds.robur.coop. The \
+                                               error is: " ^ err))
+                                        ~title:(name ^ " update Error")
+                                        ~api_meth:false `Internal_server_error
+                                        reqd ())))))))
 
   let force_create_unikernel ~unikernel_name ~push
       (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user)
@@ -2805,12 +2822,26 @@ struct
                       reqd))
         | path when String.starts_with ~prefix:"/unikernel/update/" path ->
             check_meth `GET (fun () ->
-                let unikernel_name =
+                let path_after_update =
                   String.sub path 18 (String.length path - 18)
+                in
+                let unikernel_name =
+                  match String.index_opt path_after_update '?' with
+                  | Some idx -> String.sub path_after_update 0 idx
+                  | None -> path_after_update
+                in
+                let instance_name =
+                  match
+                    Uri.get_query_param
+                      (Uri.of_string req.H1.Request.target)
+                      "instance"
+                  with
+                  | Some name -> name
+                  | None -> ""
                 in
                 authenticate store reqd
                   (unikernel_prepare_update !albatross_instances store
-                     unikernel_name http_client))
+                     ~unikernel_name ~instance_name http_client))
         | "/api/unikernel/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
