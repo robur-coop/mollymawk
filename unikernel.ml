@@ -1956,6 +1956,7 @@ struct
                  ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
                  ~content:
                    (User_single.user_single_layout u unikernels
+                      ~empty_policy:Albatross.empty_policy
                       (Albatross.all_policies ~domain:u.name albatross_instances)
                       now)
                  ~icon:"/images/robur.png" ())
