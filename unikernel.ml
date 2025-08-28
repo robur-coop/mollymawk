@@ -1915,62 +1915,86 @@ struct
                  ~icon:"/images/robur.png" ())
               `Not_found)
 
-  let update_policy store albatross _user json_dict reqd =
-    match Utils.Json.get "user_uuid" json_dict with
-    | Some (`String user_uuid) -> (
+  let update_policy store albatross_instances _user json_dict reqd =
+    match
+      Utils.Json.(get "user_uuid" json_dict, get "albatross_instance" json_dict)
+    with
+    | Some (`String user_uuid), Some (`String instance_name) -> (
         match Store.find_by_uuid store user_uuid with
         | Some u -> (
-            match Albatross_json.policy_of_json json_dict with
-            | Ok policy -> (
-                match Albatross.policy albatross with
-                | Ok (Some root_policy) -> (
-                    match
-                      Vmm_core.Policy.is_smaller ~super:root_policy ~sub:policy
-                    with
-                    | Error (`Msg err) ->
+            match
+              Albatross.find_instance_by_name albatross_instances instance_name
+            with
+            | Error err ->
+                Logs.err (fun m ->
+                    m
+                      "Couldn't find albatross instance with name %s: and \
+                       error: %s"
+                      instance_name err);
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:
+                    (`String
+                       ("Couldn't find albatross instance with name: "
+                      ^ instance_name ^ " and error: " ^ err))
+                  `Bad_request
+            | Ok albatross -> (
+                match Albatross_json.policy_of_json json_dict with
+                | Ok policy -> (
+                    match Albatross.policy albatross with
+                    | Ok (Some root_policy) -> (
+                        match
+                          Vmm_core.Policy.is_smaller ~super:root_policy
+                            ~sub:policy
+                        with
+                        | Error (`Msg err) ->
+                            Logs.err (fun m ->
+                                m
+                                  "policy %a is not smaller than root policy \
+                                   %a: %s"
+                                  Vmm_core.Policy.pp policy Vmm_core.Policy.pp
+                                  root_policy err);
+                            Middleware.http_response reqd ~title:"Error"
+                              ~data:
+                                (`String
+                                   ("Policy is not smaller than root policy: "
+                                  ^ err))
+                              `Internal_server_error
+                        | Ok () -> (
+                            Albatross.set_policy albatross ~domain:u.name policy
+                            >>= function
+                            | Error err ->
+                                Logs.err (fun m ->
+                                    m "error setting policy %a for %s: %s"
+                                      Vmm_core.Policy.pp policy u.name err);
+                                Middleware.http_response reqd ~title:"Error"
+                                  ~data:
+                                    (`String ("error setting policy: " ^ err))
+                                  `Internal_server_error
+                            | Ok policy ->
+                                Middleware.http_response reqd ~title:"Success"
+                                  ~data:(Albatross_json.policy_info policy)
+                                  `OK))
+                    | Ok None ->
                         Logs.err (fun m ->
-                            m "policy %a is not smaller than root policy %a: %s"
-                              Vmm_core.Policy.pp policy Vmm_core.Policy.pp
-                              root_policy err);
+                            m "policy: root policy can't be null ");
+                        Middleware.http_response reqd ~title:"Error"
+                          ~data:(`String "Root policy is null")
+                          `Internal_server_error
+                    | Error err ->
+                        Logs.err (fun m ->
+                            m
+                              "policy: an error occured while fetching root \
+                               policy: %s"
+                              err);
                         Middleware.http_response reqd ~title:"Error"
                           ~data:
                             (`String
-                               ("Policy is not smaller than root policy: " ^ err))
-                          `Internal_server_error
-                    | Ok () -> (
-                        Albatross.set_policy albatross ~domain:u.name policy
-                        >>= function
-                        | Error err ->
-                            Logs.err (fun m ->
-                                m "error setting policy %a for %s: %s"
-                                  Vmm_core.Policy.pp policy u.name err);
-                            Middleware.http_response reqd ~title:"Error"
-                              ~data:(`String ("error setting policy: " ^ err))
-                              `Internal_server_error
-                        | Ok policy ->
-                            Middleware.http_response reqd ~title:"Success"
-                              ~data:(Albatross_json.policy_info policy)
-                              `OK))
-                | Ok None ->
-                    Logs.err (fun m -> m "policy: root policy can't be null ");
+                               ("error with root policy: " ^ String.escaped err))
+                          `Internal_server_error)
+                | Error (`Msg err) ->
                     Middleware.http_response reqd ~title:"Error"
-                      ~data:(`String "Root policy is null")
-                      `Internal_server_error
-                | Error err ->
-                    Logs.err (fun m ->
-                        m
-                          "policy: an error occured while fetching root \
-                           policy: %s"
-                          err);
-                    Middleware.http_response reqd ~title:"Error"
-                      ~data:
-                        (`String
-                           ("error with root policy: " ^ String.escaped err))
-                      `Internal_server_error)
-            | Error (`Msg err) ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:(`String (String.escaped err))
-                  `Bad_request)
+                      ~data:(`String (String.escaped err))
+                      `Bad_request))
         | None ->
             Middleware.http_response reqd ~title:"Error"
               ~data:(`String "User not found") `Not_found)
