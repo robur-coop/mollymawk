@@ -14,11 +14,11 @@ let account_usage_layout policies unikernels blocks =
                 ->
                let policy =
                  match policies with
-                 | Some ps -> (
+                 | [] -> failwith "No policies"
+                 | ps -> (
                      match List.assoc_opt instance_name ps with
                      | Some (Ok (Some p)) -> p
                      | _ -> failwith "Policy not found")
-                 | None -> failwith "No policies"
                in
                div
                  ~a:[ a_class [ "mx-auto text-center my-4" ] ]
