@@ -1866,18 +1866,29 @@ struct
                 m "Multipart streamed correctly and unikernel created.");
             Lwt.return_unit)
 
-  let unikernel_console albatross name _ (user : User_model.user) reqd =
+  let unikernel_console albatross_instances ~unikernel_name ~instance_name _
+      (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
     let response = Middleware.http_event_source_response reqd `OK in
     let f (ts, data) =
       let json = Albatross_json.console_data_to_json (ts, data) in
       response (Yojson.Basic.to_string json)
     in
-    Albatross.query_console ~domain:user.name albatross ~name f >>= function
+    match Albatross.find_instance_by_name albatross_instances instance_name with
     | Error err ->
-        Logs.warn (fun m -> m "error querying albatross: %s" err);
-        Lwt.return_unit
-    | Ok () -> Lwt.return_unit
+        Logs.err (fun m ->
+            m "Error finding albatross instance %s: %s" instance_name err);
+        Middleware.http_response reqd ~title:"Error"
+          ~data:(`String ("Error finding albatross instance: " ^ err))
+          `Internal_server_error
+    | Ok albatross -> (
+        Albatross.query_console ~domain:user.name albatross ~name:unikernel_name
+          f
+        >>= function
+        | Error err ->
+            Logs.warn (fun m -> m "error querying albatross: %s" err);
+            Lwt.return_unit
+        | Ok () -> Lwt.return_unit)
 
   let view_user albatross store uuid _ (user : User_model.user) reqd =
     match Store.find_by_uuid store uuid with
@@ -2741,11 +2752,26 @@ struct
                      (unikernel_restart !albatross_instances)))
         | path when String.starts_with ~prefix:"/api/unikernel/console/" path ->
             check_meth `GET (fun () ->
-                let unikernel_name =
+                let path_after_console =
                   String.sub path 23 (String.length path - 23)
                 in
+                let unikernel_name =
+                  match String.index_opt path_after_console '?' with
+                  | Some idx -> String.sub path_after_console 0 idx
+                  | None -> path_after_console
+                in
+                let instance_name =
+                  match
+                    Uri.get_query_param
+                      (Uri.of_string req.H1.Request.target)
+                      "instance"
+                  with
+                  | Some name -> name
+                  | None -> ""
+                in
                 authenticate store reqd ~check_token:true ~api_meth:true
-                  (unikernel_console !albatross_instances unikernel_name))
+                  (unikernel_console !albatross_instances ~unikernel_name
+                     ~instance_name))
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
