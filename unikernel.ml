@@ -2275,22 +2275,23 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
 
-  let account_usage store albatross _ (user : User_model.user) reqd =
+  let account_usage store albatross_instances _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
-        user_volumes albatross user.name >>= fun blocks ->
-        user_unikernels albatross user.name >>= fun unikernels ->
-        let policy =
-          match Albatross.policy albatross ~domain:user.name with
-          | Ok p -> (
-              match p with Some p -> p | None -> Albatross.empty_policy)
-          | Error _ -> Albatross.empty_policy
+        user_volumes albatross_instances user.name >>= fun blocks ->
+        user_unikernels albatross_instances user.name >>= fun unikernels ->
+        let policies =
+          match
+            Albatross.all_policies albatross_instances ~domain:user.name
+          with
+          | [] -> None
+          | policies -> Some policies
         in
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Usage | Mollymawk"
              ~content:
-               (Account_usage.account_usage_layout policy unikernels blocks)
+               (Account_usage.account_usage_layout policies unikernels blocks)
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
