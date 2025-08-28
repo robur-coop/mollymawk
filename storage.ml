@@ -62,7 +62,10 @@ let t_of_json json =
             List.fold_left
               (fun acc js ->
                 let* acc = acc in
-                let* config = Configuration.of_json js in
+                let* config =
+                  if v <= 7 then Configuration.of_json_v1 js
+                  else Configuration.of_json js
+                in
                 Ok (config :: acc))
               (Ok []) configurations
           in

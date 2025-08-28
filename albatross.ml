@@ -552,11 +552,13 @@ module Make (S : Tcpip.Stack.V4V6) = struct
 
   let init stack (configs : Configuration.t list) =
     let open Lwt.Infix in
-    Lwt_list.fold_left_s
-      (fun acc (config : Configuration.t) ->
-        match acc with
-        | Error e -> Lwt.return (Error e)
-        | Ok initialized_configs -> (
+    match configs with
+    | [] ->
+        (* No configs given: succeed with an empty list *)
+        Lwt.return (Ok [])
+    | _ ->
+        Lwt_list.map_s
+          (fun (config : Configuration.t) ->
             let t =
               {
                 name = config.name;
@@ -569,7 +571,10 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             in
             let cmd = `Policy_cmd `Policy_info in
             match gen_cert t cmd t.name with
-            | Error s -> Lwt.return (Error s)
+            | Error s ->
+                Logs.warn (fun m ->
+                    m "init: gen_cert failed for %s: %s" t.name s);
+                Lwt.return_none
             | Ok certificates -> (
                 raw_query t certificates cmd reply >|= function
                 | Ok (_hdr, `Success (`Policies ps)) ->
@@ -579,10 +584,23 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                         Vmm_trie.empty ps
                     in
                     t.policies <- ps;
-                    Ok (t :: initialized_configs)
-                | Ok _w -> Error "Failed to init"
-                | Error str -> Error str)))
-      (Ok []) configs
+                    Some t
+                | Ok _w ->
+                    Logs.warn (fun m ->
+                        m "init: unexpected policy reply for %s" t.name);
+                    None
+                | Error str ->
+                    Logs.warn (fun m ->
+                        m "init: raw_query failed for %s: %s" t.name str);
+                    None))
+          configs
+        >|= fun results_opt ->
+        let initialized =
+          List.fold_right
+            (fun r acc -> match r with Some t -> t :: acc | None -> acc)
+            results_opt []
+        in
+        Ok initialized
 
   let certs t domain name cmd =
     match
