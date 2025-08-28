@@ -1112,11 +1112,10 @@ struct
               ~data:(`String "Expected a list of unikernels")
               `Internal_server_error)
 
-  let unikernel_info_one albatross store name _ (user : User_model.user) reqd =
+  let unikernel_info_one albatross_instances store ~unikernel_name
+      ~instance_name _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    user_unikernel albatross ~user_name:user.name ~unikernel_name:name
-    >>= fun unikernel_info ->
-    match unikernel_info with
+    match Albatross.find_instance_by_name albatross_instances instance_name with
     | Error err ->
         reply reqd ~content_type:"text/html"
           (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
@@ -1125,43 +1124,62 @@ struct
                   {
                     code = 500;
                     success = false;
-                    title = "Albatross Error";
+                    title = "Albatross Instance Error";
                     data =
                       `String
-                        ("An error occured trying to fetch " ^ name
-                       ^ "from albatross: " ^ err);
+                        ("An error occured trying to find albatross instance "
+                       ^ instance_name ^ ": " ^ err);
                   })
              ~icon:"/images/robur.png" ())
           `Internal_server_error
-    | Ok unikernel -> (
-        let now = Mirage_ptime.now () in
-        generate_csrf_token store user now reqd >>= function
-        | Ok csrf ->
-            let last_update_time =
-              match
-                List.find_opt
-                  (fun (u : User_model.unikernel_update) ->
-                    String.equal u.name name)
-                  user.unikernel_updates
-              with
-              | Some unikernel_update -> Some unikernel_update.timestamp
-              | None -> None
-            in
-            reply reqd ~content_type:"text/html"
-              (Dashboard.dashboard_layout ~csrf user
-                 ~content:
-                   (Unikernel_single.unikernel_single_layout
-                      ~unikernel_name:name unikernel ~last_update_time
-                      ~current_time:now)
-                 ~icon:"/images/robur.png" ())
-              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-              `OK
+    | Ok albatross -> (
+        user_unikernel albatross ~user_name:user.name ~unikernel_name
+        >>= fun unikernel_info ->
+        match unikernel_info with
         | Error err ->
             reply reqd ~content_type:"text/html"
               (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-                 ~content:(Error_page.error_layout err)
+                 ~content:
+                   (Error_page.error_layout
+                      {
+                        code = 500;
+                        success = false;
+                        title = "Albatross Error";
+                        data =
+                          `String
+                            ("An error occured trying to fetch "
+                           ^ unikernel_name ^ "from albatross: " ^ err);
+                      })
                  ~icon:"/images/robur.png" ())
-              `Internal_server_error)
+              `Internal_server_error
+        | Ok unikernel -> (
+            let now = Mirage_ptime.now () in
+            generate_csrf_token store user now reqd >>= function
+            | Ok csrf ->
+                let last_update_time =
+                  match
+                    List.find_opt
+                      (fun (u : User_model.unikernel_update) ->
+                        String.equal u.name unikernel_name)
+                      user.unikernel_updates
+                  with
+                  | Some unikernel_update -> Some unikernel_update.timestamp
+                  | None -> None
+                in
+                reply reqd ~content_type:"text/html"
+                  (Dashboard.dashboard_layout ~csrf user
+                     ~content:
+                       (Unikernel_single.unikernel_single_layout ~unikernel_name
+                          unikernel ~last_update_time ~current_time:now)
+                     ~icon:"/images/robur.png" ())
+                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                  `OK
+            | Error err ->
+                reply reqd ~content_type:"text/html"
+                  (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                     ~content:(Error_page.error_layout err)
+                     ~icon:"/images/robur.png" ())
+                  `Internal_server_error))
 
   let unikernel_prepare_update albatross store name http_client _
       (user : User_model.user) reqd =
@@ -2662,11 +2680,26 @@ struct
                   (unikernel_info !albatross_instances))
         | path when String.starts_with ~prefix:"/unikernel/info/" path ->
             check_meth `GET (fun () ->
-                let unikernel_name =
+                let path_after_info =
                   String.sub path 16 (String.length path - 16)
                 in
+                let unikernel_name =
+                  match String.index_opt path_after_info '?' with
+                  | Some idx -> String.sub path_after_info 0 idx
+                  | None -> path_after_info
+                in
+                let instance_name =
+                  match
+                    Uri.get_query_param
+                      (Uri.of_string req.H1.Request.target)
+                      "instance"
+                  with
+                  | Some name -> name
+                  | None -> ""
+                in
                 authenticate store reqd
-                  (unikernel_info_one !albatross_instances store unikernel_name))
+                  (unikernel_info_one !albatross_instances store ~unikernel_name
+                     ~instance_name))
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
                 authenticate store reqd (deploy_form store !albatross_instances))
