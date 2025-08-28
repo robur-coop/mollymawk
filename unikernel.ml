@@ -1068,20 +1068,48 @@ struct
              ~icon:"/images/robur.png" ())
           `Internal_server_error
 
-  let unikernel_info albatross _ (user : User_model.user) reqd =
+  let unikernel_info albatross_instances _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    Albatross.query albatross ~domain:user.name (`Unikernel_cmd `Unikernel_info)
-    >>= function
+    let rec loop = function
+      | [] -> Lwt.return (Ok (`List []))
+      | albatross :: rest -> (
+          Albatross.query albatross ~domain:user.name
+            (`Unikernel_cmd `Unikernel_info)
+          >>= function
+          | Error msg ->
+              Logs.err (fun m ->
+                  m "Error while communicating with albatross: %s" msg);
+              Lwt.return (Error msg)
+          | Ok (_hdr, res) -> (
+              match Albatross_json.res res with
+              | Error (`String err) ->
+                  Logs.err (fun m ->
+                      m "Error while parsing albatross response: %s" err);
+                  Lwt.return (Error err)
+              | Ok res -> (
+                  loop rest >>= function
+                  | Error msg -> Lwt.return (Error msg)
+                  | Ok (`List l) -> Lwt.return (Ok (`List (res :: l)))
+                  | Ok _ ->
+                      let msg =
+                        "Expected a list when aggregating albatross unikernel \
+                         info"
+                      in
+                      Logs.err (fun m -> m "%s" msg);
+                      Lwt.return (Error msg))))
+    in
+    loop albatross_instances >>= function
     | Error msg ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String ("Error while querying albatross: " ^ msg))
           `Internal_server_error
-    | Ok (_hdr, res) -> (
-        match Albatross_json.res res with
-        | Ok res -> Middleware.http_response reqd ~title:"Success" ~data:res `OK
-        | Error (`String err) ->
+    | Ok res -> (
+        match res with
+        | `List l ->
+            Middleware.http_response reqd ~title:"Success" ~data:(`List l) `OK
+        | _ ->
             Middleware.http_response reqd ~title:"Error"
-              ~data:(`String (String.escaped err))
+              ~data:(`String "Expected a list of unikernels")
               `Internal_server_error)
 
   let unikernel_info_one albatross store name _ (user : User_model.user) reqd =
