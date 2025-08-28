@@ -1,7 +1,6 @@
 open Utils.Json
 
-(* TODO: increment version number *)
-let current_version = 7
+let current_version = 8
 (* version history:
    1 was initial (fields until email_verification_uuid)
    2 added active
@@ -10,6 +9,7 @@ let current_version = 7
    5 cookie has two new fields last_access and user_agent
    6 tokens has 3 new fields: name, last_access and usage_count
    7 added unikernel_updates to keep track of when unikernels are updated
+   8 we now store a list of configurations
 *)
 
 let t_to_json users configurations =
@@ -28,6 +28,7 @@ let t_of_json json =
       | Some (`Int v), Some (`List users), Some (`List configurations) ->
           let* () =
             if v = current_version then Ok ()
+            else if v = 7 then Ok ()
             else if v = 6 then Ok ()
             else if v = 5 then Ok ()
             else if v = 4 then Ok ()
@@ -51,6 +52,7 @@ let t_of_json json =
                     User_model.(user_v3_of_json cookie_v1_of_json) js
                   else if v = 6 then
                     User_model.(user_v4_of_json cookie_v1_of_json) js
+                  else if v = 7 then User_model.(user_of_json cookie_of_json) js
                   else User_model.(user_of_json cookie_of_json) js
                 in
                 Ok (user :: acc))
