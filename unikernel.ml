@@ -1693,13 +1693,13 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_destroy albatross (user : User_model.user) json_dict reqd =
+  let unikernel_destroy albatross_instances (user : User_model.user) json_dict reqd =
     (* TODO use uuid in the future *)
     match
       Utils.Json.(get "name" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String unikernel_name), Some (`String instance_name) -> (
-        match Albatross.find_instance_by_name albatross instance_name with
+        match Albatross.find_instance_by_name albatross_instances instance_name with
         | Error err ->
             Logs.err (fun m ->
                 m "Error finding albatross instance %s: %s" instance_name err);
@@ -1727,7 +1727,7 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_restart albatross (user : User_model.user) json_dict reqd =
+  let unikernel_restart albatross_instances (user : User_model.user) json_dict reqd =
     (* TODO use uuid in the future *)
     match Utils.Json.get "name" json_dict with
     | Some (`String unikernel_name) -> (
