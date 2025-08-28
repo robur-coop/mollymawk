@@ -1848,64 +1848,72 @@ struct
              ~icon:"/images/robur.png" ())
           `Not_found
 
-  let edit_policy albatross store uuid _ (user : User_model.user) reqd =
-    match Store.find_by_uuid store uuid with
-    | Some u -> (
-        let user_policy =
-          match Albatross.policy albatross ~domain:u.name with
-          | Ok p -> (
-              match p with Some p -> p | None -> Albatross.empty_policy)
-          | Error _ -> Albatross.empty_policy
-        in
-        match Albatross.policy_resource_avalaible albatross with
-        | Ok unallocated_resources -> (
-            let now = Mirage_ptime.now () in
-            generate_csrf_token store user now reqd >>= function
-            | Ok csrf ->
-                reply reqd ~content_type:"text/html"
-                  (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:
-                       (String.capitalize_ascii u.name ^ " | Mollymawk")
-                     ~content:
-                       (Update_policy.update_policy_layout u ~user_policy
-                          ~unallocated_resources)
-                     ~icon:"/images/robur.png" ())
-                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-                  `OK
-            | Error err ->
-                reply reqd ~content_type:"text/html"
-                  (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-                     ~content:(Error_page.error_layout err)
-                     ~icon:"/images/robur.png" ())
-                  `Internal_server_error)
-        | Error err ->
-            let status =
-              {
-                Utils.Status.code = 500;
-                title = "Error";
-                data = `String ("Policy error: " ^ err);
-                success = false;
-              }
-            in
-            reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-                 ~content:(Error_page.error_layout status)
-                 ~icon:"/images/robur.png" ())
-              `Not_found)
-    | None ->
-        let status =
-          {
-            Utils.Status.code = 404;
-            title = "Error";
-            data = `String ("Couldn't find account with uuid: " ^ uuid);
-            success = false;
-          }
-        in
+  let edit_policy albatross_instances store uuid instance_name _
+      (user : User_model.user) reqd =
+    let status code msg =
+      {
+        Utils.Status.code;
+        title = "Error";
+        data = `String msg;
+        success = false;
+      }
+    in
+    match Albatross.find_instance_by_name albatross_instances instance_name with
+    | Error err ->
+        let status = status 404 ("Couldn't find albatross instance: " ^ err) in
         reply reqd ~content_type:"text/html"
           (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
              ~content:(Error_page.error_layout status)
              ~icon:"/images/robur.png" ())
           `Not_found
+    | Ok albatross -> (
+        match Store.find_by_uuid store uuid with
+        | Some u -> (
+            let user_policy =
+              match Albatross.policy albatross ~domain:u.name with
+              | Ok p -> (
+                  match p with Some p -> p | None -> Albatross.empty_policy)
+              | Error _ -> Albatross.empty_policy
+            in
+            match Albatross.policy_resource_avalaible albatross with
+            | Ok unallocated_resources -> (
+                let now = Mirage_ptime.now () in
+                generate_csrf_token store user now reqd >>= function
+                | Ok csrf ->
+                    reply reqd ~content_type:"text/html"
+                      (Dashboard.dashboard_layout ~csrf user
+                         ~page_title:
+                           (String.capitalize_ascii u.name ^ " | Mollymawk")
+                         ~content:
+                           (Update_policy.update_policy_layout u ~user_policy
+                              ~unallocated_resources)
+                         ~icon:"/images/robur.png" ())
+                      ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                      `OK
+                | Error err ->
+                    reply reqd ~content_type:"text/html"
+                      (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                         ~content:(Error_page.error_layout err)
+                         ~icon:"/images/robur.png" ())
+                      `Internal_server_error)
+            | Error err ->
+                let status =
+                  status 500 ("Couldn't get unallocated resources: " ^ err)
+                in
+                reply reqd ~content_type:"text/html"
+                  (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                     ~content:(Error_page.error_layout status)
+                     ~icon:"/images/robur.png" ())
+                  `Not_found)
+        | None ->
+            let status =
+              status 404 ("Couldn't find account with uuid: " ^ uuid)
+            in
+            reply reqd ~content_type:"text/html"
+              (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
+                 ~content:(Error_page.error_layout status)
+                 ~icon:"/images/robur.png" ())
+              `Not_found)
 
   let update_policy store albatross _user json_dict reqd =
     match Utils.Json.get "user_uuid" json_dict with
@@ -2556,9 +2564,25 @@ struct
                   (view_user !albatross_instances store uuid))
         | path when String.starts_with ~prefix:"/admin/u/policy/edit/" path ->
             check_meth `GET (fun () ->
-                let uuid = String.sub path 21 (String.length path - 21) in
+                let path_after_edit =
+                  String.sub path 21 (String.length path - 21)
+                in
+                let uuid =
+                  match String.index_opt path_after_edit '?' with
+                  | Some idx -> String.sub path_after_edit 0 idx
+                  | None -> path_after_edit
+                in
+                let instance_name =
+                  match
+                    Uri.get_query_param
+                      (Uri.of_string req.H1.Request.target)
+                      "instance"
+                  with
+                  | Some name -> name
+                  | None -> ""
+                in
                 authenticate ~check_admin:true store reqd
-                  (edit_policy !albatross_instances store uuid))
+                  (edit_policy !albatross_instances store uuid instance_name))
         | "/admin/settings" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (settings store))
