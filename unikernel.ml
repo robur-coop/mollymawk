@@ -1767,7 +1767,8 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_create token_or_cookie (user : User_model.user) albatross reqd =
+  let unikernel_create token_or_cookie (user : User_model.user)
+      albatross_instances reqd =
     let generate_http_error_response msg code =
       Logs.warn (fun m -> m "Unikernel_create error: %s" msg);
       Middleware.http_response reqd ~title:"Error" ~data:(`String msg) code
@@ -1782,9 +1783,14 @@ struct
         let cfg_ref = ref None in
         let force_ref = ref None in
         let csrf_ref = ref None in
+        let albatross_instance_ref = ref None in
         let process_stream () =
           Lwt_stream.iter_s
             (function
+              | (Some "albatross_instance", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  albatross_instance_ref := Some v;
+                  Lwt.return_unit
               | (Some "unikernel_name", _), _, contents ->
                   consume_part_content contents >>= fun v ->
                   name_ref := Some v;
@@ -1802,10 +1808,19 @@ struct
                   csrf_ref := Some v;
                   Lwt.return_unit
               | (Some "binary", _), _, contents -> (
-                  match (!name_ref, !cfg_ref, !force_ref, !csrf_ref) with
-                  | Some unikernel_name, Some cfg, Some force_create, Some csrf
-                    -> (
-                      let process_unikernel_create _reqd =
+                  match
+                    ( !albatross_instance_ref,
+                      !name_ref,
+                      !cfg_ref,
+                      !force_ref,
+                      !csrf_ref )
+                  with
+                  | ( Some instance_name,
+                      Some unikernel_name,
+                      Some cfg,
+                      Some force_create,
+                      Some csrf ) -> (
+                      let process_unikernel_create albatross _reqd =
                         match Albatross_json.config_of_json cfg with
                         | Error (`Msg err) ->
                             generate_http_error_response
@@ -1840,11 +1855,21 @@ struct
                                       ("Albatross JSON Error: " ^ err_msg)
                                       `Internal_server_error))
                       in
-                      match token_or_cookie with
-                      | `Token -> process_unikernel_create reqd
-                      | `Cookie ->
-                          csrf_verification process_unikernel_create user csrf
-                            reqd)
+                      match
+                        Albatross.find_instance_by_name albatross_instances
+                          instance_name
+                      with
+                      | Error err ->
+                          generate_http_error_response
+                            ("Error finding albatross instance: " ^ err)
+                            `Internal_server_error
+                      | Ok albatross -> (
+                          match token_or_cookie with
+                          | `Token -> process_unikernel_create albatross reqd
+                          | `Cookie ->
+                              csrf_verification
+                                (process_unikernel_create albatross)
+                                user csrf reqd))
                   | _ ->
                       Logs.info (fun m -> m "Missing Fields");
                       generate_http_error_response
