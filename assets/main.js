@@ -145,15 +145,17 @@ function filterData() {
 
 
 
-function openConfigForm(ip, port, certificate, p_key) {
+function openConfigForm(name, ip, port, certificate, p_key) {
 	const formSection = document.getElementById("config-form");
 	const configSection = document.getElementById("config-body");
+	const nameInput = document.getElementById("albatross-name");
 	const ipInput = document.getElementById("server-ip");
 	const portInput = document.getElementById("server-port");
 	const certificateInput = document.getElementById("certificate");
 	const pkeyInput = document.getElementById("private-key");
 	const configBtn = document.getElementById("config-button");
 	const addConfigBtn = document.getElementById("add-config")
+	nameInput.value = name;
 	ipInput.value = ip;
 	portInput.value = port;
 	certificateInput.value = certificate;
@@ -163,7 +165,7 @@ function openConfigForm(ip, port, certificate, p_key) {
 	configSection.classList.remove("block");
 	configSection.classList.add("hidden");
 	addConfigBtn.classList.add("hidden");
-	if (ip === '' || port === '' || certificate === '' || p_key === '') {
+	if (name === '' || ip === '' || port === '' || certificate === '' || p_key === '') {
 		configBtn.textContent = "Save";
 	} else {
 		configBtn.textContent = "Update";
@@ -171,7 +173,7 @@ function openConfigForm(ip, port, certificate, p_key) {
 }
 
 async function saveConfig() {
-
+	const nameInput = document.getElementById("albatross-name").value;
 	const ipInput = document.getElementById("server-ip").value;
 	const portInput = document.getElementById("server-port").value;
 	const certificateInput = document.getElementById("certificate").value;
@@ -182,10 +184,14 @@ async function saveConfig() {
 	formButton.classList.add("disabled");
 	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
 	formButton.disabled = true;
-	if (ipInput === '' || portInput === '' || certificateInput === '' || pkeyInput === '') {
+	if (nameInput === '' || ipInput === '' || portInput === '' || certificateInput === '' || pkeyInput === '') {
 		formAlert.classList.remove("hidden");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = "Please fill all fields";
+	} else if (!isValidName(nameInput)) {
+		formAlert.classList.remove("hidden");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Please use alphanumeric characters, dashes or underscores for the name";
 	} else {
 		try {
 			const response = await fetch("/api/admin/settings/update", {
@@ -195,6 +201,7 @@ async function saveConfig() {
 					"Accept": "application/json",
 				},
 				body: JSON.stringify({
+					"name": nameInput,
 					"server_ip": ipInput,
 					"server_port": Number(portInput),
 					"certificate": certificateInput,

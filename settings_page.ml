@@ -71,10 +71,9 @@ let config_table_row (configuration : Configuration.t) =
               ~attribs:
                 [
                   a_onclick
-                    (* Pass the name as the first argument to identify the config *)
-                    ("openConfigForm('" ^ configuration.name ^ "','" ^ ip
-                   ^ "','" ^ port ^ "','" ^ certificate ^ "','" ^ private_key
-                   ^ "')");
+                    ("openConfigForm(`" ^ configuration.name ^ "`,`" ^ ip
+                   ^ "`,`" ^ port ^ "`,`" ^ certificate ^ "`,`" ^ private_key
+                   ^ "`)");
                 ]
               ~content:(i ~a:[ a_class [ "fa-solid fa-pen" ] ] [])
               ~btn_type:`Primary_outlined ();
@@ -99,7 +98,7 @@ let settings_layout (configurations : Configuration.t list) =
               ~a:[ a_id "add-config" ]
               [
                 Utils.button_component
-                  ~attribs:[ a_onclick "openConfigForm('','','','')" ]
+                  ~attribs:[ a_onclick "openConfigForm('','','','','')" ]
                   ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
                   ~btn_type:`Primary_outlined ();
               ];
@@ -128,14 +127,14 @@ let settings_layout (configurations : Configuration.t list) =
                           a_class [ "block text-sm font-medium" ];
                           a_label_for "name";
                         ]
-                      [ txt "Configuration Name*" ];
+                      [ txt "Albatross Instance Name*" ];
                     input
                       ~a:
                         [
                           a_autocomplete `Off;
                           a_input_type `Text;
-                          a_name "config-name";
-                          a_id "config-name";
+                          a_name "albatross-name";
+                          a_id "albatross-name";
                           a_class
                             [
                               "ring-primary-100 mt-1.5 transition \
