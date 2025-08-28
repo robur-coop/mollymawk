@@ -46,6 +46,7 @@ let empty () =
 let to_json t =
   `Assoc
     [
+      ("version", `Int current_version);
       ("name", `String t.name);
       ("certificate", `String (X509.Certificate.encode_pem t.certificate));
       ("private_key", `String (X509.Private_key.encode_pem t.private_key));
