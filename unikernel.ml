@@ -1033,34 +1033,17 @@ struct
     user_volumes albatross_instances user.name
     >>= fun blocks_by_albatros_instance ->
     generate_csrf_token store user now reqd >>= function
-    | Ok csrf -> (
-        let missing_policy_error ?(err = None) () =
-          {
-            Utils.Status.code = 500;
-            title = "Resource policy error";
-            data = `String (Option.value err ~default:"No policy found");
-            success = false;
-          }
-        in
-        match Albatross.all_policies albatross_instances ~domain:user.name with
-        | [] ->
-            reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout
-                 ~page_title:"Resource policy error | Mollymawk"
-                 ~content:(Error_page.error_layout (missing_policy_error ()))
-                 ~icon:"/images/robur.png" ())
-              `Internal_server_error
-        | policies ->
-            reply reqd ~content_type:"text/html"
-              (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:"Deploy a Unikernel | Mollymawk"
-                 ~content:
-                   (Unikernel_create.unikernel_create_layout policies
-                      unikernels_by_albatross_instance
-                      blocks_by_albatros_instance)
-                 ~icon:"/images/robur.png" ())
-              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-              `OK)
+    | Ok csrf ->
+        reply reqd ~content_type:"text/html"
+          (Dashboard.dashboard_layout ~csrf user
+             ~page_title:"Deploy a Unikernel | Mollymawk"
+             ~content:
+               (Unikernel_create.unikernel_create_layout
+                  (Albatross.all_policies albatross_instances ~domain:user.name)
+                  unikernels_by_albatross_instance blocks_by_albatros_instance)
+             ~icon:"/images/robur.png" ())
+          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+          `OK
     | Error err ->
         reply reqd ~content_type:"text/html"
           (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
@@ -1961,15 +1944,10 @@ struct
             Lwt.return_unit
         | Ok () -> Lwt.return_unit)
 
-  let view_user albatross store uuid _ (user : User_model.user) reqd =
+  let view_user albatross_instances store uuid _ (user : User_model.user) reqd =
     match Store.find_by_uuid store uuid with
     | Some u -> (
-        user_unikernels albatross u.name >>= fun unikernels ->
-        let policy =
-          match Albatross.policy ~domain:u.name albatross with
-          | Ok p -> p
-          | Error _ -> None
-        in
+        user_unikernels albatross_instances u.name >>= fun unikernels ->
         let now = Mirage_ptime.now () in
         generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
@@ -1977,7 +1955,9 @@ struct
               (Dashboard.dashboard_layout ~csrf user
                  ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
                  ~content:
-                   (User_single.user_single_layout u unikernels policy now)
+                   (User_single.user_single_layout u unikernels
+                      (Albatross.all_policies ~domain:u.name albatross_instances)
+                      now)
                  ~icon:"/images/robur.png" ())
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
@@ -2160,12 +2140,12 @@ struct
                   (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let volumes store albatross _ (user : User_model.user) reqd =
-    user_volumes albatross user.name >>= fun blocks ->
+  let volumes store albatross_instances _ (user : User_model.user) reqd =
+    user_volumes albatross_instances user.name >>= fun blocks ->
     let policy =
       Result.fold ~ok:Fun.id
         ~error:(fun _ -> None)
-        (Albatross.policy ~domain:user.name albatross)
+        (Albatross.all_policies ~domain:user.name albatross_instances)
     in
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
@@ -2467,17 +2447,12 @@ struct
     | Ok csrf ->
         user_volumes albatross_instances user.name >>= fun blocks ->
         user_unikernels albatross_instances user.name >>= fun unikernels ->
-        let policies =
-          match
-            Albatross.all_policies albatross_instances ~domain:user.name
-          with
-          | [] -> None
-          | policies -> Some policies
-        in
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Usage | Mollymawk"
              ~content:
-               (Account_usage.account_usage_layout policies unikernels blocks)
+               (Account_usage.account_usage_layout
+                  (Albatross.all_policies albatross_instances ~domain:user.name)
+                  unikernels blocks)
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
