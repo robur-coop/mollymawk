@@ -1359,9 +1359,10 @@ struct
                                     name latest_job_data.uuid);
                               Middleware.redirect_to_page
                                 ~path:
-                                  ("/unikernel/info/"
+                                  ("/unikernel/info?unikernel="
                                   ^ Option.value ~default:""
-                                      (Vmm_core.Name.name unikernel_name))
+                                      (Vmm_core.Name.name unikernel_name)
+                                  ^ "&instance=" ^ instance_name)
                                 reqd
                                 ~msg:
                                   ("There is no update of " ^ name
@@ -2711,6 +2712,15 @@ struct
           | Some instance -> Ok instance
           | None -> Error "Couldn't find albatross instance in query"
         in
+        let get_unikernel_name req =
+          match
+            Uri.get_query_param
+              (Uri.of_string req.H1.Request.target)
+              "unikernel"
+          with
+          | Some instance -> Ok instance
+          | None -> Error "Couldn't find unikernel name in query"
+        in
         match path with
         | "/" ->
             check_meth `GET (fun () ->
@@ -2888,27 +2898,19 @@ struct
                   (unikernel_info !albatross_instances))
         | path when String.starts_with ~prefix:"/unikernel/info" path ->
             check_meth `GET (fun () ->
-                let unikernel_name =
-                  match
-                    Uri.get_query_param
-                      (Uri.of_string req.H1.Request.target)
-                      "unikernel"
-                  with
-                  | Some name -> name
-                  | None -> ""
-                in
-                let instance_name =
-                  match
-                    Uri.get_query_param
-                      (Uri.of_string req.H1.Request.target)
-                      "instance"
-                  with
-                  | Some name -> name
-                  | None -> ""
-                in
-                authenticate store reqd
-                  (unikernel_info_one !albatross_instances store ~unikernel_name
-                     ~instance_name))
+                match (get_unikernel_name req, get_instance_name req) with
+                | Ok unikernel_name, Ok instance_name ->
+                    authenticate store reqd
+                      (unikernel_info_one ~unikernel_name ~instance_name
+                         !albatross_instances store)
+                | Ok unikernel_name, _ ->
+                    Middleware.redirect_to_instance_selector
+                      ("/unikernel/info?unikernel=" ^ unikernel_name)
+                      reqd ()
+                | _ ->
+                    Middleware.redirect_to_error ~title:"Bad request"
+                      ~data:(`String "Unikernel name missing") ~api_meth:false
+                      `Bad_request reqd ())
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
                 match get_instance_name req with
@@ -2957,28 +2959,21 @@ struct
                   (fun token_or_cookie user reqd ->
                     unikernel_create token_or_cookie user !albatross_instances
                       reqd))
-        | path when String.starts_with ~prefix:"/unikernel/update/" path ->
+        | path when String.starts_with ~prefix:"/unikernel/update" path ->
             check_meth `GET (fun () ->
-                let path_after_update =
-                  String.sub path 18 (String.length path - 18)
-                in
-                let unikernel_name =
-                  match String.index_opt path_after_update '?' with
-                  | Some idx -> String.sub path_after_update 0 idx
-                  | None -> path_after_update
-                in
-                let instance_name =
-                  match
-                    Uri.get_query_param
-                      (Uri.of_string req.H1.Request.target)
-                      "instance"
-                  with
-                  | Some name -> name
-                  | None -> ""
-                in
-                authenticate store reqd
-                  (unikernel_prepare_update !albatross_instances store
-                     ~unikernel_name ~instance_name http_client))
+                match (get_unikernel_name req, get_instance_name req) with
+                | Ok unikernel_name, Ok instance_name ->
+                    authenticate store reqd
+                      (unikernel_prepare_update !albatross_instances store
+                         ~unikernel_name ~instance_name http_client)
+                | Ok unikernel_name, _ ->
+                    Middleware.redirect_to_instance_selector
+                      ("/unikernel/info?unikernel=" ^ unikernel_name)
+                      reqd ()
+                | _ ->
+                    Middleware.redirect_to_error ~title:"Bad request"
+                      ~data:(`String "Unikernel name missing") ~api_meth:false
+                      `Bad_request reqd ())
         | "/api/unikernel/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
