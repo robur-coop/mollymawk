@@ -1414,6 +1414,7 @@ struct
                                                ~content:
                                                  (Unikernel_update
                                                   .unikernel_update_layout
+                                                    ~instance_name
                                                     ~unikernel_name:name
                                                     (unikernel_name, unikernel)
                                                     now build_comparison)

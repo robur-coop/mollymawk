@@ -1082,7 +1082,7 @@ async function updateToken(value) {
 	}
 }
 
-async function updateUnikernel(job, to_be_updated_unikernel, currently_running_unikernel, unikernel_name) {
+async function updateUnikernel(job, to_be_updated_unikernel, currently_running_unikernel, unikernel_name, albatross_instance) {
 	const updateButton = document.getElementById("update-unikernel-button");
 	const unikernelArguments = document.getElementById("unikernel-arguments").value;
 	const argumentsToggle = document.getElementById("arguments-toggle").checked;
@@ -1147,7 +1147,8 @@ async function updateUnikernel(job, to_be_updated_unikernel, currently_running_u
 						"dns_address": dns_address ? dns_address : null,
 						"dns_name": dns_name ? dns_name : null
 					}) : null,
-					"molly_csrf": molly_csrf
+					"molly_csrf": molly_csrf,
+					"albatross_instance": albatross_instance,
 				})
 		})
 		const data = await response.json();
