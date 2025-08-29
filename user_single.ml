@@ -87,7 +87,9 @@ let policy_row ?(error = "") instance_name policy (user : User_model.user) =
             a
               ~a:
                 [
-                  a_href ("/admin/u/policy/edit/" ^ user.uuid ^ "");
+                  a_href
+                    ("/admin/u/policy/edit/" ^ user.uuid ^ "?instance="
+                   ^ instance_name);
                   a_class
                     [
                       "border border-primary-500 hover:bg-primary-700 px-2 \

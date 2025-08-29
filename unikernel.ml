@@ -2102,8 +2102,8 @@ struct
                          ~page_title:
                            (String.capitalize_ascii u.name ^ " | Mollymawk")
                          ~content:
-                           (Update_policy.update_policy_layout u ~user_policy
-                              ~unallocated_resources)
+                           (Update_policy.update_policy_layout u instance_name
+                              ~user_policy ~unallocated_resources)
                          ~icon:"/images/robur.png" ())
                       ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                       `OK
