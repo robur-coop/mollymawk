@@ -2532,17 +2532,29 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
 
-  let account_usage store albatross_instances _ (user : User_model.user) reqd =
+  let account_usage instance_name store albatross_instances _
+      (user : User_model.user) reqd =
+    match Albatross.find_instance_by_name albatross_instances instance_name with
+    | Error _err -> Middleware.redirect_to_instance_selector "/usage" reqd ()
+    | Ok albatross_instance -> (
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
-        user_volumes albatross_instances user.name >>= fun blocks ->
-        user_unikernels albatross_instances user.name >>= fun unikernels ->
+            user_volumes_by_instance albatross_instance user.name
+            >>= fun blocks ->
+            user_unikernels_by_instance albatross_instance user.name
+            >>= fun unikernels ->
+            let policy =
+              match Albatross.policy albatross_instance ~domain:user.name with
+              | Ok p -> (
+                  match p with Some p -> p | None -> Albatross.empty_policy)
+              | Error _ -> Albatross.empty_policy
+            in
         reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Usage | Mollymawk"
+              (Dashboard.dashboard_layout ~csrf user
+                 ~page_title:"Usage | Mollymawk"
              ~content:
-               (Account_usage.account_usage_layout
-                  (Albatross.all_policies albatross_instances ~domain:user.name)
+                   (Account_usage.account_usage_layout instance_name policy
                   unikernels blocks)
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
@@ -2552,7 +2564,7 @@ struct
           (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
              ~content:(Error_page.error_layout err)
              ~icon:"/images/robur.png" ())
-          `Internal_server_error
+              `Internal_server_error)
 
   let choose_instance store albatross_instances callback _
       (user : User_model.user) reqd =
@@ -2845,8 +2857,13 @@ struct
                 authenticate ~check_admin:true store reqd (users store))
         | "/usage" ->
             check_meth `GET (fun () ->
+                match get_instance_name req with
+                | Error msg ->
+                    Logs.info (fun m -> m "no albatross instance given: %s" msg);
+                    Middleware.redirect_to_instance_selector "/usage" reqd ()
+                | Ok instance_name ->
                 authenticate store reqd
-                  (account_usage store !albatross_instances))
+                      (account_usage instance_name store !albatross_instances))
         | path when String.starts_with ~prefix:"/select/instance" path ->
             check_meth `GET (fun () ->
                 let callback_link =
