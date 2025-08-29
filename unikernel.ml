@@ -376,6 +376,39 @@ struct
     H1.Reqd.respond_with_string reqd resp data;
     Lwt.return_unit
 
+  let user_volumes_by_instance albatross_instance user_name =
+    Albatross.query albatross_instance ~domain:user_name
+      (`Block_cmd `Block_info)
+    >|= function
+    | Error msg ->
+        Logs.err (fun m -> m "error while communicating with albatross: %s" msg);
+        []
+    | Ok (_hdr, `Success (`Block_devices blocks)) -> blocks
+    | Ok reply ->
+        Logs.err (fun m ->
+            m "expected a block info reply, received %a"
+              (Vmm_commands.pp_wire ~verbose:false)
+              reply);
+        []
+
+  let user_unikernels_by_instance albatross_instance user_name =
+    Albatross.query albatross_instance ~domain:user_name
+      (`Unikernel_cmd `Unikernel_info)
+    >|= function
+    | Error msg ->
+        Logs.err (fun m ->
+            m "Error while communicatiing with albatross instance '%s': %s"
+              albatross_instance.name msg);
+        []
+    | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels)) -> unikernels
+    | Ok reply ->
+        Logs.err (fun m ->
+            m "Expected a unikernel info reply from '%s', got %a"
+              albatross_instance.name
+              (Vmm_commands.pp_wire ~verbose:false)
+              reply);
+        []
+
   let user_volumes albatross_instances user_name =
     Lwt_list.map_p
       (fun (albatross_instance : Albatross.albatross_instance) ->
@@ -1026,30 +1059,78 @@ struct
           ~data:(`String (String.escaped err))
           reqd `Bad_request
 
-  let deploy_form store albatross_instances _ (user : User_model.user) reqd =
+  let deploy_form store albatross_instances instance_name _
+      (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    user_unikernels albatross_instances user.name
-    >>= fun unikernels_by_albatross_instance ->
-    user_volumes albatross_instances user.name
-    >>= fun blocks_by_albatros_instance ->
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:"Deploy a Unikernel | Mollymawk"
-             ~content:
-               (Unikernel_create.unikernel_create_layout
-                  (Albatross.all_policies albatross_instances ~domain:user.name)
-                  unikernels_by_albatross_instance blocks_by_albatros_instance)
-             ~icon:"/images/robur.png" ())
-          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-          `OK
+    let missing_policy_error ?(err = None) () =
+      {
+        Utils.Status.code = 500;
+        title = "Resource policy error";
+        data = `String (Option.value err ~default:"No policy found");
+        success = false;
+      }
+    in
+    match Albatross.find_instance_by_name albatross_instances instance_name with
     | Error err ->
         reply reqd ~content_type:"text/html"
           (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:(Error_page.error_layout err)
+             ~content:
+               (Error_page.error_layout
+                  {
+                    code = 500;
+                    success = false;
+                    title = "Albatross Instance Error";
+                    data =
+                      `String
+                        ("An error occured trying to find albatross instance "
+                       ^ instance_name ^ ": " ^ err);
+                  })
              ~icon:"/images/robur.png" ())
           `Internal_server_error
+    | Ok albatross_instance -> (
+        user_unikernels_by_instance albatross_instance user.name
+        >>= fun unikernels_by_albatross_instance ->
+        user_volumes_by_instance albatross_instance user.name
+        >>= fun blocks_by_albatros_instance ->
+        generate_csrf_token store user now reqd >>= function
+        | Ok csrf -> (
+            match Albatross.policy albatross_instance ~domain:user.name with
+            | Ok p -> (
+                match p with
+                | Some user_policy ->
+                    reply reqd ~content_type:"text/html"
+                      (Dashboard.dashboard_layout ~csrf user
+                         ~page_title:"Deploy a Unikernel | Mollymawk"
+                         ~content:
+                           (Unikernel_create.unikernel_create_layout
+                              ~user_policy unikernels_by_albatross_instance
+                              blocks_by_albatros_instance)
+                         ~icon:"/images/robur.png" ())
+                      ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                      `OK
+                | None ->
+                    reply reqd ~content_type:"text/html"
+                      (Guest_layout.guest_layout
+                         ~page_title:"Resource policy error | Mollymawk"
+                         ~content:
+                           (Error_page.error_layout (missing_policy_error ()))
+                         ~icon:"/images/robur.png" ())
+                      `Internal_server_error)
+            | Error err ->
+                reply reqd ~content_type:"text/html"
+                  (Guest_layout.guest_layout
+                     ~page_title:"Resource policy error | Mollymawk"
+                     ~content:
+                       (Error_page.error_layout
+                          (missing_policy_error ~err:(Some err) ()))
+                     ~icon:"/images/robur.png" ())
+                  `Internal_server_error)
+        | Error err ->
+            reply reqd ~content_type:"text/html"
+              (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                 ~content:(Error_page.error_layout err)
+                 ~icon:"/images/robur.png" ())
+              `Internal_server_error)
 
   let unikernel_info albatross_instances _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
@@ -2739,7 +2820,8 @@ struct
             check_meth `GET (fun () ->
                 authenticate store reqd
                   (account_usage store !albatross_instances))
-        | "/select/instance/" ->
+        | path when String.starts_with ~prefix:"/select/instance" path
+          ->
             check_meth `GET (fun () ->
                 let callback_link =
                   match
@@ -2827,7 +2909,14 @@ struct
                      ~instance_name))
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
-                authenticate store reqd (deploy_form store !albatross_instances))
+                match get_instance_name req with
+                | Error msg ->
+                    Logs.info (fun m -> m "no albatross instance given: %s" msg);
+                    Middleware.redirect_to_instance_selector "/unikernel/deploy"
+                      reqd ()
+                | Ok instance_name ->
+                    authenticate store reqd
+                      (deploy_form store !albatross_instances instance_name))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
