@@ -1,73 +1,11 @@
-type instance_view_data = {
-  name : string;
-  policy : Vmm_core.Policy.t;
-  memory_left : int;
-  cpu_usage_count : (int * int) list;
-}
-
-let instance_view_data_to_json (d : instance_view_data) =
-  `Assoc
-    [
-      ("policy", Albatross_json.policy_to_json d.policy);
-      ( "stats",
-        `Assoc
-          [
-            ("memory_left", `Int d.memory_left);
-            ( "cpu_usage_count",
-              `List
-                (List.map
-                   (fun (cpu, count) ->
-                     `Assoc [ ("cpu", `Int cpu); ("count", `Int count) ])
-                   d.cpu_usage_count) );
-          ] );
-    ]
-
-let unikernel_create_layout
-    (policies : (string * (Vmm_core.Policy.t option, string) result) list)
-    (unikernels_by_instance :
-      (string * (Vmm_core.Name.t * Vmm_core.Unikernel.info) list) list)
-    (blocks_by_instance : (string * (Vmm_core.Name.t * int * bool) list) list) =
-  let instance_data_list =
-    List.filter_map
-      (fun (name, policy_result) ->
-        match policy_result with
-        | Ok (Some policy) ->
-            let unikernels =
-              Option.value ~default:[]
-                (List.assoc_opt name unikernels_by_instance)
-            in
-            let total_memory_used = Utils.total_memory_used unikernels in
-            let cpu_usage_count = Utils.cpu_usage_count policy unikernels in
-            let memory_left = policy.memory - total_memory_used in
-            Some { name; policy; memory_left; cpu_usage_count }
-        | _ -> None (* Ignore instances with errors or no policy *))
-      policies
-  in
-
-  let instance_data_json =
-    let open Yojson.Basic in
-    `Assoc
-      (List.map
-         (fun d -> (d.name, instance_view_data_to_json d))
-         instance_data_list)
-    |> to_string
-  in
-
-  let initial_instance_name =
-    match instance_data_list with d :: _ -> d.name | [] -> ""
-  in
-
+let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
+    (blocks : (Vmm_core.Name.t * int * bool) list) =
+  let total_memory_used = Utils.total_memory_used unikernels in
+  let cpu_usage_count = Utils.cpu_usage_count user_policy unikernels in
+  let memory_left = user_policy.memory - total_memory_used in
   Tyxml_html.(
     section
-      ~a:
-        [
-          a_class [ "col-span-7 p-4 bg-gray-50 my-1" ];
-          Unsafe.string_attrib "x-data"
-            (Fmt.str
-               "{ instanceData: %s, selectedInstance: '%s', get selected() { \
-                return this.instanceData[this.selectedInstance] } }"
-               instance_data_json initial_instance_name);
-        ]
+      ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
       [
         div
           ~a:[ a_class [ "px-3 flex justify-between items-center" ] ]
@@ -81,34 +19,6 @@ let unikernel_create_layout
           ~a:[ a_class [ "space-y-6 mt-8 p-6 max-w-5xl mx-auto" ] ]
           [
             p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
-            div
-              ~a:[ a_class [ "my-4" ] ]
-              [
-                label
-                  ~a:[ a_class [ "block font-medium" ] ]
-                  [ txt "Albatross Instance*" ];
-                select
-                  ~a:
-                    [
-                      a_id "albatross-instance";
-                      a_name "albatross-instance";
-                      a_required ();
-                      Unsafe.string_attrib "x-model" "selectedInstance";
-                      a_class
-                        [
-                          "ring-primary-100 mt-1.5 transition appearance-none \
-                           block w-full px-3 py-3 rounded-xl shadow-sm border \
-                           hover:border-primary-200 focus:border-primary-300 \
-                           bg-primary-50 bg-opacity-0 hover:bg-opacity-50 \
-                           focus:bg-opacity-50 ring-primary-200 \
-                           focus:ring-primary-200 focus:ring-[1px] \
-                           focus:outline-none";
-                        ];
-                    ]
-                  (List.map
-                     (fun d -> option ~a:[ a_value d.name ] (txt d.name))
-                     instance_data_list);
-              ];
             div
               ~a:[ a_class [ "grid grid-cols-2 gap-3" ] ]
               [
@@ -127,12 +37,14 @@ let unikernel_create_layout
                               "ring-primary-100 mt-1.5 transition \
                                appearance-none block w-full px-3 py-3 \
                                rounded-xl shadow-sm border \
-                               hover:border-primary-200 \
+                               hover:border-primary-200\n\
+                              \                                           \
                                focus:border-primary-300 bg-primary-50 \
                                bg-opacity-0 hover:bg-opacity-50 \
                                focus:bg-opacity-50 ring-primary-200 \
-                               focus:ring-primary-200 focus:ring-[1px] \
-                               focus:outline-none";
+                               focus:ring-primary-200\n\
+                              \                                           \
+                               focus:ring-[1px] focus:outline-none";
                             ];
                         ]
                       ();
@@ -151,24 +63,27 @@ let unikernel_create_layout
                             [
                               "ring-primary-100 mt-1.5 transition block w-full \
                                px-3 py-3 rounded-xl shadow-sm border \
-                               hover:border-primary-200 \
+                               hover:border-primary-200\n\
+                              \                                           \
                                focus:border-primary-300 bg-primary-50 \
                                bg-opacity-0 hover:bg-opacity-50 \
                                focus:bg-opacity-50 ring-primary-200 \
-                               focus:ring-primary-200 focus:ring-[1px] \
-                               focus:outline-none";
+                               focus:ring-primary-200\n\
+                              \                                           \
+                               focus:ring-[1px] focus:outline-none";
                             ];
                         ]
-                      [
-                        (* 4. CPU dropdown *)
-                        Unsafe.data
-                          "<template x-for=\"cpu_stat in \
-                           selected.stats.cpu_usage_count\">\n\
-                          \  <option :value=\"cpu_stat.cpu\" :text=\"`CPU \
-                           ${cpu_stat.cpu} (used by \
-                           ${cpu_stat.count})`\"></option>\n\
-                           </template>";
-                      ];
+                      (List.map
+                         (fun (cpu_id, count) ->
+                           option
+                             ~a:[ a_value (string_of_int cpu_id) ]
+                             (txt
+                                ("CPU " ^ string_of_int cpu_id ^ " (used by "
+                               ^ string_of_int count ^ " unikernels)")))
+                         (List.sort
+                            (fun (_, count1) (_, count2) ->
+                              Int.compare count1 count2)
+                            cpu_usage_count));
                   ];
                 div
                   ~a:[ a_class [ "" ] ]
@@ -201,22 +116,17 @@ let unikernel_create_layout
                   ~a:
                     [
                       a_class [ "space-x-5" ];
-                      Unsafe.string_attrib "x-data" "{ count: 32 }";
+                      Unsafe.string_attrib "x-data"
+                        ("{count : "
+                        ^ (if memory_left >= 32 then string_of_int 32
+                           else string_of_int memory_left)
+                        ^ "}");
                     ]
                   [
                     label
                       ~a:[ a_class [ "block font-medium" ] ]
                       [
-                        txt "Memory (max ";
-                        (* 5. Memory display *)
-                        span
-                          ~a:
-                            [
-                              Unsafe.string_attrib "x-text"
-                                "selected.stats.memory_left";
-                            ]
-                          [];
-                        txt "MB available)";
+                        txt ("Memory (max " ^ string_of_int memory_left ^ "MB)");
                       ];
                     Utils.button_component
                       ~attribs:
@@ -235,9 +145,14 @@ let unikernel_create_layout
                           Unsafe.string_attrib "@keydown.enter.prevent" "";
                           Unsafe.string_attrib "x-text" "count";
                           Unsafe.string_attrib "x-on:blur"
-                            "count = \
+                            "\n\
+                            \                        count = \
                              parseInt($event.target.innerText.replace(/[^0-9]/g,'')) \
-                             || 0; $event.target.innerText = count;";
+                             || 0;\n\
+                            \                        let value = \
+                             $event.target.innerText.replace(/[^0-9]/g,'');count \
+                             = parseInt(value) || 0;$event.target.innerText = \
+                             count;";
                           Unsafe.string_attrib "x-init" "$el.innerText = count";
                         ]
                       [];
@@ -257,24 +172,11 @@ let unikernel_create_layout
                 label
                   ~a:[ a_class [ "block font-medium" ] ]
                   [ txt "Network Interfaces" ];
-                (* 6. Network dropdowns *)
-                div
-                  (List.map
-                     (fun d ->
-                       div
-                         ~a:
-                           [
-                             Unsafe.string_attrib "x-show"
-                               (Fmt.str "selectedInstance === '%s'" d.name);
-                           ]
-                         [
-                           Utils.dynamic_dropdown_form
-                             (Vmm_core.String_set.elements d.policy.bridges)
-                             ~get_label:(fun b -> b)
-                             ~get_value:(fun b -> b)
-                             ~id:("network-" ^ d.name);
-                         ])
-                     instance_data_list);
+                Utils.dynamic_dropdown_form
+                  (Vmm_core.String_set.elements user_policy.bridges)
+                  ~get_label:(fun bridge -> bridge)
+                  ~get_value:(fun bridge -> bridge)
+                  ~id:"network";
               ];
             hr ();
             div
@@ -282,31 +184,14 @@ let unikernel_create_layout
                 label
                   ~a:[ a_class [ "block font-medium" ] ]
                   [ txt "Block devices" ];
-                (* 7. Block dropdowns*)
-                div
-                  (List.map
-                     (fun d ->
-                       let blocks_on_instance =
-                         Option.value ~default:[]
-                           (List.assoc_opt d.name blocks_by_instance)
-                       in
-                       div
-                         ~a:
-                           [
-                             Unsafe.string_attrib "x-show"
-                               (Fmt.str "selectedInstance === '%s'" d.name);
-                           ]
-                         [
-                           Utils.dynamic_dropdown_form blocks_on_instance
-                             ~get_label:(fun (n, s, u) ->
-                               Fmt.str "%s - %dMB (used: %b)"
-                                 (Vmm_core.Name.to_string n)
-                                 s u)
-                             ~get_value:(fun (n, _, _) ->
-                               Vmm_core.Name.to_string n)
-                             ~id:("block-" ^ d.name);
-                         ])
-                     instance_data_list);
+                Utils.dynamic_dropdown_form blocks
+                  ~get_label:(fun (name, size, used) ->
+                    Option.value ~default:"" (Vmm_core.Name.name name)
+                    ^ " - " ^ Int.to_string size ^ "MB (used: "
+                    ^ Bool.to_string used ^ ")")
+                  ~get_value:(fun (name, _, _) ->
+                    Option.value ~default:"" (Vmm_core.Name.name name))
+                  ~id:"block";
               ];
             hr ();
             div
@@ -321,17 +206,20 @@ let unikernel_create_layout
                   ~a:
                     [
                       a_rows 4;
+                      a_required ();
                       a_name "arguments";
                       a_id "unikernel-arguments";
                       a_class
                         [
                           "ring-primary-100 mt-1.5 transition appearance-none \
                            block w-full px-3 py-3 rounded-xl shadow-sm border \
-                           hover:border-primary-200 focus:border-primary-300 \
-                           bg-primary-50 bg-opacity-0 hover:bg-opacity-50 \
-                           focus:bg-opacity-50 ring-primary-200 \
-                           focus:ring-primary-200 focus:ring-[1px] \
-                           focus:outline-none";
+                           hover:border-primary-200\n\
+                          \                                           \
+                           focus:border-primary-300 bg-primary-50 bg-opacity-0 \
+                           hover:bg-opacity-50 focus:bg-opacity-50 \
+                           ring-primary-200 focus:ring-primary-200\n\
+                          \                                           \
+                           focus:ring-[1px] focus:outline-none";
                         ];
                     ]
                   (txt "");
@@ -353,11 +241,13 @@ let unikernel_create_layout
                         [
                           "ring-primary-100 mt-1.5 transition appearance-none \
                            block w-full px-3 py-3 rounded-xl shadow-sm border \
-                           hover:border-primary-200 focus:border-primary-300 \
-                           bg-primary-50 bg-opacity-0 hover:bg-opacity-50 \
-                           focus:bg-opacity-50 ring-primary-200 \
-                           focus:ring-primary-200 focus:ring-[1px] \
-                           focus:outline-none";
+                           hover:border-primary-200\n\
+                          \                                           \
+                           focus:border-primary-300 bg-primary-50 bg-opacity-0 \
+                           hover:bg-opacity-50 focus:bg-opacity-50 \
+                           ring-primary-200 focus:ring-primary-200\n\
+                          \                                           \
+                           focus:ring-[1px] focus:outline-none";
                         ];
                     ]
                   ();
