@@ -1059,6 +1059,36 @@ struct
           ~data:(`String (String.escaped err))
           reqd `Bad_request
 
+  let delete_albatross_config stack store albatross_instances _user json_dict
+      reqd =
+    match Utils.Json.get "name" json_dict with
+    | Some (`String name) -> (
+        Store.delete_configuration store name >>= function
+        | Ok new_configurations -> (
+            Albatross.init stack new_configurations
+            >>= fun new_albatross_instances ->
+            match new_albatross_instances with
+            | Ok new_instances ->
+                albatross_instances := new_instances;
+                Middleware.http_response reqd ~title:"Success"
+                  ~data:(`String "Configuration delete successfully") `OK
+            | Error err ->
+                Middleware.http_response reqd ~title:"Error"
+                  ~data:
+                    (`String ("Failed to initialize albatross instances" ^ err))
+                  `Internal_server_error)
+        | Error (`Msg err) ->
+            Middleware.http_response reqd ~title:"Error"
+              ~data:(`String (String.escaped err))
+              `Internal_server_error)
+    | _ ->
+        Middleware.http_response reqd ~title:"Error"
+          ~data:
+            (`String
+               (Fmt.str "Delete albatross config: Unexpected fields. Got %s"
+                  (Yojson.Basic.to_string (`Assoc json_dict))))
+          `Bad_request
+
   let deploy_form store albatross_instances instance_name _
       (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
@@ -2786,7 +2816,7 @@ struct
                   (email_verification (verify_email_token store token)))
         | "/albatross/instances" ->
             check_meth `GET (fun () ->
-              Middleware.redirect_to_instance_selector "/dashboard" reqd ())
+                Middleware.redirect_to_instance_selector "/dashboard" reqd ())
         | "/dashboard" ->
             check_meth `GET (fun () ->
                 authenticate store reqd (dashboard store !albatross_instances))
@@ -2914,6 +2944,11 @@ struct
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
                      (update_settings stack store albatross_instances)))
+        | "/api/admin/settings/delete" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_admin:true ~api_meth:true store reqd
+                  (extract_json_csrf_token
+                     (delete_albatross_config stack store albatross_instances)))
         | "/api/admin/u/policy/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd

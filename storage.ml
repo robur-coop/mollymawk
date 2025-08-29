@@ -134,6 +134,25 @@ module Make (BLOCK : Mirage_block.S) = struct
         error_msgf "error while writing storage: %a" Stored_data.pp_write_error
           we
 
+  let delete_configuration t name =
+    let before = t.configurations in
+    let configurations =
+      List.filter
+        (fun (c : Configuration.t) -> not (String.equal c.name name))
+        before
+    in
+    let deleted_any = List.length configurations <> List.length before in
+    let t' = { t with configurations } in
+    write_data t' >|= function
+    | Ok () ->
+        if deleted_any then (
+          t.configurations <- configurations;
+          Ok t.configurations)
+        else error_msgf "configuration '%s' not found" name
+    | Error we ->
+        error_msgf "error while writing storage: %a" Stored_data.pp_write_error
+          we
+
   let add_user t user =
     let t' = { t with users = user :: t.users } in
     write_data t' >|= function

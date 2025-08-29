@@ -26,7 +26,10 @@ let config_table_row (configuration : Configuration.t) =
                    text-gray-800";
                 ];
             ]
-          [ txt (String.sub certificate 10 30 ^ "...") ];
+          [
+            txt (String.sub certificate 10 30 ^ "...");
+            p [ txt (String.sub private_key 10 30 ^ "...") ];
+          ];
         td
           ~a:
             [
@@ -36,17 +39,7 @@ let config_table_row (configuration : Configuration.t) =
                    text-gray-800";
                 ];
             ]
-          [ txt ip ];
-        td
-          ~a:
-            [
-              a_class
-                [
-                  "px-6 py-4 whitespace-nowrap text-sm font-medium \
-                   text-gray-800";
-                ];
-            ]
-          [ txt port ];
+          [ txt (ip ^ ":" ^ port) ];
         td
           ~a:
             [
@@ -63,7 +56,7 @@ let config_table_row (configuration : Configuration.t) =
               a_class
                 [
                   "px-6 py-4 whitespace-nowrap text-sm font-medium \
-                   text-gray-800";
+                   text-gray-800 flex space-x-4";
                 ];
             ]
           [
@@ -77,6 +70,14 @@ let config_table_row (configuration : Configuration.t) =
                 ]
               ~content:(i ~a:[ a_class [ "fa-solid fa-pen" ] ] [])
               ~btn_type:`Primary_outlined ();
+            Utils.button_component
+              ~attribs:
+                [
+                  a_id ("delete-config-btn-" ^ configuration.name);
+                  a_onclick ("deleteConfig(`" ^ configuration.name ^ "`)");
+                ]
+              ~content:(i ~a:[ a_class [ "fa-solid fa-trash" ] ] [])
+              ~btn_type:`Danger_full ();
           ];
       ])
 
@@ -359,18 +360,7 @@ let settings_layout (configurations : Configuration.t list) =
                                                 uppercase";
                                              ];
                                          ]
-                                       [ txt "Certificate" ];
-                                     th
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase";
-                                             ];
-                                         ]
-                                       [ txt "Private Key" ];
+                                       [ txt "Certificate/Key" ];
                                      th
                                        ~a:
                                          [
@@ -382,17 +372,6 @@ let settings_layout (configurations : Configuration.t list) =
                                              ];
                                          ]
                                        [ txt "IP" ];
-                                     th
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase";
-                                             ];
-                                         ]
-                                       [ txt "Port" ];
                                      th
                                        ~a:
                                          [
