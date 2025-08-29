@@ -2017,9 +2017,9 @@ struct
     | Error err ->
         Logs.err (fun m ->
             m "Error finding albatross instance %s: %s" instance_name err);
-        Middleware.http_response reqd ~title:"Error"
-          ~data:(`String ("Error finding albatross instance: " ^ err))
-          `Internal_server_error
+        Middleware.redirect_to_instance_selector
+          ("/unikernel/info?unikernel=" ^ unikernel_name)
+          reqd ()
     | Ok albatross -> (
         Albatross.query_console ~domain:user.name albatross ~name:unikernel_name
           f
@@ -2537,9 +2537,9 @@ struct
     match Albatross.find_instance_by_name albatross_instances instance_name with
     | Error _err -> Middleware.redirect_to_instance_selector "/usage" reqd ()
     | Ok albatross_instance -> (
-    let now = Mirage_ptime.now () in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
+        let now = Mirage_ptime.now () in
+        generate_csrf_token store user now reqd >>= function
+        | Ok csrf ->
             user_volumes_by_instance albatross_instance user.name
             >>= fun blocks ->
             user_unikernels_by_instance albatross_instance user.name
@@ -2550,20 +2550,20 @@ struct
                   match p with Some p -> p | None -> Albatross.empty_policy)
               | Error _ -> Albatross.empty_policy
             in
-        reply reqd ~content_type:"text/html"
+            reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
                  ~page_title:"Usage | Mollymawk"
-             ~content:
+                 ~content:
                    (Account_usage.account_usage_layout instance_name policy
-                  unikernels blocks)
-             ~icon:"/images/robur.png" ())
-          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-          `OK
-    | Error err ->
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:(Error_page.error_layout err)
-             ~icon:"/images/robur.png" ())
+                      unikernels blocks)
+                 ~icon:"/images/robur.png" ())
+              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+              `OK
+        | Error err ->
+            reply reqd ~content_type:"text/html"
+              (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                 ~content:(Error_page.error_layout err)
+                 ~icon:"/images/robur.png" ())
               `Internal_server_error)
 
   let choose_instance store albatross_instances callback _
@@ -2862,7 +2862,7 @@ struct
                     Logs.info (fun m -> m "no albatross instance given: %s" msg);
                     Middleware.redirect_to_instance_selector "/usage" reqd ()
                 | Ok instance_name ->
-                authenticate store reqd
+                    authenticate store reqd
                       (account_usage instance_name store !albatross_instances))
         | path when String.starts_with ~prefix:"/select/instance" path ->
             check_meth `GET (fun () ->
@@ -2963,28 +2963,21 @@ struct
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
                      (unikernel_restart !albatross_instances)))
-        | path when String.starts_with ~prefix:"/api/unikernel/console/" path ->
+        | path when String.starts_with ~prefix:"/api/unikernel/console" path ->
             check_meth `GET (fun () ->
-                let path_after_console =
-                  String.sub path 23 (String.length path - 23)
-                in
-                let unikernel_name =
-                  match String.index_opt path_after_console '?' with
-                  | Some idx -> String.sub path_after_console 0 idx
-                  | None -> path_after_console
-                in
-                let instance_name =
-                  match
-                    Uri.get_query_param
-                      (Uri.of_string req.H1.Request.target)
-                      "instance"
-                  with
-                  | Some name -> name
-                  | None -> ""
-                in
-                authenticate store reqd ~check_token:true ~api_meth:true
-                  (unikernel_console !albatross_instances ~unikernel_name
-                     ~instance_name))
+                match (get_unikernel_name req, get_instance_name req) with
+                | Ok unikernel_name, Ok instance_name ->
+                    authenticate store reqd ~check_token:true ~api_meth:true
+                      (unikernel_console !albatross_instances ~unikernel_name
+                         ~instance_name)
+                | Ok unikernel_name, _ ->
+                    Middleware.redirect_to_instance_selector
+                      ("/unikernel/info?unikernel=" ^ unikernel_name)
+                      reqd ()
+                | _ ->
+                    Middleware.redirect_to_error ~title:"Bad request"
+                      ~data:(`String "Unikernel name missing") ~api_meth:false
+                      `Bad_request reqd ())
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd

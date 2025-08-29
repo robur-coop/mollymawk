@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', function () {
 		});
 	}
 
-	if (window.location.pathname.startsWith("/unikernel/info/")) {
+	if (window.location.pathname.startsWith("/unikernel/info")) {
 		startEventSource();
 	}
 });
@@ -68,34 +68,40 @@ document.addEventListener('DOMContentLoaded', function () {
 function startEventSource() {
 	if (consoleLogEvent) return;
 
-	if (window.location.pathname.startsWith("/unikernel/info/")) {
-		const unikernel_name = window.location.pathname.slice("/unikernel/info/".length);
-		const console_output = document.getElementById("console-output");
+	if (!window.location.pathname.startsWith("/unikernel/info")) return;
 
-		const MAX_LOG_ENTRIES = 40;
-		let logBuffer = [];
-
-		const render = () => {
-			console_output.value = logBuffer.join("\n");
-		};
-
-		consoleLogEvent = new EventSource(`/api/unikernel/console/${unikernel_name}`);
-
-		consoleLogEvent.onmessage = ({ data }) => {
-			try {
-				const payload = JSON.parse(data);
-
-				logBuffer = [
-					`[${payload.timestamp}] ${payload.line}`,
-					...logBuffer.reverse(),
-				].slice(0, MAX_LOG_ENTRIES);
-				logBuffer.reverse()
-				render();
-			} catch (err) {
-				console.error("Failed to parse SSE payload:", err, data);
-			}
-		};
+	const params = new URLSearchParams(window.location.search);
+	let unikernelName = params.get("unikernel");
+	let albatrossInstance = params.get("instance");
+	if (!unikernelName || !albatrossInstance) {
+		console.error("No albatross instance selected and no unikernel provided.");
 	}
+	const console_output = document.getElementById("console-output");
+
+	const MAX_LOG_ENTRIES = 40;
+	let logBuffer = [];
+
+	const render = () => {
+		console_output.value = logBuffer.join("\n");
+	};
+
+	consoleLogEvent = new EventSource(`/api/unikernel/console?unikernel=${unikernelName}&instance=${albatrossInstance}`);
+
+	consoleLogEvent.onmessage = ({ data }) => {
+		try {
+			const payload = JSON.parse(data);
+
+			logBuffer = [
+				`[${payload.timestamp}] ${payload.line}`,
+				...logBuffer.reverse(),
+			].slice(0, MAX_LOG_ENTRIES);
+			logBuffer.reverse()
+			render();
+		} catch (err) {
+			console.error("Failed to parse SSE payload:", err, data);
+		}
+	};
+
 }
 
 function stopEventSource() {
