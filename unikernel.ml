@@ -2821,8 +2821,7 @@ struct
             check_meth `GET (fun () ->
                 authenticate store reqd
                   (account_usage store !albatross_instances))
-        | path when String.starts_with ~prefix:"/select/instance" path
-          ->
+        | path when String.starts_with ~prefix:"/select/instance" path ->
             check_meth `GET (fun () ->
                 let callback_link =
                   match
