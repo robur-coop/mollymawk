@@ -493,56 +493,59 @@ function multiselect(selected, options) {
 	};
 }
 
-async function updatePolicy() {
+async function updatePolicy(instanceName) {
 	const unikernel_count = document.getElementById("f_allowed_unikernels").innerText;
 	const mem_size = document.getElementById("f_allowed_memory").innerText;
 	const storage_size = document.getElementById("f_allowed_storage").innerText;
 	const cpuids = document.getElementById("selectedCPUs").value;
 	const bridges = document.getElementById("selectedBridges").value;
-	const formAlert = document.getElementById("form-alert");
 	const user_id = document.getElementById("user_id").innerText;
-	const policyButton = document.getElementById("set-policy-btn");
 	const molly_csrf = document.getElementById("molly-csrf").value;
+	const formAlert = document.getElementById("form-alert");
+	const policyButton = document.getElementById("set-policy-btn");
+
 	try {
-		buttonLoading(policyButton, true, "Processing...")
+		buttonLoading(policyButton, true, "Processing...");
+
 		const response = await fetch("/api/admin/u/policy/update", {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",
 				"Accept": "application/json",
 			},
-			body: JSON.stringify(
-				{
-					"unikernels": Number(unikernel_count),
-					"memory": Number(mem_size),
-					"block": Number(storage_size),
-					"cpuids": cpuids,
-					"bridges": bridges,
-					"user_uuid": user_id,
-					"molly_csrf": molly_csrf
-				})
-		})
+			body: JSON.stringify({
+				"albatross_instance": instanceName,
+				"unikernels": Number(unikernel_count),
+				"memory": Number(mem_size),
+				"block": Number(storage_size),
+				"cpuids": cpuids,
+				"bridges": bridges,
+				"user_uuid": user_id,
+				"molly_csrf": molly_csrf
+			})
+		});
+
 		const data = await response.json();
+
 		if (data.status === 200) {
 			formAlert.classList.remove("hidden", "text-secondary-500");
 			formAlert.classList.add("text-primary-500");
-			formAlert.textContent = "Succesfully updated";
-			postAlert("bg-primary-300", "Policy updated succesfully");
+			formAlert.textContent = "Successfully updated";
+			postAlert("bg-primary-300", "Policy updated successfully");
 			setTimeout(function () {
 				window.history.back();
 			}, 2000);
-			buttonLoading(policyButton, false, "Set Policy")
 		} else {
 			formAlert.classList.remove("hidden", "text-primary-500");
 			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = data.data
-			buttonLoading(policyButton, false, "Set Policy")
+			formAlert.textContent = data.data;
 		}
 	} catch (error) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = error
-		buttonLoading(policyButton, false, "Set Policy")
+		formAlert.textContent = error.toString();
+	} finally {
+		buttonLoading(policyButton, false, "Set Policy");
 	}
 }
 
