@@ -770,7 +770,7 @@ async function deleteVolume(block_name) {
 	}
 }
 
-async function createVolume() {
+async function createVolume(albatross_instance) {
 	const createButton = document.getElementById("create-block-button");
 	const block_name = document.getElementById("block_name").value;
 	const block_size = document.getElementById("block_size").innerText;
@@ -834,6 +834,7 @@ async function createVolume() {
 				"block_compressed": block_compressed
 			})
 		formData.append("molly_csrf", molly_csrf)
+		formData.append("albatross_instance", albatross_instance)
 		formData.append("json_data", json_data)
 		formData.append("block_data", block_data)
 		const response = await fetch("/api/volume/create", {

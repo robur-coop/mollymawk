@@ -32,7 +32,7 @@ let volume_index_layout instance_name volumes policy =
                   [
                     Modal_dialog.modal_dialog ~modal_title:"Create a volume"
                       ~button_content:(txt "Create block device")
-                      ~content:(Volume_ui.create_volume total_free_space)
+                      ~content:(Volume_ui.create_volume instance_name total_free_space)
                       ();
                   ];
               ];

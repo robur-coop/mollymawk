@@ -1,4 +1,4 @@
-let create_volume total_free_space =
+let create_volume instance_name total_free_space =
   Tyxml_html.(
     section
       ~a:[ a_id "block-create"; a_class [ "w-full mx-auto" ] ]
@@ -154,7 +154,10 @@ let create_volume total_free_space =
           [
             Utils.button_component
               ~attribs:
-                [ a_id "create-block-button"; a_onclick "createVolume()" ]
+                [
+                  a_id "create-block-button";
+                  a_onclick ("createVolume('" ^ instance_name ^ "')");
+                ]
               ~extra_css:"w-full" ~content:(txt "Create Volume")
               ~btn_type:`Primary_full ();
           ];
