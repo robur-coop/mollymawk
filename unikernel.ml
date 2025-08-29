@@ -1003,7 +1003,7 @@ struct
   let update_settings stack store albatross_instances _user json_dict reqd =
     match Configuration.of_json_from_http json_dict (Mirage_ptime.now ()) with
     | Ok configuration_settings -> (
-        Store.update_configuration store configuration_settings >>= function
+        Store.upsert_configuration store configuration_settings >>= function
         | Ok new_configurations -> (
             Albatross.init stack new_configurations
             >>= fun new_albatross_instances ->
