@@ -300,7 +300,7 @@ function gatherFieldsForDevices(fieldId, targetKey, formAlert) {
 	return { [targetKey]: result };
 }
 
-async function deployUnikernel() {
+async function deployUnikernel(albatross_instance) {
 	const formAlert = document.getElementById("form-alert");
 	const deployButton = document.getElementById("deploy-button");
 	const name = document.getElementById("unikernel-name").value;
@@ -350,6 +350,7 @@ async function deployUnikernel() {
 		...blockData,
 		arguments: argumentsList
 	};
+	formData.append("albatross_instance", albatross_instance,);
 	formData.append("unikernel_name", name,);
 	formData.append("unikernel_config", JSON.stringify(unikernel_config));
 	formData.append("unikernel_force_create", force_create);

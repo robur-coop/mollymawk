@@ -1104,7 +1104,8 @@ struct
                          ~content:
                            (Unikernel_create.unikernel_create_layout
                               ~user_policy unikernels_by_albatross_instance
-                              blocks_by_albatros_instance)
+                              blocks_by_albatros_instance
+                              albatross_instance.name)
                          ~icon:"/images/robur.png" ())
                       ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                       `OK
