@@ -730,7 +730,7 @@ async function logout() {
 	}
 }
 
-async function deleteVolume(block_name) {
+async function deleteVolume(block_name, albatross_instance) {
 	const deleteButton = document.getElementById(`delete-block-button-${block_name}`);
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	const formAlert = document.getElementById("form-alert");
@@ -745,6 +745,7 @@ async function deleteVolume(block_name) {
 			body: JSON.stringify(
 				{
 					"block_name": block_name,
+					"albatross_instance": albatross_instance,
 					"molly_csrf": molly_csrf
 				})
 		})
@@ -863,7 +864,7 @@ async function createVolume(albatross_instance) {
 	}
 }
 
-async function downloadVolume(block_name) {
+async function downloadVolume(block_name, albatross_instance) {
 	const downloadButton = document.getElementById(`download-block-button-${block_name}`);
 	const compression_level = document.getElementById(`compression-level-${block_name}`).innerText;
 	const molly_csrf = document.getElementById("molly-csrf").value;
@@ -878,6 +879,7 @@ async function downloadVolume(block_name) {
 			body: JSON.stringify(
 				{
 					"block_name": block_name,
+					"albatross_instance": albatross_instance,
 					"compression_level": Number(compression_level),
 					"molly_csrf": molly_csrf
 				})
@@ -905,7 +907,7 @@ async function downloadVolume(block_name) {
 	}
 }
 
-async function uploadToVolume(block_name) {
+async function uploadToVolume(block_name, albatross_instance) {
 	const uploadButton = document.getElementById(`upload-block-button-${block_name}`);
 	const block_compressed = document.getElementById(`block_compressed-${block_name}`).checked;
 	const block_data = document.getElementById(`block_data_upload-${block_name}`).files[0];
@@ -926,6 +928,7 @@ async function uploadToVolume(block_name) {
 				"block_compressed": block_compressed
 			})
 		formData.append("json_data", json_data)
+		formData.append("albatross_instance", albatross_instance)
 		formData.append("molly_csrf", molly_csrf)
 		formData.append("block_data", block_data)
 		const response = await fetch("/api/volume/upload", {

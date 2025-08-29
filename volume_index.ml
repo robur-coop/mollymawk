@@ -32,7 +32,8 @@ let volume_index_layout instance_name volumes policy =
                   [
                     Modal_dialog.modal_dialog ~modal_title:"Create a volume"
                       ~button_content:(txt "Create block device")
-                      ~content:(Volume_ui.create_volume instance_name total_free_space)
+                      ~content:
+                        (Volume_ui.create_volume instance_name total_free_space)
                       ();
                   ];
               ];
@@ -288,13 +289,17 @@ let volume_index_layout instance_name volumes policy =
                                              ~button_content:(txt "Upload")
                                              ~button_type:`Primary_outlined
                                              ~content:
-                                               (Volume_ui.upload_to_volume name)
+                                               (Volume_ui.upload_to_volume
+                                                  ~instance_name
+                                                  ~block_name:name)
                                              ();
                                            Modal_dialog.modal_dialog
                                              ~modal_title:"Download volume"
                                              ~button_content:(txt "Download")
                                              ~content:
-                                               (Volume_ui.download_volume name)
+                                               (Volume_ui.download_volume
+                                                  ~instance_name
+                                                  ~block_name:name)
                                              ();
                                            Utils.button_component
                                              ~attribs:
@@ -304,7 +309,8 @@ let volume_index_layout instance_name volumes policy =
                                                   ^ name);
                                                  a_onclick
                                                    ("deleteVolume('" ^ name
-                                                  ^ "')");
+                                                  ^ "','" ^ instance_name ^ "')"
+                                                   );
                                                ]
                                              ~content:(txt "Delete")
                                              ~btn_type:`Danger_full ();
