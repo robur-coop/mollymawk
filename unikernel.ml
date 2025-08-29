@@ -2461,6 +2461,30 @@ struct
              ~icon:"/images/robur.png" ())
           `Internal_server_error
 
+  let choose_instance store albatross_instances callback _
+      (user : User_model.user) reqd =
+    let now = Mirage_ptime.now () in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        List.map
+          (fun (instance : Albatross.albatross_instance) -> instance.name)
+          albatross_instances
+        |> fun instances ->
+        reply reqd ~content_type:"text/html"
+          (Dashboard.dashboard_layout ~csrf user
+             ~page_title:"Choose instance | Mollymawk"
+             ~content:
+               (Albatross_instances.select_instance user instances callback)
+             ~icon:"/images/robur.png" ())
+          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+          `OK
+    | Error err ->
+        reply reqd ~content_type:"text/html"
+          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+             ~content:(Error_page.error_layout err)
+             ~icon:"/images/robur.png" ())
+          `Internal_server_error
+
   let api_tokens store _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
@@ -2597,6 +2621,13 @@ struct
         let req = H1.Reqd.request reqd in
         let path = Uri.(pct_decode (path (of_string req.H1.Request.target))) in
         let check_meth m f = if m = req.meth then f () else bad_request () in
+        let get_instance_name req =
+          match
+            Uri.get_query_param (Uri.of_string req.H1.Request.target) "instance"
+          with
+          | Some instance -> Ok instance
+          | None -> Error "Couldn't find albatross instance in query"
+        in
         match path with
         | "/" ->
             check_meth `GET (fun () ->
@@ -2708,6 +2739,19 @@ struct
             check_meth `GET (fun () ->
                 authenticate store reqd
                   (account_usage store !albatross_instances))
+        | "/select/instance/" ->
+            check_meth `GET (fun () ->
+                let callback_link =
+                  match
+                    Uri.get_query_param
+                      (Uri.of_string req.H1.Request.target)
+                      "callback"
+                  with
+                  | Some link -> link
+                  | None -> "/dashboard"
+                in
+                authenticate store reqd
+                  (choose_instance store !albatross_instances callback_link))
         | path when String.starts_with ~prefix:"/admin/user/" path ->
             check_meth `GET (fun () ->
                 let uuid = String.sub path 12 (String.length path - 12) in

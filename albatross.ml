@@ -553,9 +553,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
   let init stack (configs : Configuration.t list) =
     let open Lwt.Infix in
     match configs with
-    | [] ->
-        (* No configs given: succeed with an empty list *)
-        Lwt.return (Ok [])
+    | [] -> Lwt.return (Ok [])
     | _ ->
         Lwt_list.map_s
           (fun (config : Configuration.t) ->
