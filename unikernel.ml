@@ -2226,26 +2226,34 @@ struct
                   (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let volumes store albatross_instances _ (user : User_model.user) reqd =
-    user_volumes albatross_instances user.name >>= fun blocks ->
-    let now = Mirage_ptime.now () in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:(String.capitalize_ascii user.name ^ " | Mollymawk")
-             ~content:
-               (Volume_index.volume_index_layout blocks
-                  (Albatross.all_policies ~domain:user.name albatross_instances))
-             ~icon:"/images/robur.png" ())
-          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-          `OK
-    | Error err ->
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:(Error_page.error_layout err)
-             ~icon:"/images/robur.png" ())
-          `Internal_server_error
+  let volumes instance_name store albatross_instances _ (user : User_model.user)
+      reqd =
+    match Albatross.find_instance_by_name albatross_instances instance_name with
+    | Error _err -> Middleware.redirect_to_instance_selector "/volumes" reqd ()
+    | Ok albatross -> (
+        user_volumes_by_instance albatross user.name >>= fun blocks ->
+        let now = Mirage_ptime.now () in
+        let policy =
+          Result.fold ~ok:Fun.id
+            ~error:(fun _ -> None)
+            (Albatross.policy ~domain:user.name albatross)
+        in
+        generate_csrf_token store user now reqd >>= function
+        | Ok csrf ->
+            reply reqd ~content_type:"text/html"
+              (Dashboard.dashboard_layout ~csrf user
+                 ~page_title:(String.capitalize_ascii user.name ^ " | Mollymawk")
+                 ~content:
+                   (Volume_index.volume_index_layout instance_name blocks policy)
+                 ~icon:"/images/robur.png" ())
+              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+              `OK
+        | Error err ->
+            reply reqd ~content_type:"text/html"
+              (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                 ~content:(Error_page.error_layout err)
+                 ~icon:"/images/robur.png" ())
+              `Internal_server_error)
 
   let delete_volume albatross_instances (user : User_model.user) json_dict reqd
       =
@@ -2786,9 +2794,15 @@ struct
             check_meth `POST (fun () ->
                 authenticate store reqd
                   (extract_json_csrf_token (close_session store)))
-        | "/volumes" ->
+        | path when String.starts_with ~prefix:"/volumes" path ->
             check_meth `GET (fun () ->
-                authenticate store reqd (volumes store !albatross_instances))
+                match get_instance_name req with
+                | Error msg ->
+                    Logs.info (fun m -> m "no albatross instance given: %s" msg);
+                    Middleware.redirect_to_instance_selector "/volumes" reqd ()
+                | Ok instance_name ->
+                    authenticate store reqd
+                      (volumes instance_name store !albatross_instances))
         | "/api/volume/delete" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
