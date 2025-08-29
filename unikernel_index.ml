@@ -83,7 +83,9 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
                 a
                   ~a:
                     [
-                      a_href ("/unikernel/info/" ^ name);
+                      a_href
+                        ("/unikernel/info?unikernel=" ^ name ^ "&instance="
+                       ^ instance_name);
                       a_class
                         [
                           "inline-flex items-center gap-x-2 text-sm \

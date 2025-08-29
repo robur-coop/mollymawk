@@ -1235,7 +1235,8 @@ struct
                   (Dashboard.dashboard_layout ~csrf user
                      ~content:
                        (Unikernel_single.unikernel_single_layout ~unikernel_name
-                          unikernel ~last_update_time ~current_time:now)
+                          ~instance_name unikernel ~last_update_time
+                          ~current_time:now)
                      ~icon:"/images/robur.png" ())
                   ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                   `OK
@@ -2885,15 +2886,16 @@ struct
             check_meth `GET (fun () ->
                 authenticate ~api_meth:true ~check_token:true store reqd
                   (unikernel_info !albatross_instances))
-        | path when String.starts_with ~prefix:"/unikernel/info/" path ->
+        | path when String.starts_with ~prefix:"/unikernel/info" path ->
             check_meth `GET (fun () ->
-                let path_after_info =
-                  String.sub path 16 (String.length path - 16)
-                in
                 let unikernel_name =
-                  match String.index_opt path_after_info '?' with
-                  | Some idx -> String.sub path_after_info 0 idx
-                  | None -> path_after_info
+                  match
+                    Uri.get_query_param
+                      (Uri.of_string req.H1.Request.target)
+                      "unikernel"
+                  with
+                  | Some name -> name
+                  | None -> ""
                 in
                 let instance_name =
                   match

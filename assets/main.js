@@ -387,12 +387,12 @@ async function deployUnikernel(albatross_instance) {
 	}
 }
 
-async function restartUnikernel(name) {
+async function restartUnikernel(unikernel_name, instance_name) {
 	try {
 		const molly_csrf = document.getElementById("molly-csrf").value;
 		const response = await fetch(`/api/unikernel/restart`, {
 			method: 'POST',
-			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
+			body: JSON.stringify({ "name": unikernel_name, "molly_csrf": molly_csrf, "albatross_instance": instance_name }),
 			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
 		})
 
@@ -410,12 +410,12 @@ async function restartUnikernel(name) {
 	}
 }
 
-async function destroyUnikernel(name) {
+async function destroyUnikernel(unikernel_name, instance_name) {
 	try {
 		const molly_csrf = document.getElementById("molly-csrf").value;
 		const response = await fetch(`/api/unikernel/destroy`, {
 			method: 'POST',
-			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
+			body: JSON.stringify({ "name": unikernel_name, "molly_csrf": molly_csrf, "albatross_instance": instance_name }),
 			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
 		})
 
@@ -1171,7 +1171,7 @@ async function updateUnikernel(job, to_be_updated_unikernel, currently_running_u
 	}
 }
 
-async function rollbackUnikernel(unikernel_name) {
+async function rollbackUnikernel(unikernel_name, instance_name) {
 	const rollbackButton = document.getElementById("unikernel-rollback");
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	const formAlert = document.getElementById("form-alert");
@@ -1186,6 +1186,7 @@ async function rollbackUnikernel(unikernel_name) {
 			body: JSON.stringify(
 				{
 					"unikernel_name": unikernel_name,
+					"albatross_instance": instance_name,
 					"molly_csrf": molly_csrf
 				})
 		})
