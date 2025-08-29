@@ -2784,6 +2784,9 @@ struct
                 let token = String.sub path 19 (String.length path - 19) in
                 authenticate store reqd
                   (email_verification (verify_email_token store token)))
+        | "/albatross/instances" ->
+            check_meth `GET (fun () ->
+              Middleware.redirect_to_instance_selector "/dashboard" reqd ())
         | "/dashboard" ->
             check_meth `GET (fun () ->
                 authenticate store reqd (dashboard store !albatross_instances))
