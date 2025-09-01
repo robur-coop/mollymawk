@@ -112,18 +112,17 @@ module Make (BLOCK : Mirage_block.S) = struct
   let configurations { configurations; _ } = configurations
 
   let upsert_configuration t (configuration : Configuration.t) =
-    let found = ref false in
-    let updated =
-      List.map
-        (fun (c : Configuration.t) ->
-          if String.equal c.name configuration.name then (
-            found := true;
-            configuration)
-          else c)
-        t.configurations
+    let found, updated_configs_rev =
+      List.fold_left
+        (fun (was_found, acc) (c : Configuration.t) ->
+          if String.equal c.name configuration.name then
+            (true, configuration :: acc)
+          else (was_found, c :: acc))
+        (false, []) t.configurations
     in
     let configurations =
-      if !found then updated else t.configurations @ [ configuration ]
+      if found then List.rev updated_configs_rev
+      else List.rev (configuration :: updated_configs_rev)
     in
     let t' = { t with configurations } in
     write_data t' >|= function
