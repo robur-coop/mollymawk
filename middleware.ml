@@ -86,6 +86,22 @@ let redirect_to_verify_email reqd ?(msg = "") () =
   H1.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
+let redirect_to_url ~url reqd ?(msg = "") () =
+  let headers =
+    H1.Headers.of_list
+      [
+        ("location", url); ("Content-Length", string_of_int (String.length msg));
+      ]
+  in
+  let response = H1.Response.create ~headers `Found in
+  H1.Reqd.respond_with_string reqd response msg;
+  Lwt.return_unit
+
+let redirect_to_instance_selector callback_link reqd ?(msg = "") () =
+  redirect_to_url
+    ~url:("/select/instance?callback=" ^ Uri.pct_encode callback_link)
+    reqd ~msg ()
+
 let redirect_to_dashboard reqd ?(msg = "") () =
   let headers =
     H1.Headers.of_list
@@ -167,10 +183,11 @@ let csrf_cookie_verification form_csrf reqd =
       Logs.err (fun m -> m "Couldn't find csrf cookie.");
       false
 
-let csrf_verification user now form_csrf handler reqd =
+let csrf_verification user now form_csrf handler reqd albatross_instances =
   match User_model.user_csrf_token user form_csrf with
   | Some csrf_token ->
-      if User_model.is_valid_cookie csrf_token now then handler reqd
+      if User_model.is_valid_cookie csrf_token now then
+        handler reqd albatross_instances
       else
         http_response ~title:"CSRF Token Mismatch"
           ~data:
