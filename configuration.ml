@@ -136,7 +136,7 @@ let of_json_v1 json =
 
                 Ok
                   {
-                    name = "mollymawk-default";
+                    name = "default";
                     certificate;
                     private_key;
                     server_ip;
