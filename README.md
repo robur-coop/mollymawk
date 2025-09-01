@@ -10,9 +10,9 @@ Mollymawk is a unikernel itself, and communicates via TLS with albatross. It pre
 
 The assumption is that only mollymawk maintains and modifies the albatross that is running - it is not supported that you run other administrative tasks (such as modifying the policies) while mollymawk is running.
 
-## Meta-Mollymawk
+## Using Mollymawk with multiple Albatross installations
 
-**Meta-Mollymawk** lets a single Mollymawk dashboard manage **multiple Albatross** instances.
+With **Mollymawk**, you can now manage **multiple Albatross** instances.
 
 ---
 
