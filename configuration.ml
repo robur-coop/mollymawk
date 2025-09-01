@@ -17,32 +17,6 @@ type t = {
   updated_at : Ptime.t;
 }
 
-(* this is here to avoid the need for option *)
-let empty () =
-  let key = X509.Private_key.generate `ED25519 in
-  let name = "mollymawk-empty" in
-  let cert =
-    let dn =
-      X509.Distinguished_name.
-        [ Relative_distinguished_name.(singleton (CN name)) ]
-    in
-    let csr = Result.get_ok (X509.Signing_request.create dn key) in
-    let valid_from = Ptime.epoch in
-    let valid_until =
-      Option.get (Ptime.add_span valid_from (Ptime.Span.of_int_s (10 * 60)))
-    in
-    Result.get_ok
-      (X509.Signing_request.sign csr ~valid_from ~valid_until key dn)
-  in
-  {
-    name;
-    certificate = cert;
-    private_key = key;
-    server_ip = Ipaddr.(V4 V4.any);
-    server_port = 1025;
-    updated_at = Ptime.epoch;
-  }
-
 let to_json t =
   `Assoc
     [

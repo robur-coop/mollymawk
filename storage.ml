@@ -99,7 +99,7 @@ module Make (BLOCK : Mirage_block.S) = struct
         in
         let* t = t_of_json json in
         Ok t
-    | Ok None -> Ok ([], [ Configuration.empty () ])
+    | Ok None -> Ok ([], [])
     | Error e ->
         error_msgf "error while reading storage: %a" Stored_data.pp_error e
 
