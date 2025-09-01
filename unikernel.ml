@@ -62,6 +62,18 @@ struct
     let now = Mirage_ptime.now () in
     Middleware.csrf_verification user now csrf f reqd
 
+  let return_only_albatross_instances_with_a_usable_policy domain instances =
+    List.filter
+      (fun instance ->
+        match Albatross.policy ~domain instance with
+        | Ok (Some policy) -> (
+            match Vmm_core.Policy.usable policy with
+            | Ok () -> true
+            | Error _ -> false)
+        | Ok None -> false
+        | Error _ -> false)
+      instances
+
   let read_multipart_data reqd =
     let response_body = H1.Reqd.request_body reqd in
     let finished, notify_finished = Lwt.wait () in
@@ -410,6 +422,10 @@ struct
         []
 
   let user_volumes albatross_instances user_name =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user_name
+        albatross_instances
+    in
     Lwt_list.map_p
       (fun (albatross_instance : Albatross.albatross_instance) ->
         Albatross.query albatross_instance ~domain:user_name
@@ -430,6 +446,10 @@ struct
       albatross_instances
 
   let user_unikernels (albatross_instances : Albatross.t) user_name =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user_name
+        albatross_instances
+    in
     Lwt_list.map_p
       (fun (albatross_instance : Albatross.albatross_instance) ->
         Albatross.query albatross_instance ~domain:user_name
@@ -789,6 +809,10 @@ struct
       ~error_message:(`String "Cannot remove last administrator")
 
   let dashboard store albatross_instances _ (user : User_model.user) reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
@@ -1091,6 +1115,10 @@ struct
 
   let deploy_form store albatross_instances instance_name _
       (user : User_model.user) reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     let now = Mirage_ptime.now () in
     let missing_policy_error ?(err = None) () =
       {
@@ -1165,6 +1193,10 @@ struct
 
   let unikernel_info albatross_instances _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     let rec loop = function
       | [] -> Lwt.return (Ok (`List []))
       | albatross :: rest -> (
@@ -1209,6 +1241,10 @@ struct
 
   let unikernel_info_one albatross_instances store ~unikernel_name
       ~instance_name _ (user : User_model.user) reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     (* TODO use uuid in the future *)
     match Albatross.find_instance_by_name albatross_instances instance_name with
     | Error err ->
@@ -1279,6 +1315,10 @@ struct
 
   let unikernel_prepare_update albatross_instances store ~unikernel_name
       ~instance_name http_client _ (user : User_model.user) reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     (* TODO use uuid in the future *)
     let name = unikernel_name in
     match Albatross.find_instance_by_name albatross_instances instance_name with
@@ -1706,6 +1746,10 @@ struct
 
   let unikernel_update albatross_instances store stack http_client
       (user : User_model.user) json_dict reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     let config_or_none field = function
       | None | Some `Null -> Ok None
       | Some json -> (
@@ -1815,6 +1859,10 @@ struct
 
   let unikernel_rollback albatross_instances store http_client
       (user : User_model.user) json_dict reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     match
       Utils.Json.
         (get "unikernel_name" json_dict, get "albatross_instance" json_dict)
@@ -1839,6 +1887,10 @@ struct
 
   let unikernel_destroy albatross_instances (user : User_model.user) json_dict
       reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     (* TODO use uuid in the future *)
     match
       Utils.Json.(get "name" json_dict, get "albatross_instance" json_dict)
@@ -1876,6 +1928,10 @@ struct
 
   let unikernel_restart albatross_instances (user : User_model.user) json_dict
       reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     (* TODO use uuid in the future *)
     match
       Utils.Json.(get "name" json_dict, get "albatross_instance" json_dict)
@@ -1913,6 +1969,10 @@ struct
 
   let unikernel_create token_or_cookie (user : User_model.user)
       albatross_instances reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     let generate_http_error_response msg code =
       Logs.warn (fun m -> m "Unikernel_create error: %s" msg);
       Middleware.http_response reqd ~title:"Error" ~data:(`String msg) code
@@ -2037,6 +2097,10 @@ struct
 
   let unikernel_console albatross_instances ~unikernel_name ~instance_name _
       (user : User_model.user) reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     (* TODO use uuid in the future *)
     let response = Middleware.http_event_source_response reqd `OK in
     let f (ts, data) =
@@ -2060,6 +2124,10 @@ struct
         | Ok () -> Lwt.return_unit)
 
   let view_user albatross_instances store uuid _ (user : User_model.user) reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     match Store.find_by_uuid store uuid with
     | Some u -> (
         user_unikernels albatross_instances u.name >>= fun unikernels ->
@@ -2100,6 +2168,10 @@ struct
 
   let edit_policy albatross_instances store uuid instance_name _
       (user : User_model.user) reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     let status code msg =
       {
         Utils.Status.code;
@@ -2258,6 +2330,10 @@ struct
 
   let volumes instance_name store albatross_instances _ (user : User_model.user)
       reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     match Albatross.find_instance_by_name albatross_instances instance_name with
     | Error _err -> Middleware.redirect_to_instance_selector "/volumes" reqd ()
     | Ok albatross -> (
@@ -2287,6 +2363,10 @@ struct
 
   let delete_volume albatross_instances (user : User_model.user) json_dict reqd
       =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     match
       Utils.Json.(get "block_name" json_dict, get "albatross_instance" json_dict)
     with
@@ -2329,6 +2409,10 @@ struct
 
   let create_or_upload_volume c_or_u token_or_cookie albatross_instances
       (user : User_model.user) reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     let cmd_name =
       match c_or_u with `Create -> "create" | `Upload -> "upload"
     in
@@ -2501,6 +2585,10 @@ struct
 
   let download_volume albatross_instances (user : User_model.user) json_dict
       reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     match
       Utils.Json.
         ( get "albatross_instance" json_dict,
@@ -2564,6 +2652,10 @@ struct
 
   let account_usage instance_name store albatross_instances _
       (user : User_model.user) reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     match Albatross.find_instance_by_name albatross_instances instance_name with
     | Error _err -> Middleware.redirect_to_instance_selector "/usage" reqd ()
     | Ok albatross_instance -> (
@@ -2598,27 +2690,36 @@ struct
 
   let choose_instance store albatross_instances callback _
       (user : User_model.user) reqd =
+    let albatross_instances =
+      return_only_albatross_instances_with_a_usable_policy user.name
+        albatross_instances
+    in
     let now = Mirage_ptime.now () in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        List.map
-          (fun (instance : Albatross.albatross_instance) -> instance.name)
-          albatross_instances
-        |> fun instances ->
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:"Choose instance | Mollymawk"
-             ~content:
-               (Albatross_instances.select_instance user instances callback)
-             ~icon:"/images/robur.png" ())
-          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-          `OK
-    | Error err ->
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:(Error_page.error_layout err)
-             ~icon:"/images/robur.png" ())
-          `Internal_server_error
+    if List.length albatross_instances = 1 then
+      Middleware.redirect_to_url
+        ~url:(callback ^ "?instance=" ^ (List.hd albatross_instances).name)
+        reqd ()
+    else
+      generate_csrf_token store user now reqd >>= function
+      | Ok csrf ->
+          List.map
+            (fun (instance : Albatross.albatross_instance) -> instance.name)
+            albatross_instances
+          |> fun instances ->
+          reply reqd ~content_type:"text/html"
+            (Dashboard.dashboard_layout ~csrf user
+               ~page_title:"Choose instance | Mollymawk"
+               ~content:
+                 (Albatross_instances.select_instance user instances callback)
+               ~icon:"/images/robur.png" ())
+            ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+            `OK
+      | Error err ->
+          reply reqd ~content_type:"text/html"
+            (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+               ~content:(Error_page.error_layout err)
+               ~icon:"/images/robur.png" ())
+            `Internal_server_error
 
   let api_tokens store _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
@@ -2908,15 +3009,9 @@ struct
                   | Some link -> link
                   | None -> "/dashboard"
                 in
-                if List.length !albatross_instances = 1 then
-                  Middleware.redirect_to_url
-                    ~url:
-                      (callback_link ^ "?instance="
-                     ^ (List.hd !albatross_instances).name)
-                    reqd ()
-                else
-                  authenticate store reqd
-                    (choose_instance store !albatross_instances callback_link))
+
+                authenticate store reqd
+                  (choose_instance store !albatross_instances callback_link))
         | path when String.starts_with ~prefix:"/admin/user/" path ->
             check_meth `GET (fun () ->
                 let uuid = String.sub path 12 (String.length path - 12) in
