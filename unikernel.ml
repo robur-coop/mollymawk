@@ -58,9 +58,9 @@ struct
   module Store = Storage.Make (BLOCK)
   module Map = Map.Make (String)
 
-  let csrf_verification f user csrf reqd =
+  let csrf_verification f user csrf reqd (albatross_instances : Albatross.t) =
     let now = Mirage_ptime.now () in
-    Middleware.csrf_verification user now csrf f reqd
+    Middleware.csrf_verification user now csrf f reqd albatross_instances
 
   let return_only_albatross_instances_with_a_usable_policy domain instances =
     List.filter
@@ -72,7 +72,7 @@ struct
             | Error _ -> false)
         | Ok None -> false
         | Error _ -> false)
-      instances
+      !instances
 
   let read_multipart_data reqd =
     let response_body = H1.Reqd.request_body reqd in
@@ -242,7 +242,8 @@ struct
         Logs.warn (fun m -> m "JSON is not a dictionary: %s" data);
         Lwt.return (Error (`Msg "not a dictionary"))
 
-  let extract_json_csrf_token f token_or_cookie user reqd =
+  let extract_json_csrf_token f token_or_cookie user reqd
+      (albatross_instances : Albatross.t) =
     extract_json_body reqd >>= function
     | Error (`Msg err) ->
         Middleware.http_response reqd ~title:"Error"
@@ -250,18 +251,19 @@ struct
           `Bad_request
     | Ok json_dict -> (
         match token_or_cookie with
-        | `Token -> f user json_dict reqd
+        | `Token -> f user json_dict reqd albatross_instances
         | `Cookie -> (
             match Utils.Json.get User_model.csrf_cookie json_dict with
             | Some (`String token) ->
                 csrf_verification (f user json_dict) user token reqd
+                  albatross_instances
             | _ ->
                 Logs.warn (fun m ->
                     m "No csrf token in session request with Json body");
                 Middleware.http_response reqd ~title:"Error"
                   ~data:(`String "Couldn't find CSRF token") `Bad_request))
 
-  let extract_multipart_csrf_token f token_or_cookie user reqd =
+  let extract_multipart_csrf_token f token_or_cookie user reqd a =
     match Middleware.header "Content-Type" reqd with
     | Some header when String.starts_with ~prefix:"multipart/form-data" header
       -> (
@@ -274,7 +276,7 @@ struct
         | Ok (m, assoc) -> (
             let multipart_body, _r = to_map ~assoc m in
             match token_or_cookie with
-            | `Token -> f user multipart_body reqd
+            | `Token -> f user multipart_body reqd a
             | `Cookie -> (
                 match Map.find_opt "molly_csrf" multipart_body with
                 | None ->
@@ -282,13 +284,14 @@ struct
                     Middleware.http_response reqd ~title:"Error"
                       ~data:(`String "Couldn't find CSRF token") `Bad_request
                 | Some (_, token) ->
-                    csrf_verification (f user multipart_body) user token reqd)))
+                    csrf_verification (f user multipart_body) user token reqd a)
+            ))
     | None | _ ->
         Logs.warn (fun m -> m "Not a multipart request");
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Expected multipart form data") `Bad_request
 
-  let email_verification f _ user reqd =
+  let email_verification f _ user reqd _ =
     if false (* TODO *) then
       Middleware.email_verified_middleware user (f user) reqd
     else f user reqd
@@ -348,8 +351,8 @@ struct
       | None -> check_cookie reqd
     else check_cookie reqd
 
-  let authenticate ?(check_admin = false) ?(api_meth = false)
-      ?(check_token = false) store reqd f =
+  let authenticate albatross_instances ?(check_admin = false)
+      ?(api_meth = false) ?(check_token = false) store reqd f =
     match authenticate_user ~check_admin ~check_token store reqd with
     | Error (v, msg) ->
         Logs.err (fun m -> m "authenticate: %s" msg);
@@ -364,7 +367,10 @@ struct
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error" ~data:(`String err)
               `Internal_server_error
-        | Ok () -> f `Token user reqd)
+        | Ok () ->
+            f `Token user reqd
+              (return_only_albatross_instances_with_a_usable_policy
+                 user.User_model.name albatross_instances))
     | Ok (`Cookie (user, cookie)) -> (
         Store.update_cookie_usage store cookie user reqd >>= function
         | Error (`Msg err) ->
@@ -372,7 +378,10 @@ struct
             Middleware.http_response reqd ~title:"Error"
               ~data:(`String (String.escaped err))
               `Internal_server_error
-        | Ok () -> f `Cookie user reqd)
+        | Ok () ->
+            f `Cookie user reqd
+              (return_only_albatross_instances_with_a_usable_policy
+                 user.User_model.name albatross_instances))
 
   let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status
       =
@@ -422,10 +431,6 @@ struct
         []
 
   let user_volumes albatross_instances user_name =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user_name
-        albatross_instances
-    in
     Lwt_list.map_p
       (fun (albatross_instance : Albatross.albatross_instance) ->
         Albatross.query albatross_instance ~domain:user_name
@@ -446,10 +451,6 @@ struct
       albatross_instances
 
   let user_unikernels (albatross_instances : Albatross.t) user_name =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user_name
-        albatross_instances
-    in
     Lwt_list.map_p
       (fun (albatross_instance : Albatross.albatross_instance) ->
         Albatross.query albatross_instance ~domain:user_name
@@ -792,7 +793,7 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find a UUID in the JSON.") `Not_found
 
-  let toggle_account_activation store _user json_dict reqd =
+  let toggle_account_activation store _user json_dict reqd _albatross =
     toggle_account_attribute json_dict store reqd ~key:"toggle-active-account"
       (fun user ->
         User_model.update_user user ~active:(not user.active)
@@ -800,7 +801,7 @@ struct
       (fun user -> user.active && Store.count_active store <= 1)
       ~error_message:(`String "Cannot deactivate last active user")
 
-  let toggle_admin_activation store _user json_dict reqd =
+  let toggle_admin_activation store _user json_dict reqd (_a : Albatross.t) =
     toggle_account_attribute json_dict store reqd ~key:"toggle-admin-account"
       (fun user ->
         User_model.update_user user ~super_user:(not user.super_user)
@@ -808,11 +809,7 @@ struct
       (fun user -> user.super_user && Store.count_superusers store <= 1)
       ~error_message:(`String "Cannot remove last administrator")
 
-  let dashboard store albatross_instances _ (user : User_model.user) reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let dashboard store _ (user : User_model.user) reqd albatross_instances =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
@@ -833,7 +830,7 @@ struct
              ~icon:"/images/robur.png" ())
           `Internal_server_error
 
-  let account_page store _ (user : User_model.user) reqd =
+  let account_page store _ (user : User_model.user) reqd _ =
     match Middleware.session_cookie_value reqd with
     | Ok active_cookie_value -> (
         let now = Mirage_ptime.now () in
@@ -869,7 +866,8 @@ struct
              ~icon:"/images/robur.png" ())
           `Unauthorized
 
-  let update_password store (user : User_model.user) json_dict reqd =
+  let update_password store (user : User_model.user) json_dict reqd
+      (_a : Albatross.t) =
     match
       Utils.Json.
         ( get "current_password" json_dict,
@@ -937,7 +935,7 @@ struct
           `Internal_server_error
 
   let close_sessions ?to_logout_cookie ?(logout = false) store
-      (user : User_model.user) _json_dict reqd =
+      (user : User_model.user) _json_dict reqd (_a : Albatross.t) =
     match Middleware.session_cookie_value reqd with
     | Ok cookie_value -> (
         match User_model.user_session_cookie user cookie_value with
@@ -992,7 +990,8 @@ struct
              ~icon:"/images/robur.png" ())
           `Unauthorized
 
-  let close_session store (user : User_model.user) json_dict reqd =
+  let close_session store (user : User_model.user) json_dict reqd
+      (_a : Albatross.t) =
     match Utils.Json.(get "session_value" json_dict) with
     | Some (`String session_value) -> (
         let now = Mirage_ptime.now () in
@@ -1022,7 +1021,7 @@ struct
                   (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let users store _ (user : User_model.user) reqd =
+  let users store _ (user : User_model.user) reqd (_a : Albatross.t) =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
@@ -1038,7 +1037,7 @@ struct
              ~icon:"/images/robur.png" ())
           `Internal_server_error
 
-  let settings store _ (user : User_model.user) reqd =
+  let settings store _ (user : User_model.user) reqd _albatross =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
@@ -1057,7 +1056,7 @@ struct
              ~icon:"/images/robur.png" ())
           `Internal_server_error
 
-  let update_settings stack store albatross_instances _user json_dict reqd =
+  let update_settings stack store albatross_instances _user json_dict reqd _a =
     match Configuration.of_json_from_http json_dict (Mirage_ptime.now ()) with
     | Ok configuration_settings -> (
         Store.upsert_configuration store configuration_settings >>= function
@@ -1084,7 +1083,7 @@ struct
           reqd `Bad_request
 
   let delete_albatross_config stack store albatross_instances _user json_dict
-      reqd =
+      reqd _a =
     match Utils.Json.get "name" json_dict with
     | Some (`String name) -> (
         Store.delete_configuration store name >>= function
@@ -1113,12 +1112,8 @@ struct
                   (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let deploy_form store albatross_instances instance_name _
-      (user : User_model.user) reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let deploy_form store instance_name _ (user : User_model.user) reqd
+      albatross_instances =
     let now = Mirage_ptime.now () in
     let missing_policy_error ?(err = None) () =
       {
@@ -1191,12 +1186,8 @@ struct
                  ~icon:"/images/robur.png" ())
               `Internal_server_error)
 
-  let unikernel_info albatross_instances _ (user : User_model.user) reqd =
+  let unikernel_info _ (user : User_model.user) reqd albatross_instances =
     (* TODO use uuid in the future *)
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
     let rec loop = function
       | [] -> Lwt.return (Ok (`List []))
       | albatross :: rest -> (
@@ -1239,12 +1230,8 @@ struct
               ~data:(`String "Expected a list of unikernels")
               `Internal_server_error)
 
-  let unikernel_info_one albatross_instances store ~unikernel_name
-      ~instance_name _ (user : User_model.user) reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let unikernel_info_one store ~unikernel_name ~instance_name _
+      (user : User_model.user) reqd albatross_instances =
     (* TODO use uuid in the future *)
     match Albatross.find_instance_by_name albatross_instances instance_name with
     | Error err ->
@@ -1313,12 +1300,8 @@ struct
                      ~icon:"/images/robur.png" ())
                   `Internal_server_error))
 
-  let unikernel_prepare_update albatross_instances store ~unikernel_name
-      ~instance_name http_client _ (user : User_model.user) reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let unikernel_prepare_update store ~unikernel_name ~instance_name http_client
+      _ (user : User_model.user) reqd albatross_instances =
     (* TODO use uuid in the future *)
     let name = unikernel_name in
     match Albatross.find_instance_by_name albatross_instances instance_name with
@@ -1744,12 +1727,8 @@ struct
               ^ " with error " ^ err))
           http_status
 
-  let unikernel_update albatross_instances store stack http_client
-      (user : User_model.user) json_dict reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let unikernel_update store stack http_client (user : User_model.user)
+      json_dict reqd albatross_instances =
     let config_or_none field = function
       | None | Some `Null -> Ok None
       | Some json -> (
@@ -1857,12 +1836,8 @@ struct
           ~data:(`String "Couldn't find job or build in json. Received ")
           `Bad_request
 
-  let unikernel_rollback albatross_instances store http_client
-      (user : User_model.user) json_dict reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let unikernel_rollback store http_client (user : User_model.user) json_dict
+      reqd albatross_instances =
     match
       Utils.Json.
         (get "unikernel_name" json_dict, get "albatross_instance" json_dict)
@@ -1885,12 +1860,8 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_destroy albatross_instances (user : User_model.user) json_dict
-      reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let unikernel_destroy (user : User_model.user) json_dict reqd
+      albatross_instances =
     (* TODO use uuid in the future *)
     match
       Utils.Json.(get "name" json_dict, get "albatross_instance" json_dict)
@@ -1926,12 +1897,8 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_restart albatross_instances (user : User_model.user) json_dict
-      reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let unikernel_restart (user : User_model.user) json_dict reqd
+      albatross_instances =
     (* TODO use uuid in the future *)
     match
       Utils.Json.(get "name" json_dict, get "albatross_instance" json_dict)
@@ -1967,12 +1934,8 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_create token_or_cookie (user : User_model.user)
-      albatross_instances reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let unikernel_create token_or_cookie (user : User_model.user) reqd
+      albatross_instances =
     let generate_http_error_response msg code =
       Logs.warn (fun m -> m "Unikernel_create error: %s" msg);
       Middleware.http_response reqd ~title:"Error" ~data:(`String msg) code
@@ -2024,7 +1987,7 @@ struct
                       Some cfg,
                       Some force_create,
                       Some csrf ) -> (
-                      let process_unikernel_create albatross _reqd =
+                      let process_unikernel_create albatross _reqd _a =
                         match Albatross_json.config_of_json cfg with
                         | Error (`Msg err) ->
                             generate_http_error_response
@@ -2069,11 +2032,12 @@ struct
                             `Internal_server_error
                       | Ok albatross -> (
                           match token_or_cookie with
-                          | `Token -> process_unikernel_create albatross reqd
+                          | `Token ->
+                              process_unikernel_create albatross reqd None
                           | `Cookie ->
                               csrf_verification
                                 (process_unikernel_create albatross)
-                                user csrf reqd))
+                                user csrf reqd albatross_instances))
                   | _ ->
                       Logs.info (fun m -> m "Missing Fields");
                       generate_http_error_response
@@ -2095,12 +2059,8 @@ struct
                 m "Multipart streamed correctly and unikernel created.");
             Lwt.return_unit)
 
-  let unikernel_console albatross_instances ~unikernel_name ~instance_name _
-      (user : User_model.user) reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let unikernel_console ~unikernel_name ~instance_name _
+      (user : User_model.user) reqd albatross_instances =
     (* TODO use uuid in the future *)
     let response = Middleware.http_event_source_response reqd `OK in
     let f (ts, data) =
@@ -2123,11 +2083,7 @@ struct
             Lwt.return_unit
         | Ok () -> Lwt.return_unit)
 
-  let view_user albatross_instances store uuid _ (user : User_model.user) reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let view_user store uuid _ (user : User_model.user) reqd albatross_instances =
     match Store.find_by_uuid store uuid with
     | Some u -> (
         user_unikernels albatross_instances u.name >>= fun unikernels ->
@@ -2166,12 +2122,8 @@ struct
              ~icon:"/images/robur.png" ())
           `Not_found
 
-  let edit_policy albatross_instances store uuid instance_name _
-      (user : User_model.user) reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let edit_policy store uuid instance_name _ (user : User_model.user) reqd
+      albatross_instances =
     let status code msg =
       {
         Utils.Status.code;
@@ -2237,7 +2189,7 @@ struct
                  ~icon:"/images/robur.png" ())
               `Not_found)
 
-  let update_policy store albatross_instances _user json_dict reqd =
+  let update_policy store _user json_dict reqd albatross_instances =
     match
       Utils.Json.(get "user_uuid" json_dict, get "albatross_instance" json_dict)
     with
@@ -2328,12 +2280,8 @@ struct
                   (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let volumes instance_name store albatross_instances _ (user : User_model.user)
-      reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let volumes instance_name store _ (user : User_model.user) reqd
+      albatross_instances =
     match Albatross.find_instance_by_name albatross_instances instance_name with
     | Error _err -> Middleware.redirect_to_instance_selector "/volumes" reqd ()
     | Ok albatross -> (
@@ -2361,12 +2309,8 @@ struct
                  ~icon:"/images/robur.png" ())
               `Internal_server_error)
 
-  let delete_volume albatross_instances (user : User_model.user) json_dict reqd
+  let delete_volume (user : User_model.user) json_dict reqd albatross_instances
       =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
     match
       Utils.Json.(get "block_name" json_dict, get "albatross_instance" json_dict)
     with
@@ -2407,12 +2351,8 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
 
-  let create_or_upload_volume c_or_u token_or_cookie albatross_instances
-      (user : User_model.user) reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let create_or_upload_volume c_or_u token_or_cookie (user : User_model.user)
+      reqd albatross_instances =
     let cmd_name =
       match c_or_u with `Create -> "create" | `Upload -> "upload"
     in
@@ -2448,7 +2388,7 @@ struct
               | (Some "block_data", _), _, contents -> (
                   match (!albatross_ref, !csrf_ref, !json_data_ref) with
                   | Some albatross_instance, Some csrf, Some json -> (
-                      let add_block albatross block_name block_size =
+                      let add_block albatross block_name block_size _a =
                         Albatross.query albatross ~domain:user.name
                           ~name:block_name
                           (`Block_cmd (`Block_add block_size))
@@ -2469,7 +2409,7 @@ struct
                       in
 
                       let stream_to_albatross albatross block_name
-                          block_compressed =
+                          block_compressed _a =
                         let push () = Lwt_stream.get contents in
                         Albatross.query albatross ~domain:user.name
                           ~name:block_name ~push
@@ -2523,22 +2463,24 @@ struct
                                   match token_or_cookie with
                                   | `Token -> (
                                       add_block albatross block_name block_size
+                                        albatross
                                       >>= function
                                       | Ok () ->
                                           stream_to_albatross albatross
                                             block_name block_compressed
+                                            albatross
                                       | Error () -> Lwt.return_unit)
                                   | `Cookie ->
                                       csrf_verification
-                                        (fun _reqd ->
+                                        (fun _reqd _albatross_instances ->
                                           add_block albatross block_name
-                                            block_size
+                                            block_size None
                                           >>= function
                                           | Ok () ->
                                               stream_to_albatross albatross
-                                                block_name block_compressed
+                                                block_name block_compressed None
                                           | Error () -> Lwt.return_unit)
-                                        user csrf reqd)
+                                        user csrf reqd albatross_instances)
                               | ( `Upload,
                                   ( Some (`String block_name),
                                     None,
@@ -2546,13 +2488,13 @@ struct
                                   match token_or_cookie with
                                   | `Token ->
                                       stream_to_albatross albatross block_name
-                                        block_compressed
+                                        block_compressed None
                                   | `Cookie ->
                                       csrf_verification
                                         (fun _reqd ->
                                           stream_to_albatross albatross
                                             block_name block_compressed)
-                                        user csrf reqd)
+                                        user csrf reqd albatross_instances)
                               | _ ->
                                   generate_http_error_response
                                     (Fmt.str "unexpected field. got %s"
@@ -2583,12 +2525,8 @@ struct
             Logs.info (fun m -> m "Data %s to volume successfully." cmd_name);
             Lwt.return_unit)
 
-  let download_volume albatross_instances (user : User_model.user) json_dict
-      reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let download_volume (user : User_model.user) json_dict reqd
+      albatross_instances =
     match
       Utils.Json.
         ( get "albatross_instance" json_dict,
@@ -2650,12 +2588,8 @@ struct
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find block name in json") `Bad_request
 
-  let account_usage instance_name store albatross_instances _
-      (user : User_model.user) reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let account_usage instance_name store _ (user : User_model.user) reqd
+      albatross_instances =
     match Albatross.find_instance_by_name albatross_instances instance_name with
     | Error _err -> Middleware.redirect_to_instance_selector "/usage" reqd ()
     | Ok albatross_instance -> (
@@ -2688,16 +2622,14 @@ struct
                  ~icon:"/images/robur.png" ())
               `Internal_server_error)
 
-  let choose_instance store albatross_instances callback _
-      (user : User_model.user) reqd =
-    let albatross_instances =
-      return_only_albatross_instances_with_a_usable_policy user.name
-        albatross_instances
-    in
+  let choose_instance store callback _ (user : User_model.user) reqd
+      albatross_instances =
     let now = Mirage_ptime.now () in
     if List.length albatross_instances = 1 then
       Middleware.redirect_to_url
-        ~url:(callback ^ "?instance=" ^ (List.hd albatross_instances).name)
+        ~url:
+          (callback ^ "?instance="
+         ^ (List.hd albatross_instances).Albatross.name)
         reqd ()
     else
       generate_csrf_token store user now reqd >>= function
@@ -2721,7 +2653,7 @@ struct
                ~icon:"/images/robur.png" ())
             `Internal_server_error
 
-  let api_tokens store _ (user : User_model.user) reqd =
+  let api_tokens store _ (user : User_model.user) reqd _ =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
@@ -2739,7 +2671,7 @@ struct
              ~icon:"/images/robur.png" ())
           `Internal_server_error
 
-  let create_token store (user : User_model.user) json_dict reqd =
+  let create_token store (user : User_model.user) json_dict reqd _ =
     match
       Utils.Json.(get "token_name" json_dict, get "token_expiry" json_dict)
     with
@@ -2768,7 +2700,7 @@ struct
                   (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let delete_token store (user : User_model.user) json_dict reqd =
+  let delete_token store (user : User_model.user) json_dict reqd _ =
     match Utils.Json.(get "token_value" json_dict) with
     | Some (`String value) -> (
         let now = Mirage_ptime.now () in
@@ -2798,7 +2730,7 @@ struct
                   (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let update_token store (user : User_model.user) json_dict reqd =
+  let update_token store (user : User_model.user) json_dict reqd _albatross =
     match
       Utils.Json.
         ( get "token_name" json_dict,
@@ -2908,37 +2840,37 @@ struct
         | "/api/login" -> check_meth `POST (fun () -> login store reqd)
         | "/verify-email" ->
             check_meth `GET (fun () ->
-                authenticate store reqd
+                authenticate albatross_instances store reqd
                   (email_verification (verify_email store)))
         | path when String.starts_with ~prefix:"/auth/verify/token=" path ->
             check_meth `GET (fun () ->
                 let token = String.sub path 19 (String.length path - 19) in
-                authenticate store reqd
+                authenticate albatross_instances store reqd
                   (email_verification (verify_email_token store token)))
         | "/albatross/instances" ->
             check_meth `GET (fun () ->
                 Middleware.redirect_to_instance_selector "/dashboard" reqd ())
         | "/dashboard" ->
             check_meth `GET (fun () ->
-                authenticate store reqd (dashboard store !albatross_instances))
+                authenticate albatross_instances store reqd (dashboard store))
         | "/account" ->
             check_meth `GET (fun () ->
-                authenticate store reqd (account_page store))
+                authenticate albatross_instances store reqd (account_page store))
         | "/account/password/update" ->
             check_meth `POST (fun () ->
-                authenticate store reqd
+                authenticate albatross_instances store reqd
                   (extract_json_csrf_token (update_password store)))
         | "/api/account/sessions/close" ->
             check_meth `POST (fun () ->
-                authenticate store reqd
+                authenticate albatross_instances store reqd
                   (extract_json_csrf_token (close_sessions store)))
         | "/logout" ->
             check_meth `POST (fun () ->
-                authenticate store reqd
+                authenticate albatross_instances store reqd
                   (extract_json_csrf_token (close_sessions ~logout:true store)))
         | "/api/account/session/close" ->
             check_meth `POST (fun () ->
-                authenticate store reqd
+                authenticate albatross_instances store reqd
                   (extract_json_csrf_token (close_session store)))
         | path when String.starts_with ~prefix:"/volumes" path ->
             check_meth `GET (fun () ->
@@ -2947,48 +2879,48 @@ struct
                     Logs.info (fun m -> m "no albatross instance given: %s" msg);
                     Middleware.redirect_to_instance_selector "/volumes" reqd ()
                 | Ok instance_name ->
-                    authenticate store reqd
-                      (volumes instance_name store !albatross_instances))
+                    authenticate albatross_instances store reqd
+                      (volumes instance_name store))
         | "/api/volume/delete" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_json_csrf_token (delete_volume !albatross_instances)))
+                authenticate albatross_instances ~check_token:true
+                  ~api_meth:true store reqd
+                  (extract_json_csrf_token delete_volume))
         | "/api/volume/create" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store reqd
-                  (fun token_or_cookie user reqd ->
-                    create_or_upload_volume `Create token_or_cookie
-                      !albatross_instances user reqd))
+                authenticate albatross_instances ~check_token:true
+                  ~api_meth:true store reqd (fun token_or_cookie user reqd ->
+                    create_or_upload_volume `Create token_or_cookie user reqd))
         | "/api/volume/download" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_json_csrf_token
-                     (download_volume !albatross_instances)))
+                authenticate albatross_instances ~check_token:true
+                  ~api_meth:true store reqd
+                  (extract_json_csrf_token download_volume))
             >>= fun () -> Paf.TCP.close flow
         | "/api/volume/upload" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store reqd
-                  (fun token_or_cookie user reqd ->
-                    create_or_upload_volume `Upload token_or_cookie
-                      !albatross_instances user reqd))
+                authenticate albatross_instances ~check_token:true
+                  ~api_meth:true store reqd (fun token_or_cookie user reqd ->
+                    create_or_upload_volume `Upload token_or_cookie user reqd))
         | "/tokens" ->
             check_meth `GET (fun () ->
-                authenticate store reqd (api_tokens store))
+                authenticate albatross_instances store reqd (api_tokens store))
         | "/api/tokens/create" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store reqd
+                authenticate albatross_instances ~api_meth:true store reqd
                   (extract_json_csrf_token (create_token store)))
         | "/api/tokens/delete" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store reqd
+                authenticate albatross_instances ~api_meth:true store reqd
                   (extract_json_csrf_token (delete_token store)))
         | "/api/tokens/update" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store reqd
+                authenticate albatross_instances ~api_meth:true store reqd
                   (extract_json_csrf_token (update_token store)))
         | "/admin/users" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true store reqd (users store))
+                authenticate albatross_instances ~check_admin:true store reqd
+                  (users store))
         | "/usage" ->
             check_meth `GET (fun () ->
                 match get_instance_name req with
@@ -2996,8 +2928,8 @@ struct
                     Logs.info (fun m -> m "no albatross instance given: %s" msg);
                     Middleware.redirect_to_instance_selector "/usage" reqd ()
                 | Ok instance_name ->
-                    authenticate store reqd
-                      (account_usage instance_name store !albatross_instances))
+                    authenticate albatross_instances store reqd
+                      (account_usage instance_name store))
         | path when String.starts_with ~prefix:"/select/instance" path ->
             check_meth `GET (fun () ->
                 let callback_link =
@@ -3009,14 +2941,13 @@ struct
                   | Some link -> link
                   | None -> "/dashboard"
                 in
-
-                authenticate store reqd
-                  (choose_instance store !albatross_instances callback_link))
+                authenticate albatross_instances store reqd
+                  (choose_instance store callback_link))
         | path when String.starts_with ~prefix:"/admin/user/" path ->
             check_meth `GET (fun () ->
                 let uuid = String.sub path 12 (String.length path - 12) in
-                authenticate ~check_admin:true store reqd
-                  (view_user !albatross_instances store uuid))
+                authenticate albatross_instances ~check_admin:true store reqd
+                  (view_user store uuid))
         | path when String.starts_with ~prefix:"/admin/u/policy/edit/" path ->
             check_meth `GET (fun () ->
                 let path_after_edit =
@@ -3036,45 +2967,49 @@ struct
                   | Some name -> name
                   | None -> ""
                 in
-                authenticate ~check_admin:true store reqd
-                  (edit_policy !albatross_instances store uuid instance_name))
+                authenticate albatross_instances ~check_admin:true store reqd
+                  (edit_policy store uuid instance_name))
         | "/admin/settings" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true store reqd (settings store))
+                authenticate albatross_instances ~check_admin:true store reqd
+                  (settings store))
         | "/api/admin/settings/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store reqd
+                authenticate albatross_instances ~check_admin:true
+                  ~api_meth:true store reqd
                   (extract_json_csrf_token
                      (update_settings stack store albatross_instances)))
         | "/api/admin/settings/delete" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store reqd
+                authenticate albatross_instances ~check_admin:true
+                  ~api_meth:true store reqd
                   (extract_json_csrf_token
                      (delete_albatross_config stack store albatross_instances)))
         | "/api/admin/u/policy/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store reqd
-                  (extract_json_csrf_token
-                     (update_policy store !albatross_instances)))
+                authenticate albatross_instances ~check_admin:true
+                  ~api_meth:true store reqd
+                  (extract_json_csrf_token (update_policy store)))
         | "/api/admin/user/activate/toggle" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store reqd
+                authenticate albatross_instances ~check_admin:true
+                  ~api_meth:true store reqd
                   (extract_json_csrf_token (toggle_account_activation store)))
         | "/api/admin/user/admin/toggle" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store reqd
+                authenticate albatross_instances ~check_admin:true
+                  ~api_meth:true store reqd
                   (extract_json_csrf_token (toggle_admin_activation store)))
         | "/api/unikernels" ->
             check_meth `GET (fun () ->
-                authenticate ~api_meth:true ~check_token:true store reqd
-                  (unikernel_info !albatross_instances))
+                authenticate albatross_instances ~api_meth:true
+                  ~check_token:true store reqd unikernel_info)
         | path when String.starts_with ~prefix:"/unikernel/info" path ->
             check_meth `GET (fun () ->
                 match (get_unikernel_name req, get_instance_name req) with
                 | Ok unikernel_name, Ok instance_name ->
-                    authenticate store reqd
-                      (unikernel_info_one ~unikernel_name ~instance_name
-                         !albatross_instances store)
+                    authenticate albatross_instances store reqd
+                      (unikernel_info_one ~unikernel_name ~instance_name store)
                 | Ok unikernel_name, _ ->
                     Middleware.redirect_to_instance_selector
                       ("/unikernel/info?unikernel=" ^ unikernel_name)
@@ -3091,25 +3026,25 @@ struct
                     Middleware.redirect_to_instance_selector "/unikernel/deploy"
                       reqd ()
                 | Ok instance_name ->
-                    authenticate store reqd
-                      (deploy_form store !albatross_instances instance_name))
+                    authenticate albatross_instances store reqd
+                      (deploy_form store instance_name))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_json_csrf_token
-                     (unikernel_destroy !albatross_instances)))
+                authenticate albatross_instances ~check_token:true
+                  ~api_meth:true store reqd
+                  (extract_json_csrf_token unikernel_destroy))
         | "/api/unikernel/restart" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_json_csrf_token
-                     (unikernel_restart !albatross_instances)))
+                authenticate albatross_instances ~check_token:true
+                  ~api_meth:true store reqd
+                  (extract_json_csrf_token unikernel_restart))
         | path when String.starts_with ~prefix:"/api/unikernel/console" path ->
             check_meth `GET (fun () ->
                 match (get_unikernel_name req, get_instance_name req) with
                 | Ok unikernel_name, Ok instance_name ->
-                    authenticate store reqd ~check_token:true ~api_meth:true
-                      (unikernel_console !albatross_instances ~unikernel_name
-                         ~instance_name)
+                    authenticate albatross_instances store reqd
+                      ~check_token:true ~api_meth:true
+                      (unikernel_console ~unikernel_name ~instance_name)
                 | Ok unikernel_name, _ ->
                     Middleware.redirect_to_instance_selector
                       ("/unikernel/info?unikernel=" ^ unikernel_name)
@@ -3120,17 +3055,16 @@ struct
                       `Bad_request reqd ())
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store reqd
-                  (fun token_or_cookie user reqd ->
-                    unikernel_create token_or_cookie user !albatross_instances
-                      reqd))
+                authenticate albatross_instances ~check_token:true
+                  ~api_meth:true store reqd (fun token_or_cookie user reqd ->
+                    unikernel_create token_or_cookie user reqd))
         | path when String.starts_with ~prefix:"/unikernel/update" path ->
             check_meth `GET (fun () ->
                 match (get_unikernel_name req, get_instance_name req) with
                 | Ok unikernel_name, Ok instance_name ->
-                    authenticate store reqd
-                      (unikernel_prepare_update !albatross_instances store
-                         ~unikernel_name ~instance_name http_client)
+                    authenticate albatross_instances store reqd
+                      (unikernel_prepare_update store ~unikernel_name
+                         ~instance_name http_client)
                 | Ok unikernel_name, _ ->
                     Middleware.redirect_to_instance_selector
                       ("/unikernel/info?unikernel=" ^ unikernel_name)
@@ -3141,15 +3075,16 @@ struct
                       `Bad_request reqd ())
         | "/api/unikernel/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store reqd
+                authenticate albatross_instances ~check_token:true
+                  ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (unikernel_update !albatross_instances store stack
-                        http_client)))
+                     (unikernel_update store stack http_client)))
         | "/api/unikernel/rollback" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store reqd
+                authenticate albatross_instances ~check_token:true
+                  ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (unikernel_rollback !albatross_instances store http_client)))
+                     (unikernel_rollback store http_client)))
         | _ ->
             let error =
               {

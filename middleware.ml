@@ -183,10 +183,11 @@ let csrf_cookie_verification form_csrf reqd =
       Logs.err (fun m -> m "Couldn't find csrf cookie.");
       false
 
-let csrf_verification user now form_csrf handler reqd =
+let csrf_verification user now form_csrf handler reqd albatross_instances =
   match User_model.user_csrf_token user form_csrf with
   | Some csrf_token ->
-      if User_model.is_valid_cookie csrf_token now then handler reqd
+      if User_model.is_valid_cookie csrf_token now then
+        handler reqd albatross_instances
       else
         http_response ~title:"CSRF Token Mismatch"
           ~data:
