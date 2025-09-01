@@ -86,17 +86,21 @@ let redirect_to_verify_email reqd ?(msg = "") () =
   H1.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
-let redirect_to_instance_selector callback_link reqd ?(msg = "") () =
+let redirect_to_url ~url reqd ?(msg = "") () =
   let headers =
     H1.Headers.of_list
       [
-        ("location", "/select/instance?callback=" ^ Uri.pct_encode callback_link);
-        ("Content-Length", string_of_int (String.length msg));
+        ("location", url); ("Content-Length", string_of_int (String.length msg));
       ]
   in
   let response = H1.Response.create ~headers `Found in
   H1.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
+
+let redirect_to_instance_selector callback_link reqd ?(msg = "") () =
+  redirect_to_url
+    ~url:("/select/instance?callback=" ^ Uri.pct_encode callback_link)
+    reqd ~msg ()
 
 let redirect_to_dashboard reqd ?(msg = "") () =
   let headers =

@@ -2908,8 +2908,15 @@ struct
                   | Some link -> link
                   | None -> "/dashboard"
                 in
-                authenticate store reqd
-                  (choose_instance store !albatross_instances callback_link))
+                if List.length !albatross_instances = 1 then
+                  Middleware.redirect_to_url
+                    ~url:
+                      (callback_link ^ "?instance="
+                     ^ (List.hd !albatross_instances).name)
+                    reqd ()
+                else
+                  authenticate store reqd
+                    (choose_instance store !albatross_instances callback_link))
         | path when String.starts_with ~prefix:"/admin/user/" path ->
             check_meth `GET (fun () ->
                 let uuid = String.sub path 12 (String.length path - 12) in
