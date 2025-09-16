@@ -1,20 +1,13 @@
 let ( let* ) = Result.bind
 
 module String_set = Set.Make (String)
+module Albatross_map = Map.Make (String)
 
 module Make (S : Tcpip.Stack.V4V6) = struct
   module TLS = Tls_mirage.Make (S.TCP)
 
-  type albatross_instance = {
-    name : string;
-    stack : S.t;
-    remote : Ipaddr.t * int;
-    cert : X509.Certificate.t;
-    key : X509.Private_key.t;
-    mutable policies : Vmm_core.Policy.t Vmm_trie.t;
-  }
-
-  type t = albatross_instance list
+  type instance_state = { mutable policies : Vmm_core.Policy.t Vmm_trie.t }
+  type t = instance_state Albatross_map.t
 
   let empty_policy =
     Vmm_core.Policy.
@@ -26,7 +19,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         bridges = Vmm_core.String_set.empty;
       }
 
-  let policy ?domain albatross_instance =
+  let policy ?domain state =
     let ( let* ) = Result.bind in
     let* path =
       match domain with
@@ -38,7 +31,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
           | Ok path -> Ok (Vmm_core.Name.create_of_path path))
     in
-    Ok (Vmm_trie.find path albatross_instance.policies)
+    Ok (Vmm_trie.find path state.policies)
 
   let policies ?domain albatross_instance =
     let ( let* ) = Result.bind in
@@ -58,10 +51,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
          [])
 
   let all_policies ?domain t =
-    List.map
-      (fun albatross_instance ->
-        (albatross_instance.name, policy ?domain albatross_instance))
-      t
+    Albatross_map.bindings t
+    |> List.map (fun (name, albatross_state) ->
+           (name, policy ?domain albatross_state))
 
   let policy_resource_avalaible t =
     let root_policy =
@@ -296,18 +288,18 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                  X509.Validation.pp_signature_error e)
         | Ok mycert -> Ok (tmp_key, mycert))
 
-  let gen_cert t ?domain cmd name =
+  let gen_cert (config : Configuration.t) state ?domain cmd name =
     let ( let* ) = Result.bind in
     let* ikey, cert, certs =
       match domain with
-      | None -> Ok (t.key, t.cert, [])
+      | None -> Ok (config.private_key, config.certificate, [])
       | Some domain ->
-          let* policy = policy ~domain t in
+          let* policy = policy ~domain state in
           let policy = Option.value ~default:empty_policy policy in
           let cmd = `Policy_cmd (`Policy_add policy) in
           let* key, cert =
-            key_cert ~is_ca:true ~cmd t.key domain
-              (X509.Certificate.subject t.cert)
+            key_cert ~is_ca:true ~cmd config.private_key domain
+              (X509.Certificate.subject config.certificate)
           in
           Ok (key, cert, [ cert ])
     in
@@ -443,19 +435,23 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     in
     continue_reading name dec d tls_flow
 
-  let raw_query t ?(name = Vmm_core.Name.root) certificates cmd ?push f =
+  let raw_query (stack : S.t) (config : Configuration.t)
+      ?(name = Vmm_core.Name.root) certificates cmd ?push f =
     let open Lwt.Infix in
-    if Ipaddr.compare (fst t.remote) Ipaddr.(V4 V4.any) = 0 then
+    if Ipaddr.compare config.server_ip Ipaddr.(V4 V4.any) = 0 then
       Lwt.return (Error "albatross not configured")
     else
-      S.TCP.create_connection (S.tcp t.stack) t.remote >>= function
+      S.TCP.create_connection (S.tcp stack)
+        (config.server_ip, config.server_port)
+      >>= function
       | Error e ->
           Lwt.return
             (Error
                (Fmt.str
                   "albatross connection failure %a while quering %a %a: %a"
                   Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                  t.remote Vmm_core.Name.pp name
+                  (config.server_ip, config.server_port)
+                  Vmm_core.Name.pp name
                   (Vmm_commands.pp ~verbose:false)
                   cmd S.TCP.pp_error e))
       | Ok flow -> (
@@ -463,7 +459,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             let authenticator =
               X509.Authenticator.chain_of_trust
                 ~time:(fun () -> Some (Mirage_ptime.now ()))
-                [ t.cert ]
+                [ config.certificate ]
             in
             Tls.Config.client ~authenticator ~certificates ()
           with
@@ -479,7 +475,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                        "albatross establishing TLS to %a while querying %a %a: \
                         %a"
                        Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                       t.remote Vmm_core.Name.pp name
+                       (config.server_ip, config.server_port)
+                       Vmm_core.Name.pp name
                        (Vmm_commands.pp ~verbose:false)
                        cmd TLS.pp_write_error e)
               | Ok tls_flow -> (
@@ -535,7 +532,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                           Error
                             (Fmt.str "eof from albatross %a querying %a %a"
                                Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                               t.remote Vmm_core.Name.pp name
+                               (config.server_ip, config.server_port)
+                               Vmm_core.Name.pp name
                                (Vmm_commands.pp ~verbose:false)
                                cmd)
                       | Error e ->
@@ -545,114 +543,104 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                                "albatross received error reading from %a \
                                 querying %a %a: %a"
                                Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                               t.remote Vmm_core.Name.pp name
+                               (config.server_ip, config.server_port)
+                               Vmm_core.Name.pp name
                                (Vmm_commands.pp ~verbose:false)
                                cmd TLS.pp_error e))
                   | Error err -> Lwt.return_error err)))
 
   let init stack (configs : Configuration.t list) =
     let open Lwt.Infix in
-    match configs with
-    | [] -> Lwt.return (Ok [])
-    | _ ->
-        Lwt_list.map_s
-          (fun (config : Configuration.t) ->
-            let t =
-              {
-                name = config.name;
-                stack;
-                remote = (config.server_ip, config.server_port);
-                cert = config.certificate;
-                key = config.private_key;
-                policies = Vmm_trie.empty;
-              }
-            in
-            let cmd = `Policy_cmd `Policy_info in
-            match gen_cert t cmd t.name with
-            | Error s ->
-                Logs.warn (fun m ->
-                    m "init: gen_cert failed for %s: %s" t.name s);
-                Lwt.return_none
-            | Ok certificates -> (
-                raw_query t certificates cmd reply >|= function
-                | Ok (_hdr, `Success (`Policies ps)) ->
-                    let ps =
-                      List.fold_left
-                        (fun acc (name, p) -> fst (Vmm_trie.insert name p acc))
-                        Vmm_trie.empty ps
-                    in
-                    t.policies <- ps;
-                    Some t
-                | Ok _w ->
-                    Logs.warn (fun m ->
-                        m "init: unexpected policy reply for %s" t.name);
-                    None
-                | Error str ->
-                    Logs.warn (fun m ->
-                        m "init: raw_query failed for %s: %s" t.name str);
-                    None))
-          configs
-        >|= fun results_opt ->
-        let initialized =
-          List.fold_right
-            (fun r acc -> match r with Some t -> t :: acc | None -> acc)
-            results_opt []
+    Lwt_list.fold_left_s
+      (fun acc_map (config : Configuration.t) ->
+        let cmd = `Policy_cmd `Policy_info in
+        let name_for_cert =
+          Vmm_core.Name.of_string config.name |> Result.get_ok
         in
-        Ok initialized
+        match
+          key_cert ~is_ca:false ~cmd config.private_key config.name
+            (X509.Certificate.subject config.certificate)
+        with
+        | Error s ->
+            Logs.warn (fun m ->
+                m "init: key_cert failed for %s: %s" config.name s);
+            Lwt.return acc_map
+        | Ok (key, cert) -> (
+            let certificates = `Single ([ cert ], key) in
+            raw_query stack config ~name:name_for_cert certificates cmd reply
+            >>= function
+            | Ok (_hdr, `Success (`Policies ps)) ->
+                let policies =
+                  List.fold_left
+                    (fun trie (name, p) -> fst (Vmm_trie.insert name p trie))
+                    Vmm_trie.empty ps
+                in
+                let state = { policies } in
+                Lwt.return (Albatross_map.add config.name state acc_map)
+            | Ok _w ->
+                Logs.warn (fun m ->
+                    m "init: unexpected policy reply for %s" config.name);
+                Lwt.return acc_map
+            | Error str ->
+                Logs.warn (fun m ->
+                    m "init: raw_query failed for %s: %s" config.name str);
+                Lwt.return acc_map))
+      Albatross_map.empty configs
+    >|= fun final_map -> Ok final_map
 
-  let certs t domain name cmd =
+  let find_instance_by_name (albatross_map : t) name =
+    match Albatross_map.find_opt name albatross_map with
+    | Some instance_state -> Ok instance_state
+    | None ->
+        Error (Fmt.str "No albatross instance found with the name %s" name)
+
+  let certs (config : Configuration.t) (state : instance_state) domain name cmd
+      =
     match
-      Result.bind (Vmm_core.Name.path_of_string domain) (fun domain ->
-          Vmm_core.Name.create domain name)
+      Result.bind (Vmm_core.Name.path_of_string domain) (fun path ->
+          Vmm_core.Name.create path name)
     with
     | Error (`Msg msg) -> Error msg
     | Ok vmm_name ->
-        Result.map (fun c -> (vmm_name, c)) (gen_cert t ~domain cmd name)
+        Result.map
+          (fun c -> (vmm_name, c))
+          (gen_cert config state ~domain cmd name)
 
-  let query t ~domain ?(name = ".") ?push cmd =
-    match certs t domain name cmd with
+  let query stack config state ~domain ?(name = ".") ?push cmd =
+    match certs config state domain name cmd with
     | Error str -> Lwt.return (Error str)
-    | Ok (name, certificates) -> raw_query t ~name certificates cmd ?push reply
+    | Ok (vmm_name, certificates) ->
+        raw_query stack config ~name:vmm_name certificates cmd ?push reply
 
-  let query_console t ~domain ~name f =
+  let query_console stack config state ~domain ~name f =
     let cmd = `Console_cmd (`Console_subscribe (`Count 40)) in
-    match certs t domain name cmd with
+    match certs config state domain name cmd with
     | Error str -> Lwt.return (Error str)
-    | Ok (name, certificates) ->
-        raw_query t ~name certificates cmd (console name f)
+    | Ok (vmm_name, certificates) ->
+        raw_query stack config ~name:vmm_name certificates cmd
+          (console vmm_name f)
 
-  let query_block_dump t ~domain ~name compression f =
+  let query_block_dump stack config state ~domain ~name compression f =
     let cmd = `Block_cmd (`Block_dump compression) in
-    match certs t domain name cmd with
+    match certs config state domain name cmd with
     | Error str -> Lwt.return (Error str)
-    | Ok (name, certificates) ->
-        raw_query t ~name certificates cmd (block_data name f)
+    | Ok (vmm_name, certificates) ->
+        raw_query stack config ~name:vmm_name certificates cmd
+          (block_data vmm_name f)
 
-  let set_policy t ~domain policy =
+  let set_policy stack config state ~domain policy =
     let open Lwt.Infix in
     match Vmm_core.Name.path_of_string domain with
     | Error (`Msg msg) -> Lwt.return (Error ("couldn't set policy: " ^ msg))
     | Ok p -> (
-        (* we set it locally - which is then used for the next command *)
-        let old_policies = t.policies in
+        let old_policies = state.policies in
         let name = Vmm_core.Name.create_of_path p in
-        t.policies <- fst (Vmm_trie.insert name policy t.policies);
-        (* now we tell albatross about it, using a command for throwing it away *)
-        (* note that the 'certs' / 'gen_cert' uses the policies for intermediate certificates *)
-        query t ~domain (`Unikernel_cmd `Unikernel_info) >|= function
+        state.policies <- fst (Vmm_trie.insert name policy state.policies);
+        query stack config state ~domain (`Unikernel_cmd `Unikernel_info)
+        >|= function
         | Ok _ -> Ok (name, policy)
         | Error msg ->
             Logs.warn (fun m -> m "error updating policies: %s" msg);
-            t.policies <- old_policies;
+            state.policies <- old_policies;
             Error msg)
-
-  let find_instance_by_name (albatross_instances : t) name =
-    match
-      List.find_opt
-        (fun albatross_instance -> String.equal albatross_instance.name name)
-        albatross_instances
-    with
-    | Some albatross_instance -> Ok albatross_instance
-    | None ->
-        Error (Fmt.str "No albatross instance found with the name %s" name)
 end
