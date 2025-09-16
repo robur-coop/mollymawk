@@ -19,7 +19,7 @@ With **Mollymawk**, you can now manage **multiple Albatross** instances.
 ### Information needed per instance
 
 * **Name** – Friendly label (e.g., `prod-eu-1`)
-* **Host / IP** – e.g., `albatross.example.org` or `10.0.42.15`
+* **IP** – e.g., `10.0.42.15`
 * **Port** – Default for albatross is **1025**
 * **Certificate** – The contents of the certificate file. See [*Generating an Albatross certificate and key*](https://github.com/robur-coop/albatross?tab=readme-ov-file#setup)
 * **Key** – The contents of the certificate's key file. See [*Generating an Albatross certificate and key*](https://github.com/robur-coop/albatross?tab=readme-ov-file#setup)
@@ -40,11 +40,6 @@ With **Mollymawk**, you can now manage **multiple Albatross** instances.
 5. Click **Save**. The instance appears after a successful connection.
 
 ---
-
-### Using Meta-Mollymawk
-
-* When a feature requires Albatross (e.g., **Deploy unikernel**, **Create a volume**, etc), you’ll first see a **Select Albatross instance** screen.
-* Choose the instance; you’ll be **redirected** to the target action (e.g., the deployment page) for that instance.
 
 ## Funding
 
