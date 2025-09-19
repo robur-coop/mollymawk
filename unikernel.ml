@@ -1296,7 +1296,6 @@ struct
       ~unikernel_name ~instance_name http_client _ (user : User_model.user) reqd
       =
     (* TODO use uuid in the future *)
-    let name = unikernel_name in
     match
       ( Albatross.find_instance_by_name albatross_instances instance_name,
         Configuration.find_config_by_name albatross_configs instance_name )
@@ -1314,7 +1313,7 @@ struct
                   ^ " from albatross with error " ^ err))
               ~title:"Albatross Error" ~api_meth:false `Internal_server_error
               reqd ()
-        | Ok (unikernel_name, unikernel) -> (
+        | Ok (name, unikernel) -> (
             Utils.send_http_request http_client ~base_url:Builder_web.base_url
               ~path:("/hash?sha256=" ^ Ohex.encode unikernel.digest)
             >>= function
@@ -1323,15 +1322,15 @@ struct
                     m
                       "builds.robur.coop: Error while fetching the current \
                        build info of %s with error: %s"
-                      name err);
+                      unikernel_name err);
                 Middleware.redirect_to_error
                   ~data:
                     (`String
                        ("An error occured while fetching the current build \
                          information from builds.robur.coop. The error is: "
                       ^ err))
-                  ~title:(name ^ " update Error") ~api_meth:false
-                  `Internal_server_error reqd ()
+                  ~title:(unikernel_name ^ " update Error")
+                  ~api_meth:false `Internal_server_error reqd ()
             | Ok response_body -> (
                 match
                   Builder_web.build_of_json
@@ -1342,15 +1341,15 @@ struct
                         m
                           "JSON parsing of the current build of %s from \
                            builds.robur.coop failed with error: %s"
-                          name err);
+                          unikernel_name err);
                     Middleware.redirect_to_error
                       ~data:
                         (`String
                            ("An error occured while parsing the json of the \
                              current build from builds.robur.coop. The error \
                              is: " ^ err))
-                      ~title:(name ^ " update Error") ~api_meth:false
-                      `Internal_server_error reqd ()
+                      ~title:(unikernel_name ^ " update Error")
+                      ~api_meth:false `Internal_server_error reqd ()
                 | Ok current_job_data -> (
                     Utils.send_http_request http_client
                       ~base_url:Builder_web.base_url
@@ -1361,15 +1360,15 @@ struct
                             m
                               "builds.robur.coop: Error while fetching the \
                                latest build info of %s with error: %s"
-                              name err);
+                              unikernel_name err);
                         Middleware.redirect_to_error
                           ~data:
                             (`String
                                ("An error occured while fetching the latest \
                                  build information from builds.robur.coop. The \
                                  error is: " ^ err))
-                          ~title:(name ^ " update Error") ~api_meth:false
-                          `Internal_server_error reqd ()
+                          ~title:(unikernel_name ^ " update Error")
+                          ~api_meth:false `Internal_server_error reqd ()
                     | Ok response_body -> (
                         match
                           Builder_web.build_of_json
@@ -1380,15 +1379,15 @@ struct
                                 m
                                   "JSON parsing of the latest build of %s from \
                                    builds.robur.coop failed with error: %s"
-                                  name err);
+                                  unikernel_name err);
                             Middleware.redirect_to_error
                               ~data:
                                 (`String
                                    ("An error occured while parsing the json \
                                      of the latest build from \
                                      builds.robur.coop. The error is: " ^ err))
-                              ~title:(name ^ "update Error") ~api_meth:false
-                              `Internal_server_error reqd ()
+                              ~title:(unikernel_name ^ "update Error")
+                              ~api_meth:false `Internal_server_error reqd ()
                         | Ok latest_job_data -> (
                             if
                               String.equal latest_job_data.uuid
@@ -1398,16 +1397,16 @@ struct
                                   m
                                     "There is no new update of %s found with \
                                      uuid  %s"
-                                    name latest_job_data.uuid);
+                                    unikernel_name latest_job_data.uuid);
                               Middleware.redirect_to_page
                                 ~path:
                                   ("/unikernel/info?unikernel="
                                   ^ Option.value ~default:""
-                                      (Vmm_core.Name.name unikernel_name)
+                                      (Vmm_core.Name.name name)
                                   ^ "&instance=" ^ instance_name)
                                 reqd
                                 ~msg:
-                                  ("There is no update of " ^ name
+                                  ("There is no update of " ^ unikernel_name
                                  ^ " found on builds.robur.coop")
                                 ())
                             else
@@ -1424,7 +1423,7 @@ struct
                                          fetching the diff between the current \
                                          and latest build info of %s with \
                                          error: %s"
-                                        name err);
+                                        unikernel_name err);
                                   Middleware.redirect_to_error
                                     ~data:
                                       (`String
@@ -1433,7 +1432,7 @@ struct
                                            current build information from \
                                            builds.robur.coop. The error is: "
                                         ^ err))
-                                    ~title:(name ^ " update Error")
+                                    ~title:(unikernel_name ^ " update Error")
                                     ~api_meth:false `Internal_server_error reqd
                                     ()
                               | Ok response_body -> (
@@ -1450,16 +1449,15 @@ struct
                                             (Dashboard.dashboard_layout ~csrf
                                                user
                                                ~page_title:
-                                                 (Vmm_core.Name.to_string
-                                                    unikernel_name
+                                                 (Vmm_core.Name.to_string name
                                                  ^ " Update | Mollymawk")
                                                ~content:
                                                  (Unikernel_update
                                                   .unikernel_update_layout
                                                     ~instance_name
-                                                    ~unikernel_name:name
-                                                    (unikernel_name, unikernel)
-                                                    now build_comparison)
+                                                    ~unikernel_name
+                                                    (name, unikernel) now
+                                                    build_comparison)
                                                ~icon:"/images/robur.png" ())
                                             ~header_list:
                                               [ ("X-MOLLY-CSRF", csrf) ]
@@ -1480,7 +1478,7 @@ struct
                                              the latest and current build of \
                                              %s from builds.robur.coop failed \
                                              with error: %s"
-                                            name err);
+                                            unikernel_name err);
                                       Middleware.redirect_to_error
                                         ~data:
                                           (`String
@@ -1489,7 +1487,7 @@ struct
                                                the latest and curent build \
                                                from builds.robur.coop. The \
                                                error is: " ^ err))
-                                        ~title:(name ^ " update Error")
+                                        ~title:(unikernel_name ^ " update Error")
                                         ~api_meth:false `Internal_server_error
                                         reqd ())))))))
     | _ ->
