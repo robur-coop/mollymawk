@@ -20,7 +20,7 @@ let select_instance (user : User_model.user) albatross_instances
                 ];
             ]
           (List.map
-             (fun instance ->
+             (fun (instance, _) ->
                a
                  ~a:
                    [

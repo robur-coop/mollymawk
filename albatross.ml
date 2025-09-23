@@ -6,7 +6,11 @@ module Albatross_map = Map.Make (String)
 module Make (S : Tcpip.Stack.V4V6) = struct
   module TLS = Tls_mirage.Make (S.TCP)
 
-  type instance_state = { mutable policies : Vmm_core.Policy.t Vmm_trie.t }
+  type instance_state = {
+    mutable policies : Vmm_core.Policy.t Vmm_trie.t;
+    configuration : Configuration.t;
+  }
+
   type t = instance_state Albatross_map.t
 
   let empty_policy =
@@ -288,18 +292,22 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                  X509.Validation.pp_signature_error e)
         | Ok mycert -> Ok (tmp_key, mycert))
 
-  let gen_cert (config : Configuration.t) state ?domain cmd name =
+  let gen_cert (state : instance_state) ?domain cmd name =
     let ( let* ) = Result.bind in
     let* ikey, cert, certs =
       match domain with
-      | None -> Ok (config.private_key, config.certificate, [])
+      | None ->
+          Ok
+            ( state.configuration.private_key,
+              state.configuration.certificate,
+              [] )
       | Some domain ->
           let* policy = policy ~domain state in
           let policy = Option.value ~default:empty_policy policy in
           let cmd = `Policy_cmd (`Policy_add policy) in
           let* key, cert =
-            key_cert ~is_ca:true ~cmd config.private_key domain
-              (X509.Certificate.subject config.certificate)
+            key_cert ~is_ca:true ~cmd state.configuration.private_key domain
+              (X509.Certificate.subject state.configuration.certificate)
           in
           Ok (key, cert, [ cert ])
     in
@@ -552,22 +560,24 @@ module Make (S : Tcpip.Stack.V4V6) = struct
   let init stack (configs : Configuration.t list) =
     let open Lwt.Infix in
     Lwt_list.fold_left_s
-      (fun acc_map (config : Configuration.t) ->
+      (fun acc_map (configuration : Configuration.t) ->
         let cmd = `Policy_cmd `Policy_info in
         let name_for_cert =
-          Vmm_core.Name.of_string config.name |> Result.get_ok
+          Vmm_core.Name.of_string configuration.name |> Result.get_ok
         in
         match
-          key_cert ~is_ca:false ~cmd config.private_key config.name
-            (X509.Certificate.subject config.certificate)
+          key_cert ~is_ca:false ~cmd configuration.private_key
+            configuration.name
+            (X509.Certificate.subject configuration.certificate)
         with
         | Error s ->
             Logs.warn (fun m ->
-                m "init: key_cert failed for %s: %s" config.name s);
+                m "init: key_cert failed for %s: %s" configuration.name s);
             Lwt.return acc_map
         | Ok (key, cert) -> (
             let certificates = `Single ([ cert ], key) in
-            raw_query stack config ~name:name_for_cert certificates cmd reply
+            raw_query stack configuration ~name:name_for_cert certificates cmd
+              reply
             >>= function
             | Ok (_hdr, `Success (`Policies ps)) ->
                 let policies =
@@ -575,15 +585,15 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                     (fun trie (name, p) -> fst (Vmm_trie.insert name p trie))
                     Vmm_trie.empty ps
                 in
-                let state = { policies } in
-                Lwt.return (Albatross_map.add config.name state acc_map)
+                let state = { policies; configuration } in
+                Lwt.return (Albatross_map.add configuration.name state acc_map)
             | Ok _w ->
                 Logs.warn (fun m ->
-                    m "init: unexpected policy reply for %s" config.name);
+                    m "init: unexpected policy reply for %s" configuration.name);
                 Lwt.return acc_map
             | Error str ->
                 Logs.warn (fun m ->
-                    m "init: raw_query failed for %s: %s" config.name str);
+                    m "init: raw_query failed for %s: %s" configuration.name str);
                 Lwt.return acc_map))
       Albatross_map.empty configs
     >|= fun final_map -> Ok final_map
@@ -594,41 +604,39 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     | None ->
         Error (Fmt.str "No albatross instance found with the name %s" name)
 
-  let certs (config : Configuration.t) (state : instance_state) domain name cmd
-      =
+  let certs (state : instance_state) domain name cmd =
     match
       Result.bind (Vmm_core.Name.path_of_string domain) (fun path ->
           Vmm_core.Name.create path name)
     with
     | Error (`Msg msg) -> Error msg
     | Ok vmm_name ->
-        Result.map
-          (fun c -> (vmm_name, c))
-          (gen_cert config state ~domain cmd name)
+        Result.map (fun c -> (vmm_name, c)) (gen_cert state ~domain cmd name)
 
-  let query stack config state ~domain ?(name = ".") ?push cmd =
-    match certs config state domain name cmd with
+  let query stack state ~domain ?(name = ".") ?push cmd =
+    match certs state domain name cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
-        raw_query stack config ~name:vmm_name certificates cmd ?push reply
+        raw_query stack state.configuration ~name:vmm_name certificates cmd
+          ?push reply
 
-  let query_console stack config state ~domain ~name f =
+  let query_console stack state ~domain ~name f =
     let cmd = `Console_cmd (`Console_subscribe (`Count 40)) in
-    match certs config state domain name cmd with
+    match certs state domain name cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
-        raw_query stack config ~name:vmm_name certificates cmd
+        raw_query stack state.configuration ~name:vmm_name certificates cmd
           (console vmm_name f)
 
-  let query_block_dump stack config state ~domain ~name compression f =
+  let query_block_dump stack state ~domain ~name compression f =
     let cmd = `Block_cmd (`Block_dump compression) in
-    match certs config state domain name cmd with
+    match certs state domain name cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
-        raw_query stack config ~name:vmm_name certificates cmd
+        raw_query stack state.configuration ~name:vmm_name certificates cmd
           (block_data vmm_name f)
 
-  let set_policy stack config state ~domain policy =
+  let set_policy stack state ~domain policy =
     let open Lwt.Infix in
     match Vmm_core.Name.path_of_string domain with
     | Error (`Msg msg) -> Lwt.return (Error ("couldn't set policy: " ^ msg))
@@ -636,8 +644,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         let old_policies = state.policies in
         let name = Vmm_core.Name.create_of_path p in
         state.policies <- fst (Vmm_trie.insert name policy state.policies);
-        query stack config state ~domain (`Unikernel_cmd `Unikernel_info)
-        >|= function
+        query stack state ~domain (`Unikernel_cmd `Unikernel_info) >|= function
         | Ok _ -> Ok (name, policy)
         | Error msg ->
             Logs.warn (fun m -> m "error updating policies: %s" msg);
