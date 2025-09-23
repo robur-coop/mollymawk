@@ -20,26 +20,66 @@ let select_instance (user : User_model.user) albatross_instances
                 ];
             ]
           (List.map
-             (fun (instance, _) ->
-               a
-                 ~a:
+             (fun (instance, (pol : Albatross.instance_state)) ->
+               let base_classes =
+                 [ "block"; "p-4"; "transition"; "duration-150"; "ease-in-out" ]
+               in
+               let classes =
+                 if Option.is_some pol.errors then
+                   base_classes
+                   @ [
+                       "bg-gray-100";
+                       "cursor-not-allowed";
+                       "pointer-events-none";
+                     ]
+                 else base_classes @ [ "hover:bg-primary-100" ]
+               in
+               let attrs =
+                 if Option.is_some pol.errors then
+                   [
+                     a_class classes;
+                     Unsafe.string_attrib "aria-disabled" "true";
+                     a_tabindex (-1);
+                   ]
+                 else
                    [
                      a_href (Fmt.str "%s?instance=%s" callback_url instance);
-                     a_class
-                       [
-                         "block p-4 transition duration-150 ease-in-out \
-                          hover:bg-primary-100";
-                       ];
+                     a_class classes;
                    ]
+               in
+               a ~a:attrs
                  [
                    div
-                     ~a:[ a_class [ "flex items-center justify-between" ] ]
+                     ~a:
+                       [ a_class [ "flex"; "items-center"; "justify-between" ] ]
                      [
                        div
                          [
-                           p
-                             ~a:[ a_class [ "font-medium text-primary-700" ] ]
-                             [ txt instance ];
+                           (if Option.is_none pol.errors then
+                              p
+                                ~a:
+                                  [
+                                    a_class
+                                      [ "font-medium"; "text-primary-700" ];
+                                  ]
+                                [ txt instance ]
+                            else
+                              p
+                                ~a:
+                                  [
+                                    a_class
+                                      [ "font-medium"; "text-secondary-500" ];
+                                  ]
+                                [
+                                  txt instance;
+                                  br ();
+                                  small
+                                    [
+                                      txt
+                                        ("Can't access this albatross \
+                                          instance: " ^ Option.get pol.errors);
+                                    ];
+                                ]);
                          ];
                        div
                          [
@@ -47,7 +87,11 @@ let select_instance (user : User_model.user) albatross_instances
                              ~a:
                                [
                                  a_class
-                                   [ "fa-solid fa-chevron-right text-gray-400" ];
+                                   [
+                                     "fa-solid";
+                                     "fa-chevron-right";
+                                     "text-gray-400";
+                                   ];
                                ]
                              [];
                          ];

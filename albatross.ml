@@ -1,15 +1,16 @@
 let ( let* ) = Result.bind
 
+type instance_state = {
+  mutable policies : Vmm_core.Policy.t Vmm_trie.t;
+  configuration : Configuration.t;
+  errors : string option;
+}
+
 module String_set = Set.Make (String)
 module Albatross_map = Map.Make (String)
 
 module Make (S : Tcpip.Stack.V4V6) = struct
   module TLS = Tls_mirage.Make (S.TCP)
-
-  type instance_state = {
-    mutable policies : Vmm_core.Policy.t Vmm_trie.t;
-    configuration : Configuration.t;
-  }
 
   type t = instance_state Albatross_map.t
 
@@ -573,7 +574,14 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         | Error s ->
             Logs.warn (fun m ->
                 m "init: key_cert failed for %s: %s" configuration.name s);
-            Lwt.return acc_map
+            let state =
+              {
+                errors = Some "Initialization error with key certificate";
+                policies = Vmm_trie.empty;
+                configuration;
+              }
+            in
+            Lwt.return (Albatross_map.add configuration.name state acc_map)
         | Ok (key, cert) -> (
             let certificates = `Single ([ cert ], key) in
             raw_query stack configuration ~name:name_for_cert certificates cmd
@@ -585,16 +593,30 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                     (fun trie (name, p) -> fst (Vmm_trie.insert name p trie))
                     Vmm_trie.empty ps
                 in
-                let state = { policies; configuration } in
+                let state = { errors = None; policies; configuration } in
                 Lwt.return (Albatross_map.add configuration.name state acc_map)
             | Ok _w ->
                 Logs.warn (fun m ->
                     m "init: unexpected policy reply for %s" configuration.name);
-                Lwt.return acc_map
+                let state =
+                  {
+                    errors = Some "Unexpected policy reply";
+                    policies = Vmm_trie.empty;
+                    configuration;
+                  }
+                in
+                Lwt.return (Albatross_map.add configuration.name state acc_map)
             | Error str ->
                 Logs.warn (fun m ->
                     m "init: raw_query failed for %s: %s" configuration.name str);
-                Lwt.return acc_map))
+                let state =
+                  {
+                    errors = Some "Failed to query this instance";
+                    policies = Vmm_trie.empty;
+                    configuration;
+                  }
+                in
+                Lwt.return (Albatross_map.add configuration.name state acc_map)))
       Albatross_map.empty configs
     >|= fun final_map -> Ok final_map
 

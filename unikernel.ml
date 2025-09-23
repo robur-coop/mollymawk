@@ -24,7 +24,7 @@ module Main
 struct
   module Paf = Paf_mirage.Make (S.TCP)
   module Liveliness = Liveliness_checks.Make (S)
-  module Albatross = Albatross.Make (S)
+  module Albatross_state = Albatross.Make (S)
 
   let js_contents assets =
     KV_ASSETS.get assets (Mirage_kv.Key.v "main.js") >|= function
@@ -65,7 +65,7 @@ struct
   let return_only_albatross_instances_with_a_usable_policy domain instances =
     List.filter
       (fun instance ->
-        match Albatross.policy ~domain instance with
+        match Albatross_state.policy ~domain instance with
         | Ok (Some policy) -> (
             match Vmm_core.Policy.usable policy with
             | Ok () -> true
@@ -390,7 +390,7 @@ struct
 
   let user_volumes_by_instance stack (state : Albatross.instance_state)
       user_name =
-    Albatross.query stack state ~domain:user_name (`Block_cmd `Block_info)
+    Albatross_state.query stack state ~domain:user_name (`Block_cmd `Block_info)
     >|= function
     | Error msg ->
         Logs.err (fun m ->
@@ -407,7 +407,7 @@ struct
 
   let user_unikernels_by_instance stack (state : Albatross.instance_state)
       user_name =
-    Albatross.query stack state ~domain:user_name
+    Albatross_state.query stack state ~domain:user_name
       (`Unikernel_cmd `Unikernel_info)
     >|= function
     | Error msg ->
@@ -424,10 +424,11 @@ struct
               reply);
         []
 
-  let user_unikernels stack (albatross_instances : Albatross.t) user_name =
+  let user_unikernels stack (albatross_instances : Albatross_state.t) user_name
+      =
     Lwt_list.map_p
       (fun (_name, (instance : Albatross.instance_state)) ->
-        Albatross.query stack instance ~domain:user_name
+        Albatross_state.query stack instance ~domain:user_name
           (`Unikernel_cmd `Unikernel_info)
         >|= function
         | Error msg ->
@@ -447,7 +448,7 @@ struct
       (albatross_instances |> Map.to_list)
 
   let user_unikernel stack state ~user_name ~unikernel_name =
-    Albatross.query stack state ~domain:user_name ~name:unikernel_name
+    Albatross_state.query stack state ~domain:user_name ~name:unikernel_name
       (`Unikernel_cmd `Unikernel_info)
     >|= function
     | Error err ->
@@ -1028,7 +1029,7 @@ struct
     | Ok configuration_settings -> (
         Store.upsert_configuration store configuration_settings >>= function
         | Ok new_configurations -> (
-            Albatross.init stack new_configurations
+            Albatross_state.init stack new_configurations
             >>= fun new_albatross_instances ->
             match new_albatross_instances with
             | Ok new_instances ->
@@ -1055,7 +1056,7 @@ struct
     | Some (`String name) -> (
         Store.delete_configuration store name >>= function
         | Ok new_configurations -> (
-            Albatross.init stack new_configurations
+            Albatross_state.init stack new_configurations
             >>= fun new_albatross_instances ->
             match new_albatross_instances with
             | Ok new_instances ->
@@ -1090,7 +1091,9 @@ struct
         success = false;
       }
     in
-    match Albatross.find_instance_by_name albatross_instances instance_name with
+    match
+      Albatross_state.find_instance_by_name albatross_instances instance_name
+    with
     | Ok albatross_instance -> (
         user_unikernels_by_instance stack albatross_instance user.name
         >>= fun unikernels_by_albatross_instance ->
@@ -1098,7 +1101,9 @@ struct
         >>= fun blocks_by_albatros_instance ->
         generate_csrf_token store user now reqd >>= function
         | Ok csrf -> (
-            match Albatross.policy albatross_instance ~domain:user.name with
+            match
+              Albatross_state.policy albatross_instance ~domain:user.name
+            with
             | Ok p -> (
                 match p with
                 | Some user_policy ->
@@ -1159,11 +1164,11 @@ struct
       | [] -> Lwt.return (Ok [])
       | (_, (instance : Albatross.instance_state)) :: rest -> (
           match
-            Albatross.find_instance_by_name albatross_instances
+            Albatross_state.find_instance_by_name albatross_instances
               instance.configuration.name
           with
           | Ok instance -> (
-              Albatross.query stack instance ~domain:user.name
+              Albatross_state.query stack instance ~domain:user.name
                 (`Unikernel_cmd `Unikernel_info)
               >>= function
               | Error msg ->
@@ -1196,7 +1201,9 @@ struct
   let unikernel_info_one stack store albatross_instances ~unikernel_name
       ~instance_name _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    match Albatross.find_instance_by_name albatross_instances instance_name with
+    match
+      Albatross_state.find_instance_by_name albatross_instances instance_name
+    with
     | Ok albatross -> (
         user_unikernel stack albatross ~user_name:user.name ~unikernel_name
         >>= fun unikernel_info ->
@@ -1266,7 +1273,9 @@ struct
   let unikernel_prepare_update stack store albatross_instances ~unikernel_name
       ~instance_name http_client _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    match Albatross.find_instance_by_name albatross_instances instance_name with
+    match
+      Albatross_state.find_instance_by_name albatross_instances instance_name
+    with
     | Ok albatross -> (
         user_unikernel stack albatross ~user_name:user.name ~unikernel_name
         >>= fun unikernel_info ->
@@ -1467,7 +1476,8 @@ struct
 
   let force_create_unikernel stack albatross ~unikernel_name ~push
       (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user) =
-    Albatross.query stack albatross ~domain:user.name ~name:unikernel_name ~push
+    Albatross_state.query stack albatross ~domain:user.name ~name:unikernel_name
+      ~push
       (`Unikernel_cmd (`Unikernel_force_create unikernel_cfg))
     >>= function
     | Error err ->
@@ -1725,7 +1735,8 @@ struct
         >>= function
         | Ok () -> (
             match
-              Albatross.find_instance_by_name albatross_instances instance_name
+              Albatross_state.find_instance_by_name albatross_instances
+                instance_name
             with
             | Ok albatross -> (
                 match config_or_none "unikernel_arguments" configuration with
@@ -1804,7 +1815,8 @@ struct
     with
     | Some (`String unikernel_name), Some (`String instance_name) -> (
         match
-          Albatross.find_instance_by_name albatross_instances instance_name
+          Albatross_state.find_instance_by_name albatross_instances
+            instance_name
         with
         | Ok albatross ->
             process_rollback stack albatross ~unikernel_name
@@ -1826,10 +1838,11 @@ struct
     with
     | Some (`String unikernel_name), Some (`String instance_name) -> (
         match
-          Albatross.find_instance_by_name albatross_instances instance_name
+          Albatross_state.find_instance_by_name albatross_instances
+            instance_name
         with
         | Ok albatross -> (
-            Albatross.query stack albatross ~domain:user.name
+            Albatross_state.query stack albatross ~domain:user.name
               ~name:unikernel_name (`Unikernel_cmd `Unikernel_destroy)
             >>= function
             | Error msg ->
@@ -1864,10 +1877,11 @@ struct
     with
     | Some (`String unikernel_name), Some (`String instance_name) -> (
         match
-          Albatross.find_instance_by_name albatross_instances instance_name
+          Albatross_state.find_instance_by_name albatross_instances
+            instance_name
         with
         | Ok albatross -> (
-            Albatross.query stack albatross ~domain:user.name
+            Albatross_state.query stack albatross ~domain:user.name
               ~name:unikernel_name
               (`Unikernel_cmd (`Unikernel_restart None))
             >>= function
@@ -1960,8 +1974,8 @@ struct
                                 `Unikernel_cmd (`Unikernel_force_create cfg)
                               else `Unikernel_cmd (`Unikernel_create cfg)
                             in
-                            Albatross.query stack albatross ~domain:user.name
-                              ~name:unikernel_name
+                            Albatross_state.query stack albatross
+                              ~domain:user.name ~name:unikernel_name
                               ~push:(fun () -> Lwt_stream.get contents)
                               albatross_cmd
                             >>= function
@@ -1984,8 +1998,8 @@ struct
                                       `Internal_server_error))
                       in
                       match
-                        Albatross.find_instance_by_name albatross_instances
-                          instance_name
+                        Albatross_state.find_instance_by_name
+                          albatross_instances instance_name
                       with
                       | Ok albatross -> (
                           match token_or_cookie with
@@ -2028,9 +2042,11 @@ struct
       let json = Albatross_json.console_data_to_json (ts, data) in
       response (Yojson.Basic.to_string json)
     in
-    match Albatross.find_instance_by_name albatross_instances instance_name with
+    match
+      Albatross_state.find_instance_by_name albatross_instances instance_name
+    with
     | Ok albatross -> (
-        Albatross.query_console stack albatross ~domain:user.name
+        Albatross_state.query_console stack albatross ~domain:user.name
           ~name:unikernel_name f
         >>= function
         | Error err ->
@@ -2057,8 +2073,9 @@ struct
                  ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
                  ~content:
                    (User_single.user_single_layout u unikernels
-                      ~empty_policy:Albatross.empty_policy
-                      (Albatross.all_policies ~domain:u.name albatross_instances)
+                      ~empty_policy:Albatross_state.empty_policy
+                      (Albatross_state.all_policies ~domain:u.name
+                         albatross_instances)
                       now)
                  ~icon:"/images/robur.png" ())
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
@@ -2094,7 +2111,9 @@ struct
         success = false;
       }
     in
-    match Albatross.find_instance_by_name albatross_instances instance_name with
+    match
+      Albatross_state.find_instance_by_name albatross_instances instance_name
+    with
     | Error err ->
         let status = status 404 ("Couldn't find albatross instance: " ^ err) in
         reply reqd ~content_type:"text/html"
@@ -2106,12 +2125,14 @@ struct
         match Store.find_by_uuid store uuid with
         | Some u -> (
             let user_policy =
-              match Albatross.policy albatross ~domain:u.name with
+              match Albatross_state.policy albatross ~domain:u.name with
               | Ok p -> (
-                  match p with Some p -> p | None -> Albatross.empty_policy)
-              | Error _ -> Albatross.empty_policy
+                  match p with
+                  | Some p -> p
+                  | None -> Albatross_state.empty_policy)
+              | Error _ -> Albatross_state.empty_policy
             in
-            match Albatross.policy_resource_avalaible albatross with
+            match Albatross_state.policy_resource_avalaible albatross with
             | Ok unallocated_resources -> (
                 let now = Mirage_ptime.now () in
                 generate_csrf_token store user now reqd >>= function
@@ -2159,12 +2180,13 @@ struct
         match Store.find_by_uuid store user_uuid with
         | Some u -> (
             match
-              Albatross.find_instance_by_name albatross_instances instance_name
+              Albatross_state.find_instance_by_name albatross_instances
+                instance_name
             with
             | Ok albatross -> (
                 match Albatross_json.policy_of_json json_dict with
                 | Ok policy -> (
-                    match Albatross.policy albatross with
+                    match Albatross_state.policy albatross with
                     | Ok (Some root_policy) -> (
                         match
                           Vmm_core.Policy.is_smaller ~super:root_policy
@@ -2184,8 +2206,8 @@ struct
                                   ^ err))
                               `Internal_server_error
                         | Ok () -> (
-                            Albatross.set_policy stack albatross ~domain:u.name
-                              policy
+                            Albatross_state.set_policy stack albatross
+                              ~domain:u.name policy
                             >>= function
                             | Error err ->
                                 Logs.err (fun m ->
@@ -2243,14 +2265,16 @@ struct
 
   let volumes stack albatross_instances instance_name store _
       (user : User_model.user) reqd =
-    match Albatross.find_instance_by_name albatross_instances instance_name with
+    match
+      Albatross_state.find_instance_by_name albatross_instances instance_name
+    with
     | Ok albatross -> (
         user_volumes_by_instance stack albatross user.name >>= fun blocks ->
         let now = Mirage_ptime.now () in
         let policy =
           Result.fold ~ok:Fun.id
             ~error:(fun _ -> None)
-            (Albatross.policy ~domain:user.name albatross)
+            (Albatross_state.policy ~domain:user.name albatross)
         in
         generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
@@ -2277,11 +2301,12 @@ struct
     with
     | Some (`String block_name), Some (`String instance_name) -> (
         match
-          Albatross.find_instance_by_name albatross_instances instance_name
+          Albatross_state.find_instance_by_name albatross_instances
+            instance_name
         with
         | Ok albatross -> (
-            Albatross.query stack albatross ~domain:user.name ~name:block_name
-              (`Block_cmd `Block_remove)
+            Albatross_state.query stack albatross ~domain:user.name
+              ~name:block_name (`Block_cmd `Block_remove)
             >>= function
             | Error err ->
                 Logs.err (fun m ->
@@ -2349,7 +2374,7 @@ struct
                   match (!albatross_ref, !csrf_ref, !json_data_ref) with
                   | Some albatross_instance, Some csrf, Some json -> (
                       let add_block stack albatross block_name block_size =
-                        Albatross.query stack albatross ~domain:user.name
+                        Albatross_state.query stack albatross ~domain:user.name
                           ~name:block_name
                           (`Block_cmd (`Block_add block_size))
                         >>= function
@@ -2371,7 +2396,7 @@ struct
                       let stream_to_albatross stack albatross block_name
                           block_compressed =
                         let push () = Lwt_stream.get contents in
-                        Albatross.query stack albatross ~domain:user.name
+                        Albatross_state.query stack albatross ~domain:user.name
                           ~name:block_name ~push
                           (`Block_cmd (`Block_set block_compressed))
                         >>= function
@@ -2396,8 +2421,8 @@ struct
                       in
 
                       match
-                        Albatross.find_instance_by_name albatross_instances
-                          albatross_instance
+                        Albatross_state.find_instance_by_name
+                          albatross_instances albatross_instance
                       with
                       | Ok albatross -> (
                           match parsed_json with
@@ -2521,10 +2546,11 @@ struct
                 Ok ())
         in
         match
-          Albatross.find_instance_by_name albatross_instances instance_name
+          Albatross_state.find_instance_by_name albatross_instances
+            instance_name
         with
         | Ok albatross -> (
-            Albatross.query_block_dump stack albatross ~domain:user.name
+            Albatross_state.query_block_dump stack albatross ~domain:user.name
               ~name:block_name compression_level response
             >>= function
             | Error err ->
@@ -2548,7 +2574,9 @@ struct
 
   let account_usage stack albatross_instances instance_name store _
       (user : User_model.user) reqd =
-    match Albatross.find_instance_by_name albatross_instances instance_name with
+    match
+      Albatross_state.find_instance_by_name albatross_instances instance_name
+    with
     | Ok albatross_instance -> (
         let now = Mirage_ptime.now () in
         generate_csrf_token store user now reqd >>= function
@@ -2558,10 +2586,14 @@ struct
             user_unikernels_by_instance stack albatross_instance user.name
             >>= fun unikernels ->
             let policy =
-              match Albatross.policy albatross_instance ~domain:user.name with
+              match
+                Albatross_state.policy albatross_instance ~domain:user.name
+              with
               | Ok p -> (
-                  match p with Some p -> p | None -> Albatross.empty_policy)
-              | Error _ -> Albatross.empty_policy
+                  match p with
+                  | Some p -> p
+                  | None -> Albatross_state.empty_policy)
+              | Error _ -> Albatross_state.empty_policy
             in
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
@@ -2580,7 +2612,7 @@ struct
               `Internal_server_error)
     | _ -> Middleware.redirect_to_instance_selector "/usage" reqd ()
 
-  let choose_instance store albatross_instances callback _
+  let choose_instance store (albatross_instances : Albatross_state.t) callback _
       (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     if Map.cardinal albatross_instances = 1 then
@@ -3071,7 +3103,7 @@ struct
     Store.connect storage >>= function
     | Error (`Msg msg) -> failwith msg
     | Ok store -> (
-        Albatross.init stack (Store.configurations store) >>= function
+        Albatross_state.init stack (Store.configurations store) >>= function
         | Ok albatross_instances ->
             let albatross_instances = ref albatross_instances in
             let port = K.port () in
