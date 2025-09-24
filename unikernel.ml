@@ -388,8 +388,7 @@ struct
     H1.Reqd.respond_with_string reqd resp data;
     Lwt.return_unit
 
-  let user_volumes_by_instance stack (state : Albatross.instance_state)
-      user_name =
+  let user_volumes_by_instance stack (state : Albatross.t) user_name =
     Albatross_state.query stack state ~domain:user_name (`Block_cmd `Block_info)
     >|= function
     | Error msg ->
@@ -405,8 +404,7 @@ struct
               reply);
         []
 
-  let user_unikernels_by_instance stack (state : Albatross.instance_state)
-      user_name =
+  let user_unikernels_by_instance stack (state : Albatross.t) user_name =
     Albatross_state.query stack state ~domain:user_name
       (`Unikernel_cmd `Unikernel_info)
     >|= function
@@ -424,10 +422,10 @@ struct
               reply);
         []
 
-  let user_unikernels stack (albatross_instances : Albatross_state.t) user_name
-      =
+  let user_unikernels stack (albatross_instances : Albatross_state.a_map)
+      user_name =
     Lwt_list.map_p
-      (fun (_name, (instance : Albatross.instance_state)) ->
+      (fun (_name, (instance : Albatross.t)) ->
         Albatross_state.query stack instance ~domain:user_name
           (`Unikernel_cmd `Unikernel_info)
         >|= function
@@ -445,7 +443,7 @@ struct
                   (Vmm_commands.pp_wire ~verbose:false)
                   reply);
             (instance.configuration.name, []))
-      (albatross_instances |> Map.to_list)
+      (albatross_instances |> Map.bindings)
 
   let user_unikernel stack state ~user_name ~unikernel_name =
     Albatross_state.query stack state ~domain:user_name ~name:unikernel_name
@@ -1149,7 +1147,7 @@ struct
     (* TODO use uuid in the future *)
     let rec loop = function
       | [] -> Lwt.return (Ok [])
-      | (_, (instance : Albatross.instance_state)) :: rest -> (
+      | (_, (instance : Albatross.t)) :: rest -> (
           match
             Albatross_state.find_instance_by_name albatross_instances
               instance.configuration.name
@@ -1177,7 +1175,7 @@ struct
                   m "Error while parsing albatross response: %s" err);
               Lwt.return (Error err))
     in
-    loop (Map.to_list albatross_instances) >>= function
+    loop (Map.bindings albatross_instances) >>= function
     | Error msg ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String ("Error while querying albatross: " ^ msg))
@@ -2599,8 +2597,8 @@ struct
               `Internal_server_error)
     | _ -> Middleware.redirect_to_instance_selector "/usage" reqd ()
 
-  let choose_instance store (albatross_instances : Albatross_state.t) callback _
-      (user : User_model.user) reqd =
+  let choose_instance store (albatross_instances : Albatross_state.a_map)
+      callback _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     if Map.cardinal albatross_instances = 1 then
       let name, _ = Map.min_binding albatross_instances in
@@ -2613,7 +2611,7 @@ struct
                ~page_title:"Choose instance | Mollymawk"
                ~content:
                  (Albatross_instances.select_instance user
-                    (Map.to_list albatross_instances)
+                    (Map.bindings albatross_instances)
                     callback)
                ~icon:"/images/robur.png" ())
             ~header_list:[ ("X-MOLLY-CSRF", csrf) ]

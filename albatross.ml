@@ -1,6 +1,6 @@
 let ( let* ) = Result.bind
 
-type instance_state = {
+type t = {
   mutable policies : Vmm_core.Policy.t Vmm_trie.t;
   configuration : Configuration.t;
   errors : string option;
@@ -12,7 +12,7 @@ module Albatross_map = Map.Make (String)
 module Make (S : Tcpip.Stack.V4V6) = struct
   module TLS = Tls_mirage.Make (S.TCP)
 
-  type t = instance_state Albatross_map.t
+  type a_map = t Albatross_map.t
 
   let empty_policy =
     Vmm_core.Policy.
@@ -24,7 +24,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         bridges = Vmm_core.String_set.empty;
       }
 
-  let policy ?domain state =
+  let policy ?domain t =
     let ( let* ) = Result.bind in
     let* path =
       match domain with
@@ -36,9 +36,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
           | Ok path -> Ok (Vmm_core.Name.create_of_path path))
     in
-    Ok (Vmm_trie.find path state.policies)
+    Ok (Vmm_trie.find path t.policies)
 
-  let policies ?domain albatross_instance =
+  let policies ?domain t =
     let ( let* ) = Result.bind in
     let* path =
       match domain with
@@ -50,15 +50,12 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
           | Ok path -> Ok path)
     in
-    Ok
-      (Vmm_trie.fold path albatross_instance.policies
-         (fun name p acc -> (name, p) :: acc)
-         [])
+    Ok (Vmm_trie.fold path t.policies (fun name p acc -> (name, p) :: acc) [])
 
   let all_policies ?domain t =
-    Albatross_map.bindings t
-    |> List.map (fun (name, albatross_state) ->
-           (name, policy ?domain albatross_state))
+    List.map
+      (fun (name, albatross_state) -> (name, policy ?domain albatross_state))
+      (Albatross_map.bindings t)
 
   let policy_resource_avalaible t =
     let root_policy =
@@ -293,22 +290,19 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                  X509.Validation.pp_signature_error e)
         | Ok mycert -> Ok (tmp_key, mycert))
 
-  let gen_cert (state : instance_state) ?domain cmd name =
+  let gen_cert t ?domain cmd name =
     let ( let* ) = Result.bind in
+    let c = t.configuration in
     let* ikey, cert, certs =
       match domain with
-      | None ->
-          Ok
-            ( state.configuration.private_key,
-              state.configuration.certificate,
-              [] )
+      | None -> Ok (c.private_key, c.certificate, [])
       | Some domain ->
-          let* policy = policy ~domain state in
+          let* policy = policy ~domain t in
           let policy = Option.value ~default:empty_policy policy in
           let cmd = `Policy_cmd (`Policy_add policy) in
           let* key, cert =
-            key_cert ~is_ca:true ~cmd state.configuration.private_key domain
-              (X509.Certificate.subject state.configuration.certificate)
+            key_cert ~is_ca:true ~cmd c.private_key domain
+              (X509.Certificate.subject c.certificate)
           in
           Ok (key, cert, [ cert ])
     in
@@ -447,116 +441,108 @@ module Make (S : Tcpip.Stack.V4V6) = struct
   let raw_query (stack : S.t) (config : Configuration.t)
       ?(name = Vmm_core.Name.root) certificates cmd ?push f =
     let open Lwt.Infix in
-    if Ipaddr.compare config.server_ip Ipaddr.(V4 V4.any) = 0 then
-      Lwt.return (Error "albatross not configured")
-    else
-      S.TCP.create_connection (S.tcp stack)
-        (config.server_ip, config.server_port)
-      >>= function
-      | Error e ->
-          Lwt.return
-            (Error
-               (Fmt.str
-                  "albatross connection failure %a while quering %a %a: %a"
-                  Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                  (config.server_ip, config.server_port)
-                  Vmm_core.Name.pp name
-                  (Vmm_commands.pp ~verbose:false)
-                  cmd S.TCP.pp_error e))
-      | Ok flow -> (
-          match
-            let authenticator =
-              X509.Authenticator.chain_of_trust
-                ~time:(fun () -> Some (Mirage_ptime.now ()))
-                [ config.certificate ]
-            in
-            Tls.Config.client ~authenticator ~certificates ()
-          with
-          | Error (`Msg msg) ->
-              Lwt.return
-                (Error (Fmt.str "albatross setting up TLS config: %s" msg))
-          | Ok tls_config -> (
-              TLS.client_of_flow tls_config flow >>= function
-              | Error e ->
-                  S.TCP.close flow >|= fun () ->
-                  Error
-                    (Fmt.str
-                       "albatross establishing TLS to %a while querying %a %a: \
-                        %a"
-                       Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                       (config.server_ip, config.server_port)
-                       Vmm_core.Name.pp name
-                       (Vmm_commands.pp ~verbose:false)
-                       cmd TLS.pp_write_error e)
-              | Ok tls_flow -> (
-                  let handle_res () = function
-                    | Ok () -> Lwt.return (Ok ())
-                    | Error `Closed ->
-                        let err = "TLS write error: connection closed" in
-                        Logs.err (fun m -> m "Albatross: %s" err);
-                        Lwt.return (Error err)
-                    | Error (`Write err) ->
-                        let err =
-                          Fmt.str "TLS write error (underlying TCP): %a"
-                            S.TCP.pp_write_error err
-                        in
-                        Logs.err (fun m -> m "Albatross: %s" err);
-                        Lwt.return (Error err)
+    S.TCP.create_connection (S.tcp stack) (config.server_ip, config.server_port)
+    >>= function
+    | Error e ->
+        Lwt.return
+          (Error
+             (Fmt.str
+                "albatross connection failure %a:%u while quering %a %a: %a"
+                Ipaddr.pp config.server_ip config.server_port Vmm_core.Name.pp
+                name
+                (Vmm_commands.pp ~verbose:false)
+                cmd S.TCP.pp_error e))
+    | Ok flow -> (
+        match
+          let authenticator =
+            X509.Authenticator.chain_of_trust
+              ~time:(fun () -> Some (Mirage_ptime.now ()))
+              [ config.certificate ]
+          in
+          Tls.Config.client ~authenticator ~certificates ()
+        with
+        | Error (`Msg msg) ->
+            Lwt.return
+              (Error (Fmt.str "albatross setting up TLS config: %s" msg))
+        | Ok tls_config -> (
+            TLS.client_of_flow tls_config flow >>= function
+            | Error e ->
+                S.TCP.close flow >|= fun () ->
+                Error
+                  (Fmt.str
+                     "albatross establishing TLS to %a:%u while querying %a \
+                      %a: %a"
+                     Ipaddr.pp config.server_ip config.server_port
+                     Vmm_core.Name.pp name
+                     (Vmm_commands.pp ~verbose:false)
+                     cmd TLS.pp_write_error e)
+            | Ok tls_flow -> (
+                let handle_res () = function
+                  | Ok () -> Lwt.return (Ok ())
+                  | Error `Closed ->
+                      let err = "TLS write error: connection closed" in
+                      Logs.err (fun m -> m "Albatross: %s" err);
+                      Lwt.return (Error err)
+                  | Error (`Write err) ->
+                      let err =
+                        Fmt.str "TLS write error (underlying TCP): %a"
+                          S.TCP.pp_write_error err
+                      in
+                      Logs.err (fun m -> m "Albatross: %s" err);
+                      Lwt.return (Error err)
+                  | Error e ->
+                      let err =
+                        Fmt.str "TLS write error: %a" TLS.pp_write_error e
+                      in
+                      Logs.err (fun m -> m "Albatross: %s" err);
+                      Lwt.return (Error err)
+                in
+                let write_one data =
+                  let buf = Cstruct.create (4 + String.length data) in
+                  Cstruct.BE.set_uint32 buf 0
+                    (Int32.of_int (String.length data));
+                  Cstruct.blit_from_string data 0 buf 4 (String.length data);
+                  TLS.write tls_flow buf >>= handle_res ()
+                in
+                let rec send_data push =
+                  push () >>= function
+                  | None ->
+                      (* send trailing 0 byte chunk *)
+                      let buf = Cstruct.create 4 in
+                      Cstruct.BE.set_uint32 buf 0 0l;
+                      TLS.write tls_flow buf >>= handle_res ()
+                  | Some data -> (
+                      write_one data >>= function
+                      | Error err -> Lwt.return (Error err)
+                      | Ok () -> send_data push)
+                in
+                (match push with
+                | None -> Lwt.return (Ok ())
+                | Some f -> send_data f)
+                >>= function
+                | Ok () -> (
+                    TLS.read tls_flow >>= fun r ->
+                    match r with
+                    | Ok (`Data d) -> f tls_flow (Cstruct.to_string d)
+                    | Ok `Eof ->
+                        TLS.close tls_flow >|= fun () ->
+                        Error
+                          (Fmt.str "eof from albatross %a:%u querying %a %a"
+                             Ipaddr.pp config.server_ip config.server_port
+                             Vmm_core.Name.pp name
+                             (Vmm_commands.pp ~verbose:false)
+                             cmd)
                     | Error e ->
-                        let err =
-                          Fmt.str "TLS write error: %a" TLS.pp_write_error e
-                        in
-                        Logs.err (fun m -> m "Albatross: %s" err);
-                        Lwt.return (Error err)
-                  in
-                  let write_one data =
-                    let buf = Cstruct.create (4 + String.length data) in
-                    Cstruct.BE.set_uint32 buf 0
-                      (Int32.of_int (String.length data));
-                    Cstruct.blit_from_string data 0 buf 4 (String.length data);
-                    TLS.write tls_flow buf >>= handle_res ()
-                  in
-                  let rec send_data push =
-                    push () >>= function
-                    | None ->
-                        (* send trailing 0 byte chunk *)
-                        let buf = Cstruct.create 4 in
-                        Cstruct.BE.set_uint32 buf 0 0l;
-                        TLS.write tls_flow buf >>= handle_res ()
-                    | Some data -> (
-                        write_one data >>= function
-                        | Error err -> Lwt.return (Error err)
-                        | Ok () -> send_data push)
-                  in
-                  (match push with
-                  | None -> Lwt.return (Ok ())
-                  | Some f -> send_data f)
-                  >>= function
-                  | Ok () -> (
-                      TLS.read tls_flow >>= fun r ->
-                      match r with
-                      | Ok (`Data d) -> f tls_flow (Cstruct.to_string d)
-                      | Ok `Eof ->
-                          TLS.close tls_flow >|= fun () ->
-                          Error
-                            (Fmt.str "eof from albatross %a querying %a %a"
-                               Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                               (config.server_ip, config.server_port)
-                               Vmm_core.Name.pp name
-                               (Vmm_commands.pp ~verbose:false)
-                               cmd)
-                      | Error e ->
-                          TLS.close tls_flow >|= fun () ->
-                          Error
-                            (Fmt.str
-                               "albatross received error reading from %a \
-                                querying %a %a: %a"
-                               Fmt.(pair ~sep:(any ":") Ipaddr.pp int)
-                               (config.server_ip, config.server_port)
-                               Vmm_core.Name.pp name
-                               (Vmm_commands.pp ~verbose:false)
-                               cmd TLS.pp_error e))
-                  | Error err -> Lwt.return_error err)))
+                        TLS.close tls_flow >|= fun () ->
+                        Error
+                          (Fmt.str
+                             "albatross received error reading from %a:%u \
+                              querying %a %a: %a"
+                             Ipaddr.pp config.server_ip config.server_port
+                             Vmm_core.Name.pp name
+                             (Vmm_commands.pp ~verbose:false)
+                             cmd TLS.pp_error e))
+                | Error err -> Lwt.return_error err)))
 
   let init stack (configuration : Configuration.t) =
     let open Lwt.Infix in
@@ -623,56 +609,59 @@ module Make (S : Tcpip.Stack.V4V6) = struct
       Albatross_map.empty configs
     >|= fun final_map -> Ok final_map
 
-  let find_instance_by_name (albatross_map : t) name =
+  let find_instance_by_name (albatross_map : a_map) name =
     match Albatross_map.find_opt name albatross_map with
     | Some instance_state -> Ok instance_state
     | None ->
         Error (Fmt.str "No albatross instance found with the name %s" name)
 
-  let certs (state : instance_state) domain name cmd =
+  let certs t domain name cmd =
     match
       Result.bind (Vmm_core.Name.path_of_string domain) (fun path ->
           Vmm_core.Name.create path name)
     with
     | Error (`Msg msg) -> Error msg
     | Ok vmm_name ->
-        Result.map (fun c -> (vmm_name, c)) (gen_cert state ~domain cmd name)
+        Result.map (fun c -> (vmm_name, c)) (gen_cert t ~domain cmd name)
 
-  let query stack state ~domain ?(name = ".") ?push cmd =
-    match certs state domain name cmd with
+  let query stack t ~domain ?(name = ".") ?push cmd =
+    match certs t domain name cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
-        raw_query stack state.configuration ~name:vmm_name certificates cmd
-          ?push reply
+        raw_query stack t.configuration ~name:vmm_name certificates cmd ?push
+          reply
 
-  let query_console stack state ~domain ~name f =
+  let query_console stack t ~domain ~name f =
     let cmd = `Console_cmd (`Console_subscribe (`Count 40)) in
-    match certs state domain name cmd with
+    match certs t domain name cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
-        raw_query stack state.configuration ~name:vmm_name certificates cmd
+        raw_query stack t.configuration ~name:vmm_name certificates cmd
           (console vmm_name f)
 
-  let query_block_dump stack state ~domain ~name compression f =
+  let query_block_dump stack t ~domain ~name compression f =
     let cmd = `Block_cmd (`Block_dump compression) in
-    match certs state domain name cmd with
+    match certs t domain name cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
-        raw_query stack state.configuration ~name:vmm_name certificates cmd
+        raw_query stack t.configuration ~name:vmm_name certificates cmd
           (block_data vmm_name f)
 
-  let set_policy stack state ~domain policy =
+  let set_policy stack t ~domain policy =
     let open Lwt.Infix in
     match Vmm_core.Name.path_of_string domain with
     | Error (`Msg msg) -> Lwt.return (Error ("couldn't set policy: " ^ msg))
     | Ok p -> (
-        let old_policies = state.policies in
+        let old_policies = t.policies in
         let name = Vmm_core.Name.create_of_path p in
-        state.policies <- fst (Vmm_trie.insert name policy state.policies);
-        query stack state ~domain (`Unikernel_cmd `Unikernel_info) >|= function
+        (* we set it locally - which is then used for the next command *)
+        t.policies <- fst (Vmm_trie.insert name policy t.policies);
+        (* now we tell albatross about it, using a command for throwing it away *)
+        (* note that the 'certs' / 'gen_cert' uses the policies for intermediate certificates *)
+        query stack t ~domain (`Unikernel_cmd `Unikernel_info) >|= function
         | Ok _ -> Ok (name, policy)
         | Error msg ->
             Logs.warn (fun m -> m "error updating policies: %s" msg);
-            state.policies <- old_policies;
+            t.policies <- old_policies;
             Error msg)
 end

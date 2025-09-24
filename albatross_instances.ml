@@ -20,7 +20,7 @@ let select_instance (user : User_model.user) albatross_instances
                 ];
             ]
           (List.map
-             (fun (instance, (pol : Albatross.instance_state)) ->
+             (fun (instance, (pol : Albatross.t)) ->
                let base_classes =
                  [ "block"; "p-4"; "transition"; "duration-150"; "ease-in-out" ]
                in

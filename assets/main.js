@@ -542,7 +542,7 @@ function multiselect(selected, options) {
 	};
 }
 
-async function updatePolicy(instanceName) {
+async function updatePolicy(instance_name) {
 	const unikernel_count = document.getElementById("f_allowed_unikernels").innerText;
 	const mem_size = document.getElementById("f_allowed_memory").innerText;
 	const storage_size = document.getElementById("f_allowed_storage").innerText;
@@ -563,7 +563,7 @@ async function updatePolicy(instanceName) {
 				"Accept": "application/json",
 			},
 			body: JSON.stringify({
-				"albatross_instance": instanceName,
+				"albatross_instance": instance_name,
 				"unikernels": Number(unikernel_count),
 				"memory": Number(mem_size),
 				"block": Number(storage_size),
