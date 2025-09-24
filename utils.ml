@@ -474,5 +474,3 @@ let user_policy_usage policy unikernels blocks : user_policy_usage =
     cpu_usage_count;
     bridge_usage_count;
   }
-
-
