@@ -390,8 +390,6 @@ type user_policy_usage = {
   bridge_usage_count : (string * int) list;
 }
 
-type user_policy_usages = (string * user_policy_usage) list
-
 let deployed_unikernels unikernels = List.length unikernels
 
 let cpu_usage_count policy unikernels =
@@ -477,40 +475,4 @@ let user_policy_usage policy unikernels blocks : user_policy_usage =
     bridge_usage_count;
   }
 
-let user_policy_usages policies unikernels blocks : user_policy_usages =
-  List.filter_map
-    (fun (instance_name, policy_result) ->
-      match policy_result with
-      | Ok (Some policy) ->
-          let instance_unikernels =
-            match List.assoc_opt instance_name unikernels with
-            | Some lst -> lst
-            | None -> []
-          in
 
-          let instance_blocks =
-            match List.assoc_opt instance_name blocks with
-            | Some lst -> lst
-            | None -> []
-          in
-
-          let policy_blocks =
-            List.filter
-              (fun (_name, _size, block_policy) ->
-                match block_policy with true -> true | false -> false)
-              instance_blocks
-          in
-
-          let policy_unikernels =
-            List.filter
-              (fun (_name, unikernel) ->
-                Vmm_core.IS.mem unikernel.Vmm_core.Unikernel.cpuid
-                  policy.Vmm_core.Policy.cpuids)
-              instance_unikernels
-          in
-          let usage =
-            user_policy_usage policy policy_unikernels policy_blocks
-          in
-          Some (instance_name, usage)
-      | _ -> None)
-    policies
