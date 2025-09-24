@@ -62,18 +62,6 @@ struct
     let now = Mirage_ptime.now () in
     Middleware.csrf_verification user now csrf f reqd
 
-  let return_only_albatross_instances_with_a_usable_policy domain instances =
-    List.filter
-      (fun instance ->
-        match Albatross_state.policy ~domain instance with
-        | Ok (Some policy) -> (
-            match Vmm_core.Policy.usable policy with
-            | Ok () -> true
-            | Error _ -> false)
-        | Ok None -> false
-        | Error _ -> false)
-      !instances
-
   let read_multipart_data reqd =
     let response_body = H1.Reqd.request_body reqd in
     let finished, notify_finished = Lwt.wait () in
