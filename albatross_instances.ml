@@ -43,7 +43,9 @@ let select_instance (user : User_model.user) albatross_instances
                    ]
                  else
                    [
-                     a_href (Fmt.str "%s?instance=%s" callback_url instance);
+                     a_href
+                       (Fmt.str "%s?instance=%s" callback_url
+                          (Configuration.name_to_str instance));
                      a_class classes;
                    ]
                in
@@ -62,7 +64,7 @@ let select_instance (user : User_model.user) albatross_instances
                                     a_class
                                       [ "font-medium"; "text-primary-700" ];
                                   ]
-                                [ txt instance ]
+                                [ txt (Configuration.name_to_str instance) ]
                             else
                               p
                                 ~a:
@@ -71,7 +73,7 @@ let select_instance (user : User_model.user) albatross_instances
                                       [ "font-medium"; "text-secondary-500" ];
                                   ]
                                 [
-                                  txt instance;
+                                  txt (Configuration.name_to_str instance);
                                   br ();
                                   small
                                     [

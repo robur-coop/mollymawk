@@ -288,7 +288,10 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                   ~attribs:
                     [
                       a_id "deploy-button";
-                      a_onclick ("deployUnikernel('" ^ albatross_instance ^ "')");
+                      a_onclick
+                        ("deployUnikernel('"
+                        ^ Configuration.name_to_str albatross_instance
+                        ^ "')");
                     ]
                   ~content:(txt "Deploy") ~btn_type:`Primary_full ();
               ];

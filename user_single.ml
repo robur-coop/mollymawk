@@ -12,7 +12,7 @@ let policy_row ?(error = "") instance_name policy (user : User_model.user) =
                 ];
             ]
           [
-            txt instance_name;
+            txt (Configuration.name_to_str instance_name);
             p ~a:[ a_class [ "text-red-500 text-sm" ] ] [ txt error ];
           ];
         td
@@ -89,7 +89,7 @@ let policy_row ?(error = "") instance_name policy (user : User_model.user) =
                 [
                   a_href
                     ("/admin/u/policy/edit/" ^ user.uuid ^ "?instance="
-                   ^ instance_name);
+                    ^ Configuration.name_to_str instance_name);
                   a_class
                     [
                       "border border-primary-500 hover:bg-primary-700 px-2 \

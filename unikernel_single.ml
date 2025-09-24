@@ -41,7 +41,11 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                           [ txt (Ohex.encode data.digest) ];
                         p
                           ~a:[ a_class [ "text-sm" ] ]
-                          [ txt ("albatross: " ^ instance_name) ];
+                          [
+                            txt
+                              ("albatross: "
+                              ^ Configuration.name_to_str instance_name);
+                          ];
                       ];
                     div
                       ~a:[ a_class [ "flex space-x-2 items-center" ] ]
@@ -53,7 +57,9 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                 [
                                   a_onclick
                                     ("restartUnikernel('" ^ unikernel_name
-                                   ^ "', '" ^ instance_name ^ "')");
+                                   ^ "', '"
+                                    ^ Configuration.name_to_str instance_name
+                                    ^ "')");
                                 ]
                               ~content:(txt "Restart")
                               ~btn_type:`Primary_outlined ();
@@ -66,7 +72,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                   a_href
                                     ("/unikernel/update?unikernel="
                                    ^ unikernel_name ^ "&instance="
-                                   ^ instance_name);
+                                    ^ Configuration.name_to_str instance_name);
                                   a_class
                                     [
                                       "py-2 px-2 rounded border border-1 \
@@ -91,7 +97,10 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                       a_id "unikernel-rollback";
                                       a_onclick
                                         ("rollbackUnikernel('" ^ unikernel_name
-                                       ^ "', '" ^ instance_name ^ "')");
+                                       ^ "', '"
+                                        ^ Configuration.name_to_str
+                                            instance_name
+                                        ^ "')");
                                     ]
                                   ~content:(txt "Rollback")
                                   ~btn_type:`Primary_outlined ();
@@ -104,7 +113,9 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                 [
                                   a_onclick
                                     ("destroyUnikernel('" ^ unikernel_name
-                                   ^ "', '" ^ instance_name ^ "')");
+                                   ^ "', '"
+                                    ^ Configuration.name_to_str instance_name
+                                    ^ "')");
                                 ]
                               ~content:(txt "Destroy")
                               ~btn_type:`Danger_outlined ();

@@ -6,7 +6,7 @@ let account_usage_layout instance_name policy unikernels blocks =
       [
         h1
           ~a:[ a_class [ "text-3xl font-bold" ] ]
-          [ txt ("Resources for " ^ instance_name) ];
+          [ txt ("Resources for " ^ Configuration.name_to_str instance_name) ];
         section
           ~a:[ a_id "usage-display"; a_class [ "grid grid-cols-3 gap-4" ] ]
           [

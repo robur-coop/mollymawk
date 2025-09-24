@@ -25,7 +25,8 @@ let volume_index_layout instance_name volumes policy =
                       [
                         txt
                           (string_of_int (List.length volumes)
-                          ^ " volumes found on instance " ^ instance_name);
+                          ^ " volumes found on instance "
+                          ^ Configuration.name_to_str instance_name);
                       ];
                   ];
                 div
@@ -309,8 +310,10 @@ let volume_index_layout instance_name volumes policy =
                                                   ^ name);
                                                  a_onclick
                                                    ("deleteVolume('" ^ name
-                                                  ^ "','" ^ instance_name ^ "')"
-                                                   );
+                                                  ^ "','"
+                                                   ^ Configuration.name_to_str
+                                                       instance_name
+                                                   ^ "')");
                                                ]
                                              ~content:(txt "Delete")
                                              ~btn_type:`Danger_full ();

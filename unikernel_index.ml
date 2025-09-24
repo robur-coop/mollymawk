@@ -20,7 +20,7 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
                 txt name;
                 p
                   ~a:[ a_class [ "text-xs text-gray-500" ] ]
-                  [ txt ("from: " ^ instance_name) ];
+                  [ txt ("from: " ^ Configuration.name_to_str instance_name) ];
               ];
             td
               ~a:
@@ -85,7 +85,7 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
                     [
                       a_href
                         ("/unikernel/info?unikernel=" ^ name ^ "&instance="
-                       ^ instance_name);
+                        ^ Configuration.name_to_str instance_name);
                       a_class
                         [
                           "inline-flex items-center gap-x-2 text-sm \

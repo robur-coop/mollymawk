@@ -7,7 +7,13 @@ type t = {
 }
 
 module String_set = Set.Make (String)
-module Albatross_map = Map.Make (String)
+
+module Albatross_map = Map.Make (struct
+  type t = Vmm_core.Name.t
+
+  let compare a b =
+    String.compare (Configuration.name_to_str a) (Configuration.name_to_str b)
+end)
 
 module Make (S : Tcpip.Stack.V4V6) = struct
   module TLS = Tls_mirage.Make (S.TCP)
@@ -547,16 +553,15 @@ module Make (S : Tcpip.Stack.V4V6) = struct
   let init stack (configuration : Configuration.t) =
     let open Lwt.Infix in
     let cmd = `Policy_cmd `Policy_info in
-    let name_for_cert =
-      Vmm_core.Name.of_string configuration.name |> Result.get_ok
-    in
     match
-      key_cert ~is_ca:false ~cmd configuration.private_key configuration.name
+      key_cert ~is_ca:false ~cmd configuration.private_key "."
         (X509.Certificate.subject configuration.certificate)
     with
     | Error s ->
         Logs.warn (fun m ->
-            m "init: key_cert failed for %s: %s" configuration.name s);
+            m "init: key_cert failed for %s: %s"
+              (Configuration.name_to_str configuration.name)
+              s);
         let state =
           {
             errors = Some "Initialization error with key certificate";
@@ -567,8 +572,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         Lwt.return state
     | Ok (key, cert) -> (
         let certificates = `Single ([ cert ], key) in
-        raw_query stack configuration ~name:name_for_cert certificates cmd reply
-        >>= function
+        raw_query stack configuration certificates cmd reply >>= function
         | Ok (_hdr, `Success (`Policies ps)) ->
             let policies =
               List.fold_left
@@ -579,7 +583,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             Lwt.return state
         | Ok _w ->
             Logs.warn (fun m ->
-                m "init: unexpected policy reply for %s" configuration.name);
+                m "init: unexpected policy reply for %s"
+                  (Configuration.name_to_str configuration.name));
             let state =
               {
                 errors = Some "Unexpected policy reply";
@@ -590,7 +595,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             Lwt.return state
         | Error str ->
             Logs.warn (fun m ->
-                m "init: raw_query failed for %s: %s" configuration.name str);
+                m "init: raw_query failed for %s: %s"
+                  (Configuration.name_to_str configuration.name)
+                  str);
             let state =
               {
                 errors = Some "Failed to query this instance";
@@ -613,7 +620,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     match Albatross_map.find_opt name albatross_map with
     | Some instance_state -> Ok instance_state
     | None ->
-        Error (Fmt.str "No albatross instance found with the name %s" name)
+        Error
+          (Fmt.str "No albatross instance found with the name %s"
+             (Configuration.name_to_str name))
 
   let certs t domain name cmd =
     match

@@ -8,7 +8,7 @@ let current_version = 2
 *)
 
 type t = {
-  name : string;
+  name : Vmm_core.Name.t;
   certificate : X509.Certificate.t;
   private_key : X509.Private_key.t;
   server_ip : Ipaddr.t;
@@ -16,11 +16,26 @@ type t = {
   updated_at : Ptime.t;
 }
 
+let name_to_str name =
+  (* this is safe since all constructors check Vmm_core.Name.valid_label *)
+  Option.get (Vmm_core.Name.name name)
+
+let name_of_str name =
+  if Vmm_core.Name.valid_label name then
+    Ok (Vmm_core.Name.create_exn Vmm_core.Name.root_path name)
+  else
+    Error
+      (`Msg
+         (Fmt.str
+            "invalid 'name' (%S): must be 1–63 characters, use only \
+             [A-Za-z0-9.-], and must not start with '-'"
+            name))
+
 let to_json t =
   `Assoc
     [
       ("version", `Int current_version);
-      ("name", `String t.name);
+      ("name", `String (name_to_str t.name));
       ("certificate", `String (X509.Certificate.encode_pem t.certificate));
       ("private_key", `String (X509.Private_key.encode_pem t.private_key));
       ("server_ip", `String (Ipaddr.to_string t.server_ip));
@@ -41,38 +56,31 @@ let of_json_from_http json_dict now =
       Some (`String key),
       Some (`String server_ip),
       Some (`Int server_port) ) ->
-      if Vmm_core.Name.valid_label name then
-        let ( let* ) = Result.bind in
-        let* certificate = X509.Certificate.decode_pem cert in
-        let* private_key = X509.Private_key.decode_pem key in
-        let* () =
-          if
-            not
-              (String.equal
-                 (X509.Public_key.fingerprint
-                    (X509.Certificate.public_key certificate))
-                 (X509.Public_key.fingerprint
-                    (X509.Private_key.public private_key)))
-          then Error (`Msg "certificate and private key do not match")
-          else Ok ()
-        in
-        let* server_ip = Ipaddr.of_string server_ip in
-        Ok
-          {
-            name;
-            certificate;
-            private_key;
-            server_ip;
-            server_port;
-            updated_at = now;
-          }
-      else
-        Error
-          (`Msg
-             (Fmt.str
-                "invalid 'name' (%S): must be 1–63 characters, use only \
-                 [A-Za-z0-9.-], and must not start with '-'"
-                name))
+      let ( let* ) = Result.bind in
+      let* name = name_of_str name in
+      let* certificate = X509.Certificate.decode_pem cert in
+      let* private_key = X509.Private_key.decode_pem key in
+      let* () =
+        if
+          not
+            (String.equal
+               (X509.Public_key.fingerprint
+                  (X509.Certificate.public_key certificate))
+               (X509.Public_key.fingerprint
+                  (X509.Private_key.public private_key)))
+        then Error (`Msg "certificate and private key do not match")
+        else Ok ()
+      in
+      let* server_ip = Ipaddr.of_string server_ip in
+      Ok
+        {
+          name;
+          certificate;
+          private_key;
+          server_ip;
+          server_port;
+          updated_at = now;
+        }
   | _ ->
       Error
         (`Msg
@@ -114,10 +122,10 @@ let of_json_v1 json =
                 in
                 let* server_ip = Ipaddr.of_string server_ip in
                 let* updated_at = Utils.TimeHelper.ptime_of_string updated_at in
-
+                let* name = name_of_str "default" in
                 Ok
                   {
-                    name = "default";
+                    name;
                     certificate;
                     private_key;
                     server_ip;
@@ -159,6 +167,7 @@ let of_json json =
                 Some (`Int server_port),
                 Some (`String updated_at) ) ->
                 let ( let* ) = Result.bind in
+                let* name = name_of_str name in
                 let* certificate = X509.Certificate.decode_pem cert in
                 let* private_key = X509.Private_key.decode_pem key in
                 let* () =

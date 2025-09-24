@@ -120,7 +120,7 @@ module Make (BLOCK : Mirage_block.S) = struct
     let found, updated_configs_rev =
       List.fold_left
         (fun (was_found, acc) (c : Configuration.t) ->
-          if String.equal c.name configuration.name then
+          if Vmm_core.Name.equal c.name configuration.name then
             (true, configuration :: acc)
           else (was_found, c :: acc))
         (false, []) t.configurations
@@ -142,7 +142,7 @@ module Make (BLOCK : Mirage_block.S) = struct
     let before = t.configurations in
     let configurations =
       List.filter
-        (fun (c : Configuration.t) -> not (String.equal c.name name))
+        (fun (c : Configuration.t) -> not (Vmm_core.Name.equal c.name name))
         before
     in
     let deleted_any = List.length configurations <> List.length before in
@@ -152,7 +152,9 @@ module Make (BLOCK : Mirage_block.S) = struct
         if deleted_any then (
           t.configurations <- configurations;
           Ok t.configurations)
-        else error_msgf "configuration '%s' not found" name
+        else
+          error_msgf "configuration '%s' not found"
+            (Configuration.name_to_str name)
     | Error we ->
         error_msgf "error while writing storage: %a" Stored_data.pp_write_error
           we

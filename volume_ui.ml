@@ -156,7 +156,10 @@ let create_volume instance_name total_free_space =
               ~attribs:
                 [
                   a_id "create-block-button";
-                  a_onclick ("createVolume('" ^ instance_name ^ "')");
+                  a_onclick
+                    ("createVolume('"
+                    ^ Configuration.name_to_str instance_name
+                    ^ "')");
                 ]
               ~extra_css:"w-full" ~content:(txt "Create Volume")
               ~btn_type:`Primary_full ();
@@ -233,8 +236,9 @@ let download_volume ~instance_name ~block_name =
                 [
                   a_id ("download-block-button-" ^ block_name);
                   a_onclick
-                    ("downloadVolume('" ^ block_name ^ "', '" ^ instance_name
-                   ^ "')");
+                    ("downloadVolume('" ^ block_name ^ "', '"
+                    ^ Configuration.name_to_str instance_name
+                    ^ "')");
                 ]
               ~extra_css:"my-4"
               ~content:(txt ("Download " ^ block_name))
@@ -298,8 +302,9 @@ let upload_to_volume ~instance_name ~block_name =
                 [
                   a_id ("upload-block-button-" ^ block_name);
                   a_onclick
-                    ("uploadToVolume('" ^ block_name ^ "', '" ^ instance_name
-                   ^ "')");
+                    ("uploadToVolume('" ^ block_name ^ "', '"
+                    ^ Configuration.name_to_str instance_name
+                    ^ "')");
                 ]
               ~extra_css:"w-full" ~content:(txt "Upload data")
               ~btn_type:`Primary_full ();

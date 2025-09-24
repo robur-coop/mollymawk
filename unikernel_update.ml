@@ -194,7 +194,9 @@ let arg_modal ~unikernel_name ~instance_name
                     ("updateUnikernel('" ^ to_be_updated_unikernel.job ^ "','"
                    ^ to_be_updated_unikernel.uuid ^ "','"
                    ^ currently_running_unikernel.uuid ^ "','" ^ unikernel_name
-                   ^ "', '" ^ instance_name ^ "')");
+                   ^ "', '"
+                    ^ Configuration.name_to_str instance_name
+                    ^ "')");
                 ]
               ~content:(txt "Proceed to update") ~btn_type:`Primary_full ();
           ];
@@ -515,7 +517,11 @@ let unikernel_update_layout ~unikernel_name ~instance_name unikernel
                           [ txt (Ohex.encode data.digest) ];
                         p
                           ~a:[ a_class [ "text-sm" ] ]
-                          [ txt ("albatross: " ^ instance_name) ];
+                          [
+                            txt
+                              ("albatross: "
+                              ^ Configuration.name_to_str instance_name);
+                          ];
                       ];
                     (if build_comparison.right.main_binary then
                        Modal_dialog.modal_dialog

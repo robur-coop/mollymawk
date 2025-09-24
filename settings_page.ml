@@ -16,7 +16,7 @@ let config_table_row (configuration : Configuration.t) =
                    text-gray-800";
                 ];
             ]
-          [ txt configuration.name ];
+          [ txt (Configuration.name_to_str configuration.name) ];
         td
           ~a:
             [
@@ -64,17 +64,23 @@ let config_table_row (configuration : Configuration.t) =
               ~attribs:
                 [
                   a_onclick
-                    ("openConfigForm(`" ^ configuration.name ^ "`,`" ^ ip
-                   ^ "`,`" ^ port ^ "`,`" ^ certificate ^ "`,`" ^ private_key
-                   ^ "`)");
+                    ("openConfigForm(`"
+                    ^ Configuration.name_to_str configuration.name
+                    ^ "`,`" ^ ip ^ "`,`" ^ port ^ "`,`" ^ certificate ^ "`,`"
+                    ^ private_key ^ "`)");
                 ]
               ~content:(i ~a:[ a_class [ "fa-solid fa-pen" ] ] [])
               ~btn_type:`Primary_outlined ();
             Utils.button_component
               ~attribs:
                 [
-                  a_id ("delete-config-btn-" ^ configuration.name);
-                  a_onclick ("deleteConfig(`" ^ configuration.name ^ "`)");
+                  a_id
+                    ("delete-config-btn-"
+                    ^ Configuration.name_to_str configuration.name);
+                  a_onclick
+                    ("deleteConfig(`"
+                    ^ Configuration.name_to_str configuration.name
+                    ^ "`)");
                 ]
               ~content:(i ~a:[ a_class [ "fa-solid fa-trash" ] ] [])
               ~btn_type:`Danger_full ();
