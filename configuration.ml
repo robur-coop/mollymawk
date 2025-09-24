@@ -196,6 +196,3 @@ let of_json json =
                     current_version))
       | Some _ -> Error (`Msg "configuration: version must be an integer"))
   | _ -> Error (`Msg "configuration: expected a dictionary")
-
-let find_config_by_name configs name =
-  List.find_opt (fun config -> String.equal config.name name) configs

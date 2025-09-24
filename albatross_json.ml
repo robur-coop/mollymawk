@@ -220,24 +220,6 @@ let policy_of_json json_dict =
            (Fmt.str "policy: unexpected types, got %s"
               (Yojson.Basic.to_string (`Assoc json_dict))))
 
-let policy_to_json (policy : Vmm_core.Policy.t) : Yojson.Basic.t =
-  let cpuids_str =
-    policy.Vmm_core.Policy.cpuids |> Vmm_core.IS.elements
-    |> List.map string_of_int |> String.concat ","
-  in
-  let bridges_str =
-    policy.Vmm_core.Policy.bridges |> Vmm_core.String_set.elements
-    |> String.concat ","
-  in
-  `Assoc
-    [
-      ("unikernels", `Int policy.Vmm_core.Policy.unikernels);
-      ("memory", `Int policy.Vmm_core.Policy.memory);
-      ("block", `Int (Option.value ~default:0 policy.Vmm_core.Policy.block));
-      ("cpuids", `String cpuids_str);
-      ("bridges", `String bridges_str);
-    ]
-
 let config_of_json str =
   let ( let* ) = Result.bind in
   let* json =
