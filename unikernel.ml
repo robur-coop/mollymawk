@@ -1028,19 +1028,15 @@ struct
     match Configuration.of_json_from_http json_dict (Mirage_ptime.now ()) with
     | Ok configuration_settings -> (
         Store.upsert_configuration store configuration_settings >>= function
-        | Ok new_configurations -> (
-            Albatross_state.init stack new_configurations
-            >>= fun new_albatross_instances ->
-            match new_albatross_instances with
-            | Ok new_instances ->
-                albatross_instances := new_instances;
-                Middleware.http_response reqd ~title:"Success"
-                  ~data:(`String "Configuration updated successfully") `OK
-            | Error err ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:
-                    (`String ("Failed to initialize albatross instances" ^ err))
-                  `Internal_server_error)
+        | Ok _new_configurations ->
+            Albatross_state.init stack configuration_settings
+            >>= fun new_albatross_instance ->
+            albatross_instances :=
+              Albatross.Albatross_map.update configuration_settings.name
+                (fun _prev -> Some new_albatross_instance)
+                !albatross_instances;
+            Middleware.http_response reqd ~title:"Success"
+              ~data:(`String "Configuration updated successfully") `OK
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:(`String (String.escaped err))
@@ -1050,24 +1046,15 @@ struct
           ~data:(`String (String.escaped err))
           reqd `Bad_request
 
-  let delete_albatross_config stack store albatross_instances _user json_dict
-      reqd =
+  let delete_albatross_config store albatross_instances _user json_dict reqd =
     match Utils.Json.get "name" json_dict with
     | Some (`String name) -> (
         Store.delete_configuration store name >>= function
-        | Ok new_configurations -> (
-            Albatross_state.init stack new_configurations
-            >>= fun new_albatross_instances ->
-            match new_albatross_instances with
-            | Ok new_instances ->
-                albatross_instances := new_instances;
-                Middleware.http_response reqd ~title:"Success"
-                  ~data:(`String "Configuration delete successfully") `OK
-            | Error err ->
-                Middleware.http_response reqd ~title:"Error"
-                  ~data:
-                    (`String ("Failed to initialize albatross instances" ^ err))
-                  `Internal_server_error)
+        | Ok _new_configurations ->
+            albatross_instances :=
+              Albatross.Albatross_map.remove name !albatross_instances;
+            Middleware.http_response reqd ~title:"Success"
+              ~data:(`String "Configuration delete successfully") `OK
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:(`String (String.escaped err))
@@ -2969,7 +2956,7 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (delete_albatross_config stack store albatross_instances)))
+                     (delete_albatross_config store albatross_instances)))
         | "/api/admin/u/policy/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
@@ -3103,7 +3090,7 @@ struct
     Store.connect storage >>= function
     | Error (`Msg msg) -> failwith msg
     | Ok store -> (
-        Albatross_state.init stack (Store.configurations store) >>= function
+        Albatross_state.init_all stack (Store.configurations store) >>= function
         | Ok albatross_instances ->
             let albatross_instances = ref albatross_instances in
             let port = K.port () in
