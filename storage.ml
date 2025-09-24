@@ -65,13 +65,14 @@ let t_of_json json =
             else
               match configuration with
               | `List cs ->
-                List.fold_left
-                  (fun acc js ->
-                     let* acc = acc in
-                     let* config = Configuration.of_json js in
-                     Ok (config :: acc))
-                  (Ok []) cs
-              | _ -> Error (`Msg "invalid data: expected a list of configurations")
+                  List.fold_left
+                    (fun acc js ->
+                      let* acc = acc in
+                      let* config = Configuration.of_json js in
+                      Ok (config :: acc))
+                    (Ok []) cs
+              | _ ->
+                  Error (`Msg "invalid data: expected a list of configurations")
           in
           Ok (users, configurations)
       | _ -> Error (`Msg "invalid data: no version and users field"))
