@@ -1147,8 +1147,7 @@ struct
     Lwt_list.fold_left_s
       (fun acc (_name, (pol : Albatross.t)) ->
         match acc with
-        | Error _ as e ->
-            Lwt.return e 
+        | Error _ as e -> Lwt.return e
         | Ok acc_list -> (
             match
               Albatross_state.find_instance_by_name albatross_instances
@@ -1172,8 +1171,7 @@ struct
                         Logs.err (fun m ->
                             m "Error while parsing albatross response: %s" err);
                         Lwt.return (Error err)
-                    | Ok parsed ->
-                        Lwt.return (Ok (parsed :: acc_list))))))
+                    | Ok parsed -> Lwt.return (Ok (parsed :: acc_list))))))
       (Ok [])
       (Albatross.Albatross_map.bindings albatross_instances)
     >>= function
