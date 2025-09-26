@@ -33,7 +33,7 @@ With **Mollymawk**, you can now manage **multiple Albatross** instances.
 4. Fill the form:
 
    * **Name** (e.g., `prod-eu-1`)
-   * **Host/IP** (e.g., `10.0.42.15`)
+   * **IP** (e.g., `10.0.42.15`)
    * **Port** (e.g., `1025`)
    * **Certificate** – paste the certificate file content
    * **Key** – paste key file content
