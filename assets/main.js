@@ -149,8 +149,7 @@ function filterData() {
 	});
 }
 
-
-
+var newConfig = false;
 function openConfigForm(name, ip, port, certificate, p_key) {
 	const formSection = document.getElementById("config-form");
 	const configSection = document.getElementById("config-body");
@@ -172,6 +171,7 @@ function openConfigForm(name, ip, port, certificate, p_key) {
 	configSection.classList.add("hidden");
 	addConfigBtn.classList.add("hidden");
 	if (name === '' || ip === '' || port === '' || certificate === '' || p_key === '') {
+		newConfig = true;
 		configBtn.textContent = "Save";
 	} else {
 		configBtn.textContent = "Update";
@@ -200,7 +200,7 @@ async function saveConfig() {
 		formAlert.textContent = "Please use alphanumeric characters, dashes or underscores for the name";
 	} else {
 		try {
-			const response = await fetch("/api/admin/settings/update", {
+			const response = await fetch(newConfig ? "/api/admin/settings/create" : "/api/admin/settings/update", {
 				method: 'POST',
 				headers: {
 					"Content-Type": "application/json",

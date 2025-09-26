@@ -116,19 +116,7 @@ module Make (BLOCK : Mirage_block.S) = struct
 
   let configurations { configurations; _ } = configurations
 
-  let upsert_configuration t (configuration : Configuration.t) =
-    let found, updated_configs_rev =
-      List.fold_left
-        (fun (was_found, acc) (c : Configuration.t) ->
-          if Vmm_core.Name.equal c.name configuration.name then
-            (true, configuration :: acc)
-          else (was_found, c :: acc))
-        (false, []) t.configurations
-    in
-    let configurations =
-      if found then List.rev updated_configs_rev
-      else List.rev (configuration :: updated_configs_rev)
-    in
+  let store_configurations t configurations =
     let t' = { t with configurations } in
     write_data t' >|= function
     | Ok () ->
@@ -137,6 +125,32 @@ module Make (BLOCK : Mirage_block.S) = struct
     | Error we ->
         error_msgf "error while writing storage: %a" Stored_data.pp_write_error
           we
+
+  let upsert_configuration t (configuration : Configuration.t)
+      (mode : [ `Create | `Update ]) =
+    let name_eq (c : Configuration.t) =
+      Vmm_core.Name.equal c.name configuration.name
+    in
+    let exists = List.exists name_eq t.configurations in
+    match mode with
+    | `Create ->
+        if exists then
+          Lwt.return
+            (error_msgf "configuration %a already exists" Vmm_core.Name.pp
+               configuration.name)
+        else store_configurations t (t.configurations @ [ configuration ])
+    | `Update ->
+        if not exists then
+          Lwt.return
+            (error_msgf "configuration %a not found" Vmm_core.Name.pp
+               configuration.name)
+        else
+          let configurations =
+            List.map
+              (fun c -> if name_eq c then configuration else c)
+              t.configurations
+          in
+          store_configurations t configurations
 
   let delete_configuration t name =
     let before = t.configurations in

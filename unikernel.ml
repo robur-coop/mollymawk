@@ -1015,10 +1015,12 @@ struct
              ~icon:"/images/robur.png" ())
           `Internal_server_error
 
-  let update_settings stack store albatross_instances _user json_dict reqd =
+  let update_settings stack store albatross_instances
+      (update_or_create : [ `Update | `Create ]) _user json_dict reqd =
     match Configuration.of_json_from_http json_dict (Mirage_ptime.now ()) with
     | Ok configuration_settings -> (
-        Store.upsert_configuration store configuration_settings >>= function
+        Store.upsert_configuration store configuration_settings update_or_create
+        >>= function
         | Ok _new_configurations ->
             Albatross_state.init stack configuration_settings
             >>= fun new_albatross_instance ->
@@ -3053,7 +3055,12 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (update_settings stack store albatross_instances)))
+                     (update_settings stack store albatross_instances `Update)))
+        | "/api/admin/settings/create" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_admin:true ~api_meth:true store reqd
+                  (extract_json_csrf_token
+                     (update_settings stack store albatross_instances `Create)))
         | "/api/admin/settings/delete" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
