@@ -1,3 +1,6 @@
+let delimit_string str =
+  if String.length str <= 20 then str else String.sub str 0 20 ^ "..."
+
 let config_table_row (configuration : Configuration.t) =
   let ip = Ipaddr.to_string configuration.server_ip in
   let port = string_of_int configuration.server_port in
@@ -27,8 +30,8 @@ let config_table_row (configuration : Configuration.t) =
                 ];
             ]
           [
-            txt (String.sub certificate 10 30 ^ "...");
-            p [ txt (String.sub private_key 10 30 ^ "...") ];
+            txt (delimit_string certificate);
+            p [ txt (delimit_string private_key) ];
           ];
         td
           ~a:

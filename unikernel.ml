@@ -450,7 +450,7 @@ struct
     | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ])) -> Ok unikernel
     | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
         let message =
-          Fmt.str "Expected one unikernel, but got %d" (List.length unikernels)
+          Fmt.str "Expected one unikernel, but got %u" (List.length unikernels)
         in
         Logs.err (fun m -> m "%s" message);
         Error message
@@ -1055,7 +1055,7 @@ struct
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:(`String (String.escaped err))
-              `Internal_server_error)
+              `Bad_request)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:
