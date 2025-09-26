@@ -21,83 +21,118 @@ let select_instance (user : User_model.user) albatross_instances
             ]
           (List.map
              (fun (instance, (pol : Albatross.t)) ->
-               let base_classes =
-                 [ "block"; "p-4"; "transition"; "duration-150"; "ease-in-out" ]
+               let url =
+                 a_href
+                   (Fmt.str "%s?instance=%s" callback_url
+                      (Configuration.name_to_str instance))
                in
-               let classes =
-                 if Option.is_some pol.error then
-                   base_classes
-                   @ [
-                       "bg-gray-100";
-                       "cursor-not-allowed";
-                       "pointer-events-none";
-                     ]
-                 else base_classes @ [ "hover:bg-primary-100" ]
-               in
-               let attrs =
-                 if Option.is_some pol.error then
-                   [
-                     a_class classes;
-                     Unsafe.string_attrib "aria-disabled" "true";
-                     a_tabindex (-1);
-                   ]
-                 else
-                   [
-                     a_href
-                       (Fmt.str "%s?instance=%s" callback_url
-                          (Configuration.name_to_str instance));
-                     a_class classes;
-                   ]
-               in
-               a ~a:attrs
-                 [
-                   div
+               match pol.error with
+               | Some err ->
+                   a
                      ~a:
-                       [ a_class [ "flex"; "items-center"; "justify-between" ] ]
+                       [
+                         url;
+                         a_class
+                           [
+                             "block";
+                             "p-4";
+                             "transition";
+                             "duration-150";
+                             "ease-in-out";
+                             "bg-gray-100";
+                             "cursor-not-allowed";
+                             "pointer-events-none";
+                           ];
+                         Unsafe.string_attrib "aria-disabled" "true";
+                         a_tabindex (-1);
+                       ]
                      [
                        div
+                         ~a:
+                           [
+                             a_class
+                               [ "flex"; "items-center"; "justify-between" ];
+                           ]
                          [
-                           (if Option.is_none pol.error then
-                              p
-                                ~a:
-                                  [
-                                    a_class
-                                      [ "font-medium"; "text-primary-700" ];
-                                  ]
-                                [ txt (Configuration.name_to_str instance) ]
-                            else
-                              p
-                                ~a:
-                                  [
-                                    a_class
-                                      [ "font-medium"; "text-secondary-500" ];
-                                  ]
-                                [
-                                  txt (Configuration.name_to_str instance);
-                                  br ();
-                                  small
-                                    [
-                                      txt
-                                        ("Can't access this albatross \
-                                          instance: " ^ Option.get pol.error);
-                                    ];
-                                ]);
-                         ];
-                       div
-                         [
-                           i
-                             ~a:
-                               [
-                                 a_class
+                           div
+                             [
+                               p
+                                 ~a:
                                    [
-                                     "fa-solid";
-                                     "fa-chevron-right";
-                                     "text-gray-400";
-                                   ];
-                               ]
-                             [];
+                                     a_class
+                                       [ "font-medium"; "text-secondary-500" ];
+                                   ]
+                                 [
+                                   txt (Configuration.name_to_str instance);
+                                   br ();
+                                   small
+                                     [
+                                       txt
+                                         ("Can't access this albatross \
+                                           instance: " ^ err);
+                                     ];
+                                 ];
+                             ];
+                           div
+                             [
+                               i
+                                 ~a:
+                                   [
+                                     a_class
+                                       [
+                                         "fa-solid";
+                                         "fa-chevron-right";
+                                         "text-gray-400";
+                                       ];
+                                   ]
+                                 [];
+                             ];
                          ];
-                     ];
-                 ])
+                     ]
+               | None ->
+                   a ~a:[ url ]
+                     [
+                       div
+                         ~a:
+                           [
+                             a_class
+                               [
+                                 "flex";
+                                 "items-center";
+                                 "justify-between";
+                                 "block";
+                                 "p-4";
+                                 "transition";
+                                 "duration-150";
+                                 "ease-in-out";
+                               ];
+                           ]
+                         [
+                           div
+                             [
+                               p
+                                 ~a:
+                                   [
+                                     a_class
+                                       [ "font-medium"; "text-primary-500" ];
+                                   ]
+                                 [ txt (Configuration.name_to_str instance) ];
+                             ];
+                           div
+                             [
+                               i
+                                 ~a:
+                                   [
+                                     a_class
+                                       [
+                                         "fa-solid";
+                                         "fa-chevron-right";
+                                         "text-gray-400";
+                                       ];
+                                   ]
+                                 [];
+                             ];
+                         ];
+                     ])
              albatross_instances);
       ])
