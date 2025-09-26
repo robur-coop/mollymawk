@@ -12,7 +12,7 @@ The assumption is that only mollymawk maintains and modifies the albatross that 
 
 ## Using Mollymawk with multiple Albatross installations
 
-With **Mollymawk**, you can now manage **multiple Albatross** instances.
+With **Mollymawk**, you can manage **multiple Albatross** instances.
 
 ---
 
