@@ -3,7 +3,7 @@ let ( let* ) = Result.bind
 type t = {
   mutable policies : Vmm_core.Policy.t Vmm_trie.t;
   configuration : Configuration.t;
-  errors : string option;
+  error : string option;
 }
 
 module String_set = Set.Make (String)
@@ -564,7 +564,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               s);
         let state =
           {
-            errors = Some "Initialization error with key certificate";
+            error = Some "Initialization error with key certificate";
             policies = Vmm_trie.empty;
             configuration;
           }
@@ -579,7 +579,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 (fun trie (name, p) -> fst (Vmm_trie.insert name p trie))
                 Vmm_trie.empty ps
             in
-            let state = { errors = None; policies; configuration } in
+            let state = { error = None; policies; configuration } in
             Lwt.return state
         | Ok _w ->
             Logs.warn (fun m ->
@@ -587,7 +587,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                   (Configuration.name_to_str configuration.name));
             let state =
               {
-                errors = Some "Unexpected policy reply";
+                error = Some "Unexpected policy reply";
                 policies = Vmm_trie.empty;
                 configuration;
               }
@@ -600,7 +600,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                   str);
             let state =
               {
-                errors = Some "Failed to query this instance";
+                error = Some "Failed to query this instance";
                 policies = Vmm_trie.empty;
                 configuration;
               }

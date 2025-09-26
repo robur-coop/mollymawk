@@ -25,7 +25,7 @@ let select_instance (user : User_model.user) albatross_instances
                  [ "block"; "p-4"; "transition"; "duration-150"; "ease-in-out" ]
                in
                let classes =
-                 if Option.is_some pol.errors then
+                 if Option.is_some pol.error then
                    base_classes
                    @ [
                        "bg-gray-100";
@@ -35,7 +35,7 @@ let select_instance (user : User_model.user) albatross_instances
                  else base_classes @ [ "hover:bg-primary-100" ]
                in
                let attrs =
-                 if Option.is_some pol.errors then
+                 if Option.is_some pol.error then
                    [
                      a_class classes;
                      Unsafe.string_attrib "aria-disabled" "true";
@@ -57,7 +57,7 @@ let select_instance (user : User_model.user) albatross_instances
                      [
                        div
                          [
-                           (if Option.is_none pol.errors then
+                           (if Option.is_none pol.error then
                               p
                                 ~a:
                                   [
@@ -79,7 +79,7 @@ let select_instance (user : User_model.user) albatross_instances
                                     [
                                       txt
                                         ("Can't access this albatross \
-                                          instance: " ^ Option.get pol.errors);
+                                          instance: " ^ Option.get pol.error);
                                     ];
                                 ]);
                          ];
