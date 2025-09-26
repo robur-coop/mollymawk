@@ -1144,38 +1144,39 @@ struct
 
   let unikernel_info stack albatross_instances _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    (* TODO: why a loop? why not a Lwt_list.fold? *)
-    let rec loop = function
-      | [] -> Lwt.return (Ok [])
-      | (_, (instance : Albatross.t)) :: rest -> (
-          match
-            Albatross_state.find_instance_by_name albatross_instances
-              instance.configuration.name
-          with
-          | Ok instance -> (
-              Albatross_state.query stack instance ~domain:user.name
-                (`Unikernel_cmd `Unikernel_info)
-              >>= function
-              | Error msg ->
-                  Logs.err (fun m ->
-                      m "Error while communicating with albatross: %s" msg);
-                  Lwt.return (Error msg)
-              | Ok (_hdr, res) -> (
-                  match Albatross_json.res res with
-                  | Error (`String err) ->
-                      Logs.err (fun m ->
-                          m "Error while parsing albatross response: %s" err);
-                      Lwt.return (Error err)
-                  | Ok res -> (
-                      loop rest >>= function
-                      | Error msg -> Lwt.return (Error msg)
-                      | Ok l -> Lwt.return (Ok (res :: l)))))
-          | Error err ->
-              Logs.err (fun m ->
-                  m "Error while parsing albatross response: %s" err);
-              Lwt.return (Error err))
-    in
-    loop (Albatross.Albatross_map.bindings albatross_instances) >>= function
+    Lwt_list.fold_left_s
+      (fun acc (_name, (pol : Albatross.t)) ->
+        match acc with
+        | Error _ as e ->
+            Lwt.return e 
+        | Ok acc_list -> (
+            match
+              Albatross_state.find_instance_by_name albatross_instances
+                pol.configuration.name
+            with
+            | Error err ->
+                Logs.err (fun m ->
+                    m "Error while finding albatross instance: %s" err);
+                Lwt.return (Error err)
+            | Ok instance -> (
+                Albatross_state.query stack instance ~domain:user.name
+                  (`Unikernel_cmd `Unikernel_info)
+                >>= function
+                | Error msg ->
+                    Logs.err (fun m ->
+                        m "Error while communicating with albatross: %s" msg);
+                    Lwt.return (Error msg)
+                | Ok (_hdr, res) -> (
+                    match Albatross_json.res res with
+                    | Error (`String err) ->
+                        Logs.err (fun m ->
+                            m "Error while parsing albatross response: %s" err);
+                        Lwt.return (Error err)
+                    | Ok parsed ->
+                        Lwt.return (Ok (parsed :: acc_list))))))
+      (Ok [])
+      (Albatross.Albatross_map.bindings albatross_instances)
+    >>= function
     | Error msg ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String ("Error while querying albatross: " ^ msg))
