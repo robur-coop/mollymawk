@@ -564,7 +564,10 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               s);
         let state =
           {
-            error = Some "Initialization error with key certificate";
+            error =
+              Some
+                (Fmt.str "Key certificate initialization failed with error: %s"
+                   s);
             policies = Vmm_trie.empty;
             configuration;
           }
@@ -600,7 +603,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                   str);
             let state =
               {
-                error = Some "Failed to query this instance";
+                error =
+                  Some
+                    (Fmt.str "Failed to query this instance with error: %s" str);
                 policies = Vmm_trie.empty;
                 configuration;
               }
