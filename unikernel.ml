@@ -736,7 +736,7 @@ struct
         | None ->
             Logs.warn (fun m -> m "%s : Account not found" key);
             Middleware.http_response reqd ~title:"Error"
-              ~data:(`String "Account not found") `Not_found
+              ~data:(`String "Account not found") `Bad_request
         | Some user -> (
             if error_on_last user then (
               Logs.warn (fun m ->
@@ -757,7 +757,7 @@ struct
     | _ ->
         Logs.warn (fun m -> m "%s: Failed to parse JSON - no UUID found" key);
         Middleware.http_response reqd ~title:"Error"
-          ~data:(`String "Couldn't find a UUID in the JSON.") `Not_found
+          ~data:(`String "Couldn't find a UUID in the JSON.") `Bad_request
 
   let toggle_account_activation store _user json_dict reqd =
     toggle_account_attribute json_dict store reqd ~key:"toggle-active-account"
@@ -2207,13 +2207,13 @@ struct
                       `Internal_server_error)
             | Error err ->
                 let status =
-                  status 500 ("Couldn't get unallocated resources: " ^ err)
+                  status 400 ("Couldn't get unallocated resources: " ^ err)
                 in
                 reply reqd ~content_type:"text/html"
-                  (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+                  (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
                      ~content:(Error_page.error_layout status)
                      ~icon:"/images/robur.png" ())
-                  `Not_found)
+                  `Bad_request)
         | None ->
             let status =
               status 400 ("Couldn't find account with uuid: " ^ uuid)
@@ -2316,7 +2316,7 @@ struct
                   `Bad_request)
         | None ->
             Middleware.http_response reqd ~title:"Error"
-              ~data:(`String "User not found") `Not_found)
+              ~data:(`String "User not found") `Bad_request)                                                                                         
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:
