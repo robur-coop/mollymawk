@@ -2166,7 +2166,9 @@ struct
         match Store.find_by_uuid store uuid with
         | Some u -> (
             let user_policy =
-              Option.value ~default:Albatross_state.empty_policy (Result.to_option (Albatross_state.policy albatross ~domain:u.name))
+              Option.value ~default:Albatross_state.empty_policy
+                (Result.to_option
+                   (Albatross_state.policy albatross ~domain:u.name))
             in
             match Albatross_state.policy_resource_avalaible albatross with
             | Ok unallocated_resources -> (
