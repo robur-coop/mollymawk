@@ -9,7 +9,7 @@ let current_version = 8
    5 cookie has two new fields last_access and user_agent
    6 tokens has 3 new fields: name, last_access and usage_count
    7 added unikernel_updates to keep track of when unikernels are updated
-   8 we now store a list of configurations
+   8 we now store a list of configurations, and each has a name field. also, no more version field in configuration
 *)
 
 let t_to_json users configurations =
