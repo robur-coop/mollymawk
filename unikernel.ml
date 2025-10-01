@@ -2569,7 +2569,6 @@ struct
                   Lwt_stream.junk_while (Fun.const true) contents)
             stream
         in
-
         Lwt.both th (process_stream ()) >>= fun (parse_res, ()) ->
         match parse_res with
         | Error (`Msg e) ->
