@@ -3198,7 +3198,7 @@ struct
     images assets >>= fun imgs ->
     Store.connect storage >>= function
     | Error (`Msg msg) -> failwith msg
-    | Ok store -> (
+    | Ok store ->
         Albatross_state.init_all stack (Store.configurations store) >>= fun albatross_instances ->
             let albatross_instances = ref albatross_instances in
             let port = K.port () in
