@@ -1147,7 +1147,7 @@ struct
   let unikernel_info stack albatross_instances _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
     Lwt_list.fold_left_s
-      (fun acc (_name, (pol : Albatross.t)) ->
+      (fun acc (_name, (instance : Albatross.t)) ->
         match acc with
         | Error _ as e -> Lwt.return e
         | Ok acc_list -> (
