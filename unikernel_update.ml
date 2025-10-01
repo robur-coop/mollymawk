@@ -1,4 +1,5 @@
-let arg_modal ~unikernel_name ~(to_be_updated_unikernel : Builder_web.build)
+let arg_modal ~unikernel_name ~instance_name
+    ~(to_be_updated_unikernel : Builder_web.build)
     ~(currently_running_unikernel : Builder_web.build)
     (unikernel : Vmm_core.Name.t * Vmm_core.Unikernel.info) =
   Tyxml_html.(
@@ -193,7 +194,9 @@ let arg_modal ~unikernel_name ~(to_be_updated_unikernel : Builder_web.build)
                     ("updateUnikernel('" ^ to_be_updated_unikernel.job ^ "','"
                    ^ to_be_updated_unikernel.uuid ^ "','"
                    ^ currently_running_unikernel.uuid ^ "','" ^ unikernel_name
-                   ^ "')");
+                   ^ "', '"
+                    ^ Configuration.name_to_str instance_name
+                    ^ "')");
                 ]
               ~content:(txt "Proceed to update") ~btn_type:`Primary_full ();
           ];
@@ -468,8 +471,8 @@ let opam_diff_table (diffs : Builder_web.o_diff list) =
              ])
          diffs))
 
-let unikernel_update_layout ~unikernel_name unikernel current_time
-    (build_comparison : Builder_web.compare) =
+let unikernel_update_layout ~unikernel_name ~instance_name unikernel
+    current_time (build_comparison : Builder_web.compare) =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
@@ -512,13 +515,20 @@ let unikernel_update_layout ~unikernel_name unikernel current_time
                         p
                           ~a:[ a_class [ "text-sm" ] ]
                           [ txt (Ohex.encode data.digest) ];
+                        p
+                          ~a:[ a_class [ "text-sm" ] ]
+                          [
+                            txt
+                              ("albatross: "
+                              ^ Configuration.name_to_str instance_name);
+                          ];
                       ];
                     (if build_comparison.right.main_binary then
                        Modal_dialog.modal_dialog
                          ~modal_title:"Unikernel Configuration"
                          ~button_content:(txt "Update to Latest")
                          ~content:
-                           (arg_modal ~unikernel_name
+                           (arg_modal ~unikernel_name ~instance_name
                               ~to_be_updated_unikernel:build_comparison.right
                               ~currently_running_unikernel:build_comparison.left
                               unikernel)
@@ -648,7 +658,7 @@ let unikernel_update_layout ~unikernel_name unikernel current_time
            Modal_dialog.modal_dialog ~modal_title:"Unikernel Configuration"
              ~button_content:(txt "Update to Latest")
              ~content:
-               (arg_modal ~unikernel_name
+               (arg_modal ~unikernel_name ~instance_name
                   ~to_be_updated_unikernel:build_comparison.right
                   ~currently_running_unikernel:build_comparison.left unikernel)
              ()

@@ -1,4 +1,4 @@
-let create_volume total_free_space =
+let create_volume instance_name total_free_space =
   Tyxml_html.(
     section
       ~a:[ a_id "block-create"; a_class [ "w-full mx-auto" ] ]
@@ -154,16 +154,22 @@ let create_volume total_free_space =
           [
             Utils.button_component
               ~attribs:
-                [ a_id "create-block-button"; a_onclick "createVolume()" ]
+                [
+                  a_id "create-block-button";
+                  a_onclick
+                    ("createVolume('"
+                    ^ Configuration.name_to_str instance_name
+                    ^ "')");
+                ]
               ~extra_css:"w-full" ~content:(txt "Create Volume")
               ~btn_type:`Primary_full ();
           ];
       ])
 
-let download_volume name =
+let download_volume ~instance_name ~block_name =
   Tyxml_html.(
     section
-      ~a:[ a_id ("block-download-" ^ name); a_class [ "w-full mx-auto" ] ]
+      ~a:[ a_id ("block-download-" ^ block_name); a_class [ "w-full mx-auto" ] ]
       [
         div
           [
@@ -172,7 +178,7 @@ let download_volume name =
                 [
                   a_class [ "block my-2 font-medium" ]; a_label_for "block name";
                 ]
-              [ txt name ];
+              [ txt block_name ];
             p ~a:[ a_id "download-alert"; a_class [ "my-2 hidden" ] ] [];
             label
               ~a:
@@ -199,7 +205,7 @@ let download_volume name =
                 span
                   ~a:
                     [
-                      a_id ("compression-level-" ^ name);
+                      a_id ("compression-level-" ^ block_name);
                       a_contenteditable true;
                       a_class [ "text-4xl border px-4" ];
                       a_user_data "x-on:keydown.enter.prevent" "";
@@ -228,19 +234,22 @@ let download_volume name =
             Utils.button_component
               ~attribs:
                 [
-                  a_id ("download-block-button-" ^ name);
-                  a_onclick ("downloadVolume('" ^ name ^ "')");
+                  a_id ("download-block-button-" ^ block_name);
+                  a_onclick
+                    ("downloadVolume('" ^ block_name ^ "', '"
+                    ^ Configuration.name_to_str instance_name
+                    ^ "')");
                 ]
               ~extra_css:"my-4"
-              ~content:(txt ("Download " ^ name))
+              ~content:(txt ("Download " ^ block_name))
               ~btn_type:`Primary_full ();
           ];
       ])
 
-let upload_to_volume name =
+let upload_to_volume ~instance_name ~block_name =
   Tyxml_html.(
     section
-      ~a:[ a_id ("block-upload-" ^ name); a_class [ "w-full mx-auto" ] ]
+      ~a:[ a_id ("block-upload-" ^ block_name); a_class [ "w-full mx-auto" ] ]
       [
         div
           ~a:[ a_class [ "my-4" ] ]
@@ -252,8 +261,8 @@ let upload_to_volume name =
               ~a:
                 [
                   a_input_type `File;
-                  a_name ("block_data_upload-" ^ name);
-                  a_id ("block_data_upload-" ^ name);
+                  a_name ("block_data_upload-" ^ block_name);
+                  a_id ("block_data_upload-" ^ block_name);
                   a_class
                     [
                       "ring-primary-100 mt-1.5 transition appearance-none \
@@ -276,8 +285,8 @@ let upload_to_volume name =
               ~a:
                 [
                   a_input_type `Checkbox;
-                  a_name ("block_compressed-" ^ name);
-                  a_id ("block_compressed-" ^ name);
+                  a_name ("block_compressed-" ^ block_name);
+                  a_id ("block_compressed-" ^ block_name);
                   a_class [ "accent-primary-500 mr-2 w-6 h-6" ];
                 ]
               ();
@@ -291,8 +300,11 @@ let upload_to_volume name =
             Utils.button_component
               ~attribs:
                 [
-                  a_id ("upload-block-button-" ^ name);
-                  a_onclick ("uploadToVolume('" ^ name ^ "')");
+                  a_id ("upload-block-button-" ^ block_name);
+                  a_onclick
+                    ("uploadToVolume('" ^ block_name ^ "', '"
+                    ^ Configuration.name_to_str instance_name
+                    ^ "')");
                 ]
               ~extra_css:"w-full" ~content:(txt "Upload data")
               ~btn_type:`Primary_full ();

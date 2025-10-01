@@ -1,5 +1,5 @@
 let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
-    (blocks : (Vmm_core.Name.t * int * bool) list) =
+    (blocks : (Vmm_core.Name.t * int * bool) list) albatross_instance =
   let total_memory_used = Utils.total_memory_used unikernels in
   let cpu_usage_count = Utils.cpu_usage_count user_policy unikernels in
   let memory_left = user_policy.memory - total_memory_used in
@@ -286,7 +286,13 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
               [
                 Utils.button_component
                   ~attribs:
-                    [ a_id "deploy-button"; a_onclick "deployUnikernel()" ]
+                    [
+                      a_id "deploy-button";
+                      a_onclick
+                        ("deployUnikernel('"
+                        ^ Configuration.name_to_str albatross_instance
+                        ^ "')");
+                    ]
                   ~content:(txt "Deploy") ~btn_type:`Primary_full ();
               ];
           ];

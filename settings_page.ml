@@ -1,9 +1,96 @@
-let settings_layout (configuration : Configuration.t) =
+let delimit_string str =
+  if String.length str <= 20 then str else String.sub str 0 20 ^ "..."
+
+let config_table_row (configuration : Configuration.t) =
   let ip = Ipaddr.to_string configuration.server_ip in
   let port = string_of_int configuration.server_port in
   let certificate = X509.Certificate.encode_pem configuration.certificate in
   let private_key = X509.Private_key.encode_pem configuration.private_key in
   let last_update = Utils.TimeHelper.string_of_ptime configuration.updated_at in
+  Tyxml_html.(
+    tr
+      [
+        td
+          ~a:
+            [
+              a_class
+                [
+                  "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                   text-gray-800";
+                ];
+            ]
+          [ txt (Configuration.name_to_str configuration.name) ];
+        td
+          ~a:
+            [
+              a_class
+                [
+                  "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                   text-gray-800";
+                ];
+            ]
+          [
+            txt (delimit_string certificate);
+            p [ txt (delimit_string private_key) ];
+          ];
+        td
+          ~a:
+            [
+              a_class
+                [
+                  "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                   text-gray-800";
+                ];
+            ]
+          [ txt (ip ^ ":" ^ port) ];
+        td
+          ~a:
+            [
+              a_class
+                [
+                  "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                   text-gray-800";
+                ];
+            ]
+          [ txt last_update ];
+        td
+          ~a:
+            [
+              a_class
+                [
+                  "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                   text-gray-800 flex space-x-4";
+                ];
+            ]
+          [
+            Utils.button_component
+              ~attribs:
+                [
+                  a_onclick
+                    ("openConfigForm(`"
+                    ^ Configuration.name_to_str configuration.name
+                    ^ "`,`" ^ ip ^ "`,`" ^ port ^ "`,`" ^ certificate ^ "`,`"
+                    ^ private_key ^ "`)");
+                ]
+              ~content:(i ~a:[ a_class [ "fa-solid fa-pen" ] ] [])
+              ~btn_type:`Primary_outlined ();
+            Utils.button_component
+              ~attribs:
+                [
+                  a_id
+                    ("delete-config-btn-"
+                    ^ Configuration.name_to_str configuration.name);
+                  a_onclick
+                    ("deleteConfig(`"
+                    ^ Configuration.name_to_str configuration.name
+                    ^ "`)");
+                ]
+              ~content:(i ~a:[ a_class [ "fa-solid fa-trash" ] ] [])
+              ~btn_type:`Danger_full ();
+          ];
+      ])
+
+let settings_layout (configurations : Configuration.t list) =
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -21,7 +108,7 @@ let settings_layout (configuration : Configuration.t) =
               ~a:[ a_id "add-config" ]
               [
                 Utils.button_component
-                  ~attribs:[ a_onclick "openConfigForm('','','','')" ]
+                  ~attribs:[ a_onclick "openConfigForm('','','','','')" ]
                   ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
                   ~btn_type:`Primary_outlined ();
               ];
@@ -38,6 +125,44 @@ let settings_layout (configuration : Configuration.t) =
             ]
           [
             p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
+            input ~a:[ a_input_type `Hidden; a_id "config-name-edit" ] ();
+            div
+              ~a:[ a_class [ "bg-gray-50 px-4 pb-4 pt-5 sm:p-6 sm:pb-4 my-4" ] ]
+              [
+                div
+                  [
+                    label
+                      ~a:
+                        [
+                          a_class [ "block text-sm font-medium" ];
+                          a_label_for "name";
+                        ]
+                      [ txt "Albatross Instance Name*" ];
+                    input
+                      ~a:
+                        [
+                          a_autocomplete `Off;
+                          a_input_type `Text;
+                          a_name "albatross-name";
+                          a_id "albatross-name";
+                          a_class
+                            [
+                              "ring-primary-100 mt-1.5 transition \
+                               appearance-none block w-full px-3 py-3 \
+                               rounded-xl shadow-sm border \
+                               hover:border-primary-200\n\
+                              \                                           \
+                               focus:border-primary-300 bg-primary-50 \
+                               bg-opacity-0 hover:bg-opacity-50 \
+                               focus:bg-opacity-50 ring-primary-200 \
+                               focus:ring-primary-200\n\
+                              \                                           \
+                               focus:ring-[1px] focus:outline-none";
+                            ];
+                        ]
+                      ();
+                  ];
+              ];
             div
               ~a:[ a_class [ "bg-gray-50 px-4 pb-4 pt-5 sm:p-6 sm:pb-4 my-4" ] ]
               [
@@ -233,7 +358,7 @@ let settings_layout (configuration : Configuration.t) =
                                                 uppercase";
                                              ];
                                          ]
-                                       [ txt "Certificate" ];
+                                       [ txt "Name" ];
                                      th
                                        ~a:
                                          [
@@ -244,7 +369,7 @@ let settings_layout (configuration : Configuration.t) =
                                                 uppercase";
                                              ];
                                          ]
-                                       [ txt "Private Key" ];
+                                       [ txt "Certificate/Key" ];
                                      th
                                        ~a:
                                          [
@@ -256,17 +381,6 @@ let settings_layout (configuration : Configuration.t) =
                                              ];
                                          ]
                                        [ txt "IP" ];
-                                     th
-                                       ~a:
-                                         [
-                                           a_class
-                                             [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase";
-                                             ];
-                                         ]
-                                       [ txt "Port" ];
                                      th
                                        ~a:
                                          [
@@ -291,86 +405,7 @@ let settings_layout (configuration : Configuration.t) =
                                        [ txt "Action" ];
                                    ];
                                ])
-                          [
-                            tr
-                              [
-                                td
-                                  ~a:
-                                    [
-                                      a_class
-                                        [
-                                          "px-6 py-4 whitespace-nowrap text-sm \
-                                           font-medium text-gray-800";
-                                        ];
-                                    ]
-                                  [ txt (String.sub certificate 10 30 ^ "...") ];
-                                td
-                                  ~a:
-                                    [
-                                      a_class
-                                        [
-                                          "px-6 py-4 whitespace-nowrap text-sm \
-                                           font-medium text-gray-800";
-                                        ];
-                                    ]
-                                  [ txt (String.sub private_key 10 30 ^ "...") ];
-                                td
-                                  ~a:
-                                    [
-                                      a_class
-                                        [
-                                          "px-6 py-4 whitespace-nowrap text-sm \
-                                           font-medium text-gray-800";
-                                        ];
-                                    ]
-                                  [ txt ip ];
-                                td
-                                  ~a:
-                                    [
-                                      a_class
-                                        [
-                                          "px-6 py-4 whitespace-nowrap text-sm \
-                                           font-medium text-gray-800";
-                                        ];
-                                    ]
-                                  [ txt port ];
-                                td
-                                  ~a:
-                                    [
-                                      a_class
-                                        [
-                                          "px-6 py-4 whitespace-nowrap text-sm \
-                                           font-medium text-gray-800";
-                                        ];
-                                    ]
-                                  [ txt last_update ];
-                                td
-                                  ~a:
-                                    [
-                                      a_class
-                                        [
-                                          "px-6 py-4 whitespace-nowrap text-sm \
-                                           font-medium text-gray-800";
-                                        ];
-                                    ]
-                                  [
-                                    Utils.button_component
-                                      ~attribs:
-                                        [
-                                          a_onclick
-                                            ("openConfigForm('" ^ ip ^ "','"
-                                           ^ port ^ "','"
-                                           ^ String.escaped certificate ^ "','"
-                                           ^ String.escaped private_key ^ "')");
-                                        ]
-                                      ~content:
-                                        (i
-                                           ~a:[ a_class [ "fa-solid fa-pen" ] ]
-                                           [])
-                                      ~btn_type:`Primary_outlined ();
-                                  ];
-                              ];
-                          ];
+                          (List.map config_table_row configurations);
                       ];
                   ];
               ];

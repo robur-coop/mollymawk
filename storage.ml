@@ -1,6 +1,6 @@
 open Utils.Json
 
-let current_version = 7
+let current_version = 8
 (* version history:
    1 was initial (fields until email_verification_uuid)
    2 added active
@@ -9,14 +9,15 @@ let current_version = 7
    5 cookie has two new fields last_access and user_agent
    6 tokens has 3 new fields: name, last_access and usage_count
    7 added unikernel_updates to keep track of when unikernels are updated
+   8 we now store a list of configurations, and each has a name field. also, no more version field in configuration
 *)
 
-let t_to_json users configuration =
+let t_to_json users configurations =
   `Assoc
     [
       ("version", `Int current_version);
       ("users", `List (List.map User_model.user_to_json users));
-      ("configuration", Configuration.to_json configuration);
+      ("configuration", Configuration.to_json configurations);
     ]
 
 let t_of_json json =
@@ -27,6 +28,7 @@ let t_of_json json =
       | Some (`Int v), Some (`List users), Some configuration ->
           let* () =
             if v = current_version then Ok ()
+            else if v = 7 then Ok ()
             else if v = 6 then Ok ()
             else if v = 5 then Ok ()
             else if v = 4 then Ok ()
@@ -50,13 +52,17 @@ let t_of_json json =
                     User_model.(user_v3_of_json cookie_v1_of_json) js
                   else if v = 6 then
                     User_model.(user_v4_of_json cookie_v1_of_json) js
+                  else if v = 7 then User_model.(user_of_json cookie_of_json) js
                   else User_model.(user_of_json cookie_of_json) js
                 in
                 Ok (user :: acc))
               (Ok []) users
           in
-          let* configuration = Configuration.of_json configuration in
-          Ok (users, configuration)
+          let* configurations =
+            if v < 8 then Configuration.of_json_v1 configuration
+            else Configuration.of_json configuration
+          in
+          Ok (users, configurations)
       | _ -> Error (`Msg "invalid data: no version and users field"))
   | _ -> Error (`Msg "invalid data: not an assoc")
 
@@ -69,12 +75,12 @@ module Make (BLOCK : Mirage_block.S) = struct
   type t = {
     disk : Stored_data.t;
     mutable users : User_model.user list;
-    mutable configuration : Configuration.t;
+    mutable configurations : Configuration.t list;
   }
 
   let write_data t =
     Stored_data.write t.disk
-      (Yojson.Basic.to_string (t_to_json t.users t.configuration))
+      (Yojson.Basic.to_string (t_to_json t.users t.configurations))
 
   let read_data disk =
     Stored_data.read disk >|= function
@@ -86,7 +92,7 @@ module Make (BLOCK : Mirage_block.S) = struct
         in
         let* t = t_of_json json in
         Ok t
-    | Ok None -> Ok ([], Configuration.empty ())
+    | Ok None -> Ok ([], [])
     | Error e ->
         error_msgf "error while reading storage: %a" Stored_data.pp_error e
 
@@ -94,16 +100,63 @@ module Make (BLOCK : Mirage_block.S) = struct
     Stored_data.connect block >>= fun disk ->
     read_data disk >|= function
     | Error _ as e -> e
-    | Ok (users, configuration) -> Ok { disk; users; configuration }
+    | Ok (users, configurations) -> Ok { disk; users; configurations }
 
-  let configuration { configuration; _ } = configuration
+  let configurations { configurations; _ } = configurations
 
-  let update_configuration t (configuration : Configuration.t) =
-    let t' = { t with configuration } in
+  let store_configurations t configurations =
+    let t' = { t with configurations } in
     write_data t' >|= function
     | Ok () ->
-        t.configuration <- configuration;
-        Ok ()
+        t.configurations <- configurations;
+        Ok t.configurations
+    | Error we ->
+        error_msgf "error while writing storage: %a" Stored_data.pp_write_error
+          we
+
+  let upsert_configuration t (configuration : Configuration.t)
+      (mode : [ `Create | `Update ]) =
+    let name_eq (c : Configuration.t) =
+      Vmm_core.Name.equal c.name configuration.name
+    in
+    let exists = List.exists name_eq t.configurations in
+    match mode with
+    | `Create ->
+        if exists then
+          Lwt.return
+            (error_msgf "configuration %s already exists"
+               (Configuration.name_to_str configuration.name))
+        else store_configurations t (t.configurations @ [ configuration ])
+    | `Update ->
+        if not exists then
+          Lwt.return
+            (error_msgf "configuration %s not found"
+               (Configuration.name_to_str configuration.name))
+        else
+          let configurations =
+            List.map
+              (fun c -> if name_eq c then configuration else c)
+              t.configurations
+          in
+          store_configurations t configurations
+
+  let delete_configuration t name =
+    let before = t.configurations in
+    let configurations =
+      List.filter
+        (fun (c : Configuration.t) -> not (Vmm_core.Name.equal c.name name))
+        before
+    in
+    let deleted_any = List.length configurations <> List.length before in
+    let t' = { t with configurations } in
+    write_data t' >|= function
+    | Ok () ->
+        if deleted_any then (
+          t.configurations <- configurations;
+          Ok t.configurations)
+        else
+          error_msgf "configuration '%s' not found"
+            (Configuration.name_to_str name)
     | Error we ->
         error_msgf "error while writing storage: %a" Stored_data.pp_write_error
           we

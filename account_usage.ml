@@ -1,10 +1,12 @@
-let account_usage_layout policy unikernels blocks =
+let account_usage_layout instance_name policy unikernels blocks =
   let user_policy_usage = Utils.user_policy_usage policy unikernels blocks in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
       [
-        h1 ~a:[ a_class [ "text-3xl font-bold" ] ] [ txt "Resources" ];
+        h1
+          ~a:[ a_class [ "text-3xl font-bold" ] ]
+          [ txt ("Resources for " ^ Configuration.name_to_str instance_name) ];
         section
           ~a:[ a_id "usage-display"; a_class [ "grid grid-cols-3 gap-4" ] ]
           [

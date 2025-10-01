@@ -1,5 +1,5 @@
-let unikernel_single_layout ~unikernel_name ?(last_update_time = None)
-    ~current_time unikernel =
+let unikernel_single_layout ~unikernel_name ~instance_name
+    ?(last_update_time = None) ~current_time unikernel =
   let u_name, data = unikernel in
   Tyxml_html.(
     section
@@ -39,6 +39,13 @@ let unikernel_single_layout ~unikernel_name ?(last_update_time = None)
                         p
                           ~a:[ a_class [ "text-sm" ] ]
                           [ txt (Ohex.encode data.digest) ];
+                        p
+                          ~a:[ a_class [ "text-sm" ] ]
+                          [
+                            txt
+                              ("albatross: "
+                              ^ Configuration.name_to_str instance_name);
+                          ];
                       ];
                     div
                       ~a:[ a_class [ "flex space-x-2 items-center" ] ]
@@ -50,7 +57,9 @@ let unikernel_single_layout ~unikernel_name ?(last_update_time = None)
                                 [
                                   a_onclick
                                     ("restartUnikernel('" ^ unikernel_name
-                                   ^ "')");
+                                   ^ "', '"
+                                    ^ Configuration.name_to_str instance_name
+                                    ^ "')");
                                 ]
                               ~content:(txt "Restart")
                               ~btn_type:`Primary_outlined ();
@@ -60,7 +69,10 @@ let unikernel_single_layout ~unikernel_name ?(last_update_time = None)
                             a
                               ~a:
                                 [
-                                  a_href ("/unikernel/update/" ^ unikernel_name);
+                                  a_href
+                                    ("/unikernel/update?unikernel="
+                                   ^ unikernel_name ^ "&instance="
+                                    ^ Configuration.name_to_str instance_name);
                                   a_class
                                     [
                                       "py-2 px-2 rounded border border-1 \
@@ -85,7 +97,10 @@ let unikernel_single_layout ~unikernel_name ?(last_update_time = None)
                                       a_id "unikernel-rollback";
                                       a_onclick
                                         ("rollbackUnikernel('" ^ unikernel_name
-                                       ^ "')");
+                                       ^ "', '"
+                                        ^ Configuration.name_to_str
+                                            instance_name
+                                        ^ "')");
                                     ]
                                   ~content:(txt "Rollback")
                                   ~btn_type:`Primary_outlined ();
@@ -98,7 +113,9 @@ let unikernel_single_layout ~unikernel_name ?(last_update_time = None)
                                 [
                                   a_onclick
                                     ("destroyUnikernel('" ^ unikernel_name
-                                   ^ "')");
+                                   ^ "', '"
+                                    ^ Configuration.name_to_str instance_name
+                                    ^ "')");
                                 ]
                               ~content:(txt "Destroy")
                               ~btn_type:`Danger_outlined ();

@@ -1,4 +1,107 @@
-let unikernel_index_layout unikernels current_time =
+let instance_unikernels instance_name albatross_instance_unikernels current_time
+    =
+  Tyxml_html.(
+    List.map
+      (fun (name, unikernel) ->
+        let name = Option.value ~default:"no name" (Vmm_core.Name.name name) in
+        tr
+          ~a:[ a_class [ "border-b border-gray-200" ] ]
+          [
+            td
+              ~a:
+                [
+                  a_class
+                    [
+                      "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                       text-gray-800";
+                    ];
+                ]
+              [
+                txt name;
+                p
+                  ~a:[ a_class [ "text-xs text-gray-500" ] ]
+                  [ txt ("from: " ^ Configuration.name_to_str instance_name) ];
+              ];
+            td
+              ~a:
+                [
+                  a_class
+                    [
+                      "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                       text-gray-800";
+                    ];
+                ]
+              [
+                txt
+                  (match unikernel.Vmm_core.Unikernel.typ with
+                  | `Solo5 -> "solo5");
+              ];
+            td
+              ~a:
+                [
+                  a_class
+                    [
+                      "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                       text-gray-800";
+                    ];
+                ]
+              [ txt (string_of_int unikernel.cpuid) ];
+            td
+              ~a:
+                [
+                  a_class
+                    [
+                      "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                       text-gray-800";
+                    ];
+                ]
+              [ txt (string_of_int unikernel.memory ^ " MB") ];
+            td
+              ~a:
+                [
+                  a_class
+                    [
+                      "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                       text-gray-800";
+                    ];
+                ]
+              [
+                txt
+                  (Utils.TimeHelper.time_ago ~current_time
+                     ~check_time:unikernel.started);
+              ];
+            td
+              ~a:
+                [
+                  a_class
+                    [
+                      "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                       text-gray-800";
+                    ];
+                ]
+              [
+                a
+                  ~a:
+                    [
+                      a_href
+                        ("/unikernel/info?unikernel=" ^ name ^ "&instance="
+                        ^ Configuration.name_to_str instance_name);
+                      a_class
+                        [
+                          "inline-flex items-center gap-x-2 text-sm \
+                           font-semibold rounded-lg border border-1 py-1 px-2 \
+                           border-primary-400 text-primary-600 \
+                           hover:text-primary-500 focus:outline-none \
+                           focus:text-primary-800 disabled:opacity-50 \
+                           disabled:pointer-events-none";
+                        ];
+                    ]
+                  [ txt "View" ];
+              ];
+          ])
+      albatross_instance_unikernels)
+
+let unikernel_index_layout unikernels_by_albatross_instance current_time =
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -12,9 +115,15 @@ let unikernel_index_layout unikernels current_time =
                   ~a:[ a_class [ "font-bold text-gray-700" ] ]
                   [
                     txt
-                      ("Unikernels ("
-                      ^ string_of_int (List.length unikernels)
-                      ^ ")");
+                      ("Showing "
+                      ^ string_of_int
+                          (List.fold_left
+                             (fun acc (_, us) -> acc + List.length us)
+                             0 unikernels_by_albatross_instance)
+                      ^ " unikernels from "
+                      ^ string_of_int
+                          (List.length unikernels_by_albatross_instance)
+                      ^ " running Albatross instances");
                   ];
               ];
             div
@@ -206,117 +315,11 @@ let unikernel_index_layout unikernels current_time =
                                    ];
                                ])
                           (List.map
-                             (fun (name, unikernel) ->
-                               let name =
-                                 Option.value ~default:"no name"
-                                   (Vmm_core.Name.name name)
-                               in
-                               tr
-                                 ~a:[ a_class [ "border-b border-gray-200" ] ]
-                                 [
-                                   td
-                                     ~a:
-                                       [
-                                         a_class
-                                           [
-                                             "px-6 py-4 whitespace-nowrap \
-                                              text-sm font-medium \
-                                              text-gray-800";
-                                           ];
-                                       ]
-                                     [ txt name ];
-                                   td
-                                     ~a:
-                                       [
-                                         a_class
-                                           [
-                                             "px-6 py-4 whitespace-nowrap \
-                                              text-sm font-medium \
-                                              text-gray-800";
-                                           ];
-                                       ]
-                                     [
-                                       txt
-                                         (match
-                                            unikernel.Vmm_core.Unikernel.typ
-                                          with
-                                         | `Solo5 -> "solo5");
-                                     ];
-                                   td
-                                     ~a:
-                                       [
-                                         a_class
-                                           [
-                                             "px-6 py-4 whitespace-nowrap \
-                                              text-sm font-medium \
-                                              text-gray-800";
-                                           ];
-                                       ]
-                                     [ txt (string_of_int unikernel.cpuid) ];
-                                   td
-                                     ~a:
-                                       [
-                                         a_class
-                                           [
-                                             "px-6 py-4 whitespace-nowrap \
-                                              text-sm font-medium \
-                                              text-gray-800";
-                                           ];
-                                       ]
-                                     [
-                                       txt
-                                         (string_of_int unikernel.memory ^ " MB");
-                                     ];
-                                   td
-                                     ~a:
-                                       [
-                                         a_class
-                                           [
-                                             "px-6 py-4 whitespace-nowrap \
-                                              text-sm font-medium \
-                                              text-gray-800";
-                                           ];
-                                       ]
-                                     [
-                                       txt
-                                         (Utils.TimeHelper.time_ago
-                                            ~current_time
-                                            ~check_time:unikernel.started);
-                                     ];
-                                   td
-                                     ~a:
-                                       [
-                                         a_class
-                                           [
-                                             "px-6 py-4 whitespace-nowrap \
-                                              text-sm font-medium \
-                                              text-gray-800";
-                                           ];
-                                       ]
-                                     [
-                                       a
-                                         ~a:
-                                           [
-                                             a_href ("/unikernel/info/" ^ name);
-                                             a_class
-                                               [
-                                                 "inline-flex items-center \
-                                                  gap-x-2 text-sm \
-                                                  font-semibold rounded-lg \
-                                                  border border-1 py-1 px-2 \
-                                                  border-primary-400 \
-                                                  text-primary-600 \
-                                                  hover:text-primary-500 \
-                                                  focus:outline-none \
-                                                  focus:text-primary-800 \
-                                                  disabled:opacity-50 \
-                                                  disabled:pointer-events-none";
-                                               ];
-                                           ]
-                                         [ txt "View" ];
-                                     ];
-                                 ])
-                             unikernels);
+                             (fun (instance_name, unikernels) ->
+                               instance_unikernels instance_name unikernels
+                                 current_time)
+                             unikernels_by_albatross_instance
+                          |> List.flatten);
                       ];
                   ];
               ];

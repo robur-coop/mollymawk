@@ -1,12 +1,16 @@
 let update_policy_layout (user : User_model.user) ~user_policy
-    ~unallocated_resources =
+    ~unallocated_resources instance_name =
   Tyxml_html.(
     section
       ~a:[ a_id "policy-form" ]
       [
         h2
           ~a:[ a_class [ "font-semibold text-2xl" ] ]
-          [ txt ("Set Policy for " ^ user.name) ];
+          [
+            txt
+              ("Set Policy for " ^ user.name ^ "on albatross instance "
+              ^ Configuration.name_to_str instance_name);
+          ];
         p ~a:[ a_id "form-alert"; a_class [ "my-4" ] ] [];
         p ~a:[ a_id "user_id"; a_class [ "hidden" ] ] [ txt user.uuid ];
         div
@@ -451,7 +455,14 @@ let update_policy_layout (user : User_model.user) ~user_policy
           ~a:[ a_class [ "my-3" ] ]
           [
             Utils.button_component
-              ~attribs:[ a_onclick "updatePolicy()"; a_id "set-policy-btn" ]
+              ~attribs:
+                [
+                  a_onclick
+                    ("updatePolicy('"
+                    ^ Configuration.name_to_str instance_name
+                    ^ "')");
+                  a_id "set-policy-btn";
+                ]
               ~content:(txt "Set Policy") ~btn_type:`Primary_full ();
           ];
       ])

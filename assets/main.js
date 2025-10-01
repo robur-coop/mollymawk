@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', function () {
 		});
 	}
 
-	if (window.location.pathname.startsWith("/unikernel/info/")) {
+	if (window.location.pathname.startsWith("/unikernel/info")) {
 		startEventSource();
 	}
 });
@@ -68,34 +68,40 @@ document.addEventListener('DOMContentLoaded', function () {
 function startEventSource() {
 	if (consoleLogEvent) return;
 
-	if (window.location.pathname.startsWith("/unikernel/info/")) {
-		const unikernel_name = window.location.pathname.slice("/unikernel/info/".length);
-		const console_output = document.getElementById("console-output");
+	if (!window.location.pathname.startsWith("/unikernel/info")) return;
 
-		const MAX_LOG_ENTRIES = 40;
-		let logBuffer = [];
-
-		const render = () => {
-			console_output.value = logBuffer.join("\n");
-		};
-
-		consoleLogEvent = new EventSource(`/api/unikernel/console/${unikernel_name}`);
-
-		consoleLogEvent.onmessage = ({ data }) => {
-			try {
-				const payload = JSON.parse(data);
-
-				logBuffer = [
-					`[${payload.timestamp}] ${payload.line}`,
-					...logBuffer.reverse(),
-				].slice(0, MAX_LOG_ENTRIES);
-				logBuffer.reverse()
-				render();
-			} catch (err) {
-				console.error("Failed to parse SSE payload:", err, data);
-			}
-		};
+	const params = new URLSearchParams(window.location.search);
+	let unikernelName = params.get("unikernel");
+	let albatrossInstance = params.get("instance");
+	if (!unikernelName || !albatrossInstance) {
+		console.error("No albatross instance selected and no unikernel provided.");
 	}
+	const console_output = document.getElementById("console-output");
+
+	const MAX_LOG_ENTRIES = 40;
+	let logBuffer = [];
+
+	const render = () => {
+		console_output.value = logBuffer.join("\n");
+	};
+
+	consoleLogEvent = new EventSource(`/api/unikernel/console?unikernel=${unikernelName}&instance=${albatrossInstance}`);
+
+	consoleLogEvent.onmessage = ({ data }) => {
+		try {
+			const payload = JSON.parse(data);
+
+			logBuffer = [
+				`[${payload.timestamp}] ${payload.line}`,
+				...logBuffer.reverse(),
+			].slice(0, MAX_LOG_ENTRIES);
+			logBuffer.reverse()
+			render();
+		} catch (err) {
+			console.error("Failed to parse SSE payload:", err, data);
+		}
+	};
+
 }
 
 function stopEventSource() {
@@ -143,17 +149,18 @@ function filterData() {
 	});
 }
 
-
-
-function openConfigForm(ip, port, certificate, p_key) {
+var newConfig = false;
+function openConfigForm(name, ip, port, certificate, p_key) {
 	const formSection = document.getElementById("config-form");
 	const configSection = document.getElementById("config-body");
+	const nameInput = document.getElementById("albatross-name");
 	const ipInput = document.getElementById("server-ip");
 	const portInput = document.getElementById("server-port");
 	const certificateInput = document.getElementById("certificate");
 	const pkeyInput = document.getElementById("private-key");
 	const configBtn = document.getElementById("config-button");
 	const addConfigBtn = document.getElementById("add-config")
+	nameInput.value = name;
 	ipInput.value = ip;
 	portInput.value = port;
 	certificateInput.value = certificate;
@@ -163,7 +170,8 @@ function openConfigForm(ip, port, certificate, p_key) {
 	configSection.classList.remove("block");
 	configSection.classList.add("hidden");
 	addConfigBtn.classList.add("hidden");
-	if (ip === '' || port === '' || certificate === '' || p_key === '') {
+	if (name === '' || ip === '' || port === '' || certificate === '' || p_key === '') {
+		newConfig = true;
 		configBtn.textContent = "Save";
 	} else {
 		configBtn.textContent = "Update";
@@ -171,7 +179,7 @@ function openConfigForm(ip, port, certificate, p_key) {
 }
 
 async function saveConfig() {
-
+	const nameInput = document.getElementById("albatross-name").value;
 	const ipInput = document.getElementById("server-ip").value;
 	const portInput = document.getElementById("server-port").value;
 	const certificateInput = document.getElementById("certificate").value;
@@ -182,19 +190,24 @@ async function saveConfig() {
 	formButton.classList.add("disabled");
 	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
 	formButton.disabled = true;
-	if (ipInput === '' || portInput === '' || certificateInput === '' || pkeyInput === '') {
+	if (nameInput === '' || ipInput === '' || portInput === '' || certificateInput === '' || pkeyInput === '') {
 		formAlert.classList.remove("hidden");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = "Please fill all fields";
+	} else if (!isValidName(nameInput)) {
+		formAlert.classList.remove("hidden");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Please use alphanumeric characters, dashes or underscores for the name";
 	} else {
 		try {
-			const response = await fetch("/api/admin/settings/update", {
+			const response = await fetch(newConfig ? "/api/admin/settings/create" : "/api/admin/settings/update", {
 				method: 'POST',
 				headers: {
 					"Content-Type": "application/json",
 					"Accept": "application/json",
 				},
 				body: JSON.stringify({
+					"name": nameInput,
 					"server_ip": ipInput,
 					"server_port": Number(portInput),
 					"certificate": certificateInput,
@@ -224,6 +237,48 @@ async function saveConfig() {
 	}
 	formButton.innerHTML = "Update"
 	formButton.disabled = false;
+}
+
+async function deleteConfig(name) {
+	const formAlert = document.getElementById("form-alert");
+	const formButton = document.getElementById(`delete-config-btn-${name}`);
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	formButton.classList.add("disabled");
+	formButton.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
+	formButton.disabled = true;
+	try {
+		const response = await fetch("/api/admin/settings/delete", {
+			method: 'POST',
+			headers: {
+				"Content-Type": "application/json",
+				"Accept": "application/json",
+			},
+			body: JSON.stringify({
+				"name": name,
+				"molly_csrf": molly_csrf
+			})
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			formAlert.classList.remove("hidden", "text-secondary-500");
+			formAlert.classList.add("text-primary-500");
+			formAlert.textContent = "Succesfully deleted";
+			postAlert("bg-primary-300", data.data);
+			setTimeout(function () {
+				window.location.reload();
+			}, 2000);
+		} else {
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = data.data
+		}
+	} catch (error) {
+		formAlert.classList.remove("hidden");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = error
+	}
+	formButton.disabled = false;
+	formButton.innerHTML = `<i class="fa-solid fa-trash"></i>`
 }
 
 function closeBanner() {
@@ -293,7 +348,7 @@ function gatherFieldsForDevices(fieldId, targetKey, formAlert) {
 	return { [targetKey]: result };
 }
 
-async function deployUnikernel() {
+async function deployUnikernel(albatross_instance) {
 	const formAlert = document.getElementById("form-alert");
 	const deployButton = document.getElementById("deploy-button");
 	const name = document.getElementById("unikernel-name").value;
@@ -343,6 +398,7 @@ async function deployUnikernel() {
 		...blockData,
 		arguments: argumentsList
 	};
+	formData.append("albatross_instance", albatross_instance,);
 	formData.append("unikernel_name", name,);
 	formData.append("unikernel_config", JSON.stringify(unikernel_config));
 	formData.append("unikernel_force_create", force_create);
@@ -379,12 +435,12 @@ async function deployUnikernel() {
 	}
 }
 
-async function restartUnikernel(name) {
+async function restartUnikernel(unikernel_name, instance_name) {
 	try {
 		const molly_csrf = document.getElementById("molly-csrf").value;
 		const response = await fetch(`/api/unikernel/restart`, {
 			method: 'POST',
-			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
+			body: JSON.stringify({ "name": unikernel_name, "molly_csrf": molly_csrf, "albatross_instance": instance_name }),
 			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
 		})
 
@@ -402,12 +458,12 @@ async function restartUnikernel(name) {
 	}
 }
 
-async function destroyUnikernel(name) {
+async function destroyUnikernel(unikernel_name, instance_name) {
 	try {
 		const molly_csrf = document.getElementById("molly-csrf").value;
 		const response = await fetch(`/api/unikernel/destroy`, {
 			method: 'POST',
-			body: JSON.stringify({ "name": name, "molly_csrf": molly_csrf }),
+			body: JSON.stringify({ "name": unikernel_name, "molly_csrf": molly_csrf, "albatross_instance": instance_name }),
 			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
 		})
 
@@ -486,56 +542,59 @@ function multiselect(selected, options) {
 	};
 }
 
-async function updatePolicy() {
+async function updatePolicy(instance_name) {
 	const unikernel_count = document.getElementById("f_allowed_unikernels").innerText;
 	const mem_size = document.getElementById("f_allowed_memory").innerText;
 	const storage_size = document.getElementById("f_allowed_storage").innerText;
 	const cpuids = document.getElementById("selectedCPUs").value;
 	const bridges = document.getElementById("selectedBridges").value;
-	const formAlert = document.getElementById("form-alert");
 	const user_id = document.getElementById("user_id").innerText;
-	const policyButton = document.getElementById("set-policy-btn");
 	const molly_csrf = document.getElementById("molly-csrf").value;
+	const formAlert = document.getElementById("form-alert");
+	const policyButton = document.getElementById("set-policy-btn");
+
 	try {
-		buttonLoading(policyButton, true, "Processing...")
+		buttonLoading(policyButton, true, "Processing...");
+
 		const response = await fetch("/api/admin/u/policy/update", {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",
 				"Accept": "application/json",
 			},
-			body: JSON.stringify(
-				{
-					"unikernels": Number(unikernel_count),
-					"memory": Number(mem_size),
-					"block": Number(storage_size),
-					"cpuids": cpuids,
-					"bridges": bridges,
-					"user_uuid": user_id,
-					"molly_csrf": molly_csrf
-				})
-		})
+			body: JSON.stringify({
+				"albatross_instance": instance_name,
+				"unikernels": Number(unikernel_count),
+				"memory": Number(mem_size),
+				"block": Number(storage_size),
+				"cpuids": cpuids,
+				"bridges": bridges,
+				"user_uuid": user_id,
+				"molly_csrf": molly_csrf
+			})
+		});
+
 		const data = await response.json();
+
 		if (data.status === 200) {
 			formAlert.classList.remove("hidden", "text-secondary-500");
 			formAlert.classList.add("text-primary-500");
-			formAlert.textContent = "Succesfully updated";
-			postAlert("bg-primary-300", "Policy updated succesfully");
+			formAlert.textContent = "Successfully updated";
+			postAlert("bg-primary-300", "Policy updated successfully");
 			setTimeout(function () {
 				window.history.back();
 			}, 2000);
-			buttonLoading(policyButton, false, "Set Policy")
 		} else {
 			formAlert.classList.remove("hidden", "text-primary-500");
 			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = data.data
-			buttonLoading(policyButton, false, "Set Policy")
+			formAlert.textContent = data.data;
 		}
 	} catch (error) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = error
-		buttonLoading(policyButton, false, "Set Policy")
+		formAlert.textContent = error.toString();
+	} finally {
+		buttonLoading(policyButton, false, "Set Policy");
 	}
 }
 
@@ -719,7 +778,7 @@ async function logout() {
 	}
 }
 
-async function deleteVolume(block_name) {
+async function deleteVolume(block_name, albatross_instance) {
 	const deleteButton = document.getElementById(`delete-block-button-${block_name}`);
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	const formAlert = document.getElementById("form-alert");
@@ -734,6 +793,7 @@ async function deleteVolume(block_name) {
 			body: JSON.stringify(
 				{
 					"block_name": block_name,
+					"albatross_instance": albatross_instance,
 					"molly_csrf": molly_csrf
 				})
 		})
@@ -759,7 +819,7 @@ async function deleteVolume(block_name) {
 	}
 }
 
-async function createVolume() {
+async function createVolume(albatross_instance) {
 	const createButton = document.getElementById("create-block-button");
 	const block_name = document.getElementById("block_name").value;
 	const block_size = document.getElementById("block_size").innerText;
@@ -823,6 +883,7 @@ async function createVolume() {
 				"block_compressed": block_compressed
 			})
 		formData.append("molly_csrf", molly_csrf)
+		formData.append("albatross_instance", albatross_instance)
 		formData.append("json_data", json_data)
 		formData.append("block_data", block_data)
 		const response = await fetch("/api/volume/create", {
@@ -851,7 +912,7 @@ async function createVolume() {
 	}
 }
 
-async function downloadVolume(block_name) {
+async function downloadVolume(block_name, albatross_instance) {
 	const downloadButton = document.getElementById(`download-block-button-${block_name}`);
 	const compression_level = document.getElementById(`compression-level-${block_name}`).innerText;
 	const molly_csrf = document.getElementById("molly-csrf").value;
@@ -866,6 +927,7 @@ async function downloadVolume(block_name) {
 			body: JSON.stringify(
 				{
 					"block_name": block_name,
+					"albatross_instance": albatross_instance,
 					"compression_level": Number(compression_level),
 					"molly_csrf": molly_csrf
 				})
@@ -893,7 +955,7 @@ async function downloadVolume(block_name) {
 	}
 }
 
-async function uploadToVolume(block_name) {
+async function uploadToVolume(block_name, albatross_instance) {
 	const uploadButton = document.getElementById(`upload-block-button-${block_name}`);
 	const block_compressed = document.getElementById(`block_compressed-${block_name}`).checked;
 	const block_data = document.getElementById(`block_data_upload-${block_name}`).files[0];
@@ -914,6 +976,7 @@ async function uploadToVolume(block_name) {
 				"block_compressed": block_compressed
 			})
 		formData.append("json_data", json_data)
+		formData.append("albatross_instance", albatross_instance)
 		formData.append("molly_csrf", molly_csrf)
 		formData.append("block_data", block_data)
 		const response = await fetch("/api/volume/upload", {
@@ -1071,7 +1134,7 @@ async function updateToken(value) {
 	}
 }
 
-async function updateUnikernel(job, to_be_updated_unikernel, currently_running_unikernel, unikernel_name) {
+async function updateUnikernel(job, to_be_updated_unikernel, currently_running_unikernel, unikernel_name, albatross_instance) {
 	const updateButton = document.getElementById("update-unikernel-button");
 	const unikernelArguments = document.getElementById("unikernel-arguments").value;
 	const argumentsToggle = document.getElementById("arguments-toggle").checked;
@@ -1136,7 +1199,8 @@ async function updateUnikernel(job, to_be_updated_unikernel, currently_running_u
 						"dns_address": dns_address ? dns_address : null,
 						"dns_name": dns_name ? dns_name : null
 					}) : null,
-					"molly_csrf": molly_csrf
+					"molly_csrf": molly_csrf,
+					"albatross_instance": albatross_instance,
 				})
 		})
 		const data = await response.json();
@@ -1160,7 +1224,7 @@ async function updateUnikernel(job, to_be_updated_unikernel, currently_running_u
 	}
 }
 
-async function rollbackUnikernel(unikernel_name) {
+async function rollbackUnikernel(unikernel_name, instance_name) {
 	const rollbackButton = document.getElementById("unikernel-rollback");
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	const formAlert = document.getElementById("form-alert");
@@ -1175,6 +1239,7 @@ async function rollbackUnikernel(unikernel_name) {
 			body: JSON.stringify(
 				{
 					"unikernel_name": unikernel_name,
+					"albatross_instance": instance_name,
 					"molly_csrf": molly_csrf
 				})
 		})

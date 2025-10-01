@@ -1,4 +1,107 @@
-let user_single_layout (user : User_model.user) unikernels policy current_time =
+let policy_row ?(error = "") instance_name policy (user : User_model.user) =
+  Tyxml_html.(
+    tr
+      [
+        td
+          ~a:
+            [
+              a_class
+                [
+                  "px-6 py-1 whitespace-nowrap text-sm font-medium \
+                   text-gray-800";
+                ];
+            ]
+          [
+            txt (Configuration.name_to_str instance_name);
+            p ~a:[ a_class [ "text-red-500 text-sm" ] ] [ txt error ];
+          ];
+        td
+          ~a:
+            [
+              a_class
+                [
+                  "px-6 py-1 whitespace-nowrap text-sm font-medium \
+                   text-gray-800";
+                ];
+            ]
+          [ txt (string_of_int policy.Vmm_core.Policy.unikernels) ];
+        td
+          ~a:
+            [
+              a_class
+                [
+                  "px-6 py-1 whitespace-normal text-sm font-medium \
+                   text-gray-800";
+                ];
+            ]
+          [ txt (string_of_int policy.memory ^ " MB") ];
+        td
+          ~a:
+            [
+              a_class
+                [
+                  "px-6 py-1 whitespace-normal text-sm font-medium \
+                   text-gray-800";
+                ];
+            ]
+          [ txt (string_of_int (Option.value policy.block ~default:0) ^ " MB") ];
+        td
+          ~a:
+            [
+              a_class
+                [
+                  "px-6 py-1 whitespace-normal text-sm font-medium \
+                   text-gray-800";
+                ];
+            ]
+          [
+            txt
+              (String.concat ", "
+                 (List.map string_of_int (Vmm_core.IS.elements policy.cpuids)));
+          ];
+        td
+          ~a:
+            [
+              a_class
+                [
+                  "px-6 py-1 whitespace-normal text-sm font-medium \
+                   text-gray-800";
+                ];
+            ]
+          [
+            txt
+              (String.concat ", "
+                 (List.map string_of_uri
+                    (Vmm_core.String_set.elements policy.bridges)));
+          ];
+        td
+          ~a:
+            [
+              a_class
+                [
+                  "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                   text-gray-800";
+                ];
+            ]
+          [
+            a
+              ~a:
+                [
+                  a_href
+                    ("/admin/u/policy/edit/" ^ user.uuid ^ "?instance="
+                    ^ Configuration.name_to_str instance_name);
+                  a_class
+                    [
+                      "border border-primary-500 hover:bg-primary-700 px-2 \
+                       py-1 text-primary-800 hover:text-primary-50 rounded";
+                    ];
+                ]
+              [ txt "Edit" ];
+          ];
+      ])
+
+let user_single_layout ~empty_policy (user : User_model.user) unikernels
+    policies current_time =
   Tyxml_html.(
     section
       ~a:[ a_class [ "p-4 bg-gray-50 my-1" ] ]
@@ -221,8 +324,8 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                 section
                   ~a:[ a_id "policy-table" ]
                   [
-                    (match policy with
-                    | None ->
+                    (match policies with
+                    | [] ->
                         a
                           ~a:
                             [
@@ -236,204 +339,110 @@ let user_single_layout (user : User_model.user) unikernels policy current_time =
                                 ];
                             ]
                           [ txt "Add Policy" ]
-                    | Some policy ->
-                        div
-                          [
-                            table
-                              ~a:
+                    | policy ->
+                        table
+                          ~a:
+                            [
+                              a_class
                                 [
-                                  a_class
-                                    [
-                                      "table-auto min-w-full divide-y \
-                                       divide-gray-200";
-                                    ];
-                                ]
-                              ~thead:
-                                (thead
+                                  "table-auto min-w-full divide-y \
+                                   divide-gray-200";
+                                ];
+                            ]
+                          ~thead:
+                            (thead
+                               [
+                                 tr
                                    [
-                                     tr
-                                       [
-                                         th
-                                           ~a:
+                                     th
+                                       ~a:
+                                         [
+                                           a_class
                                              [
-                                               a_class
-                                                 [
-                                                   "px-6 py-2 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase";
-                                                 ];
-                                             ]
-                                           [ txt "Allowed unikernels" ];
-                                         th
-                                           ~a:
+                                               "px-6 py-2 text-start text-xs \
+                                                font-bold text-primary-600 \
+                                                uppercase";
+                                             ];
+                                         ]
+                                       [ txt "Albatross instance" ];
+                                     th
+                                       ~a:
+                                         [
+                                           a_class
                                              [
-                                               a_class
-                                                 [
-                                                   "px-6 py-2 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase";
-                                                 ];
-                                             ]
-                                           [ txt "Allowed Memory" ];
-                                         th
-                                           ~a:
+                                               "px-6 py-2 text-start text-xs \
+                                                font-bold text-primary-600 \
+                                                uppercase";
+                                             ];
+                                         ]
+                                       [ txt "Allowed unikernels" ];
+                                     th
+                                       ~a:
+                                         [
+                                           a_class
                                              [
-                                               a_class
-                                                 [
-                                                   "px-6 py-2 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase";
-                                                 ];
-                                             ]
-                                           [ txt "Allowed Storage" ];
-                                         th
-                                           ~a:
+                                               "px-6 py-2 text-start text-xs \
+                                                font-bold text-primary-600 \
+                                                uppercase";
+                                             ];
+                                         ]
+                                       [ txt "Allowed Memory" ];
+                                     th
+                                       ~a:
+                                         [
+                                           a_class
                                              [
-                                               a_class
-                                                 [
-                                                   "px-6 py-2 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase";
-                                                 ];
-                                             ]
-                                           [ txt "CPU IDs" ];
-                                         th
-                                           ~a:
+                                               "px-6 py-2 text-start text-xs \
+                                                font-bold text-primary-600 \
+                                                uppercase";
+                                             ];
+                                         ]
+                                       [ txt "Allowed Storage" ];
+                                     th
+                                       ~a:
+                                         [
+                                           a_class
                                              [
-                                               a_class
-                                                 [
-                                                   "px-6 py-2 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase";
-                                                 ];
-                                             ]
-                                           [ txt "Network Bridges" ];
-                                         th
-                                           ~a:
+                                               "px-6 py-2 text-start text-xs \
+                                                font-bold text-primary-600 \
+                                                uppercase";
+                                             ];
+                                         ]
+                                       [ txt "CPU IDs" ];
+                                     th
+                                       ~a:
+                                         [
+                                           a_class
                                              [
-                                               a_class
-                                                 [
-                                                   "px-6 py-2 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase";
-                                                 ];
-                                             ]
-                                           [ txt "Action" ];
-                                       ];
-                                   ])
-                              [
-                                tr
-                                  [
-                                    td
-                                      ~a:
-                                        [
-                                          a_class
-                                            [
-                                              "px-6 py-1 whitespace-nowrap \
-                                               text-sm font-medium \
-                                               text-gray-800";
-                                            ];
-                                        ]
-                                      [
-                                        txt
-                                          (string_of_int
-                                             policy.Vmm_core.Policy.unikernels);
-                                      ];
-                                    td
-                                      ~a:
-                                        [
-                                          a_class
-                                            [
-                                              "px-6 py-1 whitespace-normal \
-                                               text-sm font-medium \
-                                               text-gray-800";
-                                            ];
-                                        ]
-                                      [
-                                        txt (string_of_int policy.memory ^ " MB");
-                                      ];
-                                    td
-                                      ~a:
-                                        [
-                                          a_class
-                                            [
-                                              "px-6 py-1 whitespace-normal \
-                                               text-sm font-medium \
-                                               text-gray-800";
-                                            ];
-                                        ]
-                                      [
-                                        txt
-                                          (string_of_int
-                                             (Option.value policy.block
-                                                ~default:0)
-                                          ^ " MB");
-                                      ];
-                                    td
-                                      ~a:
-                                        [
-                                          a_class
-                                            [
-                                              "px-6 py-1 whitespace-normal \
-                                               text-sm font-medium \
-                                               text-gray-800";
-                                            ];
-                                        ]
-                                      [
-                                        txt
-                                          (String.concat ", "
-                                             (List.map string_of_int
-                                                (Vmm_core.IS.elements
-                                                   policy.cpuids)));
-                                      ];
-                                    td
-                                      ~a:
-                                        [
-                                          a_class
-                                            [
-                                              "px-6 py-1 whitespace-normal \
-                                               text-sm font-medium \
-                                               text-gray-800";
-                                            ];
-                                        ]
-                                      [
-                                        txt
-                                          (String.concat ", "
-                                             (List.map string_of_uri
-                                                (Vmm_core.String_set.elements
-                                                   policy.bridges)));
-                                      ];
-                                    td
-                                      ~a:
-                                        [
-                                          a_class
-                                            [
-                                              "px-6 py-4 whitespace-nowrap \
-                                               text-sm font-medium \
-                                               text-gray-800";
-                                            ];
-                                        ]
-                                      [
-                                        a
-                                          ~a:
-                                            [
-                                              a_href
-                                                ("/admin/u/policy/edit/"
-                                               ^ user.uuid ^ "");
-                                              a_class
-                                                [
-                                                  "border border-primary-500 \
-                                                   hover:bg-primary-700 px-2 \
-                                                   py-1 text-primary-800 \
-                                                   hover:text-primary-50 \
-                                                   rounded";
-                                                ];
-                                            ]
-                                          [ txt "Edit" ];
-                                      ];
-                                  ];
-                              ];
-                          ]);
+                                               "px-6 py-2 text-start text-xs \
+                                                font-bold text-primary-600 \
+                                                uppercase";
+                                             ];
+                                         ]
+                                       [ txt "Network Bridges" ];
+                                     th
+                                       ~a:
+                                         [
+                                           a_class
+                                             [
+                                               "px-6 py-2 text-start text-xs \
+                                                font-bold text-primary-600 \
+                                                uppercase";
+                                             ];
+                                         ]
+                                       [ txt "Action" ];
+                                   ];
+                               ])
+                          (List.map
+                             (fun (instance_name, policy) ->
+                               match policy with
+                               | Error error ->
+                                   policy_row instance_name empty_policy user
+                                     ~error
+                               | Ok (Some p) -> policy_row instance_name p user
+                               | Ok None ->
+                                   policy_row instance_name empty_policy user)
+                             policy));
                   ];
               ];
           ];
