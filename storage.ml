@@ -17,7 +17,7 @@ let t_to_json users configurations =
     [
       ("version", `Int current_version);
       ("users", `List (List.map User_model.user_to_json users));
-      ("configuration", `List (List.map Configuration.to_json configurations));
+      ("configuration", Configuration.to_json configurations);
     ]
 
 let t_of_json json =
@@ -59,20 +59,8 @@ let t_of_json json =
               (Ok []) users
           in
           let* configurations =
-            if v < 8 then
-              let* cfg = Configuration.of_json_v1 configuration in
-              Ok [ cfg ]
-            else
-              match configuration with
-              | `List cs ->
-                  List.fold_left
-                    (fun acc js ->
-                      let* acc = acc in
-                      let* config = Configuration.of_json js in
-                      Ok (config :: acc))
-                    (Ok []) cs
-              | _ ->
-                  Error (`Msg "invalid data: expected a list of configurations")
+            if v < 8 then Configuration.of_json_v1 configuration
+            else Configuration.of_json configuration
           in
           Ok (users, configurations)
       | _ -> Error (`Msg "invalid data: no version and users field"))
