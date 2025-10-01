@@ -534,7 +534,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                     | Ok `Eof ->
                         TLS.close tls_flow >|= fun () ->
                         Error
-                          (Fmt.str "eof from albatross %a:%u querying %a %a"
+                          (Fmt.str "eof from albatross %s %a:%u querying %a %a" (Configuration.name_to_str config.name)
                              Ipaddr.pp config.server_ip config.server_port
                              Vmm_core.Name.pp name
                              (Vmm_commands.pp ~verbose:false)
