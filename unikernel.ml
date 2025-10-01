@@ -3199,8 +3199,7 @@ struct
     Store.connect storage >>= function
     | Error (`Msg msg) -> failwith msg
     | Ok store -> (
-        Albatross_state.init_all stack (Store.configurations store) >>= function
-        | Ok albatross_instances ->
+        Albatross_state.init_all stack (Store.configurations store) >>= fun albatross_instances ->
             let albatross_instances = ref albatross_instances in
             let port = K.port () in
             Logs.info (fun m ->
