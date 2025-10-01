@@ -1157,12 +1157,12 @@ struct
         | Error msg ->
             Logs.err (fun m ->
                 m "Error communicating with albatross '%s': %s"
-                  (Vmm_core.Name.to_string name)
+                  (Configuration.name_to_str name)
                   msg);
             let failure =
               `Assoc
                 [
-                  ("instance", `String (Vmm_core.Name.to_string name));
+                  ("instance", `String (Configuration.name_to_str name));
                   ("error", `String msg);
                 ]
             in
@@ -1172,12 +1172,12 @@ struct
             | Error (`String err) ->
                 Logs.err (fun m ->
                     m "Error parsing response from albatross '%s': %s"
-                      (Vmm_core.Name.to_string name)
+                      (Configuration.name_to_str name)
                       err);
                 let failure =
                   `Assoc
                     [
-                      ("instance", `String (Vmm_core.Name.to_string name));
+                      ("instance", `String (Configuration.name_to_str name));
                       ("error", `String err);
                     ]
                 in
