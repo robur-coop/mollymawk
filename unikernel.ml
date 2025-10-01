@@ -405,7 +405,8 @@ struct
               msg);
         []
     | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
-    | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
+    | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
+        unikernels
     | Ok reply ->
         Logs.err (fun m ->
             m "Expected a unikernel info reply from '%s', got %a"
@@ -1153,20 +1154,20 @@ struct
         match acc with
         | Error _ as e -> Lwt.return e
         | Ok acc_list -> (
-                Albatross_state.query stack instance ~domain:user.name
-                  (`Unikernel_cmd `Unikernel_info)
-                >>= function
-                | Error msg ->
+            Albatross_state.query stack instance ~domain:user.name
+              (`Unikernel_cmd `Unikernel_info)
+            >>= function
+            | Error msg ->
+                Logs.err (fun m ->
+                    m "Error while communicating with albatross: %s" msg);
+                Lwt.return (Error msg)
+            | Ok (_hdr, res) -> (
+                match Albatross_json.res res with
+                | Error (`String err) ->
                     Logs.err (fun m ->
-                        m "Error while communicating with albatross: %s" msg);
-                    Lwt.return (Error msg)
-                | Ok (_hdr, res) -> (
-                    match Albatross_json.res res with
-                    | Error (`String err) ->
-                        Logs.err (fun m ->
-                            m "Error while parsing albatross response: %s" err);
-                        Lwt.return (Error err)
-                    | Ok parsed -> Lwt.return (Ok (parsed :: acc_list))))))
+                        m "Error while parsing albatross response: %s" err);
+                    Lwt.return (Error err)
+                | Ok parsed -> Lwt.return (Ok (parsed :: acc_list)))))
       (Ok [])
       (Albatross.Albatross_map.bindings albatross_instances)
     >>= function
@@ -2162,8 +2163,9 @@ struct
         | Some u -> (
             let user_policy =
               Option.value ~default:Albatross_state.empty_policy
-                (Result.to_option
-                   (Albatross_state.policy albatross ~domain:u.name))
+                (Option.join
+                   (Result.to_option
+                      (Albatross_state.policy albatross ~domain:u.name)))
             in
             match Albatross_state.policy_resource_avalaible albatross with
             | Ok unallocated_resources -> (
@@ -2662,8 +2664,10 @@ struct
             >>= fun unikernels ->
             let policy =
               Option.value ~default:Albatross_state.empty_policy
-                (Result.to_option
-                   (Albatross_state.policy albatross_instance ~domain:user.name))
+                (Option.join
+                   (Result.to_option
+                      (Albatross_state.policy albatross_instance
+                         ~domain:user.name)))
             in
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
