@@ -453,7 +453,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         Lwt.return
           (Error
              (Fmt.str
-                "albatross connection failure %a:%u while quering %a %a: %a"
+                "albatross %s connection failure %a:%u while quering %a %a: %a"
+                (Configuration.name_to_str config.name)
                 Ipaddr.pp config.server_ip config.server_port Vmm_core.Name.pp
                 name
                 (Vmm_commands.pp ~verbose:false)
