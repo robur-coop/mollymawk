@@ -588,10 +588,11 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             in
             let state = { error = None; policies; configuration } in
             Lwt.return state
-        | Ok _w ->
+        | Ok w ->
             Logs.warn (fun m ->
-                m "init: unexpected policy reply for %s"
-                  (Configuration.name_to_str configuration.name));
+                m "init: unexpected policy reply for %s: %a"
+                  (Configuration.name_to_str configuration.name)
+                  (Vmm_commands.pp_wire ~verbose:false) w);
             let state =
               {
                 error = Some "Unexpected policy reply";
