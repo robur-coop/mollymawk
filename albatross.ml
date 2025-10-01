@@ -543,8 +543,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                         TLS.close tls_flow >|= fun () ->
                         Error
                           (Fmt.str
-                             "albatross received error reading from %a:%u \
-                              querying %a %a: %a"
+                             "albatross %s received error reading from %a:%u \
+                              querying %a %a: %a" (Configuration.name_to_str config.name)
                              Ipaddr.pp config.server_ip config.server_port
                              Vmm_core.Name.pp name
                              (Vmm_commands.pp ~verbose:false)
