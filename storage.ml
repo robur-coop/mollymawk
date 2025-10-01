@@ -136,12 +136,14 @@ module Make (BLOCK : Mirage_block.S) = struct
     | `Create ->
         if exists then
           Lwt.return
-            (error_msgf "configuration %s already exists" (Configuration.name_to_str configuration.name))
+            (error_msgf "configuration %s already exists"
+               (Configuration.name_to_str configuration.name))
         else store_configurations t (t.configurations @ [ configuration ])
     | `Update ->
         if not exists then
           Lwt.return
-            (error_msgf "configuration %s not found" (Configuration.name_to_str configuration.name))
+            (error_msgf "configuration %s not found"
+               (Configuration.name_to_str configuration.name))
         else
           let configurations =
             List.map
