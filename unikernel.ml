@@ -2143,17 +2143,17 @@ struct
     | None ->
         let status =
           {
-            Utils.Status.code = 404;
+            Utils.Status.code = 400;
             title = "Error";
             data = `String ("Couldn't find account with uuid: " ^ uuid);
             success = false;
           }
         in
         reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
+          (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
              ~content:(Error_page.error_layout status)
              ~icon:"/images/robur.png" ())
-          `Not_found
+          `Bad_request
 
   let edit_policy store albatross_instances uuid instance_name _
       (user : User_model.user) reqd =
@@ -2169,9 +2169,9 @@ struct
       Albatross_state.find_instance_by_name albatross_instances instance_name
     with
     | Error err ->
-        let status = status 404 ("Couldn't find albatross instance: " ^ err) in
+        let status = status 400 ("Couldn't find albatross instance: " ^ err) in
         reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
+          (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
              ~content:(Error_page.error_layout status)
              ~icon:"/images/robur.png" ())
           `Bad_request
@@ -2216,10 +2216,10 @@ struct
                   `Not_found)
         | None ->
             let status =
-              status 404 ("Couldn't find account with uuid: " ^ uuid)
+              status 400 ("Couldn't find account with uuid: " ^ uuid)
             in
             reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
+              (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
                  ~content:(Error_page.error_layout status)
                  ~icon:"/images/robur.png" ())
               `Bad_request)
@@ -3178,17 +3178,17 @@ struct
         | _ ->
             let error =
               {
-                Utils.Status.code = 404;
+                Utils.Status.code = 400;
                 title = "Page not found";
                 success = false;
                 data = `String "This page cannot be found.";
               }
             in
             reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
+              (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
                  ~content:(Error_page.error_layout error)
                  ~icon:"/images/robur.png" ())
-              `Not_found)
+              `Bad_request)
 
   let pp_error ppf = function
     | #H1.Status.t as code -> H1.Status.pp_hum ppf code
