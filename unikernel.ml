@@ -1142,7 +1142,7 @@ struct
                         ^ Configuration.name_to_str instance_name);
                   })
              ~icon:"/images/robur.png" ())
-          `Internal_server_error
+          `Bad_request
 
   let unikernel_info stack albatross_instances _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
@@ -1254,7 +1254,7 @@ struct
                         ^ Configuration.name_to_str instance_name);
                   })
              ~icon:"/images/robur.png" ())
-          `Internal_server_error
+          `Bad_request
 
   let unikernel_prepare_update stack store albatross_instances ~unikernel_name
       ~instance_name http_client _ (user : User_model.user) reqd =
@@ -1459,7 +1459,7 @@ struct
                ("An error occured while finding albatross instance "
                ^ Configuration.name_to_str instance_name))
           ~title:"Albatross Instance Error" ~api_meth:false
-          `Internal_server_error reqd ()
+          `Bad_request reqd ()
 
   let force_create_unikernel stack albatross ~unikernel_name ~push
       (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user) =
@@ -1782,7 +1782,7 @@ struct
                            ("An error occured while finding albatross instance "
                            ^ Configuration.name_to_str instance_name))
                       ~title:"Albatross Instance Error" ~api_meth:false
-                      `Internal_server_error reqd ())
+                      `Bad_request reqd ())
             | Error (`Msg err) ->
                 Middleware.http_response reqd ~title:"Error: Bad instance name"
                   ~data:
@@ -2097,9 +2097,12 @@ struct
         Logs.err (fun m ->
             m "Error finding albatross instance %s"
               (Configuration.name_to_str instance_name));
-        Middleware.redirect_to_instance_selector
-          ("/unikernel/info?unikernel=" ^ unikernel_name)
-          reqd ()
+        Middleware.redirect_to_error ~data:
+          (`String
+             ("Error finding albatross instance: "
+             ^ Configuration.name_to_str instance_name))
+          ~title:"Albatross Instance Error" ~api_meth:false
+          `Bad_request reqd ()
 
   let view_user stack albatross_instances store uuid _ (user : User_model.user)
       reqd =
@@ -2340,7 +2343,12 @@ struct
                  ~content:(Error_page.error_layout err)
                  ~icon:"/images/robur.png" ())
               `Internal_server_error)
-    | _ -> Middleware.redirect_to_instance_selector "/volumes" reqd ()
+    | _ -> Middleware.redirect_to_error ~data:
+    (`String
+       ("Error finding albatross instance: "
+       ^ Configuration.name_to_str instance_name))
+    ~title:"Albatross Instance Error" ~api_meth:false
+    `Bad_request reqd ()
 
   let delete_volume stack albatross_instances (user : User_model.user) json_dict
       reqd =
@@ -2679,7 +2687,12 @@ struct
                  ~content:(Error_page.error_layout err)
                  ~icon:"/images/robur.png" ())
               `Internal_server_error)
-    | _ -> Middleware.redirect_to_instance_selector "/usage" reqd ()
+    | _ -> Middleware.redirect_to_error ~data:
+    (`String
+       ("Error finding albatross instance: "
+       ^ Configuration.name_to_str instance_name))
+    ~title:"Albatross Instance Error" ~api_meth:false
+    `Bad_request reqd ()
 
   let choose_instance store (albatross_instances : Albatross_state.a_map)
       callback _ (user : User_model.user) reqd =
