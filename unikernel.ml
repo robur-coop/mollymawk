@@ -3214,5 +3214,4 @@ struct
             let http = Paf.http_service ~error_handler request_handler in
             let (`Initialized th) = Paf.serve http service in
             th
-        | Error err -> failwith err)
 end
