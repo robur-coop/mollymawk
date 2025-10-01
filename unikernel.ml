@@ -427,7 +427,8 @@ struct
                   (Configuration.name_to_str instance.configuration.name)
                   msg);
             (instance.configuration.name, [])
-        | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels)) ->
+        | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
+        | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
             (instance.configuration.name, unikernels)
         | Ok reply ->
             Logs.err (fun m ->
