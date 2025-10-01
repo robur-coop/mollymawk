@@ -2664,14 +2664,7 @@ struct
             user_unikernels_by_instance stack albatross_instance user.name
             >>= fun unikernels ->
             let policy =
-              match
-                Albatross_state.policy albatross_instance ~domain:user.name
-              with
-              | Ok p -> (
-                  match p with
-                  | Some p -> p
-                  | None -> Albatross_state.empty_policy)
-              | Error _ -> Albatross_state.empty_policy
+              Option.value ~default:Albatross_state.empty_policy (Result.to_option (Albatross_state.policy albatross_instance ~domain:user.name))
             in
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
