@@ -478,7 +478,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 Error
                   (Fmt.str
                      "albatross %s establishing TLS to %a:%u while querying %a \
-                      %a: %a" (Configuration.name_to_str config.name)
+                      %a: %a"
+                     (Configuration.name_to_str config.name)
                      Ipaddr.pp config.server_ip config.server_port
                      Vmm_core.Name.pp name
                      (Vmm_commands.pp ~verbose:false)
@@ -534,7 +535,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                     | Ok `Eof ->
                         TLS.close tls_flow >|= fun () ->
                         Error
-                          (Fmt.str "eof from albatross %s %a:%u querying %a %a" (Configuration.name_to_str config.name)
+                          (Fmt.str "eof from albatross %s %a:%u querying %a %a"
+                             (Configuration.name_to_str config.name)
                              Ipaddr.pp config.server_ip config.server_port
                              Vmm_core.Name.pp name
                              (Vmm_commands.pp ~verbose:false)
@@ -544,7 +546,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                         Error
                           (Fmt.str
                              "albatross %s received error reading from %a:%u \
-                              querying %a %a: %a" (Configuration.name_to_str config.name)
+                              querying %a %a: %a"
+                             (Configuration.name_to_str config.name)
                              Ipaddr.pp config.server_ip config.server_port
                              Vmm_core.Name.pp name
                              (Vmm_commands.pp ~verbose:false)
