@@ -623,7 +623,6 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         init stack configuration >|= fun state ->
         Albatross_map.add configuration.name state acc_map)
       Albatross_map.empty configs
-    >|= fun final_map -> Ok final_map
 
   let find_instance_by_name (albatross_map : a_map) name =
     match Albatross_map.find_opt name albatross_map with
