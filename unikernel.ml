@@ -1077,7 +1077,7 @@ struct
     let now = Mirage_ptime.now () in
     let missing_policy_error ?(err = None) () =
       {
-        Utils.Status.code = 500;
+        Utils.Status.code = 400;
         title = "Resource policy error";
         data = `String (Option.value err ~default:"No policy found");
         success = false;
@@ -1135,11 +1135,11 @@ struct
               `Internal_server_error)
     | _ ->
         reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+          (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
              ~content:
                (Error_page.error_layout
                   {
-                    code = 500;
+                    code = 400;
                     success = false;
                     title = "Albatross Instance Error";
                     data =
@@ -1252,11 +1252,11 @@ struct
                   `Internal_server_error))
     | _ ->
         reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
+          (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
              ~content:
                (Error_page.error_layout
                   {
-                    code = 500;
+                    code = 400;
                     success = false;
                     title = "Albatross Instance Error";
                     data =
