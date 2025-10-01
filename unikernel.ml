@@ -1761,7 +1761,7 @@ struct
                                     m "Couldn't decode data %s" err);
                                 Middleware.http_response reqd ~title:"Error"
                                   ~data:(`String (String.escaped err))
-                                  `Internal_server_error))
+                                  `Bad_request))
                     | Ok (Some cfg) ->
                         process_unikernel_update ~unikernel_name ~job
                           ~to_be_updated_unikernel ~currently_running_unikernel
@@ -2156,7 +2156,7 @@ struct
           (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
              ~content:(Error_page.error_layout status)
              ~icon:"/images/robur.png" ())
-          `Not_found
+          `Bad_request
     | Ok albatross -> (
         match Store.find_by_uuid store uuid with
         | Some u -> (
