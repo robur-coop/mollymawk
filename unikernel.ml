@@ -450,8 +450,10 @@ struct
               (Configuration.name_to_str state.configuration.name)
               err);
         Error err
+    | Ok (_hdr, `Success (`Unikernel_info [ unikernel ]))
     | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ])) -> Ok unikernel
-    | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
+    | Ok (_hdr, `Success (`Unikernel_info unikernels))
+    | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels)) ->
         let message =
           Fmt.str "Expected one unikernel, but got %u" (List.length unikernels)
         in
