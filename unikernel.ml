@@ -451,7 +451,8 @@ struct
               err);
         Error err
     | Ok (_hdr, `Success (`Unikernel_info [ unikernel ]))
-    | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ])) -> Ok unikernel
+    | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ])) ->
+        Ok unikernel
     | Ok (_hdr, `Success (`Unikernel_info unikernels))
     | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels)) ->
         let message =
