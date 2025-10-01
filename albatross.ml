@@ -620,8 +620,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     let open Lwt.Infix in
     Lwt_list.fold_left_s
       (fun acc_map (configuration : Configuration.t) ->
-        init stack configuration >>= fun state ->
-        Lwt.return (Albatross_map.add configuration.name state acc_map))
+        init stack configuration >|= fun state ->
+        Albatross_map.add configuration.name state acc_map)
       Albatross_map.empty configs
     >|= fun final_map -> Ok final_map
 
