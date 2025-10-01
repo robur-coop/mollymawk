@@ -141,8 +141,7 @@ module Make (BLOCK : Mirage_block.S) = struct
     | `Update ->
         if not exists then
           Lwt.return
-            (error_msgf "configuration %a not found" Vmm_core.Name.pp
-               configuration.name)
+            (error_msgf "configuration %s not found" (Configuration.name_to_str configuration.name))
         else
           let configurations =
             List.map
