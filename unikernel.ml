@@ -3024,25 +3024,14 @@ struct
                   | Some idx -> String.sub path_after_edit 0 idx
                   | None -> path_after_edit
                 in
-                match
-                  Uri.get_query_param
-                    (Uri.of_string req.H1.Request.target)
-                    "instance"
-                with
-                | None ->
+                match get_instance_name req with
+                | Ok instance_name ->
+                    authenticate ~check_admin:true store reqd
+                      (edit_policy store !albatross_instances uuid instance_name)
+                | Error err ->
                     Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String "Albatross name missing") ~api_meth:false
-                      `Bad_request reqd ()
-                | Some name -> (
-                    match Configuration.name_of_str name with
-                    | Ok instance_name ->
-                        authenticate ~check_admin:true store reqd
-                          (edit_policy store !albatross_instances uuid
-                             instance_name)
-                    | Error (`Msg err) ->
-                        Middleware.redirect_to_error ~title:"Bad request"
-                          ~data:(`String ("Albatross name bad " ^ err))
-                          ~api_meth:false `Bad_request reqd ()))
+                      ~data:(`String ("Albatross name bad " ^ err))
+                      ~api_meth:false `Bad_request reqd ())
         | "/admin/settings" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (settings store))
