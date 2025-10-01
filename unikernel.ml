@@ -1759,24 +1759,46 @@ struct
                                    ^ Configuration.name_to_str instance_name
                                    ^ " with error: " ^ err))
                               `Bad_request
-                        | Ok (n, unikernel) -> (
-                            match
-                              Albatross_json.(
-                                unikernel_info (n, unikernel)
-                                |> Yojson.Basic.to_string |> config_of_json)
-                            with
-                            | Ok cfg ->
-                                process_unikernel_update ~unikernel_name ~job
-                                  ~to_be_updated_unikernel
-                                  ~currently_running_unikernel
-                                  ~http_liveliness_address ~dns_liveliness stack
-                                  cfg user store http_client albatross reqd
-                            | Error (`Msg err) ->
-                                Logs.warn (fun m ->
-                                    m "Couldn't decode data %s" err);
-                                Middleware.http_response reqd ~title:"Error"
-                                  ~data:(`String (String.escaped err))
-                                  `Bad_request))
+                        | Ok (n, (info : Vmm_core.Unikernel.info)) ->
+                            let (cfg : Vmm_core.Unikernel.config) =
+                              {
+                                Vmm_core.Unikernel.typ = info.typ;
+                                compressed = false;
+                                image = "";
+                                fail_behaviour = info.fail_behaviour;
+                                cpuid = info.cpuid;
+                                memory = info.cpuid;
+                                block_devices =
+                                  List.map
+                                    (fun {
+                                           Vmm_core.Unikernel.unikernel_device;
+                                           host_device;
+                                           sector_size;
+                                           _;
+                                         } ->
+                                      ( unikernel_device,
+                                        Some host_device,
+                                        Some sector_size ))
+                                    info.block_devices;
+                                bridges =
+                                  List.map
+                                    (fun {
+                                           Vmm_core.Unikernel.unikernel_device;
+                                           host_device;
+                                           mac;
+                                         } ->
+                                      ( unikernel_device,
+                                        Some host_device,
+                                        Some mac ))
+                                    info.bridges;
+                                argv = info.argv;
+                              }
+                            in
+                            process_unikernel_update ~unikernel_name ~job
+                              ~to_be_updated_unikernel
+                              ~currently_running_unikernel
+                              ~http_liveliness_address ~dns_liveliness stack cfg
+                              user store http_client albatross reqd)
                     | Ok (Some cfg) ->
                         process_unikernel_update ~unikernel_name ~job
                           ~to_be_updated_unikernel ~currently_running_unikernel
