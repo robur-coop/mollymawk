@@ -477,8 +477,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 S.TCP.close flow >|= fun () ->
                 Error
                   (Fmt.str
-                     "albatross establishing TLS to %a:%u while querying %a \
-                      %a: %a"
+                     "albatross %s establishing TLS to %a:%u while querying %a \
+                      %a: %a" (Configuration.name_to_str config.name)
                      Ipaddr.pp config.server_ip config.server_port
                      Vmm_core.Name.pp name
                      (Vmm_commands.pp ~verbose:false)
