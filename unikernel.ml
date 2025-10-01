@@ -2316,7 +2316,7 @@ struct
                   `Bad_request)
         | None ->
             Middleware.http_response reqd ~title:"Error"
-              ~data:(`String "User not found") `Bad_request)                                                                                         
+              ~data:(`String "User not found") `Bad_request)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:
