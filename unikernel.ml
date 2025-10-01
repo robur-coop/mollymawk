@@ -1153,15 +1153,6 @@ struct
         match acc with
         | Error _ as e -> Lwt.return e
         | Ok acc_list -> (
-            match
-              Albatross_state.find_instance_by_name albatross_instances
-                pol.configuration.name
-            with
-            | Error err ->
-                Logs.err (fun m ->
-                    m "Error while finding albatross instance: %s" err);
-                Lwt.return (Error err)
-            | Ok instance -> (
                 Albatross_state.query stack instance ~domain:user.name
                   (`Unikernel_cmd `Unikernel_info)
                 >>= function
