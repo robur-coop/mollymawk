@@ -1878,13 +1878,13 @@ struct
                     (`String
                        ("Error finding albatross instance: "
                        ^ Configuration.name_to_str instance_name))
-                  `Internal_server_error)
+                  `Bad_request)
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:
                 (`String
                    ("Error converting albatross name to instance name: " ^ err))
-              `Internal_server_error)
+              `Bad_request)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
@@ -1930,13 +1930,13 @@ struct
                     (`String
                        ("Error finding albatross instance: "
                        ^ Configuration.name_to_str instance_name))
-                  `Internal_server_error)
+                  `Bad_request)
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:
                 (`String
                    ("Error converting albatross name to instance name: " ^ err))
-              `Internal_server_error)
+              `Bad_request)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
@@ -2047,11 +2047,11 @@ struct
                               generate_http_error_response
                                 ("Error finding albatross instance: "
                                 ^ Configuration.name_to_str instance_name)
-                                `Internal_server_error)
+                                `Bad_request)
                       | Error (`Msg err) ->
                           generate_http_error_response
                             ("Error converting name to albatross: " ^ err)
-                            `Internal_server_error)
+                            `Bad_request)
                   | _ ->
                       Logs.info (fun m -> m "Missing Fields");
                       generate_http_error_response
@@ -2210,7 +2210,7 @@ struct
               (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
                  ~content:(Error_page.error_layout status)
                  ~icon:"/images/robur.png" ())
-              `Not_found)
+              `Bad_request)
 
   let update_policy stack albatross_instances store _user json_dict reqd =
     match
