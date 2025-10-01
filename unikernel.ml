@@ -1203,8 +1203,7 @@ struct
     with
     | Ok albatross -> (
         user_unikernel stack albatross ~user_name:user.name ~unikernel_name
-        >>= fun unikernel_info ->
-        match unikernel_info with
+        >>= function
         | Error err ->
             reply reqd ~content_type:"text/html"
               (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
@@ -1275,8 +1274,7 @@ struct
     with
     | Ok albatross -> (
         user_unikernel stack albatross ~user_name:user.name ~unikernel_name
-        >>= fun unikernel_info ->
-        match unikernel_info with
+        >>= function
         | Error err ->
             Middleware.redirect_to_error
               ~data:
@@ -1752,8 +1750,7 @@ struct
                     | Ok None -> (
                         user_unikernel stack albatross ~user_name:user.name
                           ~unikernel_name
-                        >>= fun unikernel_info ->
-                        match unikernel_info with
+                        >>= function
                         | Error err ->
                             Middleware.http_response reqd ~title:"Error"
                               ~data:
@@ -2074,8 +2071,8 @@ struct
                   Lwt_stream.junk_while (Fun.const true) contents)
             stream
         in
-        Lwt.both th (process_stream ()) >>= fun (_res, ()) ->
-        th >>= function
+        Lwt.both th (process_stream ()) >>= fun (parse_res, ()) ->
+        match parse_res with
         | Error (`Msg e) ->
             Logs.info (fun m -> m "Multipart parser thread error: %s" e);
             Lwt.return_unit
