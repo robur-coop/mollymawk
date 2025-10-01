@@ -1150,33 +1150,47 @@ struct
   let unikernel_info stack albatross_instances _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
     Lwt_list.fold_left_s
-      (fun acc (_name, (instance : Albatross.t)) ->
-        match acc with
-        | Error _ as e -> Lwt.return e
-        | Ok acc_list -> (
-            Albatross_state.query stack instance ~domain:user.name
-              (`Unikernel_cmd `Unikernel_info)
-            >>= function
-            | Error msg ->
+      (fun (successes, failures) (name, (instance : Albatross.t)) ->
+        Albatross_state.query stack instance ~domain:user.name
+          (`Unikernel_cmd `Unikernel_info)
+        >>= function
+        | Error msg ->
+            Logs.err (fun m ->
+                m "Error communicating with albatross '%s': %s"
+                  (Vmm_core.Name.to_string name)
+                  msg);
+            let failure =
+              `Assoc
+                [
+                  ("instance", `String (Vmm_core.Name.to_string name));
+                  ("error", `String msg);
+                ]
+            in
+            Lwt.return (successes, failure :: failures)
+        | Ok (_hdr, res) -> (
+            match Albatross_json.res res with
+            | Error (`String err) ->
                 Logs.err (fun m ->
-                    m "Error while communicating with albatross: %s" msg);
-                Lwt.return (Error msg)
-            | Ok (_hdr, res) -> (
-                match Albatross_json.res res with
-                | Error (`String err) ->
-                    Logs.err (fun m ->
-                        m "Error while parsing albatross response: %s" err);
-                    Lwt.return (Error err)
-                | Ok parsed -> Lwt.return (Ok (parsed :: acc_list)))))
-      (Ok [])
+                    m "Error parsing response from albatross '%s': %s"
+                      (Vmm_core.Name.to_string name)
+                      err);
+                let failure =
+                  `Assoc
+                    [
+                      ("instance", `String (Vmm_core.Name.to_string name));
+                      ("error", `String err);
+                    ]
+                in
+                Lwt.return (successes, failure :: failures)
+            | Ok parsed -> Lwt.return (parsed :: successes, failures)))
+      ([], [])
       (Albatross.Albatross_map.bindings albatross_instances)
-    >>= function
-    | Error msg ->
-        Middleware.http_response reqd ~title:"Error"
-          ~data:(`String ("Error while querying albatross: " ^ msg))
-          `Internal_server_error
-    | Ok res ->
-        Middleware.http_response reqd ~title:"Success" ~data:(`List res) `OK
+    >>= fun (successes, failures) ->
+    let response_data =
+      `Assoc [ ("data", `List successes); ("errors", `List failures) ]
+    in
+    Middleware.http_response reqd ~title:"Unikernel Information"
+      ~data:response_data `OK
 
   let unikernel_info_one stack store albatross_instances ~unikernel_name
       ~instance_name _ (user : User_model.user) reqd =
