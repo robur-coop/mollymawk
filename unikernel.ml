@@ -3199,18 +3199,19 @@ struct
     Store.connect storage >>= function
     | Error (`Msg msg) -> failwith msg
     | Ok store ->
-        Albatross_state.init_all stack (Store.configurations store) >>= fun albatross_instances ->
-            let albatross_instances = ref albatross_instances in
-            let port = K.port () in
-            Logs.info (fun m ->
-                m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
-                  port);
-            let request_handler =
-              request_handler stack albatross_instances js_file css_file imgs
-                store http_client
-            in
-            Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
-            let http = Paf.http_service ~error_handler request_handler in
-            let (`Initialized th) = Paf.serve http service in
-            th
+        Albatross_state.init_all stack (Store.configurations store)
+        >>= fun albatross_instances ->
+        let albatross_instances = ref albatross_instances in
+        let port = K.port () in
+        Logs.info (fun m ->
+            m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
+              port);
+        let request_handler =
+          request_handler stack albatross_instances js_file css_file imgs store
+            http_client
+        in
+        Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
+        let http = Paf.http_service ~error_handler request_handler in
+        let (`Initialized th) = Paf.serve http service in
+        th
 end

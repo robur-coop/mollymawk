@@ -592,7 +592,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             Logs.warn (fun m ->
                 m "init: unexpected policy reply for %s: %a"
                   (Configuration.name_to_str configuration.name)
-                  (Vmm_commands.pp_wire ~verbose:false) w);
+                  (Vmm_commands.pp_wire ~verbose:false)
+                  w);
             let state =
               {
                 error = Some "Unexpected policy reply";
