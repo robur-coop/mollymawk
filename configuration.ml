@@ -137,7 +137,7 @@ let of_json_v1 json =
                         (Yojson.Basic.to_string (`Assoc xs))))
           else
             Error
-              (`Msg (Fmt.str "configuration: found version %u, expected %u" v 1))
+              (`Msg (Fmt.str "configuration: found version %u, expected 1" v))
       | Some _ -> Error (`Msg "configuration: version must be an integer"))
   | _ -> Error (`Msg "configuration: expected a dictionary")
 
