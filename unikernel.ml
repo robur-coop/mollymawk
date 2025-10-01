@@ -404,7 +404,8 @@ struct
               (Configuration.name_to_str state.configuration.name)
               msg);
         []
-    | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels)) -> unikernels
+    | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
+    | Ok (_hdr, `Success (`Unikernel_info unikernels)) -> unikernels
     | Ok reply ->
         Logs.err (fun m ->
             m "Expected a unikernel info reply from '%s', got %a"
