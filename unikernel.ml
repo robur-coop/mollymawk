@@ -575,7 +575,7 @@ struct
                       | Error (`Msg err) ->
                           Middleware.http_response reqd ~title:"Error"
                             ~data:(`String (String.escaped err))
-                            `Bad_request)
+                            `Internal_server_error)
                   | _ ->
                       Middleware.http_response reqd ~title:"Error"
                         ~data:
@@ -736,7 +736,7 @@ struct
         | None ->
             Logs.warn (fun m -> m "%s : Account not found" key);
             Middleware.http_response reqd ~title:"Error"
-              ~data:(`String "Account not found") `Bad_request
+              ~data:(`String "Account not found") `Not_found
         | Some user -> (
             if error_on_last user then (
               Logs.warn (fun m ->
@@ -821,17 +821,17 @@ struct
     | Error (`Msg err) ->
         let error =
           {
-            Utils.Status.code = 401;
+            Utils.Status.code = 400;
             title = "Unauthenticated";
             success = false;
             data = `String err;
           }
         in
         reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"401 | Mollymawk"
+          (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
              ~content:(Error_page.error_layout error)
              ~icon:"/images/robur.png" ())
-          `Unauthorized
+          `Bad_request
 
   let update_password store (user : User_model.user) json_dict reqd =
     match
@@ -863,7 +863,7 @@ struct
         else if not (User_model.password_validation new_password) then
           Middleware.http_response reqd ~title:"Error"
             ~data:(`String "New password must be atleast 8 characters.")
-            `Internal_server_error
+            `Bad_request
         else
           let updated_user =
             User_model.update_user user ~password:new_password_hash
@@ -930,31 +930,31 @@ struct
         | None ->
             let error =
               {
-                Utils.Status.code = 401;
+                Utils.Status.code = 404;
                 title = "Unauthenticated";
                 success = false;
                 data = `String "Auth cookie not found";
               }
             in
             reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout ~page_title:"401 | Mollymawk"
+              (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
                  ~content:(Error_page.error_layout error)
                  ~icon:"/images/robur.png" ())
-              `Unauthorized)
+              `Not_found)
     | Error (`Msg err) ->
         let error =
           {
-            Utils.Status.code = 401;
+            Utils.Status.code = 400;
             title = "Unauthenticated";
             success = false;
             data = `String err;
           }
         in
         reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"401 | Mollymawk"
+          (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
              ~content:(Error_page.error_layout error)
              ~icon:"/images/robur.png" ())
-          `Unauthorized
+          `Bad_request
 
   let close_session store (user : User_model.user) json_dict reqd =
     match Utils.Json.(get "session_value" json_dict) with
@@ -1117,7 +1117,7 @@ struct
                          ~content:
                            (Error_page.error_layout (missing_policy_error ()))
                          ~icon:"/images/robur.png" ())
-                      `Internal_server_error)
+                      `Bad_request)
             | Error err ->
                 reply reqd ~content_type:"text/html"
                   (Guest_layout.guest_layout
@@ -1126,7 +1126,7 @@ struct
                        (Error_page.error_layout
                           (missing_policy_error ~err:(Some err) ()))
                      ~icon:"/images/robur.png" ())
-                  `Internal_server_error)
+                  `Bad_request)
         | Error err ->
             reply reqd ~content_type:"text/html"
               (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
@@ -1135,11 +1135,11 @@ struct
               `Internal_server_error)
     | _ ->
         reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
+          (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
              ~content:
                (Error_page.error_layout
                   {
-                    code = 400;
+                    code = 404;
                     success = false;
                     title = "Albatross Instance Error";
                     data =
@@ -1148,7 +1148,7 @@ struct
                         ^ Configuration.name_to_str instance_name);
                   })
              ~icon:"/images/robur.png" ())
-          `Bad_request
+          `Not_found
 
   let unikernel_info stack albatross_instances _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
@@ -1251,11 +1251,11 @@ struct
                   `Internal_server_error))
     | _ ->
         reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
+          (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
              ~content:
                (Error_page.error_layout
                   {
-                    code = 400;
+                    code = 404;
                     success = false;
                     title = "Albatross Instance Error";
                     data =
@@ -1264,7 +1264,7 @@ struct
                         ^ Configuration.name_to_str instance_name);
                   })
              ~icon:"/images/robur.png" ())
-          `Bad_request
+          `Not_found
 
   let unikernel_prepare_update stack store albatross_instances ~unikernel_name
       ~instance_name http_client _ (user : User_model.user) reqd =
@@ -1467,7 +1467,7 @@ struct
             (`String
                ("An error occured while finding albatross instance "
                ^ Configuration.name_to_str instance_name))
-          ~title:"Albatross Instance Error" ~api_meth:false `Bad_request reqd ()
+          ~title:"Albatross Instance Error" ~api_meth:false `Not_found reqd ()
 
   let force_create_unikernel stack albatross ~unikernel_name ~push
       (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user) =
@@ -1656,7 +1656,7 @@ struct
             (`String
                (unikernel_name
               ^ " rollback failed. Could not find the build information."))
-          `Internal_server_error
+          `Not_found
 
   let process_unikernel_update ~unikernel_name ~job ~to_be_updated_unikernel
       ~currently_running_unikernel ~http_liveliness_address ~dns_liveliness
@@ -1811,7 +1811,7 @@ struct
                            ("An error occured while finding albatross instance "
                            ^ Configuration.name_to_str instance_name))
                       ~title:"Albatross Instance Error" ~api_meth:false
-                      `Bad_request reqd ())
+                      `Not_found reqd ())
             | Error (`Msg err) ->
                 Middleware.http_response reqd ~title:"Error: Bad instance name"
                   ~data:
@@ -1830,7 +1830,7 @@ struct
                 (`String
                    ("Liveliness check of currentyly running unikernel failed \
                      with error: " ^ err))
-              `Bad_request)
+              `Internal_server_error)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:(`String "Couldn't find job or build in json. Received ")
@@ -1858,7 +1858,7 @@ struct
                     (`String
                        ("Couldn't find albatross instance, "
                        ^ Configuration.name_to_str instance_name))
-                  `Bad_request)
+                  `Not_found)
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:
@@ -1908,7 +1908,7 @@ struct
                     (`String
                        ("Error finding albatross instance: "
                        ^ Configuration.name_to_str instance_name))
-                  `Bad_request)
+                  `Not_found)
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:
@@ -1960,7 +1960,7 @@ struct
                     (`String
                        ("Error finding albatross instance: "
                        ^ Configuration.name_to_str instance_name))
-                  `Bad_request)
+                  `Not_found)
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:
@@ -2077,7 +2077,7 @@ struct
                               generate_http_error_response
                                 ("Error finding albatross instance: "
                                 ^ Configuration.name_to_str instance_name)
-                                `Bad_request)
+                                `Not_found)
                       | Error (`Msg err) ->
                           generate_http_error_response
                             ("Error converting name to albatross: " ^ err)
@@ -2131,7 +2131,7 @@ struct
             (`String
                ("Error finding albatross instance: "
                ^ Configuration.name_to_str instance_name))
-          ~title:"Albatross Instance Error" ~api_meth:false `Bad_request reqd ()
+          ~title:"Albatross Instance Error" ~api_meth:false `Not_found reqd ()
 
   let view_user stack albatross_instances store uuid _ (user : User_model.user)
       reqd =
@@ -2162,17 +2162,17 @@ struct
     | None ->
         let status =
           {
-            Utils.Status.code = 400;
+            Utils.Status.code = 404;
             title = "Error";
             data = `String ("Couldn't find account with uuid: " ^ uuid);
             success = false;
           }
         in
         reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
+          (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
              ~content:(Error_page.error_layout status)
              ~icon:"/images/robur.png" ())
-          `Bad_request
+          `Not_found
 
   let edit_policy store albatross_instances uuid instance_name _
       (user : User_model.user) reqd =
@@ -2188,12 +2188,12 @@ struct
       Albatross_state.find_instance_by_name albatross_instances instance_name
     with
     | Error err ->
-        let status = status 400 ("Couldn't find albatross instance: " ^ err) in
+        let status = status 404 ("Couldn't find albatross instance: " ^ err) in
         reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
+          (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
              ~content:(Error_page.error_layout status)
              ~icon:"/images/robur.png" ())
-          `Bad_request
+          `Not_found
     | Ok albatross -> (
         match Store.find_by_uuid store uuid with
         | Some u -> (
@@ -2235,13 +2235,13 @@ struct
                   `Bad_request)
         | None ->
             let status =
-              status 400 ("Couldn't find account with uuid: " ^ uuid)
+              status 404 ("Couldn't find account with uuid: " ^ uuid)
             in
             reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
+              (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
                  ~content:(Error_page.error_layout status)
                  ~icon:"/images/robur.png" ())
-              `Bad_request)
+              `Not_found)
 
   let update_policy stack albatross_instances store _user json_dict reqd =
     match
@@ -2277,7 +2277,7 @@ struct
                                     (`String
                                        ("Policy is not smaller than root \
                                          policy: " ^ err))
-                                  `Internal_server_error
+                                  `Bad_request
                             | Ok () -> (
                                 Albatross_state.set_policy stack albatross
                                   ~domain:u.name policy
@@ -2326,7 +2326,7 @@ struct
                         (`String
                            ("Couldn't find albatross instance with name: "
                            ^ Configuration.name_to_str instance_name))
-                      `Bad_request)
+                      `Not_found)
             | Error (`Msg err) ->
                 Middleware.http_response reqd ~title:"Error"
                   ~data:
@@ -2335,7 +2335,7 @@ struct
                   `Bad_request)
         | None ->
             Middleware.http_response reqd ~title:"Error"
-              ~data:(`String "User not found") `Bad_request)
+              ~data:(`String "User not found") `Not_found)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:
@@ -2379,7 +2379,7 @@ struct
             (`String
                ("Error finding albatross instance: "
                ^ Configuration.name_to_str instance_name))
-          ~title:"Albatross Instance Error" ~api_meth:false `Bad_request reqd ()
+          ~title:"Albatross Instance Error" ~api_meth:false `Not_found reqd ()
 
   let delete_volume stack albatross_instances (user : User_model.user) json_dict
       reqd =
@@ -2423,7 +2423,7 @@ struct
                     (`String
                        ("Couldn't find albatross instance with name: "
                        ^ Configuration.name_to_str instance_name))
-                  `Bad_request)
+                  `Not_found)
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:
@@ -2478,7 +2478,7 @@ struct
                         | Error err ->
                             generate_http_error_response
                               (Fmt.str "an error with albatross. got %s" err)
-                              `Bad_request
+                              `Internal_server_error
                             >|= fun () -> Error ()
                         | Ok (_hdr, res) -> (
                             match Albatross_json.res res with
@@ -2500,7 +2500,7 @@ struct
                         | Error err ->
                             generate_http_error_response
                               (Fmt.str "an error with albatross. got %s" err)
-                              `Bad_request
+                              `Internal_server_error
                         | Ok (_hdr, res) -> (
                             match Albatross_json.res res with
                             | Error (`String err) ->
@@ -2587,7 +2587,7 @@ struct
                                    "Couldn't find albatross instance with name \
                                     %s"
                                    (Configuration.name_to_str albatross_instance))
-                                `Bad_request)
+                                `Not_found)
                       | Error (`Msg err) ->
                           generate_http_error_response
                             (Fmt.str
@@ -2675,7 +2675,7 @@ struct
                     (`String
                        ("Couldn't find albatross instance with name: "
                        ^ Configuration.name_to_str instance_name))
-                  `Bad_request)
+                  `Not_found)
         | Error (`Msg err) ->
             Middleware.http_response reqd ~title:"Error"
               ~data:
@@ -2726,7 +2726,7 @@ struct
             (`String
                ("Error finding albatross instance: "
                ^ Configuration.name_to_str instance_name))
-          ~title:"Albatross Instance Error" ~api_meth:false `Bad_request reqd ()
+          ~title:"Albatross Instance Error" ~api_meth:false `Not_found reqd ()
 
   let choose_instance store (albatross_instances : Albatross_state.a_map)
       callback _ (user : User_model.user) reqd =
@@ -2873,7 +2873,7 @@ struct
                   `Internal_server_error)
         | None ->
             Middleware.http_response reqd ~title:"Error"
-              ~data:(`String "Token not found") `Bad_request)
+              ~data:(`String "Token not found") `Not_found)
     | _ ->
         Middleware.http_response reqd ~title:"Error"
           ~data:
