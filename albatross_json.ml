@@ -91,11 +91,10 @@ let success = function
   | `Empty -> `Null
   | `String m -> `String m
   | `Policies ps -> policy_infos ps
-  | `Old_unikernel_info2 is -> unikernel_infos is
   | `Old_unikernel_info3 is -> unikernel_infos is
+  | `Old_unikernel_info4 is -> unikernel_infos is
   | `Unikernel_info is -> unikernel_infos is
   | `Block_devices bs -> block_infos bs
-  | `Old_unikernels _ -> `String "old unikernels not supported"
   | `Unikernel_image _ -> `String "unikernel image not supported"
   | `Old_block_device_image (_, bd) -> `String bd
   | `Block_device_image _compressed -> `String "block device image"
@@ -291,6 +290,8 @@ let config_of_json str =
       compressed = false;
       image = "";
       fail_behaviour;
+      add_name = true;
+      startup = None; (* TODO *)
       cpuid;
       memory;
       block_devices;

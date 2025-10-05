@@ -405,6 +405,7 @@ struct
               msg);
         []
     | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
+    | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
     | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
         unikernels
     | Ok reply ->
@@ -429,6 +430,7 @@ struct
                   msg);
             (instance.configuration.name, [])
         | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
+        | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
         | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
             (instance.configuration.name, unikernels)
         | Ok reply ->
@@ -451,10 +453,12 @@ struct
               err);
         Error err
     | Ok (_hdr, `Success (`Unikernel_info [ unikernel ]))
-    | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ])) ->
+    | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ]))
+    | Ok (_hdr, `Success (`Old_unikernel_info4 [ unikernel ])) ->
         Ok unikernel
     | Ok (_hdr, `Success (`Unikernel_info unikernels))
-    | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels)) ->
+    | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
+    | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels)) ->
         let message =
           Fmt.str "Expected one unikernel, but got %u" (List.length unikernels)
         in
@@ -1765,6 +1769,8 @@ struct
                                 Vmm_core.Unikernel.typ = info.typ;
                                 compressed = false;
                                 image = "";
+                                add_name = true;
+                                startup = info.startup;
                                 fail_behaviour = info.fail_behaviour;
                                 cpuid = info.cpuid;
                                 memory = info.cpuid;
