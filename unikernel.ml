@@ -822,7 +822,7 @@ struct
         let error =
           {
             Utils.Status.code = 400;
-            title = "Unauthenticated";
+            title = "Bad Request";
             success = false;
             data = `String err;
           }
@@ -931,7 +931,7 @@ struct
             let error =
               {
                 Utils.Status.code = 404;
-                title = "Unauthenticated";
+                title = "Not Found";
                 success = false;
                 data = `String "Auth cookie not found";
               }
@@ -945,7 +945,7 @@ struct
         let error =
           {
             Utils.Status.code = 400;
-            title = "Unauthenticated";
+            title = "Bad Request";
             success = false;
             data = `String err;
           }
