@@ -291,7 +291,8 @@ let config_of_json str =
       image = "";
       fail_behaviour;
       add_name = true;
-      startup = None; (* TODO *)
+      startup = None;
+      (* TODO *)
       cpuid;
       memory;
       block_devices;
