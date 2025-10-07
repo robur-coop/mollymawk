@@ -2860,11 +2860,16 @@ struct
             check_meth `GET (fun () ->
                 authenticate store reqd
                   (email_verification (verify_email store)))
-        | path when String.starts_with ~prefix:"/auth/verify/token=" path ->
+        | "/auth/verify" ->
             check_meth `GET (fun () ->
-                let token = String.sub path 19 (String.length path - 19) in
-                authenticate store reqd
-                  (email_verification (verify_email_token store token)))
+                match get_query_parameter "token" with
+                | Ok token ->
+                    authenticate store reqd
+                      (email_verification (verify_email_token store token))
+                | _ ->
+                    Middleware.redirect_to_error ~title:"Bad request"
+                      ~data:(`String "Unikernel name missing") ~api_meth:false
+                      `Bad_request reqd ())
         | "/albatross/instances" ->
             check_meth `GET (fun () ->
                 Middleware.redirect_to_instance_selector "/dashboard" reqd ())
@@ -2953,25 +2958,27 @@ struct
                 in
                 authenticate store reqd
                   (choose_instance store !albatross_instances callback_link))
-        | path when String.starts_with ~prefix:"/admin/user/" path ->
+        | "/admin/user" ->
             check_meth `GET (fun () ->
-                let uuid = String.sub path 12 (String.length path - 12) in
-                authenticate ~check_admin:true store reqd
-                  (view_user stack !albatross_instances store uuid))
-        | path when String.starts_with ~prefix:"/admin/u/policy/edit/" path ->
+                match get_query_parameter "uuid" with
+                | Ok uuid ->
+                    authenticate ~check_admin:true store reqd
+                      (view_user stack !albatross_instances store uuid)
+                | _ ->
+                    Middleware.redirect_to_error ~title:"Bad request"
+                      ~data:(`String "Unikernel name missing") ~api_meth:false
+                      `Bad_request reqd ())
+        | "/admin/u/policy/edit" ->
             check_meth `GET (fun () ->
-                let path_after_edit =
-                  String.sub path 21 (String.length path - 21)
-                in
-                let uuid =
-                  match String.index_opt path_after_edit '?' with
-                  | Some idx -> String.sub path_after_edit 0 idx
-                  | None -> path_after_edit
-                in
-                authenticate ~check_admin:true store reqd
-                  (albatross_instance
-                     ("/admin/u/policy/edit/" ^ uuid)
-                     (edit_policy store uuid)))
+                match get_query_parameter "uuid" with
+                | Ok uuid ->
+                    authenticate ~check_admin:true store reqd
+                      (albatross_instance req.H1.Request.target
+                         (edit_policy store uuid))
+                | _ ->
+                    Middleware.redirect_to_error ~title:"Bad request"
+                      ~data:(`String "Unikernel name missing") ~api_meth:false
+                      `Bad_request reqd ())
         | "/admin/settings" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (settings store))
