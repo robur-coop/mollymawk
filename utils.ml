@@ -88,7 +88,7 @@ module Email = struct
         false
 
   let generate_verification_link uuid =
-    "/auth/verify/token=" ^ Uuidm.to_string uuid
+    "/auth/verify?token=" ^ Uuidm.to_string uuid
 end
 
 module Status = struct
