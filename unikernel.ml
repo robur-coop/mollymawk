@@ -1702,7 +1702,7 @@ struct
                                    ^ Configuration.name_to_str instance_name
                                    ^ " with error: " ^ err))
                               `Bad_request
-                        | Ok (n, (info : Vmm_core.Unikernel.info)) ->
+                        | Ok (_n, (info : Vmm_core.Unikernel.info)) ->
                             let (cfg : Vmm_core.Unikernel.config) =
                               {
                                 Vmm_core.Unikernel.typ = info.typ;
@@ -2626,7 +2626,9 @@ struct
     if Albatross.Albatross_map.cardinal albatross_instances = 1 then
       let name, _ = Albatross.Albatross_map.min_binding albatross_instances in
       Middleware.redirect_to_url
-        ~url:(callback ^ "?instance=" ^ Configuration.name_to_str name)
+        ~url:
+          (Middleware.construct_instance_redirect_url callback
+             (Configuration.name_to_str name))
         reqd ()
     else
       generate_csrf_token store user now reqd >>= function
@@ -2784,13 +2786,18 @@ struct
         let req = H1.Reqd.request reqd in
         let path = Uri.(pct_decode (path (of_string req.H1.Request.target))) in
         let check_meth m f = if m = req.meth then f () else bad_request () in
+        let get_query_parameter name req =
+          match
+            Uri.get_query_param (Uri.of_string req.H1.Request.target) name
+          with
+          | Some param -> Ok param
+          | None -> Error "Couldn't find unikernel name in query"
+        in
         let albatross_instance endpoint fn
             (token_or_cookie : [> `Cookie | `Token ]) (user : User_model.user)
             reqd =
-          match
-            Uri.get_query_param (Uri.of_string req.H1.Request.target) "instance"
-          with
-          | Some instance -> (
+          match get_query_parameter "instance" req with
+          | Ok instance -> (
               match Configuration.name_of_str instance with
               | Ok instance_name -> (
                   match
@@ -2814,16 +2821,7 @@ struct
                       (`String ("Error with albatross instance name: " ^ err))
                     ~title:"Albatross Instance Error" ~api_meth:false
                     `Bad_request reqd ())
-          | None -> Middleware.redirect_to_instance_selector endpoint reqd ()
-        in
-        let get_unikernel_name req =
-          match
-            Uri.get_query_param
-              (Uri.of_string req.H1.Request.target)
-              "unikernel"
-          with
-          | Some instance -> Ok instance
-          | None -> Error "Couldn't find unikernel name in query"
+          | Error _ -> Middleware.redirect_to_instance_selector endpoint reqd ()
         in
         match path with
         | "/" ->
@@ -2970,7 +2968,6 @@ struct
                   | Some idx -> String.sub path_after_edit 0 idx
                   | None -> path_after_edit
                 in
-
                 authenticate ~check_admin:true store reqd
                   (albatross_instance
                      ("/admin/u/policy/edit/" ^ uuid)
@@ -3012,10 +3009,11 @@ struct
                   (unikernel_info stack !albatross_instances))
         | path when String.starts_with ~prefix:"/unikernel/info" path ->
             check_meth `GET (fun () ->
-                match get_unikernel_name req with
+                match get_query_parameter "unikernel" req with
                 | Ok unikernel_name ->
                     authenticate store reqd
-                      (albatross_instance "/unikernel/info"
+                      (albatross_instance
+                         ("/unikernel/info?unikernel=" ^ unikernel_name)
                          (unikernel_info_one stack store ~unikernel_name))
                 | _ ->
                     Middleware.redirect_to_error ~title:"Bad request"
@@ -3038,10 +3036,11 @@ struct
                      (unikernel_restart stack !albatross_instances)))
         | path when String.starts_with ~prefix:"/api/unikernel/console" path ->
             check_meth `GET (fun () ->
-                match get_unikernel_name req with
+                match get_query_parameter "unikernel" req with
                 | Ok unikernel_name ->
                     authenticate store reqd ~check_token:true ~api_meth:true
-                      (albatross_instance "/api/unikernel/console"
+                      (albatross_instance
+                         ("/api/unikernel/console?unikernel=" ^ unikernel_name)
                          (unikernel_console stack ~unikernel_name))
                 | _ ->
                     Middleware.redirect_to_error ~title:"Bad request"
@@ -3055,10 +3054,11 @@ struct
                       user reqd))
         | path when String.starts_with ~prefix:"/unikernel/update" path ->
             check_meth `GET (fun () ->
-                match get_unikernel_name req with
+                match get_query_parameter "unikernel" req with
                 | Ok unikernel_name ->
                     authenticate store reqd
-                      (albatross_instance "/unikernel/update"
+                      (albatross_instance
+                         ("/unikernel/update?unikernel=" ^ unikernel_name)
                          (unikernel_prepare_update stack store ~unikernel_name
                             http_client))
                 | _ ->
