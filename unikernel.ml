@@ -3012,8 +3012,7 @@ struct
                 match get_query_parameter "unikernel" with
                 | Ok unikernel_name ->
                     authenticate store reqd
-                      (albatross_instance
-                         ("/unikernel/info?unikernel=" ^ unikernel_name)
+                      (albatross_instance req.H1.Request.target
                          (unikernel_info_one stack store ~unikernel_name))
                 | _ ->
                     Middleware.redirect_to_error ~title:"Bad request"
@@ -3039,8 +3038,7 @@ struct
                 match get_query_parameter "unikernel" with
                 | Ok unikernel_name ->
                     authenticate store reqd ~check_token:true ~api_meth:true
-                      (albatross_instance
-                         ("/api/unikernel/console?unikernel=" ^ unikernel_name)
+                      (albatross_instance req.H1.Request.target
                          (unikernel_console stack ~unikernel_name))
                 | _ ->
                     Middleware.redirect_to_error ~title:"Bad request"
@@ -3057,8 +3055,7 @@ struct
                 match get_query_parameter "unikernel" with
                 | Ok unikernel_name ->
                     authenticate store reqd
-                      (albatross_instance
-                         ("/unikernel/update?unikernel=" ^ unikernel_name)
+                      (albatross_instance req.H1.Request.target
                          (unikernel_prepare_update stack store ~unikernel_name
                             http_client))
                 | _ ->
