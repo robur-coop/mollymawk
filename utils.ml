@@ -153,6 +153,63 @@ let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
           ])
       [ content ])
 
+(** A UI with two buttons, one for decrementing a value and the other for
+    incrementing the value*)
+let increment_or_decrement_ui ~max_value ~min_value ~figure_unit ~id ~label' =
+  Tyxml_html.(
+    div
+      ~a:
+        [
+          a_class [ "space-x-5" ];
+          Unsafe.string_attrib "x-data"
+            ("{count : "
+            ^ (if max_value >= min_value then string_of_int min_value
+               else string_of_int max_value)
+            ^ "}");
+        ]
+      [
+        label
+          ~a:[ a_class [ "block font-medium my-2" ] ]
+          [ txt (Fmt.str "%s (max %d %s)" label' max_value figure_unit) ];
+        button_component
+          ~attribs:
+            [
+              Unsafe.string_attrib "x-on:click"
+                (Fmt.str "if (count > %d) count = count - %d" min_value
+                   min_value);
+            ]
+          ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+          ~btn_type:`Danger_outlined ();
+        span
+          ~a:
+            [
+              a_id id;
+              a_contenteditable true;
+              a_class [ "text-4xl border px-4" ];
+              Unsafe.string_attrib "@keydown.enter.prevent" "";
+              Unsafe.string_attrib "x-text" "count";
+              Unsafe.string_attrib "x-on:blur"
+                "\n\
+                \                        count = \
+                 parseInt($event.target.innerText.replace(/[^0-9]/g,'')) || 0;\n\
+                \                        let value = \
+                 $event.target.innerText.replace(/[^0-9]/g,'');count = \
+                 parseInt(value) || 0;$event.target.innerText = count;";
+              Unsafe.string_attrib "x-init" "$el.innerText = count";
+            ]
+          [];
+        span ~a:[ a_class [ "text-4xl" ] ] [ txt figure_unit ];
+        button_component
+          ~attribs:
+            [
+              Unsafe.string_attrib "x-on:click"
+                (Fmt.str "if (count < %d) count = count + %d" max_value
+                   min_value);
+            ]
+          ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+          ~btn_type:`Primary_outlined ();
+      ])
+
 let display_banner = function
   | Some message ->
       Tyxml_html.(
