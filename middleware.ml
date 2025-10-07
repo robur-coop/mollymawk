@@ -99,7 +99,8 @@ let redirect_to_url ~url reqd ?(msg = "") () =
 
 let construct_instance_redirect_url callback instance_name =
   let separator = if String.contains callback '?' then "&" else "?" in
-  Fmt.str "%s%sinstance=%" callback separator (Configuration.name_to_str instance_name)
+  Fmt.str "%s%sinstance=%" callback separator
+    (Configuration.name_to_str instance_name)
 
 let redirect_to_instance_selector callback_link reqd ?(msg = "") () =
   redirect_to_url
