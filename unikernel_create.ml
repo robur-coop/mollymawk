@@ -88,6 +88,9 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                 Utils.increment_or_decrement_ui ~id:"unikernel-memory"
                   ~max_value:memory_left ~min_value:32 ~figure_unit:"MB"
                   ~label':"Memory";
+                Utils.increment_or_decrement_ui ~id:"startup-delay"
+                  ~max_value:100 ~min_value:1 ~figure_unit:"s"
+                  ~label':"Startup Delay";
               ];
             hr ();
             div

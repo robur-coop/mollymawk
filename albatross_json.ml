@@ -284,6 +284,13 @@ let config_of_json str =
         (get "arguments" dict)
     with Failure s -> Error (`Msg ("expected strings as argv, error: " ^ s))
   in
+  let* startup =
+    Option.fold ~none:(Ok None)
+      ~some:(function
+        | `Int n -> Ok (Some n)
+        | _ -> Error (`Msg "startup delay must be an integer between 1 and 100"))
+      (get "startup_delay" dict)
+  in
   Ok
     {
       Vmm_core.Unikernel.typ = `Solo5;
@@ -291,8 +298,7 @@ let config_of_json str =
       image = "";
       fail_behaviour;
       add_name = true;
-      startup = None;
-      (* TODO *)
+      startup;
       cpuid;
       memory;
       block_devices;
