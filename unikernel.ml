@@ -2786,17 +2786,17 @@ struct
         let req = H1.Reqd.request reqd in
         let path = Uri.(pct_decode (path (of_string req.H1.Request.target))) in
         let check_meth m f = if m = req.meth then f () else bad_request () in
-        let get_query_parameter name req =
+        let get_query_parameter name =
           match
             Uri.get_query_param (Uri.of_string req.H1.Request.target) name
           with
           | Some param -> Ok param
-          | None -> Error "Couldn't find unikernel name in query"
+          | None -> Error (Fmt.str "Couldn't find %s in query params" name)
         in
         let albatross_instance endpoint fn
             (token_or_cookie : [> `Cookie | `Token ]) (user : User_model.user)
             reqd =
-          match get_query_parameter "instance" req with
+          match get_query_parameter "instance" with
           | Ok instance -> (
               match Configuration.name_of_str instance with
               | Ok instance_name -> (
@@ -3009,7 +3009,7 @@ struct
                   (unikernel_info stack !albatross_instances))
         | path when String.starts_with ~prefix:"/unikernel/info" path ->
             check_meth `GET (fun () ->
-                match get_query_parameter "unikernel" req with
+                match get_query_parameter "unikernel" with
                 | Ok unikernel_name ->
                     authenticate store reqd
                       (albatross_instance
@@ -3036,7 +3036,7 @@ struct
                      (unikernel_restart stack !albatross_instances)))
         | path when String.starts_with ~prefix:"/api/unikernel/console" path ->
             check_meth `GET (fun () ->
-                match get_query_parameter "unikernel" req with
+                match get_query_parameter "unikernel" with
                 | Ok unikernel_name ->
                     authenticate store reqd ~check_token:true ~api_meth:true
                       (albatross_instance
@@ -3054,7 +3054,7 @@ struct
                       user reqd))
         | path when String.starts_with ~prefix:"/unikernel/update" path ->
             check_meth `GET (fun () ->
-                match get_query_parameter "unikernel" req with
+                match get_query_parameter "unikernel" with
                 | Ok unikernel_name ->
                     authenticate store reqd
                       (albatross_instance
