@@ -341,8 +341,7 @@ let users_index_layout (users : User_model.user list) current_time =
                                          ~a:
                                            [
                                              a_href
-                                               ("/admin/user?uuid=" ^ user.uuid
-                                              ^ "");
+                                               ("/admin/user?uuid=" ^ user.uuid);
                                              a_class
                                                [
                                                  "border border-primary-500 \
