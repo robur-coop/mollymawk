@@ -2865,10 +2865,9 @@ struct
                 | Ok token ->
                     authenticate store reqd
                       (email_verification (verify_email_token store token))
-                | _ ->
+                | Error err ->
                     Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String "Unikernel name missing") ~api_meth:false
-                      `Bad_request reqd ())
+                      ~data:(`String err) ~api_meth:false `Bad_request reqd ())
         | "/albatross/instances" ->
             check_meth `GET (fun () ->
                 Middleware.redirect_to_instance_selector "/dashboard" reqd ())
@@ -2963,10 +2962,9 @@ struct
                 | Ok uuid ->
                     authenticate ~check_admin:true store reqd
                       (view_user stack !albatross_instances store uuid)
-                | _ ->
+                | Error err ->
                     Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String "Unikernel name missing") ~api_meth:false
-                      `Bad_request reqd ())
+                      ~data:(`String err) ~api_meth:false `Bad_request reqd ())
         | "/admin/u/policy/edit" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "uuid" with
@@ -2974,10 +2972,9 @@ struct
                     authenticate ~check_admin:true store reqd
                       (albatross_instance req.H1.Request.target
                          (edit_policy store uuid))
-                | _ ->
+                | Error err ->
                     Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String "Unikernel name missing") ~api_meth:false
-                      `Bad_request reqd ())
+                      ~data:(`String err) ~api_meth:false `Bad_request reqd ())
         | "/admin/settings" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (settings store))
@@ -3020,10 +3017,9 @@ struct
                     authenticate store reqd
                       (albatross_instance req.H1.Request.target
                          (unikernel_info_one stack store ~unikernel_name))
-                | _ ->
+                | Error err ->
                     Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String "Unikernel name missing") ~api_meth:false
-                      `Bad_request reqd ())
+                      ~data:(`String err) ~api_meth:false `Bad_request reqd ())
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
                 authenticate store reqd
@@ -3046,10 +3042,9 @@ struct
                     authenticate store reqd ~check_token:true ~api_meth:true
                       (albatross_instance req.H1.Request.target
                          (unikernel_console stack ~unikernel_name))
-                | _ ->
+                | Error err ->
                     Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String "Unikernel name missing") ~api_meth:false
-                      `Bad_request reqd ())
+                      ~data:(`String err) ~api_meth:false `Bad_request reqd ())
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -3064,10 +3059,9 @@ struct
                       (albatross_instance req.H1.Request.target
                          (unikernel_prepare_update stack store ~unikernel_name
                             http_client))
-                | _ ->
+                | Error err ->
                     Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String "Unikernel name missing") ~api_meth:false
-                      `Bad_request reqd ())
+                      ~data:(`String err) ~api_meth:false `Bad_request reqd ())
         | "/api/unikernel/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
