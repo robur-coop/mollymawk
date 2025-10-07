@@ -23,9 +23,7 @@ let select_instance (user : User_model.user) albatross_instances
              (fun (instance, (pol : Albatross.t)) ->
                let url =
                  a_href
-                   (Fmt.str "%s"
-                      (Middleware.construct_instance_redirect_url ~callback
-                         ~instance_name:(Configuration.name_to_str instance)))
+                   (Middleware.construct_instance_redirect_url callback instance)
                in
                match pol.error with
                | Some err ->

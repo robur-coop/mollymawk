@@ -97,10 +97,10 @@ let redirect_to_url ~url reqd ?(msg = "") () =
   H1.Reqd.respond_with_string reqd response msg;
   Lwt.return_unit
 
-let construct_instance_redirect_url ~callback ~instance_name =
-  match String.contains callback '?' with
-  | true -> callback ^ "&instance=" ^ instance_name
-  | false -> callback ^ "?instance=" ^ instance_name
+let construct_instance_redirect_url callback instance_name =
+  if String.contains callback '?' then
+    callback ^ "&instance=" ^ Configuration.name_to_str instance_name
+  else callback ^ "?instance=" ^ Configuration.name_to_str instance_name
 
 let redirect_to_instance_selector callback_link reqd ?(msg = "") () =
   redirect_to_url
