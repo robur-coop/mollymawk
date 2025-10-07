@@ -2627,8 +2627,8 @@ struct
       let name, _ = Albatross.Albatross_map.min_binding albatross_instances in
       Middleware.redirect_to_url
         ~url:
-          (Middleware.construct_instance_redirect_url callback
-             (Configuration.name_to_str name))
+          (Middleware.construct_instance_redirect_url ~callback
+             ~instance_name:(Configuration.name_to_str name))
         reqd ()
     else
       generate_csrf_token store user now reqd >>= function
