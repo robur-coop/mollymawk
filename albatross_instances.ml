@@ -1,5 +1,5 @@
 let select_instance (user : User_model.user) albatross_instances
-    (callback_url : string) =
+    (callback : string) =
   Tyxml_html.(
     section
       ~a:[ a_id "instance-form"; a_class [ "p-4 bg-gray-50 my-1" ] ]
@@ -24,8 +24,8 @@ let select_instance (user : User_model.user) albatross_instances
                let url =
                  a_href
                    (Fmt.str "%s"
-                      (Middleware.construct_instance_redirect_url callback_url
-                         (Configuration.name_to_str instance)))
+                      (Middleware.construct_instance_redirect_url ~callback
+                         ~instance_name:(Configuration.name_to_str instance)))
                in
                match pol.error with
                | Some err ->
