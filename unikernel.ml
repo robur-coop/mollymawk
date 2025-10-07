@@ -1082,7 +1082,6 @@ struct
         success = false;
       }
     in
-
     user_unikernels_by_instance stack albatross user.name
     >>= fun unikernels_by_albatross_instance ->
     user_volumes_by_instance stack albatross user.name
