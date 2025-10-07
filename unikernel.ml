@@ -2891,7 +2891,7 @@ struct
             check_meth `POST (fun () ->
                 authenticate store reqd
                   (extract_json_csrf_token (close_session store)))
-        | path when String.starts_with ~prefix:"/volumes" path ->
+        | "/volumes" ->
             check_meth `GET (fun () ->
                 authenticate store reqd
                   (albatross_instance "/volumes" (volumes stack store)))
@@ -2940,7 +2940,7 @@ struct
             check_meth `GET (fun () ->
                 authenticate store reqd
                   (albatross_instance "/usage" (account_usage stack store)))
-        | path when String.starts_with ~prefix:"/select/instance" path ->
+        | "/select/instance" ->
             check_meth `GET (fun () ->
                 let callback_link =
                   match
@@ -3007,7 +3007,7 @@ struct
             check_meth `GET (fun () ->
                 authenticate ~api_meth:true ~check_token:true store reqd
                   (unikernel_info stack !albatross_instances))
-        | path when String.starts_with ~prefix:"/unikernel/info" path ->
+        | "/unikernel/info" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "unikernel" with
                 | Ok unikernel_name ->
@@ -3033,7 +3033,7 @@ struct
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
                      (unikernel_restart stack !albatross_instances)))
-        | path when String.starts_with ~prefix:"/api/unikernel/console" path ->
+        | "/api/unikernel/console" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "unikernel" with
                 | Ok unikernel_name ->
@@ -3050,7 +3050,7 @@ struct
                   (fun token_or_cookie user reqd ->
                     unikernel_create stack !albatross_instances token_or_cookie
                       user reqd))
-        | path when String.starts_with ~prefix:"/unikernel/update" path ->
+        | "/unikernel/update" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "unikernel" with
                 | Ok unikernel_name ->
