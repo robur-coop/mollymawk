@@ -2624,11 +2624,11 @@ struct
       callback _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     if Albatross.Albatross_map.cardinal albatross_instances = 1 then
-      let name, _ = Albatross.Albatross_map.min_binding albatross_instances in
+      let instance_name, _ =
+        Albatross.Albatross_map.min_binding albatross_instances
+      in
       Middleware.redirect_to_url
-        ~url:
-          (Middleware.construct_instance_redirect_url ~callback
-             ~instance_name:(Configuration.name_to_str name))
+        ~url:(Middleware.construct_instance_redirect_url callback instance_name)
         reqd ()
     else
       generate_csrf_token store user now reqd >>= function
