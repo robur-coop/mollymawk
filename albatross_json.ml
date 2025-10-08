@@ -287,7 +287,7 @@ let config_of_json str =
   let* startup =
     Option.fold ~none:(Ok None)
       ~some:(function
-        | `Int n -> Ok (Some n)
+        | `Int n when n >= 0 && n <= 100-> Ok (Some n)
         | _ -> Error (`Msg "startup delay must be an integer between 1 and 100"))
       (get "startup_delay" dict)
   in
