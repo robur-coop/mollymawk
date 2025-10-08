@@ -45,11 +45,7 @@ let update_policy_layout (user : User_model.user) ~user_policy
               ~min_value:0
               ~max_value:
                 Vmm_core.Policy.(
-                  match (unallocated_resources.block, user_policy.block) with
-                  | Some unallocated, Some user_block ->
-                      unallocated + user_block
-                  | Some unallocated, None -> unallocated
-                  | _ -> 0)
+                  Option.value ~default:0 unallocated_resources.block + Option.value ~default:0 user_policy.block)
               ~figure_unit:"MB" ~step:32 ~label':"Allowed Storage" ();
           ];
         hr ();
