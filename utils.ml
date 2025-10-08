@@ -158,6 +158,11 @@ let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
 let increment_or_decrement_ui ~max_value ~min_value ?(step = 1)
     ?(default_value = 0) ?(figure_unit = "") ~id ~label' () =
   let max_value = if max_value <= min_value then min_value else max_value in
+  let default_value =
+    if default_value <= min_value then min_value
+    else if default_value >= max_value then max_value
+    else default_value
+  in
   Tyxml_html.(
     div
       ~a:
