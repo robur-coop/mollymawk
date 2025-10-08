@@ -42,7 +42,7 @@ let create_volume instance_name total_free_space =
             Utils.increment_or_decrement_ui ~id:"block_size"
               ~min_value:(if total_free_space > 0 then 1 else 0)
               ~max_value:total_free_space ~figure_unit:"MB"
-              ~label':"Volume size";
+              ~label':"Volume size" ();
           ];
         Utils.switch_button ~switch_id:"dataToggle"
           ~switch_label:"Dump data to this volume"

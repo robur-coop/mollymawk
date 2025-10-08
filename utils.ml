@@ -155,7 +155,8 @@ let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
 
 (** A UI with two buttons, one for decrementing a value and the other for
     incrementing the value*)
-let increment_or_decrement_ui ~max_value ~min_value ~figure_unit ~id ~label' =
+let increment_or_decrement_ui ~max_value ~min_value ?(default_value = 0)
+    ~figure_unit ~id ~label' () =
   Tyxml_html.(
     div
       ~a:
@@ -163,8 +164,10 @@ let increment_or_decrement_ui ~max_value ~min_value ~figure_unit ~id ~label' =
           a_class [ "space-x-5" ];
           Unsafe.string_attrib "x-data"
             ("{count : "
-            ^ (if max_value >= min_value then string_of_int min_value
-               else string_of_int max_value)
+            ^ (if default_value = 0 then
+                 if max_value >= min_value then string_of_int min_value
+                 else string_of_int max_value
+               else string_of_int default_value)
             ^ "}");
         ]
       [

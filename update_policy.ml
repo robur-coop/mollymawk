@@ -21,7 +21,7 @@ let update_policy_layout (user : User_model.user) ~user_policy
               ~max_value:
                 Vmm_core.Policy.(
                   unallocated_resources.unikernels + user_policy.unikernels)
-              ~figure_unit:"VMs" ~label':"Allowed Unikernels";
+              ~figure_unit:"VMs" ~label':"Allowed Unikernels" ();
           ];
         hr ();
         div
@@ -32,7 +32,7 @@ let update_policy_layout (user : User_model.user) ~user_policy
               ~max_value:
                 Vmm_core.Policy.(
                   unallocated_resources.memory + user_policy.memory)
-              ~figure_unit:"MB" ~label':"Allowed Memory";
+              ~figure_unit:"MB" ~label':"Allowed Memory" ();
           ];
         hr ();
         div
@@ -50,7 +50,7 @@ let update_policy_layout (user : User_model.user) ~user_policy
                       unallocated + user_block
                   | Some unallocated, None -> unallocated
                   | _ -> 0)
-              ~figure_unit:"MB" ~label':"Allowed Storage";
+              ~figure_unit:"MB" ~label':"Allowed Storage" ();
           ];
         hr ();
         div
