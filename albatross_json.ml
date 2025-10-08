@@ -287,7 +287,8 @@ let config_of_json str =
   let* startup =
     Option.fold ~none:(Ok None)
       ~some:(function
-        | `Int n when n >= 0 && n <= 100 -> if n = 50 then Ok None else Ok (Some n)
+        | `Int n when n >= 0 && n <= 100 ->
+            if n = 50 then Ok None else Ok (Some n)
         | _ ->
             Error
               (`Msg
