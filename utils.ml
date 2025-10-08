@@ -156,7 +156,7 @@ let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
 (** A UI with two buttons, one for decrementing a value and the other for
     incrementing the value*)
 let increment_or_decrement_ui ~max_value ~min_value ?(default_value = 0)
-    ~figure_unit ~id ~label' () =
+    ?(figure_unit = "") ~id ~label' () =
   Tyxml_html.(
     div
       ~a:

@@ -353,7 +353,7 @@ async function deployUnikernel(albatross_instance) {
 	const deployButton = document.getElementById("deploy-button");
 	const name = document.getElementById("unikernel-name").value;
 	const cpuid = document.getElementById("cpuid").value;
-	const startup = document.getElementById("startup-delay").innerText;
+	const startup = document.getElementById("startup-priority").innerText;
 	const fail_behaviour = document.getElementById("restart-on-fail").checked;
 	const force_create = document.getElementById("force-create").checked;
 	const memory = document.getElementById("unikernel-memory").innerText;
@@ -393,7 +393,7 @@ async function deployUnikernel(albatross_instance) {
 	let formData = new FormData();
 	const unikernel_config = {
 		cpuid: Number(cpuid),
-		startup_delay: Number(startup),
+		startup: Number(startup),
 		fail_behaviour: fail_behaviour ? { "restart": fail_behaviour } : "quit",
 		memory: Number(memory),
 		...networkData,
