@@ -192,12 +192,11 @@ let increment_or_decrement_ui ~max_value ~min_value ?(step = 1)
               Unsafe.string_attrib "@keydown.enter.prevent" "";
               Unsafe.string_attrib "x-text" "count";
               Unsafe.string_attrib "x-on:blur"
-                "\n\
-                \                        count = \
-                 parseInt($event.target.innerText.replace(/[^0-9]/g,'')) || 0;\n\
-                \                        let value = \
-                 $event.target.innerText.replace(/[^0-9]/g,'');count = \
-                 parseInt(value) || 0;$event.target.innerText = count;";
+                (Fmt.str
+                   "let rawValue = parseInt($el.innerText.replace(/[^0-9-]/g, \
+                    '')) || 0; count = Math.max(%d, Math.min(%d, rawValue)); \
+                    $el.innerText = count;"
+                   min_value max_value);
               Unsafe.string_attrib "x-init" "$el.innerText = count";
             ]
           [];
