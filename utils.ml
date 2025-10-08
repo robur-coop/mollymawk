@@ -155,20 +155,16 @@ let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
 
 (** A UI with two buttons, one for decrementing a value and the other for
     incrementing the value*)
-let increment_or_decrement_ui ~max_value ~min_value ?(default_value = 0)
-    ?(figure_unit = "") ~id ~label' () =
+let increment_or_decrement_ui ~max_value ~min_value ?(step = 1)
+    ?(default_value = 0) ?(figure_unit = "") ~id ~label' () =
+  let max_value = if max_value <= min_value then min_value else max_value in
   Tyxml_html.(
     div
       ~a:
         [
           a_class [ "space-x-5" ];
           Unsafe.string_attrib "x-data"
-            ("{count : "
-            ^ (if default_value = 0 then
-                 if max_value >= min_value then string_of_int min_value
-                 else string_of_int max_value
-               else string_of_int default_value)
-            ^ "}");
+            ("{count : " ^ string_of_int default_value ^ "}");
         ]
       [
         label
@@ -178,8 +174,7 @@ let increment_or_decrement_ui ~max_value ~min_value ?(default_value = 0)
           ~attribs:
             [
               Unsafe.string_attrib "x-on:click"
-                (Fmt.str "if (count > %d) count = count - %d" min_value
-                   min_value);
+                (Fmt.str "if (count > %d) count = count - %d" min_value step);
             ]
           ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
           ~btn_type:`Danger_outlined ();
@@ -206,8 +201,7 @@ let increment_or_decrement_ui ~max_value ~min_value ?(default_value = 0)
           ~attribs:
             [
               Unsafe.string_attrib "x-on:click"
-                (Fmt.str "if (count < %d) count = count + %d" max_value
-                   min_value);
+                (Fmt.str "if (count < %d) count = count + %d" max_value step);
             ]
           ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
           ~btn_type:`Primary_outlined ();

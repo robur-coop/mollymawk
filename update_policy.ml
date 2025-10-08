@@ -17,7 +17,7 @@ let update_policy_layout (user : User_model.user) ~user_policy
           ~a:[ a_class [ "py-3" ] ]
           [
             Utils.increment_or_decrement_ui ~id:"f_allowed_unikernels"
-              ~min_value:user_policy.Vmm_core.Policy.unikernels
+              ~default_value:user_policy.Vmm_core.Policy.unikernels ~min_value:0
               ~max_value:
                 Vmm_core.Policy.(
                   unallocated_resources.unikernels + user_policy.unikernels)
@@ -28,7 +28,8 @@ let update_policy_layout (user : User_model.user) ~user_policy
           ~a:[ a_class [ "py-3" ] ]
           [
             Utils.increment_or_decrement_ui ~id:"f_allowed_memory"
-              ~min_value:user_policy.Vmm_core.Policy.memory
+              ~default_value:user_policy.Vmm_core.Policy.memory ~step:32
+              ~min_value:0
               ~max_value:
                 Vmm_core.Policy.(
                   unallocated_resources.memory + user_policy.memory)
@@ -39,10 +40,11 @@ let update_policy_layout (user : User_model.user) ~user_policy
           ~a:[ a_class [ "py-3" ] ]
           [
             Utils.increment_or_decrement_ui ~id:"f_allowed_storage"
-              ~min_value:
+              ~default_value:
                 (match user_policy.Vmm_core.Policy.block with
                 | None -> 0
                 | Some x -> x)
+              ~min_value:0
               ~max_value:
                 Vmm_core.Policy.(
                   match (unallocated_resources.block, user_policy.block) with
@@ -50,7 +52,7 @@ let update_policy_layout (user : User_model.user) ~user_policy
                       unallocated + user_block
                   | Some unallocated, None -> unallocated
                   | _ -> 0)
-              ~figure_unit:"MB" ~label':"Allowed Storage" ();
+              ~figure_unit:"MB" ~step:32 ~label':"Allowed Storage" ();
           ];
         hr ();
         div
