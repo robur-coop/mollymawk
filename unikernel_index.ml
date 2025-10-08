@@ -4,6 +4,9 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
     List.map
       (fun (name, unikernel) ->
         let name = Option.value ~default:"no name" (Vmm_core.Name.name name) in
+        let startup =
+          Option.value ~default:50 unikernel.Vmm_core.Unikernel.startup
+        in
         tr
           ~a:[ a_class [ "border-b border-gray-200" ] ]
           [
@@ -24,11 +27,7 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
                 p
                   ~a:[ a_class [ "text-xs text-gray-500" ] ]
                   [
-                    txt
-                      ("type: "
-                      ^
-                      match unikernel.Vmm_core.Unikernel.typ with
-                      | `Solo5 -> "solo5");
+                    txt ("type: " ^ match unikernel.typ with `Solo5 -> "solo5");
                   ];
               ];
             td
@@ -41,7 +40,9 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
                     ];
                 ]
               [
-                txt (string_of_int (Option.value ~default:50 unikernel.startup));
+                txt
+                  (if startup = 50 then "50 (default)"
+                   else string_of_int startup);
               ];
             td
               ~a:

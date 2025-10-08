@@ -1,6 +1,7 @@
 let unikernel_single_layout ~unikernel_name ~instance_name
     ?(last_update_time = None) ~current_time unikernel =
   let u_name, data = unikernel in
+  let startup = Option.value ~default:50 data.Vmm_core.Unikernel.startup in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-10 p-4 bg-gray-50 my-1" ] ]
@@ -32,8 +33,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                 txt
                                   ("created "
                                   ^ Utils.TimeHelper.time_ago ~current_time
-                                      ~check_time:
-                                        data.Vmm_core.Unikernel.started);
+                                      ~check_time:data.started);
                               ];
                           ];
                         p
@@ -50,9 +50,9 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                           ~a:[ a_class [ "text-sm" ] ]
                           [
                             txt
-                              ("Startup priority: "
-                              ^ string_of_int
-                                  (Option.value ~default:50 data.startup));
+                              (Fmt.str "Startup priority: %s"
+                                 (if startup = 50 then "50 (default)"
+                                  else string_of_int startup));
                           ];
                       ];
                     div
