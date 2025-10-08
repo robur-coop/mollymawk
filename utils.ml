@@ -153,6 +153,64 @@ let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
           ])
       [ content ])
 
+(** A UI with two buttons, one for decrementing a value and the other for
+    incrementing the value*)
+let increment_or_decrement_ui ~max_value ~min_value ?(step = 1)
+    ?(default_value = 0) ?(figure_unit = "") ~id ~label' () =
+  let max_value = if max_value <= min_value then min_value else max_value in
+  let default_value =
+    if default_value <= min_value then min_value
+    else if default_value >= max_value then max_value
+    else default_value
+  in
+  Tyxml_html.(
+    div
+      ~a:
+        [
+          a_class [ "space-x-5" ];
+          Unsafe.string_attrib "x-data"
+            ("{count : " ^ string_of_int default_value ^ "}");
+        ]
+      [
+        label
+          ~a:[ a_class [ "block font-medium my-2" ] ]
+          [ txt (Fmt.str "%s (max %d %s)" label' max_value figure_unit) ];
+        button_component
+          ~attribs:
+            [
+              Unsafe.string_attrib "x-on:click"
+                (Fmt.str "if (count > %d) count = count - %d" min_value step);
+            ]
+          ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+          ~btn_type:`Danger_outlined ();
+        span
+          ~a:
+            [
+              a_id id;
+              a_contenteditable true;
+              a_class [ "text-4xl border px-4" ];
+              Unsafe.string_attrib "@keydown.enter.prevent" "";
+              Unsafe.string_attrib "x-text" "count";
+              Unsafe.string_attrib "x-on:blur"
+                (Fmt.str
+                   "let rawValue = parseInt($el.innerText.replace(/[^0-9-]/g, \
+                    '')) || 0; count = Math.max(%d, Math.min(%d, rawValue)); \
+                    $el.innerText = count;"
+                   min_value max_value);
+              Unsafe.string_attrib "x-init" "$el.innerText = count";
+            ]
+          [];
+        span ~a:[ a_class [ "text-4xl" ] ] [ txt figure_unit ];
+        button_component
+          ~attribs:
+            [
+              Unsafe.string_attrib "x-on:click"
+                (Fmt.str "if (count < %d) count = count + %d" max_value step);
+            ]
+          ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+          ~btn_type:`Primary_outlined ();
+      ])
+
 let display_banner = function
   | Some message ->
       Tyxml_html.(

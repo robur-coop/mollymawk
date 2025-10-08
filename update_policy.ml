@@ -14,195 +14,42 @@ let update_policy_layout (user : User_model.user) ~user_policy
         p ~a:[ a_id "form-alert"; a_class [ "my-4" ] ] [];
         p ~a:[ a_id "user_id"; a_class [ "hidden" ] ] [ txt user.uuid ];
         div
-          ~a:[ a_class [ "my-3" ] ]
+          ~a:[ a_class [ "py-3" ] ]
           [
-            label
-              ~a:[ a_class [ "block font-medium" ] ]
-              [ txt "Allowed Unikernels" ];
-            small
-              ~a:[ a_class [ "text-sm" ] ]
-              [
-                txt
-                  ("can assign up to: "
-                  ^ string_of_int
-                      Vmm_core.Policy.(
-                        unallocated_resources.unikernels
-                        + user_policy.unikernels));
-              ];
-            div
-              ~a:
-                [
-                  a_class [ "space-x-5 my-4" ];
-                  Unsafe.string_attrib "x-data"
-                    ("{count : "
-                    ^ string_of_int user_policy.Vmm_core.Policy.unikernels
-                    ^ "}");
-                ]
-              [
-                Utils.button_component
-                  ~attribs:
-                    [
-                      Unsafe.string_attrib "x-on:click" "if (count > 0) count--";
-                    ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                  ~btn_type:`Danger_outlined ();
-                span
-                  ~a:
-                    [
-                      a_id "f_allowed_unikernels";
-                      a_contenteditable true;
-                      a_class [ "text-4xl border px-4" ];
-                      Unsafe.string_attrib "@keydown.enter.prevent" "";
-                      Unsafe.string_attrib "x-text" "count";
-                      Unsafe.string_attrib "x-on:blur"
-                        "\n\
-                        \                        count = \
-                         parseInt($event.target.innerText.replace(/[^0-9]/g,'')) \
-                         || 0;\n\
-                        \                        let value = \
-                         $event.target.innerText.replace(/[^0-9]/g,'');count = \
-                         parseInt(value) || 0;$event.target.innerText = count;";
-                      Unsafe.string_attrib "x-init" "$el.innerText = count";
-                    ]
-                  [];
-                Utils.button_component
-                  ~attribs:[ Unsafe.string_attrib "x-on:click" "count++" ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                  ~btn_type:`Primary_outlined ();
-              ];
+            Utils.increment_or_decrement_ui ~id:"f_allowed_unikernels"
+              ~default_value:user_policy.Vmm_core.Policy.unikernels ~min_value:0
+              ~max_value:
+                Vmm_core.Policy.(
+                  unallocated_resources.unikernels + user_policy.unikernels)
+              ~figure_unit:"VMs" ~label':"Allowed Unikernels" ();
           ];
         hr ();
         div
-          ~a:[ a_class [ "my-3" ] ]
+          ~a:[ a_class [ "py-3" ] ]
           [
-            label
-              ~a:[ a_class [ "block font-medium" ] ]
-              [ txt "Allowed Memory" ];
-            small
-              ~a:[ a_class [ "text-sm" ] ]
-              [
-                txt
-                  ("can assign up to: "
-                  ^ string_of_int
-                      Vmm_core.Policy.(
-                        unallocated_resources.memory + user_policy.memory)
-                  ^ " MB");
-              ];
-            div
-              ~a:
-                [
-                  a_class [ "space-x-5 my-4" ];
-                  Unsafe.string_attrib "x-data"
-                    ("{count : "
-                    ^ string_of_int user_policy.Vmm_core.Policy.memory
-                    ^ "}");
-                ]
-              [
-                Utils.button_component
-                  ~attribs:
-                    [
-                      Unsafe.string_attrib "x-on:click"
-                        "if (count > 0) count = count - 50";
-                    ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                  ~btn_type:`Danger_outlined ();
-                span
-                  ~a:
-                    [
-                      a_id "f_allowed_memory";
-                      a_contenteditable true;
-                      a_class [ "text-4xl border px-4" ];
-                      Unsafe.string_attrib "@keydown.enter.prevent" "";
-                      Unsafe.string_attrib "x-text" "count";
-                      Unsafe.string_attrib "x-on:blur"
-                        "\n\
-                        \                        count = \
-                         parseInt($event.target.innerText.replace(/[^0-9]/g,'')) \
-                         || 0;\n\
-                        \                        let value = \
-                         $event.target.innerText.replace(/[^0-9]/g,'');count = \
-                         parseInt(value) || 0;$event.target.innerText = count;";
-                      Unsafe.string_attrib "x-init" "$el.innerText = count";
-                    ]
-                  [];
-                span ~a:[ a_class [ "text-4xl" ] ] [ txt " MB" ];
-                Utils.button_component
-                  ~attribs:
-                    [ Unsafe.string_attrib "x-on:click" "count = count + 50" ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                  ~btn_type:`Primary_outlined ();
-              ];
+            Utils.increment_or_decrement_ui ~id:"f_allowed_memory"
+              ~default_value:user_policy.Vmm_core.Policy.memory ~step:32
+              ~min_value:0
+              ~max_value:
+                Vmm_core.Policy.(
+                  unallocated_resources.memory + user_policy.memory)
+              ~figure_unit:"MB" ~label':"Allowed Memory" ();
           ];
         hr ();
         div
-          ~a:[ a_class [ "my-3" ] ]
+          ~a:[ a_class [ "py-3" ] ]
           [
-            label
-              ~a:[ a_class [ "block font-medium" ] ]
-              [ txt "Allowed Storage" ];
-            small
-              ~a:[ a_class [ "text-sm" ] ]
-              [
-                txt
-                  ("can assign up to: "
-                  ^ string_of_int
-                      Vmm_core.Policy.(
-                        match
-                          (unallocated_resources.block, user_policy.block)
-                        with
-                        | Some unallocated, Some user_block ->
-                            unallocated + user_block
-                        | Some unallocated, None -> unallocated
-                        | _ -> 0)
-                  ^ " MB");
-              ];
-            div
-              ~a:
-                [
-                  a_class [ "space-x-5 my-4" ];
-                  Unsafe.string_attrib "x-data"
-                    ("{count : "
-                    ^ (match user_policy.Vmm_core.Policy.block with
-                      | None -> string_of_int 0
-                      | Some x -> string_of_int x)
-                    ^ "}");
-                ]
-              [
-                Utils.button_component
-                  ~attribs:
-                    [
-                      Unsafe.string_attrib "x-on:click"
-                        "if (count > 0) count = count - 50";
-                    ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                  ~btn_type:`Danger_outlined ();
-                span
-                  ~a:
-                    [
-                      a_id "f_allowed_storage";
-                      a_contenteditable true;
-                      a_class [ "text-4xl border px-4" ];
-                      Unsafe.string_attrib "@keydown.enter.prevent" "";
-                      Unsafe.string_attrib "x-text" "count";
-                      Unsafe.string_attrib "x-on:blur"
-                        "\n\
-                        \                        count = \
-                         parseInt($event.target.innerText.replace(/[^0-9]/g,'')) \
-                         || 0;\n\
-                        \                        let value = \
-                         $event.target.innerText.replace(/[^0-9]/g,'');count = \
-                         parseInt(value) || 0;$event.target.innerText = count;";
-                      Unsafe.string_attrib "x-init" "$el.innerText = count";
-                    ]
-                  [];
-                span ~a:[ a_class [ "text-4xl" ] ] [ txt "MB" ];
-                Utils.button_component
-                  ~attribs:
-                    [ Unsafe.string_attrib "x-on:click" "count = count + 50" ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                  ~btn_type:`Primary_outlined ();
-              ];
+            Utils.increment_or_decrement_ui ~id:"f_allowed_storage"
+              ~default_value:
+                (Option.value ~default:0 user_policy.Vmm_core.Policy.block)
+              ~min_value:0
+              ~max_value:
+                Vmm_core.Policy.(
+                  Option.value ~default:0 unallocated_resources.block
+                  + Option.value ~default:0 user_policy.block)
+              ~figure_unit:"MB" ~step:32 ~label':"Allowed Storage" ();
           ];
+        hr ();
         div
           ~a:[ a_class [ "my-3" ] ]
           [

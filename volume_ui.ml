@@ -37,62 +37,11 @@ let create_volume instance_name total_free_space =
               ();
           ];
         div
-          ~a:[ a_class [ "my-6" ] ]
+          ~a:[ a_class [ "py-3" ] ]
           [
-            label
-              ~a:
-                [
-                  a_class [ "block text-sm font-medium" ];
-                  a_label_for "block size";
-                ]
-              [ txt "Volume size" ];
-            small
-              ~a:[ a_class [ "text-sm" ] ]
-              [
-                txt
-                  ("can assign up to: " ^ string_of_int total_free_space ^ " MB");
-              ];
-            div
-              ~a:
-                [
-                  a_class [ "space-x-5 my-4" ];
-                  Unsafe.string_attrib "x-data" "{count : 50}";
-                ]
-              [
-                Utils.button_component
-                  ~attribs:
-                    [
-                      Unsafe.string_attrib "x-on:click"
-                        "if (count > 1) count = count - 50";
-                    ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                  ~btn_type:`Danger_outlined ();
-                span
-                  ~a:
-                    [
-                      a_id "block_size";
-                      a_contenteditable true;
-                      a_class [ "text-4xl border px-4" ];
-                      Unsafe.string_attrib "@keydown.enter.prevent" "";
-                      Unsafe.string_attrib "x-text" "count";
-                      Unsafe.string_attrib "x-on:blur"
-                        "\n\
-                        \                        count = \
-                         parseInt($event.target.innerText.replace(/[^0-9]/g,'')) \
-                         || 0;\n\
-                        \                        let value = \
-                         $event.target.innerText.replace(/[^0-9]/g,'');count = \
-                         parseInt(value) || 0;$event.target.innerText = count;";
-                      Unsafe.string_attrib "x-init" "$el.innerText = count";
-                    ]
-                  [];
-                span ~a:[ a_class [ "text-4xl" ] ] [ txt "MB" ];
-                Utils.button_component
-                  ~attribs:
-                    [ Unsafe.string_attrib "x-on:click" "count = count + 50" ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                  ~btn_type:`Primary_outlined ();
-              ];
+            Utils.increment_or_decrement_ui ~id:"block_size" ~min_value:0
+              ~max_value:total_free_space ~figure_unit:"MB" ~step:32
+              ~label':"Volume size" ();
           ];
         Utils.switch_button ~switch_id:"dataToggle"
           ~switch_label:"Dump data to this volume"
@@ -187,50 +136,9 @@ let download_volume ~instance_name ~block_name =
                   a_label_for "compression_level";
                 ]
               [ txt "Set Compression level" ];
-            div
-              ~a:
-                [
-                  a_class [ "space-x-5 my-4" ];
-                  Unsafe.string_attrib "x-data" "{level : 0}";
-                ]
-              [
-                Utils.button_component
-                  ~attribs:
-                    [
-                      Unsafe.string_attrib "x-on:click"
-                        "if (level >= 1) level = level - 1";
-                    ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                  ~btn_type:`Danger_outlined ();
-                span
-                  ~a:
-                    [
-                      a_id ("compression-level-" ^ block_name);
-                      a_contenteditable true;
-                      a_class [ "text-4xl border px-4" ];
-                      a_user_data "x-on:keydown.enter.prevent" "";
-                      Unsafe.string_attrib "x-on:input"
-                        "let value =\n\
-                        \                                                                  \
-                         $event.target.innerText.replace(/[^0-9]/g,'');\n\
-                        \                                                                  \
-                         $event.target.innerText = value;\n\
-                        \                                                                  \
-                         level = parseInt(value) || 0;";
-                      Unsafe.string_attrib "x-text" "level";
-                      Unsafe.string_attrib "x-on:blur"
-                        "$event.target.innerText = level;";
-                    ]
-                  [];
-                Utils.button_component
-                  ~attribs:
-                    [
-                      Unsafe.string_attrib "x-on:click"
-                        "if (level < 9) level = level + 1";
-                    ]
-                  ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                  ~btn_type:`Primary_outlined ();
-              ];
+            Utils.increment_or_decrement_ui
+              ~id:("compression-level-" ^ block_name)
+              ~min_value:0 ~max_value:9 ~label':"Compression level" ();
             Utils.button_component
               ~attribs:
                 [

@@ -91,11 +91,10 @@ let success = function
   | `Empty -> `Null
   | `String m -> `String m
   | `Policies ps -> policy_infos ps
-  | `Old_unikernel_info2 is -> unikernel_infos is
   | `Old_unikernel_info3 is -> unikernel_infos is
+  | `Old_unikernel_info4 is -> unikernel_infos is
   | `Unikernel_info is -> unikernel_infos is
   | `Block_devices bs -> block_infos bs
-  | `Old_unikernels _ -> `String "old unikernels not supported"
   | `Unikernel_image _ -> `String "unikernel image not supported"
   | `Old_block_device_image (_, bd) -> `String bd
   | `Block_device_image _compressed -> `String "block device image"
@@ -285,12 +284,25 @@ let config_of_json str =
         (get "arguments" dict)
     with Failure s -> Error (`Msg ("expected strings as argv, error: " ^ s))
   in
+  let* startup =
+    Option.fold ~none:(Ok None)
+      ~some:(function
+        | `Int n when n >= 0 && n <= 100 ->
+            if n = 50 then Ok None else Ok (Some n)
+        | _ ->
+            Error
+              (`Msg
+                 "startup must be an integer between 1 and 100, default is 50"))
+      (get "startup" dict)
+  in
   Ok
     {
       Vmm_core.Unikernel.typ = `Solo5;
       compressed = false;
       image = "";
       fail_behaviour;
+      add_name = true;
+      startup;
       cpuid;
       memory;
       block_devices;

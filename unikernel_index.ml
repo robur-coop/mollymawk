@@ -21,6 +21,15 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
                 p
                   ~a:[ a_class [ "text-xs text-gray-500" ] ]
                   [ txt ("from: " ^ Configuration.name_to_str instance_name) ];
+                p
+                  ~a:[ a_class [ "text-xs text-gray-500" ] ]
+                  [
+                    txt
+                      ("type: "
+                      ^
+                      match unikernel.Vmm_core.Unikernel.typ with
+                      | `Solo5 -> "solo5");
+                  ];
               ];
             td
               ~a:
@@ -33,8 +42,8 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
                 ]
               [
                 txt
-                  (match unikernel.Vmm_core.Unikernel.typ with
-                  | `Solo5 -> "solo5");
+                  (Option.value ~default:"50 (default)"
+                     (Option.map string_of_int unikernel.startup));
               ];
             td
               ~a:
@@ -218,7 +227,7 @@ let unikernel_index_layout unikernels_by_albatross_instance current_time =
                                                 select-none";
                                              ];
                                          ]
-                                       [ txt "Type" ];
+                                       [ txt "Startup Priority" ];
                                      th
                                        ~a:
                                          [

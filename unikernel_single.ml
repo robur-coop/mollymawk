@@ -43,8 +43,16 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                           ~a:[ a_class [ "text-sm" ] ]
                           [
                             txt
-                              ("albatross: "
+                              ("Albatross instance: "
                               ^ Configuration.name_to_str instance_name);
+                          ];
+                        p
+                          ~a:[ a_class [ "text-sm" ] ]
+                          [
+                            txt
+                              (Fmt.str "Startup priority: %s"
+                                 (Option.value ~default:"50 (default)"
+                                    (Option.map string_of_int data.startup)));
                           ];
                       ];
                     div

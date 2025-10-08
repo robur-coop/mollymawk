@@ -411,7 +411,6 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 name s);
           Error ()
       | Ok (_, `Data (`Console_data (ts, data))) -> f (ts, data)
-      | Ok (_, `Data (`Utc_console_data (ts, data))) -> f (ts, data)
       | Ok (_, `Success (`String _)) ->
           (* ignore the success subscribed *)
           Ok ()

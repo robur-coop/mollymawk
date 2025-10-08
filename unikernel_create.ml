@@ -85,86 +85,12 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                               Int.compare count1 count2)
                             cpu_usage_count));
                   ];
-                div
-                  ~a:[ a_class [ "" ] ]
-                  [
-                    label
-                      ~a:[ a_class [ "block font-medium" ] ]
-                      [ txt "Fail Behaviour" ];
-                    div
-                      ~a:[ a_class [ "" ] ]
-                      [
-                        Utils.switch_button ~switch_id:"restart-on-fail"
-                          ~switch_label:"Restart"
-                          (div
-                             [
-                               label
-                                 ~a:
-                                   [
-                                     a_class [ "block text-sm font-medium" ];
-                                     a_label_for "restart_description";
-                                   ]
-                                 [
-                                   txt
-                                     "This unikernel will automatically \
-                                      restart on fail";
-                                 ];
-                             ]);
-                      ];
-                  ];
-                div
-                  ~a:
-                    [
-                      a_class [ "space-x-5" ];
-                      Unsafe.string_attrib "x-data"
-                        ("{count : "
-                        ^ (if memory_left >= 32 then string_of_int 32
-                           else string_of_int memory_left)
-                        ^ "}");
-                    ]
-                  [
-                    label
-                      ~a:[ a_class [ "block font-medium" ] ]
-                      [
-                        txt ("Memory (max " ^ string_of_int memory_left ^ "MB)");
-                      ];
-                    Utils.button_component
-                      ~attribs:
-                        [
-                          Unsafe.string_attrib "x-on:click"
-                            "if (count > 32) count = count - 32";
-                        ]
-                      ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-                      ~btn_type:`Danger_outlined ();
-                    span
-                      ~a:
-                        [
-                          a_id "unikernel-memory";
-                          a_contenteditable true;
-                          a_class [ "text-4xl border px-4" ];
-                          Unsafe.string_attrib "@keydown.enter.prevent" "";
-                          Unsafe.string_attrib "x-text" "count";
-                          Unsafe.string_attrib "x-on:blur"
-                            "\n\
-                            \                        count = \
-                             parseInt($event.target.innerText.replace(/[^0-9]/g,'')) \
-                             || 0;\n\
-                            \                        let value = \
-                             $event.target.innerText.replace(/[^0-9]/g,'');count \
-                             = parseInt(value) || 0;$event.target.innerText = \
-                             count;";
-                          Unsafe.string_attrib "x-init" "$el.innerText = count";
-                        ]
-                      [];
-                    span ~a:[ a_class [ "text-4xl" ] ] [ txt " MB" ];
-                    Utils.button_component
-                      ~attribs:
-                        [
-                          Unsafe.string_attrib "x-on:click" "count = count + 32";
-                        ]
-                      ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-                      ~btn_type:`Primary_outlined ();
-                  ];
+                Utils.increment_or_decrement_ui ~id:"unikernel-memory"
+                  ~max_value:memory_left ~min_value:0 ~default_value:32
+                  ~figure_unit:"MB" ~step:32 ~label':"Memory" ();
+                Utils.increment_or_decrement_ui ~id:"startup-priority"
+                  ~max_value:100 ~min_value:0 ~default_value:50
+                  ~label':"Startup Priority" ();
               ];
             hr ();
             div
@@ -251,6 +177,33 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                         ];
                     ]
                   ();
+              ];
+            div
+              ~a:[ a_class [ "" ] ]
+              [
+                label
+                  ~a:[ a_class [ "block font-medium" ] ]
+                  [ txt "Fail Behaviour" ];
+                div
+                  ~a:[ a_class [ "" ] ]
+                  [
+                    Utils.switch_button ~switch_id:"restart-on-fail"
+                      ~switch_label:"Restart"
+                      (div
+                         [
+                           label
+                             ~a:
+                               [
+                                 a_class [ "block text-sm font-medium" ];
+                                 a_label_for "restart_description";
+                               ]
+                             [
+                               txt
+                                 "This unikernel will automatically restart on \
+                                  fail";
+                             ];
+                         ]);
+                  ];
               ];
             div
               ~a:[ a_class [ "" ] ]
