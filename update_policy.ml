@@ -41,9 +41,7 @@ let update_policy_layout (user : User_model.user) ~user_policy
           [
             Utils.increment_or_decrement_ui ~id:"f_allowed_storage"
               ~default_value:
-                (match user_policy.Vmm_core.Policy.block with
-                | None -> 0
-                | Some x -> x)
+                (Option.value ~default:0 user_policy.Vmm_core.Policy.block)
               ~min_value:0
               ~max_value:
                 Vmm_core.Policy.(
