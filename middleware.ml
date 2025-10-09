@@ -26,6 +26,32 @@ let cookie cookie_name (reqd : H1.Reqd.t) =
         cookie_list
   | _ -> None
 
+let http_response ~title ~data ?(api_meth = true) ?(header_list = []) reqd
+    http_status =
+  let code = H1.Status.to_code http_status
+  and success = H1.Status.is_successful http_status in
+  let status = { Utils.Status.code; title; data; success } in
+  let data =
+    if api_meth then Utils.Status.to_json status
+    else if success then Yojson.Basic.to_string data
+    else
+      Guest_layout.guest_layout ~page_title:(title ^ " | Mollymawk")
+        ~content:(Error_page.error_layout status)
+        ~icon:"/images/robur.png" ()
+  in
+  let headers =
+    H1.Headers.(
+      of_list
+        ([
+           ("content-length", string_of_int (String.length data));
+           ("content-type", if api_meth then "application/json" else "text/html");
+         ]
+        @ header_list))
+  in
+  let resp = H1.Response.create ~headers http_status in
+  H1.Reqd.respond_with_string reqd resp data;
+  Lwt.return_unit
+
 let redirect_to_page ~path ?(clear_session = false) ?(with_error = false) reqd
     ?(msg = "") () =
   let msg_cookie =
@@ -40,62 +66,10 @@ let redirect_to_page ~path ?(clear_session = false) ?(with_error = false) reqd
         ]
       else []
     in
-    session_header
-    @ [
-        ("Set-Cookie", msg_cookie);
-        ("location", path);
-        ("Content-Length", string_of_int (String.length msg));
-      ]
+    session_header @ [ ("Set-Cookie", msg_cookie); ("location", path) ]
   in
-  let headers = H1.Headers.of_list header_list in
-  let response = H1.Response.create ~headers `Found in
-  H1.Reqd.respond_with_string reqd response msg;
-  Lwt.return_unit
-
-let redirect_to_error ~title ~data ~api_meth status reqd () =
-  let code = H1.Status.to_code status
-  and success = H1.Status.is_successful status in
-  let error = { Utils.Status.code; title; data; success } in
-  let data =
-    if api_meth then Utils.Status.to_json error
-    else
-      Guest_layout.guest_layout ~page_title:(title ^ " | Mollymawk")
-        ~content:(Error_page.error_layout error)
-        ~icon:"/images/robur.png" ()
-  in
-  Lwt.return
-    (let headers =
-       H1.Headers.of_list
-         [
-           ("content-length", string_of_int (String.length data));
-           ("content-type", if api_meth then "application/json" else "text/html");
-         ]
-     in
-     let resp = H1.Response.create ~headers status in
-     H1.Reqd.respond_with_string reqd resp data)
-
-let redirect_to_verify_email reqd ?(msg = "") () =
-  let headers =
-    H1.Headers.of_list
-      [
-        ("location", "/verify-email");
-        ("Content-Length", string_of_int (String.length msg));
-      ]
-  in
-  let response = H1.Response.create ~headers `Found in
-  H1.Reqd.respond_with_string reqd response msg;
-  Lwt.return_unit
-
-let redirect_to_url ~url reqd ?(msg = "") () =
-  let headers =
-    H1.Headers.of_list
-      [
-        ("location", url); ("Content-Length", string_of_int (String.length msg));
-      ]
-  in
-  let response = H1.Response.create ~headers `Found in
-  H1.Reqd.respond_with_string reqd response msg;
-  Lwt.return_unit
+  http_response ~api_meth:false ~title:"Redirecting" ~data:(`String "")
+    ~header_list reqd `Found
 
 let construct_instance_redirect_url callback instance_name =
   let separator = if String.contains callback '?' then "&" else "?" in
@@ -103,41 +77,9 @@ let construct_instance_redirect_url callback instance_name =
     (Configuration.name_to_str instance_name)
 
 let redirect_to_instance_selector callback_link reqd ?(msg = "") () =
-  redirect_to_url
-    ~url:("/select/instance?callback=" ^ Uri.pct_encode callback_link)
+  redirect_to_page
+    ~path:("/select/instance?callback=" ^ Uri.pct_encode callback_link)
     reqd ~msg ()
-
-let redirect_to_dashboard reqd ?(msg = "") () =
-  let headers =
-    H1.Headers.of_list
-      [
-        ("location", "/dashboard");
-        ("Content-Length", string_of_int (String.length msg));
-      ]
-  in
-  let response = H1.Response.create ~headers `Found in
-  H1.Reqd.respond_with_string reqd response msg;
-  Lwt.return_unit
-
-let http_response ~title ?(header_list = []) ?(data = `String "") reqd
-    http_status =
-  let code = H1.Status.to_code http_status
-  and success = H1.Status.is_successful http_status in
-  let status = { Utils.Status.code; title; data; success } in
-  let data = Utils.Status.to_json status in
-  let headers =
-    H1.Headers.(
-      add_list
-        (of_list
-           [
-             ("Content-Type", "application/json");
-             ("Content-length", string_of_int (String.length data));
-           ])
-        header_list)
-  in
-  let response = H1.Response.create ~headers http_status in
-  H1.Reqd.respond_with_string reqd response data;
-  Lwt.return_unit
 
 let http_event_source_response
     ?(header_list = [ ("Content-Type", "text/event-stream") ]) reqd http_status
@@ -174,7 +116,7 @@ let session_cookie_value reqd =
 
 let email_verified_middleware user handler reqd =
   if User_model.is_email_verified user then handler reqd
-  else redirect_to_verify_email reqd ()
+  else redirect_to_page ~path:"/verify/email" reqd ()
 
 let csrf_cookie_verification form_csrf reqd =
   match cookie User_model.csrf_cookie reqd with
