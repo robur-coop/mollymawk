@@ -26,8 +26,8 @@ let cookie cookie_name (reqd : H1.Reqd.t) =
         cookie_list
   | _ -> None
 
-let http_response ?title ~data ?(api_meth = true) ?(header_list = [])
-    reqd http_status =
+let http_response ?title ~data ?(api_meth = true) ?(header_list = []) reqd
+    http_status =
   let title = Option.value title ~default:(H1.Status.to_string http_status) in
   let code = H1.Status.to_code http_status
   and success = H1.Status.is_successful http_status in

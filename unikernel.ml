@@ -806,8 +806,8 @@ struct
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
         | Error err ->
-            Middleware.http_response ~api_meth:false reqd
-              ~title:err.title ~data:err.data `Internal_server_error)
+            Middleware.http_response ~api_meth:false reqd ~title:err.title
+              ~data:err.data `Internal_server_error)
     | Error (`Msg err) ->
         Middleware.http_response ~api_meth:false reqd ~data:(`String err)
           `Bad_request
@@ -1054,8 +1054,7 @@ struct
                   ~data:(`String "No user policy") `Bad_request)
         | Error err ->
             Middleware.http_response ~api_meth:false reqd
-              ~title:"Resource Policy error" ~data:(`String err)
-              `Bad_request)
+              ~title:"Resource Policy error" ~data:(`String err) `Bad_request)
     | Error err ->
         Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
@@ -1137,8 +1136,8 @@ struct
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
         | Error err ->
-            Middleware.http_response ~api_meth:false reqd
-              ~title:err.title ~data:err.data `Internal_server_error)
+            Middleware.http_response ~api_meth:false reqd ~title:err.title
+              ~data:err.data `Internal_server_error)
 
   let unikernel_prepare_update stack store ~unikernel_name http_client albatross
       _ (user : User_model.user) reqd =
@@ -1300,8 +1299,8 @@ struct
                                         `OK
                                   | Error err ->
                                       Middleware.http_response ~api_meth:false
-                                        reqd ~title:err.title
-                                        ~data:err.data `Internal_server_error)
+                                        reqd ~title:err.title ~data:err.data
+                                        `Internal_server_error)
                               | Error (`Msg err) ->
                                   Logs.err (fun m ->
                                       m
@@ -1318,8 +1317,7 @@ struct
                                            and curent build from \
                                            builds.robur.coop. The error is: "
                                         ^ err))
-                                    ~title:
-                                      (unikernel_name ^ " update Error")
+                                    ~title:(unikernel_name ^ " update Error")
                                     ~api_meth:false reqd `Internal_server_error)
                         )))))
 
@@ -1666,8 +1664,7 @@ struct
                            ^ Configuration.name_to_str instance_name))
                       ~title:"Albatross Instance Error" reqd `Not_found)
             | Error (`Msg err) ->
-                Middleware.http_response reqd
-                  ~title:"Error: Bad instance name"
+                Middleware.http_response reqd ~title:"Error: Bad instance name"
                   ~data:
                     (`String
                        ("Couldn't convert the instance to a name, error: " ^ err))
@@ -2154,8 +2151,8 @@ struct
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
     | Error err ->
-        Middleware.http_response ~api_meth:false ~title:err.title
-          ~data:err.data reqd `Bad_request
+        Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
+          reqd `Bad_request
 
   let delete_volume stack albatross_instances (user : User_model.user) json_dict
       reqd =
@@ -2480,8 +2477,8 @@ struct
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
     | Error err ->
-        Middleware.http_response ~api_meth:false ~title:err.title
-          ~data:err.data reqd `Internal_server_error
+        Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
+          reqd `Internal_server_error
 
   let choose_instance store (albatross_instances : Albatross_state.a_map)
       callback _ (user : User_model.user) reqd =
@@ -2932,8 +2929,7 @@ struct
                      (unikernel_rollback stack store !albatross_instances
                         http_client)))
         | _ ->
-            Middleware.http_response ~api_meth:false
-              ~title:"Page not found"
+            Middleware.http_response ~api_meth:false ~title:"Page not found"
               ~data:(`String "This page cannot be found.") reqd `Bad_request)
 
   let pp_error ppf = function
