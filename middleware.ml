@@ -26,8 +26,9 @@ let cookie cookie_name (reqd : H1.Reqd.t) =
         cookie_list
   | _ -> None
 
-let http_response ~title ~data ?(api_meth = true) ?(header_list = []) reqd
-    http_status =
+let http_response ?(title = None) ~data ?(api_meth = true) ?(header_list = [])
+    reqd http_status =
+  let title = Option.value title ~default:(H1.Status.to_string http_status) in
   let code = H1.Status.to_code http_status
   and success = H1.Status.is_successful http_status in
   let status = { Utils.Status.code; title; data; success } in
@@ -68,7 +69,7 @@ let redirect_to_page ~path ?(clear_session = false) ?(with_error = false) reqd
     in
     session_header @ [ ("Set-Cookie", msg_cookie); ("location", path) ]
   in
-  http_response ~api_meth:false ~title:"Redirecting" ~data:(`String "")
+  http_response ~api_meth:false ~title:(Some "Redirecting") ~data:(`String "")
     ~header_list reqd `Found
 
 let construct_instance_redirect_url callback instance_name =
@@ -135,14 +136,14 @@ let csrf_verification user now form_csrf handler reqd =
   | Some csrf_token ->
       if User_model.is_valid_cookie csrf_token now then handler reqd
       else
-        http_response ~title:"CSRF Token Mismatch"
+        http_response ~title:(Some "CSRF Token Mismatch")
           ~data:
             (`String "Invalid CSRF token error. Please refresh and try again.")
           reqd `Bad_request
   | None ->
       http_response
         ~data:(`String "Missing CSRF token. Please refresh and try again.")
-        ~title:"Missing CSRF Token" reqd `Bad_request
+        ~title:(Some "Missing CSRF Token") reqd `Bad_request
 
 let api_authentication reqd =
   match header "Authorization" reqd with
