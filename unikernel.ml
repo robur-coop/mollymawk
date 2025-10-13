@@ -444,11 +444,13 @@ struct
       (`Unikernel_cmd `Unikernel_info)
     >|= function
     | Error err ->
-        Logs.err (fun m ->
-            m "Error fetching '%s' from '%s': %s" unikernel_name
-              (Configuration.name_to_str state.configuration.name)
-              err);
-        Error err
+        let err_msg =
+          Fmt.str "Error fetching '%s' from '%s': %s" unikernel_name
+            (Configuration.name_to_str state.configuration.name)
+            err
+        in
+        Logs.err (fun m -> m "%s" err_msg);
+        Error err_msg
     | Ok (_hdr, `Success (`Unikernel_info [ unikernel ]))
     | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ])) ->
         Ok unikernel
