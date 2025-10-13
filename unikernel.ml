@@ -696,7 +696,7 @@ struct
               ~data:(`String (String.escaped err))
               `Internal_server_error)
     | Error err ->
-        Middleware.http_response ~api_meth:false reqd ~title:(Some err.title)
+        Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
   let verify_email_token store verification_token (user : User_model.user) reqd
@@ -788,7 +788,7 @@ struct
              ~icon:"/images/robur.png" ())
           `OK
     | Error err ->
-        Middleware.http_response ~api_meth:false reqd ~title:(Some err.title)
+        Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
   let account_page store _ (user : User_model.user) reqd =
@@ -807,7 +807,7 @@ struct
               `OK
         | Error err ->
             Middleware.http_response ~api_meth:false reqd
-              ~title:(Some err.title) ~data:err.data `Internal_server_error)
+              ~title:err.title ~data:err.data `Internal_server_error)
     | Error (`Msg err) ->
         Middleware.http_response ~api_meth:false reqd ~data:(`String err)
           `Bad_request
@@ -956,7 +956,7 @@ struct
              ~icon:"/images/robur.png" ())
           `OK
     | Error err ->
-        Middleware.http_response ~api_meth:false reqd ~title:(Some err.title)
+        Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
   let settings store _ (user : User_model.user) reqd =
@@ -971,7 +971,7 @@ struct
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
     | Error err ->
-        Middleware.http_response ~api_meth:false reqd ~title:(Some err.title)
+        Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
   let update_settings stack store albatross_instances
@@ -1050,14 +1050,14 @@ struct
                   `OK
             | None ->
                 Middleware.http_response ~api_meth:false reqd
-                  ~title:(Some "Resource Policy error")
+                  ~title:"Resource Policy error"
                   ~data:(`String "No user policy") `Bad_request)
         | Error err ->
             Middleware.http_response ~api_meth:false reqd
-              ~title:(Some "Resource Policy error") ~data:(`String err)
+              ~title:"Resource Policy error" ~data:(`String err)
               `Bad_request)
     | Error err ->
-        Middleware.http_response ~api_meth:false reqd ~title:(Some err.title)
+        Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
   let unikernel_info stack albatross_instances _ (user : User_model.user) reqd =
@@ -1102,7 +1102,7 @@ struct
     let response_data =
       `Assoc [ ("data", `List successes); ("errors", `List failures) ]
     in
-    Middleware.http_response reqd ~title:(Some "Unikernel Information")
+    Middleware.http_response reqd ~title:"Unikernel Information"
       ~data:response_data `OK
 
   let unikernel_info_one stack store ~unikernel_name albatross _
@@ -1138,7 +1138,7 @@ struct
               `OK
         | Error err ->
             Middleware.http_response ~api_meth:false reqd
-              ~title:(Some err.title) ~data:err.data `Internal_server_error)
+              ~title:err.title ~data:err.data `Internal_server_error)
 
   let unikernel_prepare_update stack store ~unikernel_name http_client albatross
       _ (user : User_model.user) reqd =
@@ -1167,7 +1167,7 @@ struct
                 (`String
                    ("An error occured while fetching the current build \
                      information from builds.robur.coop. The error is: " ^ err))
-              ~title:(Some (unikernel_name ^ " update Error"))
+              ~title:(unikernel_name ^ " update Error")
               reqd `Internal_server_error
         | Ok response_body -> (
             match
@@ -1185,7 +1185,7 @@ struct
                        ("An error occured while parsing the json of the \
                          current build from builds.robur.coop. The error is: "
                       ^ err))
-                  ~title:(Some (unikernel_name ^ " update Error"))
+                  ~title:(unikernel_name ^ " update Error")
                   reqd `Internal_server_error
             | Ok current_job_data -> (
                 Utils.send_http_request http_client
@@ -1204,7 +1204,7 @@ struct
                            ("An error occured while fetching the latest build \
                              information from builds.robur.coop. The error \
                              is: " ^ err))
-                      ~title:(Some (unikernel_name ^ " update Error"))
+                      ~title:(unikernel_name ^ " update Error")
                       ~api_meth:false reqd `Internal_server_error
                 | Ok response_body -> (
                     match
@@ -1223,7 +1223,7 @@ struct
                                ("An error occured while parsing the json of \
                                  the latest build from builds.robur.coop. The \
                                  error is: " ^ err))
-                          ~title:(Some (unikernel_name ^ "update Error"))
+                          ~title:(unikernel_name ^ "update Error")
                           ~api_meth:false reqd `Internal_server_error
                     | Ok latest_job_data -> (
                         if
@@ -1270,7 +1270,7 @@ struct
                                        build information from \
                                        builds.robur.coop. The error is: " ^ err
                                      ))
-                                ~title:(Some (unikernel_name ^ " update Error"))
+                                ~title:(unikernel_name ^ " update Error")
                                 ~api_meth:false reqd `Internal_server_error
                           | Ok response_body -> (
                               match
@@ -1300,7 +1300,7 @@ struct
                                         `OK
                                   | Error err ->
                                       Middleware.http_response ~api_meth:false
-                                        reqd ~title:(Some err.title)
+                                        reqd ~title:err.title
                                         ~data:err.data `Internal_server_error)
                               | Error (`Msg err) ->
                                   Logs.err (fun m ->
@@ -1319,7 +1319,7 @@ struct
                                            builds.robur.coop. The error is: "
                                         ^ err))
                                     ~title:
-                                      (Some (unikernel_name ^ " update Error"))
+                                      (unikernel_name ^ " update Error")
                                     ~api_meth:false reqd `Internal_server_error)
                         )))))
 
@@ -1482,14 +1482,14 @@ struct
             user store http_client `Rollback albatross
           >>= function
           | Ok _res ->
-              Middleware.http_response reqd ~title:(Some "Rollback Successful")
+              Middleware.http_response reqd ~title:"Rollback Successful"
                 ~data:
                   (`String
                      ("Rollback succesful. " ^ unikernel_name
                     ^ " is now running on build " ^ old_unikernel.uuid))
                 `OK
           | Error (`Msg err, http_status) ->
-              Middleware.http_response reqd ~title:(Some "Rollback Error")
+              Middleware.http_response reqd ~title:"Rollback Error"
                 ~data:
                   (`String
                      ("Rollback failed. " ^ unikernel_name
@@ -1497,7 +1497,7 @@ struct
                     ^ " with error " ^ err))
                 http_status
         else
-          Middleware.http_response reqd ~title:(Some "Rollback Failed")
+          Middleware.http_response reqd ~title:"Rollback Failed"
             ~data:
               (`String
                  (unikernel_name
@@ -1505,7 +1505,7 @@ struct
                    of an update."))
             `Bad_request
     | None ->
-        Middleware.http_response reqd ~title:(Some "Rollback Error")
+        Middleware.http_response reqd ~title:"Rollback Error"
           ~data:
             (`String
                (unikernel_name
@@ -1531,14 +1531,14 @@ struct
             process_rollback stack albatross ~unikernel_name
               (Mirage_ptime.now ()) store http_client reqd user
         | Ok () ->
-            Middleware.http_response reqd ~title:(Some "Update Successful")
+            Middleware.http_response reqd ~title:"Update Successful"
               ~data:
                 (`String
                    ("Update succesful. " ^ unikernel_name
                   ^ " is now running on build " ^ to_be_updated_unikernel))
               `OK)
     | Error (`Msg err, http_status) ->
-        Middleware.http_response reqd ~title:(Some "Update Error")
+        Middleware.http_response reqd ~title:"Update Error"
           ~data:
             (`String
                ("Update failed. " ^ unikernel_name
@@ -1595,7 +1595,7 @@ struct
                     with
                     | Error (`Msg err) ->
                         Middleware.http_response reqd
-                          ~title:(Some "Error with Unikernel Arguments Json")
+                          ~title:"Error with Unikernel Arguments Json"
                           ~data:
                             (`String
                                ("Could not get the unikernel arguments json: "
@@ -1664,10 +1664,10 @@ struct
                         (`String
                            ("An error occured while finding albatross instance "
                            ^ Configuration.name_to_str instance_name))
-                      ~title:(Some "Albatross Instance Error") reqd `Not_found)
+                      ~title:"Albatross Instance Error" reqd `Not_found)
             | Error (`Msg err) ->
                 Middleware.http_response reqd
-                  ~title:(Some "Error: Bad instance name")
+                  ~title:"Error: Bad instance name"
                   ~data:
                     (`String
                        ("Couldn't convert the instance to a name, error: " ^ err))
@@ -1679,7 +1679,7 @@ struct
                    with: %s"
                   err);
             Middleware.http_response reqd
-              ~title:(Some "Error: Liveliness check failed")
+              ~title:"Error: Liveliness check failed"
               ~data:
                 (`String
                    ("Liveliness check of currentyly running unikernel failed \
@@ -1991,7 +1991,7 @@ struct
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
         | Error err ->
-            Middleware.http_response ~api_meth:false ~title:(Some err.title)
+            Middleware.http_response ~api_meth:false ~title:err.title
               ~data:err.data reqd `Internal_server_error)
     | None ->
         Middleware.http_response ~api_meth:false
@@ -2023,7 +2023,7 @@ struct
                   ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                   `OK
             | Error err ->
-                Middleware.http_response ~api_meth:false ~title:(Some err.title)
+                Middleware.http_response ~api_meth:false ~title:err.title
                   ~data:err.data reqd `Bad_request)
         | Error err ->
             Middleware.http_response ~api_meth:false
@@ -2154,7 +2154,7 @@ struct
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
     | Error err ->
-        Middleware.http_response ~api_meth:false ~title:(Some err.title)
+        Middleware.http_response ~api_meth:false ~title:err.title
           ~data:err.data reqd `Bad_request
 
   let delete_volume stack albatross_instances (user : User_model.user) json_dict
@@ -2480,7 +2480,7 @@ struct
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
     | Error err ->
-        Middleware.http_response ~api_meth:false ~title:(Some err.title)
+        Middleware.http_response ~api_meth:false ~title:err.title
           ~data:err.data reqd `Internal_server_error
 
   let choose_instance store (albatross_instances : Albatross_state.a_map)
@@ -2507,7 +2507,7 @@ struct
             ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
             `OK
       | Error err ->
-          Middleware.http_response ~api_meth:false ~title:(Some err.title)
+          Middleware.http_response ~api_meth:false ~title:err.title
             ~data:err.data reqd `Internal_server_error
 
   let api_tokens store _ (user : User_model.user) reqd =
@@ -2521,7 +2521,7 @@ struct
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
     | Error err ->
-        Middleware.http_response reqd ~title:(Some err.title) ~data:err.data
+        Middleware.http_response reqd ~title:err.title ~data:err.data
           `Internal_server_error
 
   let create_token store (user : User_model.user) json_dict reqd =
@@ -2673,7 +2673,7 @@ struct
                         reqd `Not_found)
               | Error (`Msg err) ->
                   Middleware.http_response ~api_meth:false
-                    ~title:(Some "Albatross instance error")
+                    ~title:"Albatross instance error"
                     ~data:
                       (`String ("Error with albatross instance name: " ^ err))
                     reqd `Bad_request)
@@ -2933,7 +2933,7 @@ struct
                         http_client)))
         | _ ->
             Middleware.http_response ~api_meth:false
-              ~title:(Some "Page not found")
+              ~title:"Page not found"
               ~data:(`String "This page cannot be found.") reqd `Bad_request)
 
   let pp_error ppf = function
