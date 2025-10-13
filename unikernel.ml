@@ -233,7 +233,7 @@ struct
   let extract_json_csrf_token f token_or_cookie user reqd =
     extract_json_body reqd >>= function
     | Error (`Msg err) ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String (String.escaped err))
           `Bad_request
     | Ok json_dict -> (
@@ -246,7 +246,7 @@ struct
             | _ ->
                 Logs.warn (fun m ->
                     m "No csrf token in session request with Json body");
-                Middleware.http_response reqd ~title:"Error"
+                Middleware.http_response reqd
                   ~data:(`String "Couldn't find CSRF token") `Bad_request))
 
   let extract_multipart_csrf_token f token_or_cookie user reqd =
@@ -256,7 +256,7 @@ struct
         read_multipart_data reqd >>= function
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Failed to read multipart data: %s" err);
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:(`String ("Couldn't process multipart request: " ^ err))
               `Bad_request
         | Ok (m, assoc) -> (
@@ -267,13 +267,13 @@ struct
                 match Map.find_opt "molly_csrf" multipart_body with
                 | None ->
                     Logs.warn (fun m -> m "No csrf token in multipart request");
-                    Middleware.http_response reqd ~title:"Error"
+                    Middleware.http_response reqd
                       ~data:(`String "Couldn't find CSRF token") `Bad_request
                 | Some (_, token) ->
                     csrf_verification (f user multipart_body) user token reqd)))
     | None | _ ->
         Logs.warn (fun m -> m "Not a multipart request");
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String "Expected multipart form data") `Bad_request
 
   let email_verification f _ user reqd =
@@ -342,22 +342,21 @@ struct
     | Error (v, msg) ->
         Logs.err (fun m -> m "authenticate: %s" msg);
         if api_meth || v = `Token then
-          Middleware.http_response reqd ~title:"Error" ~data:(`String msg)
-            `Bad_request
+          Middleware.http_response reqd ~data:(`String msg) `Bad_request
         else
           Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
             ~with_error:true ~msg reqd ()
     | Ok (`Token (user, token)) -> (
         Store.increment_token_usage store token user >>= function
         | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Error" ~data:(`String err)
+            Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error
         | Ok () -> f `Token user reqd)
     | Ok (`Cookie (user, cookie)) -> (
         Store.update_cookie_usage store cookie user reqd >>= function
         | Error (`Msg err) ->
             Logs.err (fun m -> m "Error with storage: %s" err);
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:(`String (String.escaped err))
               `Internal_server_error
         | Ok () -> f `Cookie user reqd)
@@ -447,11 +446,13 @@ struct
       (`Unikernel_cmd `Unikernel_info)
     >|= function
     | Error err ->
-        Logs.err (fun m ->
-            m "Error fetching '%s' from '%s': %s" unikernel_name
-              (Configuration.name_to_str state.configuration.name)
-              err);
-        Error err
+        let err_msg =
+          Fmt.str "Error fetching '%s' from '%s': %s" unikernel_name
+            (Configuration.name_to_str state.configuration.name)
+            err
+        in
+        Logs.err (fun m -> m "%s" err_msg);
+        Error err_msg
     | Ok (_hdr, `Success (`Unikernel_info [ unikernel ]))
     | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ]))
     | Ok (_hdr, `Success (`Old_unikernel_info4 [ unikernel ])) ->
@@ -478,7 +479,8 @@ struct
     let csrf = Middleware.generate_csrf_cookie now reqd in
     let csrf_cookie = csrf.name ^ "=" ^ csrf.value ^ ";Path=/;HttpOnly=true" in
     match Middleware.session_cookie_value reqd with
-    | Ok x when x <> "" -> Middleware.redirect_to_dashboard reqd ()
+    | Ok x when x <> "" ->
+        Middleware.redirect_to_page ~path:"/dashboard" reqd ()
     | Ok _ | Error (`Msg _) ->
         reply reqd ~content_type:"text/html"
           (Sign_up.register_page ~csrf:csrf.value ~icon:"/images/robur.png")
@@ -488,7 +490,8 @@ struct
 
   let sign_in reqd =
     match Middleware.session_cookie_value reqd with
-    | Ok x when x <> "" -> Middleware.redirect_to_dashboard reqd ()
+    | Ok x when x <> "" ->
+        Middleware.redirect_to_page ~path:"/dashboard" reqd ()
     | Ok _ | Error (`Msg _) ->
         reply reqd ~content_type:"text/html"
           (Sign_in.login_page ~icon:"/images/robur.png" ())
@@ -503,7 +506,7 @@ struct
     match json with
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String (String.escaped err))
           `Bad_request
     | Ok (`Assoc json_dict) -> (
@@ -533,7 +536,7 @@ struct
             Some (`String form_csrf) ) -> (
             match validate_user_input ~name ~email ~password ~form_csrf with
             | Error err ->
-                Middleware.http_response reqd ~title:"Error"
+                Middleware.http_response reqd
                   ~data:(`String (String.escaped err))
                   `Bad_request
             | Ok _ ->
@@ -542,11 +545,11 @@ struct
                   let existing_name = Store.find_by_name store name in
                   match (existing_name, existing_email) with
                   | Some _, None ->
-                      Middleware.http_response reqd ~title:"Error"
+                      Middleware.http_response reqd
                         ~data:(`String "A user with this name already exist.")
                         `Bad_request
                   | None, Some _ ->
-                      Middleware.http_response reqd ~title:"Error"
+                      Middleware.http_response reqd
                         ~data:(`String "A user with this email already exist.")
                         `Bad_request
                   | None, None -> (
@@ -573,34 +576,33 @@ struct
                             ]
                           in
                           Middleware.http_response reqd ~header_list
-                            ~title:"Success"
                             ~data:(User_model.user_to_json user)
                             `OK
                       | Error (`Msg err) ->
-                          Middleware.http_response reqd ~title:"Error"
+                          Middleware.http_response reqd
                             ~data:(`String (String.escaped err))
                             `Internal_server_error)
                   | _ ->
-                      Middleware.http_response reqd ~title:"Error"
+                      Middleware.http_response reqd
                         ~data:
                           (`String
                              "A user with this name or email already exist.")
                         `Bad_request
                 else
-                  Middleware.http_response reqd ~title:"Error"
+                  Middleware.http_response reqd
                     ~data:
                       (`String
                          "CSRF token mismatch error. Please referesh and try \
                           again.") `Bad_request)
         | _ ->
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:
                 (`String
                    (Fmt.str "Register: Unexpected fields. Got %s"
                       (Yojson.Basic.to_string (`Assoc json_dict))))
               `Bad_request)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String "Register account: expected a dictionary") `Bad_request
 
   let login store reqd =
@@ -612,7 +614,7 @@ struct
     match json with
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Failed to parse JSON: %s" err);
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String (String.escaped err))
           `Bad_request
     | Ok (`Assoc json_dict) -> (
@@ -628,7 +630,7 @@ struct
         | Some (`String email), Some (`String password) -> (
             match validate_user_input ~email ~password with
             | Error err ->
-                Middleware.http_response reqd ~title:"Error"
+                Middleware.http_response reqd
                   ~data:(`String (String.escaped err))
                   `Bad_request
             | Ok _ -> (
@@ -640,7 +642,7 @@ struct
                     user now
                 with
                 | Error (`Msg err) ->
-                    Middleware.http_response reqd ~title:"Error"
+                    Middleware.http_response reqd
                       ~data:(`String (String.escaped err))
                       `Bad_request
                 | Ok (user, cookie) -> (
@@ -657,22 +659,21 @@ struct
                           ]
                         in
                         Middleware.http_response reqd ~header_list
-                          ~title:"Success"
                           ~data:(User_model.user_to_json user)
                           `OK
                     | Error (`Msg err) ->
-                        Middleware.http_response reqd ~title:"Error"
+                        Middleware.http_response reqd
                           ~data:(`String (String.escaped err))
                           `Internal_server_error)))
         | _ ->
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:
                 (`String
                    (Fmt.str "Update password: Unexpected fields. Got %s"
                       (Yojson.Basic.to_string (`Assoc json_dict))))
               `Bad_request)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String "Update password: expected a dictionary") `Bad_request
 
   let verify_email store (user : User_model.user) reqd =
@@ -695,15 +696,12 @@ struct
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
         | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response ~api_meth:false reqd
               ~data:(`String (String.escaped err))
               `Internal_server_error)
     | Error err ->
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:(Error_page.error_layout err)
-             ~icon:"/images/robur.png" ())
-          `Internal_server_error
+        Middleware.http_response ~api_meth:false reqd ~title:err.title
+          ~data:err.data `Internal_server_error
 
   let verify_email_token store verification_token (user : User_model.user) reqd
       =
@@ -719,13 +717,13 @@ struct
     | Ok user' ->
         if String.equal user.uuid user'.uuid then
           Store.update_user store user >>= function
-          | Ok () -> Middleware.redirect_to_dashboard reqd ()
+          | Ok () -> Middleware.redirect_to_page ~path:"/dashboard" reqd ()
           | Error (`Msg msg) ->
-              Middleware.http_response reqd ~title:"Error"
+              Middleware.http_response reqd
                 ~data:(`String (String.escaped msg))
                 `Internal_server_error
         else
-          Middleware.http_response reqd ~title:"Error"
+          Middleware.http_response reqd
             ~data:(`String "Logged in user is not the to-be-verified one")
             `Bad_request
     | Error (`Msg s) ->
@@ -739,28 +737,27 @@ struct
         match Store.find_by_uuid store uuid with
         | None ->
             Logs.warn (fun m -> m "%s : Account not found" key);
-            Middleware.http_response reqd ~title:"Error"
-              ~data:(`String "Account not found") `Not_found
+            Middleware.http_response reqd ~data:(`String "Account not found")
+              `Not_found
         | Some user -> (
             if error_on_last user then (
               Logs.warn (fun m ->
                   m "%s : Can't perform action on last user" key);
-              Middleware.http_response reqd ~title:"Error" ~data:error_message
-                `Forbidden)
+              Middleware.http_response reqd ~data:error_message `Forbidden)
             else
               let updated_user = update_fn user in
               Store.update_user store updated_user >>= function
               | Ok () ->
-                  Middleware.http_response reqd ~title:"OK"
+                  Middleware.http_response reqd
                     ~data:(`String "Updated user successfully") `OK
               | Error (`Msg msg) ->
                   Logs.warn (fun m -> m "%s : Storage error with %s" key msg);
-                  Middleware.http_response reqd ~title:"Error"
+                  Middleware.http_response reqd
                     ~data:(`String (String.escaped msg))
                     `Internal_server_error))
     | _ ->
         Logs.warn (fun m -> m "%s: Failed to parse JSON - no UUID found" key);
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String "Couldn't find a UUID in the JSON.") `Bad_request
 
   let toggle_account_activation store _user json_dict reqd =
@@ -795,11 +792,8 @@ struct
              ~icon:"/images/robur.png" ())
           `OK
     | Error err ->
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:(Error_page.error_layout err)
-             ~icon:"/images/robur.png" ())
-          `Internal_server_error
+        Middleware.http_response ~api_meth:false reqd ~title:err.title
+          ~data:err.data `Internal_server_error
 
   let account_page store _ (user : User_model.user) reqd =
     match Middleware.session_cookie_value reqd with
@@ -808,8 +802,7 @@ struct
         generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
             reply reqd ~content_type:"text/html"
-              (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:"Account | Mollymawk"
+              (Dashboard.dashboard_layout ~csrf user ~page_title:"Account"
                  ~content:
                    (User_account.user_account_layout user ~active_cookie_value
                       now)
@@ -817,24 +810,10 @@ struct
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
         | Error err ->
-            reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-                 ~content:(Error_page.error_layout err)
-                 ~icon:"/images/robur.png" ())
-              `Internal_server_error)
+            Middleware.http_response ~api_meth:false reqd ~title:err.title
+              ~data:err.data `Internal_server_error)
     | Error (`Msg err) ->
-        let error =
-          {
-            Utils.Status.code = 400;
-            title = "Bad Request";
-            success = false;
-            data = `String err;
-          }
-        in
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
-             ~content:(Error_page.error_layout error)
-             ~icon:"/images/robur.png" ())
+        Middleware.http_response ~api_meth:false reqd ~data:(`String err)
           `Bad_request
 
   let update_password store (user : User_model.user) json_dict reqd =
@@ -857,15 +836,15 @@ struct
                (User_model.hash_password ~password:current_password
                   ~uuid:user.uuid))
         then
-          Middleware.http_response reqd ~title:"Error"
+          Middleware.http_response reqd
             ~data:(`String "The current password entered is wrong.")
             `Bad_request
         else if not (String.equal new_password confirm_password) then
-          Middleware.http_response reqd ~title:"Error"
+          Middleware.http_response reqd
             ~data:(`String "New password and confirm password do not match")
             `Bad_request
         else if not (User_model.password_validation new_password) then
-          Middleware.http_response reqd ~title:"Error"
+          Middleware.http_response reqd
             ~data:(`String "New password must be atleast 8 characters.")
             `Bad_request
         else
@@ -875,15 +854,15 @@ struct
           in
           Store.update_user store updated_user >>= function
           | Ok () ->
-              Middleware.http_response reqd ~title:"OK"
+              Middleware.http_response reqd
                 ~data:(`String "Updated password successfully") `OK
           | Error (`Msg err) ->
               Logs.warn (fun m -> m "Storage error with %s" err);
-              Middleware.http_response reqd ~title:"Error"
+              Middleware.http_response reqd
                 ~data:(`String (String.escaped err))
                 `Internal_server_error)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:
             (`String
                (Fmt.str "Update password: Unexpected fields. Got %s"
@@ -900,7 +879,7 @@ struct
     | Ok () -> redirect
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Storage error with %s" err);
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String (String.escaped err))
           `Internal_server_error
 
@@ -917,12 +896,12 @@ struct
                       not
                         (String.equal c.name User_model.session_cookie
                         && c.value <> cookie.value)),
-                    Middleware.http_response reqd ~title:"OK"
+                    Middleware.http_response reqd
                       ~data:(`String "Closed all sessions succesfully") `OK )
               | _, true ->
                   ( (fun (c : User_model.cookie) ->
                       not (String.equal c.value cookie.value)),
-                    Middleware.http_response reqd ~title:"OK"
+                    Middleware.http_response reqd
                       ~data:(`String "Logout succesful") `OK )
               | Some to_logout_cookie_value, false ->
                   ( (fun (c : User_model.cookie) ->
@@ -932,32 +911,13 @@ struct
             in
             new_user_cookies ~user ~filter ~redirect store reqd
         | None ->
-            let error =
-              {
-                Utils.Status.code = 404;
-                title = "Not Found";
-                success = false;
-                data = `String "Auth cookie not found";
-              }
-            in
-            reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
-                 ~content:(Error_page.error_layout error)
-                 ~icon:"/images/robur.png" ())
-              `Not_found)
+            Middleware.http_response ~api_meth:false reqd
+              ~data:(`String "Authentication cookie not found.") `Not_found)
     | Error (`Msg err) ->
-        let error =
-          {
-            Utils.Status.code = 400;
-            title = "Bad Request";
-            success = false;
-            data = `String err;
-          }
-        in
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
-             ~content:(Error_page.error_layout error)
-             ~icon:"/images/robur.png" ())
+        Middleware.http_response ~api_meth:false reqd
+          ~data:
+            (`String
+               ("Session cookie error: Couldn't find a session cookie. " ^ err))
           `Bad_request
 
   let close_session store (user : User_model.user) json_dict reqd =
@@ -975,15 +935,15 @@ struct
         in
         Store.update_user store updated_user >>= function
         | Ok () ->
-            Middleware.http_response reqd ~title:"Success"
+            Middleware.http_response reqd
               ~data:(`String "Session closed succesfully") `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:(`String (String.escaped err))
               `Internal_server_error)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:
             (`String
                (Fmt.str "Close session: Unexpected fields. Got %s"
@@ -995,35 +955,28 @@ struct
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Users | Mollymawk"
+          (Dashboard.dashboard_layout ~csrf user ~page_title:"Users"
              ~content:(Users_index.users_index_layout (Store.users store) now)
              ~icon:"/images/robur.png" ())
           `OK
     | Error err ->
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:(Error_page.error_layout err)
-             ~icon:"/images/robur.png" ())
-          `Internal_server_error
+        Middleware.http_response ~api_meth:false reqd ~title:err.title
+          ~data:err.data `Internal_server_error
 
   let settings store _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:"Settings | Mollymawk"
+          (Dashboard.dashboard_layout ~csrf user ~page_title:"Settings"
              ~content:
                (Settings_page.settings_layout (Store.configurations store))
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
     | Error err ->
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:(Error_page.error_layout err)
-             ~icon:"/images/robur.png" ())
-          `Internal_server_error
+        Middleware.http_response ~api_meth:false reqd ~title:err.title
+          ~data:err.data `Internal_server_error
 
   let update_settings stack store albatross_instances
       (update_or_create : [ `Update | `Create ]) _user json_dict reqd =
@@ -1038,14 +991,14 @@ struct
               Albatross.Albatross_map.update configuration_settings.name
                 (fun _prev -> Some new_albatross_instance)
                 !albatross_instances;
-            Middleware.http_response reqd ~title:"Success"
+            Middleware.http_response reqd
               ~data:(`String "Configuration updated successfully") `OK
         | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:(`String (String.escaped err))
               `Internal_server_error)
     | Error (`Msg err) ->
-        Middleware.http_response ~title:"Error"
+        Middleware.http_response
           ~data:(`String (String.escaped err))
           reqd `Bad_request
 
@@ -1058,18 +1011,18 @@ struct
             | Ok _new_configurations ->
                 albatross_instances :=
                   Albatross.Albatross_map.remove name !albatross_instances;
-                Middleware.http_response reqd ~title:"Success"
+                Middleware.http_response reqd
                   ~data:(`String "Configuration delete successfully") `OK
             | Error (`Msg err) ->
-                Middleware.http_response reqd ~title:"Error"
+                Middleware.http_response reqd
                   ~data:(`String (String.escaped err))
                   `Internal_server_error)
         | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:(`String (String.escaped err))
               `Bad_request)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:
             (`String
                (Fmt.str "Delete albatross config: Unexpected fields. Got %s"
@@ -1078,14 +1031,6 @@ struct
 
   let deploy_form stack store albatross _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    let missing_policy_error ?(err = None) () =
-      {
-        Utils.Status.code = 400;
-        title = "Resource policy error";
-        data = `String (Option.value err ~default:"No policy found");
-        success = false;
-      }
-    in
     user_unikernels_by_instance stack albatross user.name
     >>= fun unikernels_by_albatross_instance ->
     user_volumes_by_instance stack albatross user.name
@@ -1098,7 +1043,7 @@ struct
             | Some user_policy ->
                 reply reqd ~content_type:"text/html"
                   (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:"Deploy a Unikernel | Mollymawk"
+                     ~page_title:"Deploy a Unikernel"
                      ~content:
                        (Unikernel_create.unikernel_create_layout ~user_policy
                           unikernels_by_albatross_instance
@@ -1108,28 +1053,15 @@ struct
                   ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                   `OK
             | None ->
-                reply reqd ~content_type:"text/html"
-                  (Guest_layout.guest_layout
-                     ~page_title:"Resource policy error | Mollymawk"
-                     ~content:
-                       (Error_page.error_layout (missing_policy_error ()))
-                     ~icon:"/images/robur.png" ())
-                  `Bad_request)
+                Middleware.http_response ~api_meth:false reqd
+                  ~title:"Resource Policy error"
+                  ~data:(`String "No user policy") `Bad_request)
         | Error err ->
-            reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout
-                 ~page_title:"Resource policy error | Mollymawk"
-                 ~content:
-                   (Error_page.error_layout
-                      (missing_policy_error ~err:(Some err) ()))
-                 ~icon:"/images/robur.png" ())
-              `Bad_request)
+            Middleware.http_response ~api_meth:false reqd
+              ~title:"Resource Policy error" ~data:(`String err) `Bad_request)
     | Error err ->
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:(Error_page.error_layout err)
-             ~icon:"/images/robur.png" ())
-          `Internal_server_error
+        Middleware.http_response ~api_meth:false reqd ~title:err.title
+          ~data:err.data `Internal_server_error
 
   let unikernel_info stack albatross_instances _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
@@ -1182,20 +1114,11 @@ struct
     user_unikernel stack albatross ~user_name:user.name ~unikernel_name
     >>= function
     | Error err ->
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:
-               (Error_page.error_layout
-                  {
-                    code = 500;
-                    success = false;
-                    title = "Albatross Error";
-                    data =
-                      `String
-                        ("An error occured trying to fetch " ^ unikernel_name
-                       ^ "from albatross: " ^ err);
-                  })
-             ~icon:"/images/robur.png" ())
+        let data =
+          "An error occured trying to fetch " ^ unikernel_name
+          ^ "from albatross: " ^ err
+        in
+        Middleware.http_response ~api_meth:false reqd ~data:(`String data)
           `Internal_server_error
     | Ok unikernel -> (
         let now = Mirage_ptime.now () in
@@ -1221,11 +1144,8 @@ struct
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
         | Error err ->
-            reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-                 ~content:(Error_page.error_layout err)
-                 ~icon:"/images/robur.png" ())
-              `Internal_server_error)
+            Middleware.http_response ~api_meth:false reqd ~title:err.title
+              ~data:err.data `Internal_server_error)
 
   let unikernel_prepare_update stack store ~unikernel_name http_client albatross
       _ (user : User_model.user) reqd =
@@ -1233,13 +1153,12 @@ struct
     user_unikernel stack albatross ~user_name:user.name ~unikernel_name
     >>= function
     | Error err ->
-        Middleware.redirect_to_error
+        Middleware.http_response ~api_meth:false
           ~data:
             (`String
                ("An error occured while fetching " ^ unikernel_name
               ^ " from albatross with error " ^ err))
-          ~title:"Albatross Error" ~api_meth:false `Internal_server_error reqd
-          ()
+          reqd `Internal_server_error
     | Ok (name, unikernel) -> (
         Utils.send_http_request http_client ~base_url:Builder_web.base_url
           ~path:("/hash?sha256=" ^ Ohex.encode unikernel.digest)
@@ -1250,13 +1169,13 @@ struct
                   "builds.robur.coop: Error while fetching the current build \
                    info of %s with error: %s"
                   unikernel_name err);
-            Middleware.redirect_to_error
+            Middleware.http_response ~api_meth:false
               ~data:
                 (`String
                    ("An error occured while fetching the current build \
                      information from builds.robur.coop. The error is: " ^ err))
               ~title:(unikernel_name ^ " update Error")
-              ~api_meth:false `Internal_server_error reqd ()
+              reqd `Internal_server_error
         | Ok response_body -> (
             match
               Builder_web.build_of_json (Yojson.Basic.from_string response_body)
@@ -1267,14 +1186,14 @@ struct
                       "JSON parsing of the current build of %s from \
                        builds.robur.coop failed with error: %s"
                       unikernel_name err);
-                Middleware.redirect_to_error
+                Middleware.http_response ~api_meth:false
                   ~data:
                     (`String
                        ("An error occured while parsing the json of the \
                          current build from builds.robur.coop. The error is: "
                       ^ err))
                   ~title:(unikernel_name ^ " update Error")
-                  ~api_meth:false `Internal_server_error reqd ()
+                  reqd `Internal_server_error
             | Ok current_job_data -> (
                 Utils.send_http_request http_client
                   ~base_url:Builder_web.base_url
@@ -1286,14 +1205,14 @@ struct
                           "builds.robur.coop: Error while fetching the latest \
                            build info of %s with error: %s"
                           unikernel_name err);
-                    Middleware.redirect_to_error
+                    Middleware.http_response
                       ~data:
                         (`String
                            ("An error occured while fetching the latest build \
                              information from builds.robur.coop. The error \
                              is: " ^ err))
                       ~title:(unikernel_name ^ " update Error")
-                      ~api_meth:false `Internal_server_error reqd ()
+                      ~api_meth:false reqd `Internal_server_error
                 | Ok response_body -> (
                     match
                       Builder_web.build_of_json
@@ -1305,14 +1224,14 @@ struct
                               "JSON parsing of the latest build of %s from \
                                builds.robur.coop failed with error: %s"
                               unikernel_name err);
-                        Middleware.redirect_to_error
+                        Middleware.http_response
                           ~data:
                             (`String
                                ("An error occured while parsing the json of \
                                  the latest build from builds.robur.coop. The \
                                  error is: " ^ err))
                           ~title:(unikernel_name ^ "update Error")
-                          ~api_meth:false `Internal_server_error reqd ()
+                          ~api_meth:false reqd `Internal_server_error
                     | Ok latest_job_data -> (
                         if
                           String.equal latest_job_data.uuid
@@ -1350,7 +1269,7 @@ struct
                                      the diff between the current and latest \
                                      build info of %s with error: %s"
                                     unikernel_name err);
-                              Middleware.redirect_to_error
+                              Middleware.http_response
                                 ~data:
                                   (`String
                                      ("An error occured while fetching the \
@@ -1359,7 +1278,7 @@ struct
                                        builds.robur.coop. The error is: " ^ err
                                      ))
                                 ~title:(unikernel_name ^ " update Error")
-                                ~api_meth:false `Internal_server_error reqd ()
+                                ~api_meth:false reqd `Internal_server_error
                           | Ok response_body -> (
                               match
                                 Builder_web.compare_of_json
@@ -1374,7 +1293,7 @@ struct
                                         (Dashboard.dashboard_layout ~csrf user
                                            ~page_title:
                                              (Vmm_core.Name.to_string name
-                                             ^ " Update | Mollymawk")
+                                             ^ " Update")
                                            ~content:
                                              (Unikernel_update
                                               .unikernel_update_layout
@@ -1387,13 +1306,8 @@ struct
                                         ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                                         `OK
                                   | Error err ->
-                                      reply reqd ~content_type:"text/html"
-                                        (Guest_layout.guest_layout
-                                           ~page_title:
-                                             "CSRF Token Error | Mollymawk"
-                                           ~content:
-                                             (Error_page.error_layout err)
-                                           ~icon:"/images/robur.png" ())
+                                      Middleware.http_response ~api_meth:false
+                                        reqd ~title:err.title ~data:err.data
                                         `Internal_server_error)
                               | Error (`Msg err) ->
                                   Logs.err (fun m ->
@@ -1403,7 +1317,7 @@ struct
                                          builds.robur.coop failed with error: \
                                          %s"
                                         unikernel_name err);
-                                  Middleware.redirect_to_error
+                                  Middleware.http_response
                                     ~data:
                                       (`String
                                          ("An error occured while parsing the \
@@ -1412,8 +1326,8 @@ struct
                                            builds.robur.coop. The error is: "
                                         ^ err))
                                     ~title:(unikernel_name ^ " update Error")
-                                    ~api_meth:false `Internal_server_error reqd
-                                    ()))))))
+                                    ~api_meth:false reqd `Internal_server_error)
+                        )))))
 
   let force_create_unikernel stack albatross ~unikernel_name ~push
       (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user) =
@@ -1698,7 +1612,7 @@ struct
                           ~unikernel_name
                         >>= function
                         | Error err ->
-                            Middleware.http_response reqd ~title:"Error"
+                            Middleware.http_response reqd
                               ~data:
                                 (`String
                                    ("Couldn't find albatross instance, "
@@ -1753,13 +1667,12 @@ struct
                           ~http_liveliness_address ~dns_liveliness stack cfg
                           user store http_client albatross reqd)
                 | _ ->
-                    Middleware.redirect_to_error
+                    Middleware.http_response
                       ~data:
                         (`String
                            ("An error occured while finding albatross instance "
                            ^ Configuration.name_to_str instance_name))
-                      ~title:"Albatross Instance Error" ~api_meth:false
-                      `Not_found reqd ())
+                      ~title:"Albatross Instance Error" reqd `Not_found)
             | Error (`Msg err) ->
                 Middleware.http_response reqd ~title:"Error: Bad instance name"
                   ~data:
@@ -1780,7 +1693,7 @@ struct
                      with error: " ^ err))
               `Internal_server_error)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String "Couldn't find job or build in json. Received ")
           `Bad_request
 
@@ -1801,19 +1714,19 @@ struct
                 process_rollback stack albatross ~unikernel_name
                   (Mirage_ptime.now ()) store http_client reqd user
             | _ ->
-                Middleware.http_response reqd ~title:"Error"
+                Middleware.http_response reqd
                   ~data:
                     (`String
                        ("Couldn't find albatross instance, "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
         | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:
                 (`String ("Couldn't convert name to albatross instance, " ^ err))
               `Bad_request)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
   let unikernel_destroy stack albatross_instances (user : User_model.user)
@@ -1835,36 +1748,34 @@ struct
                 >>= function
                 | Error msg ->
                     Logs.err (fun m -> m "Error querying albatross: %s" msg);
-                    Middleware.http_response reqd ~title:"Error"
+                    Middleware.http_response reqd
                       ~data:(`String ("Error querying albatross: " ^ msg))
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
                     match Albatross_json.res res with
-                    | Ok res ->
-                        Middleware.http_response reqd ~title:"Success" ~data:res
-                          `OK
+                    | Ok res -> Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
-                        Middleware.http_response reqd ~title:"Error"
+                        Middleware.http_response reqd
                           ~data:(`String (String.escaped err))
                           `Internal_server_error))
             | _ ->
                 Logs.err (fun m ->
                     m "Error finding albatross instance %s"
                       (Configuration.name_to_str instance_name));
-                Middleware.http_response reqd ~title:"Error"
+                Middleware.http_response reqd
                   ~data:
                     (`String
                        ("Error finding albatross instance: "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
         | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:
                 (`String
                    ("Error converting albatross name to instance name: " ^ err))
               `Bad_request)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
   let unikernel_restart stack albatross_instances (user : User_model.user)
@@ -1887,43 +1798,41 @@ struct
                 >>= function
                 | Error msg ->
                     Logs.err (fun m -> m "Error querying albatross: %s" msg);
-                    Middleware.http_response reqd ~title:"Error"
+                    Middleware.http_response reqd
                       ~data:(`String ("Error querying albatross: " ^ msg))
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
                     match Albatross_json.res res with
-                    | Ok res ->
-                        Middleware.http_response reqd ~title:"Success" ~data:res
-                          `OK
+                    | Ok res -> Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
-                        Middleware.http_response reqd ~title:"Error"
+                        Middleware.http_response reqd
                           ~data:(`String (String.escaped err))
                           `Internal_server_error))
             | _ ->
                 Logs.err (fun m ->
                     m "Error finding albatross instance %s"
                       (Configuration.name_to_str instance_name));
-                Middleware.http_response reqd ~title:"Error"
+                Middleware.http_response reqd
                   ~data:
                     (`String
                        ("Error finding albatross instance: "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
         | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:
                 (`String
                    ("Error converting albatross name to instance name: " ^ err))
               `Bad_request)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
   let unikernel_create stack albatross_instances token_or_cookie
       (user : User_model.user) reqd =
     let generate_http_error_response msg code =
       Logs.warn (fun m -> m "Unikernel_create error: %s" msg);
-      Middleware.http_response reqd ~title:"Error" ~data:(`String msg) code
+      Middleware.http_response reqd ~data:(`String msg) code
     in
     get_multipart_request_as_stream reqd >>= function
     | Error msg -> generate_http_error_response msg `Bad_request
@@ -1996,8 +1905,8 @@ struct
                             | Ok (_hdr, res) -> (
                                 match Albatross_json.res res with
                                 | Ok res_json ->
-                                    Middleware.http_response reqd
-                                      ~title:"Success" ~data:res_json `OK
+                                    Middleware.http_response reqd ~data:res_json
+                                      `OK
                                 | Error (`String err_str) ->
                                     generate_http_error_response
                                       ("Albatross Response Error: " ^ err_str)
@@ -2078,7 +1987,7 @@ struct
         | Ok csrf ->
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
+                 ~page_title:(String.capitalize_ascii u.name)
                  ~content:
                    (User_single.user_single_layout u unikernels
                       ~empty_policy:Albatross_state.empty_policy
@@ -2089,36 +1998,14 @@ struct
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
         | Error err ->
-            reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-                 ~content:(Error_page.error_layout err)
-                 ~icon:"/images/robur.png" ())
-              `Internal_server_error)
+            Middleware.http_response ~api_meth:false ~title:err.title
+              ~data:err.data reqd `Internal_server_error)
     | None ->
-        let status =
-          {
-            Utils.Status.code = 404;
-            title = "Error";
-            data = `String ("Couldn't find account with uuid: " ^ uuid);
-            success = false;
-          }
-        in
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
-             ~content:(Error_page.error_layout status)
-             ~icon:"/images/robur.png" ())
-          `Not_found
+        Middleware.http_response ~api_meth:false
+          ~data:(`String ("Couldn't find account with uuid: " ^ uuid))
+          reqd `Not_found
 
   let edit_policy store uuid albatross _ (user : User_model.user) reqd =
-    let status code msg =
-      {
-        Utils.Status.code;
-        title = "Error";
-        data = `String msg;
-        success = false;
-      }
-    in
-
     match Store.find_by_uuid store uuid with
     | Some u -> (
         let user_policy =
@@ -2134,8 +2021,7 @@ struct
             | Ok csrf ->
                 reply reqd ~content_type:"text/html"
                   (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:
-                       (String.capitalize_ascii u.name ^ " | Mollymawk")
+                     ~page_title:(String.capitalize_ascii u.name)
                      ~content:
                        (Update_policy.update_policy_layout u
                           albatross.configuration.name ~user_policy
@@ -2144,27 +2030,16 @@ struct
                   ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                   `OK
             | Error err ->
-                reply reqd ~content_type:"text/html"
-                  (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-                     ~content:(Error_page.error_layout err)
-                     ~icon:"/images/robur.png" ())
-                  `Internal_server_error)
+                Middleware.http_response ~api_meth:false ~title:err.title
+                  ~data:err.data reqd `Bad_request)
         | Error err ->
-            let status =
-              status 400 ("Couldn't get unallocated resources: " ^ err)
-            in
-            reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
-                 ~content:(Error_page.error_layout status)
-                 ~icon:"/images/robur.png" ())
-              `Bad_request)
+            Middleware.http_response ~api_meth:false
+              ~data:(`String ("Couldn't get unallocated resources: " ^ err))
+              reqd `Bad_request)
     | None ->
-        let status = status 404 ("Couldn't find account with uuid: " ^ uuid) in
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"404 | Mollymawk"
-             ~content:(Error_page.error_layout status)
-             ~icon:"/images/robur.png" ())
-          `Not_found
+        Middleware.http_response ~api_meth:false
+          ~data:(`String ("Couldn't find account with uuid: " ^ uuid))
+          reqd `Not_found
 
   let update_policy stack albatross_instances store _user json_dict reqd =
     match
@@ -2195,7 +2070,7 @@ struct
                                        policy %a: %s"
                                       Vmm_core.Policy.pp policy
                                       Vmm_core.Policy.pp root_policy err);
-                                Middleware.http_response reqd ~title:"Error"
+                                Middleware.http_response reqd
                                   ~data:
                                     (`String
                                        ("Policy is not smaller than root \
@@ -2209,19 +2084,18 @@ struct
                                     Logs.err (fun m ->
                                         m "error setting policy %a for %s: %s"
                                           Vmm_core.Policy.pp policy u.name err);
-                                    Middleware.http_response reqd ~title:"Error"
+                                    Middleware.http_response reqd
                                       ~data:
                                         (`String ("error setting policy: " ^ err))
                                       `Internal_server_error
                                 | Ok policy ->
                                     Middleware.http_response reqd
-                                      ~title:"Success"
                                       ~data:(Albatross_json.policy_info policy)
                                       `OK))
                         | Ok None ->
                             Logs.err (fun m ->
                                 m "policy: root policy can't be null ");
-                            Middleware.http_response reqd ~title:"Error"
+                            Middleware.http_response reqd
                               ~data:(`String "Root policy is null")
                               `Internal_server_error
                         | Error err ->
@@ -2230,37 +2104,37 @@ struct
                                   "policy: an error occured while fetching \
                                    root policy: %s"
                                   err);
-                            Middleware.http_response reqd ~title:"Error"
+                            Middleware.http_response reqd
                               ~data:
                                 (`String
                                    ("error with root policy: "
                                   ^ String.escaped err))
                               `Internal_server_error)
                     | Error (`Msg err) ->
-                        Middleware.http_response reqd ~title:"Error"
+                        Middleware.http_response reqd
                           ~data:(`String (String.escaped err))
                           `Bad_request)
                 | _ ->
                     Logs.err (fun m ->
                         m "Couldn't find albatross instance with name %s"
                           (Configuration.name_to_str instance_name));
-                    Middleware.http_response reqd ~title:"Error"
+                    Middleware.http_response reqd
                       ~data:
                         (`String
                            ("Couldn't find albatross instance with name: "
                            ^ Configuration.name_to_str instance_name))
                       `Not_found)
             | Error (`Msg err) ->
-                Middleware.http_response reqd ~title:"Error"
+                Middleware.http_response reqd
                   ~data:
                     (`String
                        ("Couldn't convert name to albatross instance: " ^ err))
                   `Bad_request)
         | None ->
-            Middleware.http_response reqd ~title:"Error"
-              ~data:(`String "User not found") `Not_found)
+            Middleware.http_response reqd ~data:(`String "User not found")
+              `Not_found)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:
             (`String
                (Fmt.str "Update policy: Unexpected fields. Got %s"
@@ -2279,7 +2153,7 @@ struct
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
-             ~page_title:(String.capitalize_ascii user.name ^ " | Mollymawk")
+             ~page_title:(String.capitalize_ascii user.name)
              ~content:
                (Volume_index.volume_index_layout albatross.configuration.name
                   blocks policy)
@@ -2287,11 +2161,8 @@ struct
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
     | Error err ->
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:(Error_page.error_layout err)
-             ~icon:"/images/robur.png" ())
-          `Internal_server_error
+        Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
+          reqd `Bad_request
 
   let delete_volume stack albatross_instances (user : User_model.user) json_dict
       reqd =
@@ -2312,37 +2183,35 @@ struct
                 | Error err ->
                     Logs.err (fun m ->
                         m "Error querying albatross: %s" (String.escaped err));
-                    Middleware.http_response reqd ~title:"Error"
+                    Middleware.http_response reqd
                       ~data:
                         (`String
                            ("Error querying albatross: " ^ String.escaped err))
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
                     match Albatross_json.res res with
-                    | Ok res ->
-                        Middleware.http_response reqd ~title:"Success" ~data:res
-                          `OK
+                    | Ok res -> Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
-                        Middleware.http_response reqd ~title:"Error"
+                        Middleware.http_response reqd
                           ~data:(`String (String.escaped err))
                           `Internal_server_error))
             | _ ->
                 Logs.err (fun m ->
                     m "Couldn't find albatross instance with name %s"
                       (Configuration.name_to_str instance_name));
-                Middleware.http_response reqd ~title:"Error"
+                Middleware.http_response reqd
                   ~data:
                     (`String
                        ("Couldn't find albatross instance with name: "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
         | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:
                 (`String ("Couldn't convert name to albatross instance: " ^ err))
               `Bad_request)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String "Couldn't find block name in json") `Bad_request
 
   let create_or_upload_volume stack albatross_instances c_or_u token_or_cookie
@@ -2352,7 +2221,7 @@ struct
     in
     let generate_http_error_response msg code =
       Logs.warn (fun m -> m "Block %s error: %s" cmd_name msg);
-      Middleware.http_response reqd ~title:"Error" ~data:(`String msg) code
+      Middleware.http_response reqd ~data:(`String msg) code
     in
     get_multipart_request_as_stream reqd >>= function
     | Error msg -> generate_http_error_response msg `Bad_request
@@ -2420,8 +2289,7 @@ struct
                                   (Fmt.str "unexpected field. got %s" err)
                                   `Bad_request
                             | Ok res ->
-                                Middleware.http_response reqd ~title:"Success"
-                                  ~data:res `OK)
+                                Middleware.http_response reqd ~data:res `OK)
                       in
                       let parsed_json =
                         try Ok (Yojson.Basic.from_string json)
@@ -2582,19 +2450,19 @@ struct
                 Logs.err (fun m ->
                     m "Couldn't find albatross instance with name %s"
                       (Configuration.name_to_str instance_name));
-                Middleware.http_response reqd ~title:"Error"
+                Middleware.http_response reqd
                   ~data:
                     (`String
                        ("Couldn't find albatross instance with name: "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
         | Error (`Msg err) ->
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:
                 (`String ("Couldn't convert name to albatross instance: " ^ err))
               `Bad_request)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:(`String "Couldn't find block name in json") `Bad_request
 
   let account_usage stack store albatross _ (user : User_model.user) reqd =
@@ -2611,7 +2479,7 @@ struct
                   (Albatross_state.policy albatross ~domain:user.name)))
         in
         reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Usage | Mollymawk"
+          (Dashboard.dashboard_layout ~csrf user ~page_title:"Usage"
              ~content:
                (Account_usage.account_usage_layout albatross.configuration.name
                   policy unikernels blocks)
@@ -2619,11 +2487,8 @@ struct
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
     | Error err ->
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:(Error_page.error_layout err)
-             ~icon:"/images/robur.png" ())
-          `Internal_server_error
+        Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
+          reqd `Internal_server_error
 
   let choose_instance store (albatross_instances : Albatross_state.a_map)
       callback _ (user : User_model.user) reqd =
@@ -2632,15 +2497,15 @@ struct
       let instance_name, _ =
         Albatross.Albatross_map.min_binding albatross_instances
       in
-      Middleware.redirect_to_url
-        ~url:(Middleware.construct_instance_redirect_url callback instance_name)
+      Middleware.redirect_to_page
+        ~path:
+          (Middleware.construct_instance_redirect_url callback instance_name)
         reqd ()
     else
       generate_csrf_token store user now reqd >>= function
       | Ok csrf ->
           reply reqd ~content_type:"text/html"
-            (Dashboard.dashboard_layout ~csrf user
-               ~page_title:"Choose instance | Mollymawk"
+            (Dashboard.dashboard_layout ~csrf user ~page_title:"Choose instance"
                ~content:
                  (Albatross_instances.select_instance user
                     (Albatross.Albatross_map.bindings albatross_instances)
@@ -2649,28 +2514,21 @@ struct
             ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
             `OK
       | Error err ->
-          reply reqd ~content_type:"text/html"
-            (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-               ~content:(Error_page.error_layout err)
-               ~icon:"/images/robur.png" ())
-            `Internal_server_error
+          Middleware.http_response ~api_meth:false ~title:err.title
+            ~data:err.data reqd `Internal_server_error
 
   let api_tokens store _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:"Tokens | Mollymawk"
+          (Dashboard.dashboard_layout ~csrf user ~page_title:"Tokens"
              ~content:(Tokens_index.tokens_index_layout user.tokens now)
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
     | Error err ->
-        reply reqd ~content_type:"text/html"
-          (Guest_layout.guest_layout ~page_title:"500 | Mollymawk"
-             ~content:(Error_page.error_layout err)
-             ~icon:"/images/robur.png" ())
+        Middleware.http_response reqd ~title:err.title ~data:err.data
           `Internal_server_error
 
   let create_token store (user : User_model.user) json_dict reqd =
@@ -2686,16 +2544,16 @@ struct
         in
         Store.update_user store updated_user >>= function
         | Ok () ->
-            Middleware.http_response reqd ~title:"Success"
+            Middleware.http_response reqd
               ~data:(User_model.token_to_json token)
               `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:(`String (String.escaped err))
               `Internal_server_error)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:
             (`String
                (Fmt.str "Create token: Unexpected fields. Got %s"
@@ -2717,15 +2575,15 @@ struct
         in
         Store.update_user store updated_user >>= function
         | Ok () ->
-            Middleware.http_response reqd ~title:"Success"
+            Middleware.http_response reqd
               ~data:(`String "Token deleted succesfully") `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
-            Middleware.http_response reqd ~title:"Error"
+            Middleware.http_response reqd
               ~data:(`String (String.escaped err))
               `Internal_server_error)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:
             (`String
                (Fmt.str "Delete token: Unexpected fields. Got %s"
@@ -2762,19 +2620,19 @@ struct
             in
             Store.update_user store updated_user >>= function
             | Ok () ->
-                Middleware.http_response reqd ~title:"Success"
+                Middleware.http_response reqd
                   ~data:(User_model.token_to_json updated_token)
                   `OK
             | Error (`Msg err) ->
                 Logs.warn (fun m -> m "Storage error with %s" err);
-                Middleware.http_response reqd ~title:"Error"
+                Middleware.http_response reqd
                   ~data:(`String (String.escaped err))
                   `Internal_server_error)
         | None ->
-            Middleware.http_response reqd ~title:"Error"
-              ~data:(`String "Token not found") `Not_found)
+            Middleware.http_response reqd ~data:(`String "Token not found")
+              `Not_found)
     | _ ->
-        Middleware.http_response reqd ~title:"Error"
+        Middleware.http_response reqd
           ~data:
             (`String
                (Fmt.str "Update token: Unexpected fields. Got %s"
@@ -2785,7 +2643,7 @@ struct
       http_client flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
-          Middleware.http_response reqd ~title:"Error"
+          Middleware.http_response reqd
             ~data:(`String "Bad HTTP request method.") `Bad_request
         in
         let req = H1.Reqd.request reqd in
@@ -2814,18 +2672,18 @@ struct
                       Logs.err (fun m ->
                           m "Couldn't find albatross instance with name %s"
                             (Configuration.name_to_str instance_name));
-                      Middleware.http_response reqd ~title:"Error"
+                      Middleware.http_response ~api_meth:false
                         ~data:
                           (`String
                              ("Couldn't find albatross instance with name: "
                              ^ Configuration.name_to_str instance_name))
-                        `Not_found)
+                        reqd `Not_found)
               | Error (`Msg err) ->
-                  Middleware.redirect_to_error
+                  Middleware.http_response ~api_meth:false
+                    ~title:"Albatross instance error"
                     ~data:
                       (`String ("Error with albatross instance name: " ^ err))
-                    ~title:"Albatross Instance Error" ~api_meth:false
-                    `Bad_request reqd ())
+                    reqd `Bad_request)
           | Error _ -> Middleware.redirect_to_instance_selector endpoint reqd ()
         in
         match path with
@@ -2833,7 +2691,7 @@ struct
             check_meth `GET (fun () ->
                 reply reqd ~content_type:"text/html"
                   (Guest_layout.guest_layout
-                     ~page_title:"Deploy unikernels with ease | Mollymawk"
+                     ~page_title:"Deploy unikernels with ease"
                      ~content:Index_page.index_page ~icon:"/images/robur.png" ())
                   `OK)
         | "/main.js" ->
@@ -2872,8 +2730,8 @@ struct
                     authenticate store reqd
                       (email_verification (verify_email_token store token))
                 | Error err ->
-                    Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String err) ~api_meth:false `Bad_request reqd ())
+                    Middleware.http_response ~api_meth:false ~data:(`String err)
+                      reqd `Bad_request)
         | "/albatross/instances" ->
             check_meth `GET (fun () ->
                 Middleware.redirect_to_instance_selector "/dashboard" reqd ())
@@ -2969,8 +2827,8 @@ struct
                     authenticate ~check_admin:true store reqd
                       (view_user stack !albatross_instances store uuid)
                 | Error err ->
-                    Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String err) ~api_meth:false `Bad_request reqd ())
+                    Middleware.http_response ~api_meth:false ~data:(`String err)
+                      reqd `Bad_request)
         | "/admin/u/policy/edit" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "uuid" with
@@ -2979,8 +2837,8 @@ struct
                       (albatross_instance req.H1.Request.target
                          (edit_policy store uuid))
                 | Error err ->
-                    Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String err) ~api_meth:false `Bad_request reqd ())
+                    Middleware.http_response ~api_meth:false ~data:(`String err)
+                      reqd `Bad_request)
         | "/admin/settings" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (settings store))
@@ -3024,8 +2882,8 @@ struct
                       (albatross_instance req.H1.Request.target
                          (unikernel_info_one stack store ~unikernel_name))
                 | Error err ->
-                    Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String err) ~api_meth:false `Bad_request reqd ())
+                    Middleware.http_response ~api_meth:false ~data:(`String err)
+                      reqd `Bad_request)
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
                 authenticate store reqd
@@ -3049,8 +2907,8 @@ struct
                       (albatross_instance req.H1.Request.target
                          (unikernel_console stack ~unikernel_name))
                 | Error err ->
-                    Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String err) ~api_meth:false `Bad_request reqd ())
+                    Middleware.http_response ~api_meth:false ~data:(`String err)
+                      reqd `Bad_request)
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -3066,8 +2924,8 @@ struct
                          (unikernel_prepare_update stack store ~unikernel_name
                             http_client))
                 | Error err ->
-                    Middleware.redirect_to_error ~title:"Bad request"
-                      ~data:(`String err) ~api_meth:false `Bad_request reqd ())
+                    Middleware.http_response ~api_meth:false ~data:(`String err)
+                      reqd `Bad_request)
         | "/api/unikernel/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -3081,19 +2939,8 @@ struct
                      (unikernel_rollback stack store !albatross_instances
                         http_client)))
         | _ ->
-            let error =
-              {
-                Utils.Status.code = 400;
-                title = "Page not found";
-                success = false;
-                data = `String "This page cannot be found.";
-              }
-            in
-            reply reqd ~content_type:"text/html"
-              (Guest_layout.guest_layout ~page_title:"400 | Mollymawk"
-                 ~content:(Error_page.error_layout error)
-                 ~icon:"/images/robur.png" ())
-              `Bad_request)
+            Middleware.http_response ~api_meth:false ~title:"Page not found"
+              ~data:(`String "This page cannot be found.") reqd `Bad_request)
 
   let pp_error ppf = function
     | #H1.Status.t as code -> H1.Status.pp_hum ppf code
