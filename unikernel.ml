@@ -1110,7 +1110,11 @@ struct
     user_unikernel stack albatross ~user_name:user.name ~unikernel_name
     >>= function
     | Error err ->
-        Middleware.http_response ~api_meth:false reqd ~data:(`String err)
+        let data =
+          "An error occured trying to fetch " ^ unikernel_name
+          ^ "from albatross: " ^ err
+        in
+        Middleware.http_response ~api_meth:false reqd ~data:(`String data)
           `Internal_server_error
     | Ok unikernel -> (
         let now = Mirage_ptime.now () in
