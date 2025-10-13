@@ -36,7 +36,7 @@ let http_response ?(title = None) ~data ?(api_meth = true) ?(header_list = [])
     if api_meth then Utils.Status.to_json status
     else if success then Yojson.Basic.to_string data
     else
-      Guest_layout.guest_layout ~page_title:(title ^ " | Mollymawk")
+      Guest_layout.guest_layout ~page_title:title
         ~content:(Error_page.error_layout status)
         ~icon:"/images/robur.png" ()
   in

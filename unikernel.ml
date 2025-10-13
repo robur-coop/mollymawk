@@ -796,8 +796,7 @@ struct
         generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
             reply reqd ~content_type:"text/html"
-              (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:"Account | Mollymawk"
+              (Dashboard.dashboard_layout ~csrf user ~page_title:"Account"
                  ~content:
                    (User_account.user_account_layout user ~active_cookie_value
                       now)
@@ -950,7 +949,7 @@ struct
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Users | Mollymawk"
+          (Dashboard.dashboard_layout ~csrf user ~page_title:"Users"
              ~content:(Users_index.users_index_layout (Store.users store) now)
              ~icon:"/images/robur.png" ())
           `OK
@@ -963,8 +962,7 @@ struct
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:"Settings | Mollymawk"
+          (Dashboard.dashboard_layout ~csrf user ~page_title:"Settings"
              ~content:
                (Settings_page.settings_layout (Store.configurations store))
              ~icon:"/images/robur.png" ())
@@ -1039,7 +1037,7 @@ struct
             | Some user_policy ->
                 reply reqd ~content_type:"text/html"
                   (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:"Deploy a Unikernel | Mollymawk"
+                     ~page_title:"Deploy a Unikernel"
                      ~content:
                        (Unikernel_create.unikernel_create_layout ~user_policy
                           unikernels_by_albatross_instance
@@ -1286,7 +1284,7 @@ struct
                                         (Dashboard.dashboard_layout ~csrf user
                                            ~page_title:
                                              (Vmm_core.Name.to_string name
-                                             ^ " Update | Mollymawk")
+                                             ^ " Update")
                                            ~content:
                                              (Unikernel_update
                                               .unikernel_update_layout
@@ -1980,7 +1978,7 @@ struct
         | Ok csrf ->
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:(String.capitalize_ascii u.name ^ " | Mollymawk")
+                 ~page_title:(String.capitalize_ascii u.name)
                  ~content:
                    (User_single.user_single_layout u unikernels
                       ~empty_policy:Albatross_state.empty_policy
@@ -2014,8 +2012,7 @@ struct
             | Ok csrf ->
                 reply reqd ~content_type:"text/html"
                   (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:
-                       (String.capitalize_ascii u.name ^ " | Mollymawk")
+                     ~page_title:(String.capitalize_ascii u.name)
                      ~content:
                        (Update_policy.update_policy_layout u
                           albatross.configuration.name ~user_policy
@@ -2147,7 +2144,7 @@ struct
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
-             ~page_title:(String.capitalize_ascii user.name ^ " | Mollymawk")
+             ~page_title:(String.capitalize_ascii user.name)
              ~content:
                (Volume_index.volume_index_layout albatross.configuration.name
                   blocks policy)
@@ -2473,7 +2470,7 @@ struct
                   (Albatross_state.policy albatross ~domain:user.name)))
         in
         reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Usage | Mollymawk"
+          (Dashboard.dashboard_layout ~csrf user ~page_title:"Usage"
              ~content:
                (Account_usage.account_usage_layout albatross.configuration.name
                   policy unikernels blocks)
@@ -2499,8 +2496,7 @@ struct
       generate_csrf_token store user now reqd >>= function
       | Ok csrf ->
           reply reqd ~content_type:"text/html"
-            (Dashboard.dashboard_layout ~csrf user
-               ~page_title:"Choose instance | Mollymawk"
+            (Dashboard.dashboard_layout ~csrf user ~page_title:"Choose instance"
                ~content:
                  (Albatross_instances.select_instance user
                     (Albatross.Albatross_map.bindings albatross_instances)
@@ -2517,8 +2513,7 @@ struct
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:"Tokens | Mollymawk"
+          (Dashboard.dashboard_layout ~csrf user ~page_title:"Tokens"
              ~content:(Tokens_index.tokens_index_layout user.tokens now)
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
@@ -2687,7 +2682,7 @@ struct
             check_meth `GET (fun () ->
                 reply reqd ~content_type:"text/html"
                   (Guest_layout.guest_layout
-                     ~page_title:"Deploy unikernels with ease | Mollymawk"
+                     ~page_title:"Deploy unikernels with ease"
                      ~content:Index_page.index_page ~icon:"/images/robur.png" ())
                   `OK)
         | "/main.js" ->
