@@ -1,9 +1,42 @@
 let ( let* ) = Result.bind
 
+module Instance_status = struct
+  type error = {
+    timestamp : Ptime.t;
+    category : [ `Configuration | `Transient | `Incompatible | `Internal ];
+    details : string;
+  }
+
+  type t =
+    | Online
+    | Degraded of { retries : int; log : error list }
+    | Offline of error list
+
+  let make_error category details =
+    { timestamp = Mirage_ptime.now (); category; details }
+
+  let update_status status new_error =
+    match status with
+    | Online -> Degraded { retries = 1; log = [ new_error ] }
+    | Degraded { retries; log } ->
+        Degraded { retries = retries + 1; log = new_error :: log }
+    | Offline log -> Offline (new_error :: log)
+
+  let pp_error_info ppf { timestamp; category; details } =
+    let category_str =
+      match category with
+      | `Configuration -> "configuration"
+      | `Transient -> "transient"
+      | `Incompatible -> "incompatible"
+      | `Internal -> "internal"
+    in
+    Fmt.pf ppf "[%a] %s: %s" Ptime.pp timestamp category_str details
+end
+
 type t = {
   mutable policies : Vmm_core.Policy.t Vmm_trie.t;
   configuration : Configuration.t;
-  error : string option;
+  status : Instance_status.t;
 }
 
 module String_set = Set.Make (String)
@@ -565,12 +598,15 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             m "init: key_cert failed for %s: %s"
               (Configuration.name_to_str configuration.name)
               s);
+        let error =
+          Instance_status.make_error `Configuration
+            (Fmt.str "Initialisation error: key_cert failed for %s with %s"
+               (Configuration.name_to_str configuration.name)
+               s)
+        in
         let state =
           {
-            error =
-              Some
-                (Fmt.str "Key certificate initialization failed with error: %s"
-                   s);
+            status = Offline [ error ];
             policies = Vmm_trie.empty;
             configuration;
           }
@@ -585,7 +621,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 (fun trie (name, p) -> fst (Vmm_trie.insert name p trie))
                 Vmm_trie.empty ps
             in
-            let state = { error = None; policies; configuration } in
+            let state = { status = Online; policies; configuration } in
             Lwt.return state
         | Ok w ->
             Logs.warn (fun m ->
@@ -593,9 +629,12 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                   (Configuration.name_to_str configuration.name)
                   (Vmm_commands.pp_wire ~verbose:false)
                   w);
+            let error =
+              Instance_status.make_error `Internal "Unexpected policy reply"
+            in
             let state =
               {
-                error = Some "Unexpected policy reply";
+                status = Instance_status.update_status Online error;
                 policies = Vmm_trie.empty;
                 configuration;
               }
@@ -606,11 +645,15 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 m "init: raw_query failed for %s: %s"
                   (Configuration.name_to_str configuration.name)
                   str);
+            let error =
+              Instance_status.make_error `Configuration
+                (Fmt.str "Initialisation error: raw_qeury failed for %s with %s"
+                   (Configuration.name_to_str configuration.name)
+                   str)
+            in
             let state =
               {
-                error =
-                  Some
-                    (Fmt.str "Failed to query this instance with error: %s" str);
+                status = Offline [ error ];
                 policies = Vmm_trie.empty;
                 configuration;
               }
