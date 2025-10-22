@@ -25,8 +25,53 @@ let select_instance (user : User_model.user) albatross_instances
                  a_href
                    (Middleware.construct_instance_redirect_url callback instance)
                in
-               match pol.error with
-               | Some err ->
+               match pol.status with
+               | Online ->
+                   a ~a:[ url ]
+                     [
+                       div
+                         ~a:
+                           [
+                             a_class
+                               [
+                                 "flex";
+                                 "items-center";
+                                 "justify-between";
+                                 "block";
+                                 "p-4";
+                                 "transition";
+                                 "duration-150";
+                                 "ease-in-out";
+                               ];
+                           ]
+                         [
+                           div
+                             [
+                               p
+                                 ~a:
+                                   [
+                                     a_class
+                                       [ "font-medium"; "text-primary-500" ];
+                                   ]
+                                 [ txt (Configuration.name_to_str instance) ];
+                             ];
+                           div
+                             [
+                               i
+                                 ~a:
+                                   [
+                                     a_class
+                                       [
+                                         "fa-solid";
+                                         "fa-chevron-right";
+                                         "text-gray-400";
+                                       ];
+                                   ]
+                                 [];
+                             ];
+                         ];
+                     ]
+               | _ ->
                    a
                      ~a:
                        [
@@ -67,55 +112,9 @@ let select_instance (user : User_model.user) albatross_instances
                                    small
                                      [
                                        txt
-                                         ("Can't access this albatross \
-                                           instance: " ^ err);
+                                         "Can't access this albatross instance.";
                                      ];
                                  ];
-                             ];
-                           div
-                             [
-                               i
-                                 ~a:
-                                   [
-                                     a_class
-                                       [
-                                         "fa-solid";
-                                         "fa-chevron-right";
-                                         "text-gray-400";
-                                       ];
-                                   ]
-                                 [];
-                             ];
-                         ];
-                     ]
-               | None ->
-                   a ~a:[ url ]
-                     [
-                       div
-                         ~a:
-                           [
-                             a_class
-                               [
-                                 "flex";
-                                 "items-center";
-                                 "justify-between";
-                                 "block";
-                                 "p-4";
-                                 "transition";
-                                 "duration-150";
-                                 "ease-in-out";
-                               ];
-                           ]
-                         [
-                           div
-                             [
-                               p
-                                 ~a:
-                                   [
-                                     a_class
-                                       [ "font-medium"; "text-primary-500" ];
-                                   ]
-                                 [ txt (Configuration.name_to_str instance) ];
                              ];
                            div
                              [
