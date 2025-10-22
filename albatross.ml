@@ -1,6 +1,6 @@
 let ( let* ) = Result.bind
 
-module Instance_status = struct
+module Status = struct
   type error = {
     timestamp : Ptime.t;
     category : [ `Configuration | `Transient | `Incompatible | `Internal ];
@@ -12,17 +12,17 @@ module Instance_status = struct
     | Degraded of { retries : int; log : error list }
     | Offline of error list
 
-  let make_error category details =
+  let make category details =
     { timestamp = Mirage_ptime.now (); category; details }
 
-  let update_status status new_error =
+  let update status new_error =
     match status with
     | Online -> Degraded { retries = 1; log = [ new_error ] }
     | Degraded { retries; log } ->
         Degraded { retries = retries + 1; log = new_error :: log }
     | Offline log -> Offline (new_error :: log)
 
-  let pp_error_info ppf { timestamp; category; details } =
+  let pp_error ppf { timestamp; category; details } =
     let category_str =
       match category with
       | `Configuration -> "configuration"
@@ -36,7 +36,7 @@ end
 type t = {
   mutable policies : Vmm_core.Policy.t Vmm_trie.t;
   configuration : Configuration.t;
-  status : Instance_status.t;
+  mutable status : Status.t;
 }
 
 module String_set = Set.Make (String)
@@ -599,7 +599,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               (Configuration.name_to_str configuration.name)
               s);
         let error =
-          Instance_status.make_error `Configuration
+          Status.make `Configuration
             (Fmt.str "Initialisation error: key_cert failed for %s with %s"
                (Configuration.name_to_str configuration.name)
                s)
@@ -624,17 +624,17 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             let state = { status = Online; policies; configuration } in
             Lwt.return state
         | Ok w ->
-            Logs.warn (fun m ->
-                m "init: unexpected policy reply for %s: %a"
-                  (Configuration.name_to_str configuration.name)
-                  (Vmm_commands.pp_wire ~verbose:false)
-                  w);
-            let error =
-              Instance_status.make_error `Internal "Unexpected policy reply"
+            let err =
+              Fmt.str "Unexpected policy reply for %s: %a"
+                (Configuration.name_to_str configuration.name)
+                (Vmm_commands.pp_wire ~verbose:false)
+                w
             in
+            Logs.warn (fun m -> m "%s" err);
+            let error = Status.make `Internal err in
             let state =
               {
-                status = Instance_status.update_status Online error;
+                status = Status.update Online error;
                 policies = Vmm_trie.empty;
                 configuration;
               }
@@ -646,7 +646,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                   (Configuration.name_to_str configuration.name)
                   str);
             let error =
-              Instance_status.make_error `Configuration
+              Status.make `Configuration
                 (Fmt.str "Initialisation error: raw_qeury failed for %s with %s"
                    (Configuration.name_to_str configuration.name)
                    str)
