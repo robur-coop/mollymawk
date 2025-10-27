@@ -2639,6 +2639,21 @@ struct
                   (Yojson.Basic.to_string (`Assoc json_dict))))
           `Bad_request
 
+  let view_albatross_error_logs store albatross _ (user : User_model.user) reqd
+      =
+    let now = Mirage_ptime.now () in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        reply reqd ~content_type:"text/html"
+          (Dashboard.dashboard_layout ~csrf user ~page_title:"Albatross Errors"
+             ~content:(Albatross_status.albatross_status_layout albatross)
+             ~icon:"/images/robur.png" ())
+          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+          `OK
+    | Error err ->
+        Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
+          reqd `Internal_server_error
+
   let request_handler stack albatross_instances js_file css_file imgs store
       http_client flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
@@ -2842,6 +2857,11 @@ struct
         | "/admin/settings" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (settings store))
+        | "/admin/albatross/errors" ->
+            check_meth `GET (fun () ->
+                authenticate ~check_admin:true store reqd
+                  (albatross_instance req.H1.Request.target
+                     (view_albatross_error_logs store)))
         | "/api/admin/settings/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
