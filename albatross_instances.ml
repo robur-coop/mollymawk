@@ -21,13 +21,15 @@ let select_instance (user : User_model.user) albatross_instances
             ]
           (List.map
              (fun (instance, (pol : Albatross.t)) ->
-               let url =
-                 a_href
-                   (Middleware.construct_instance_redirect_url callback instance)
-               in
                match pol.status with
                | Online ->
-                   a ~a:[ url ]
+                   a
+                     ~a:
+                       [
+                         a_href
+                           (Middleware.construct_instance_redirect_url callback
+                              instance);
+                       ]
                      [
                        div
                          ~a:
@@ -42,6 +44,9 @@ let select_instance (user : User_model.user) albatross_instances
                                  "transition";
                                  "duration-150";
                                  "ease-in-out";
+                                 "hover:bg-primary-700";
+                                 "hover:text-primary-50";
+                                 "cursor-pointer";
                                ];
                            ]
                          [
@@ -75,7 +80,9 @@ let select_instance (user : User_model.user) albatross_instances
                    a
                      ~a:
                        [
-                         url;
+                         a_href
+                           ("/admin/albatross/errors?instance="
+                           ^ Configuration.name_to_str instance);
                          a_class
                            [
                              "block";
@@ -84,8 +91,6 @@ let select_instance (user : User_model.user) albatross_instances
                              "duration-150";
                              "ease-in-out";
                              "bg-gray-100";
-                             "cursor-not-allowed";
-                             "pointer-events-none";
                            ];
                          Unsafe.string_attrib "aria-disabled" "true";
                          a_tabindex (-1);
@@ -109,11 +114,7 @@ let select_instance (user : User_model.user) albatross_instances
                                  [
                                    txt (Configuration.name_to_str instance);
                                    br ();
-                                   small
-                                     [
-                                       txt
-                                         "Can't access this albatross instance.";
-                                     ];
+                                   small [ txt "Click to view error logs." ];
                                  ];
                              ];
                            div
