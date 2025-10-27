@@ -687,7 +687,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
 
   let query stack t ~domain ?(name = ".") ?push cmd =
     match certs t domain name cmd with
-    | Error str -> Lwt.return (Error str)
+    | Error str ->
+        t.status <- Status.update t.status (Status.make `Configuration str);
+        Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
         raw_query stack t.configuration ~name:vmm_name certificates cmd ?push
           reply
