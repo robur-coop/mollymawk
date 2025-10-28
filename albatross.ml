@@ -1,11 +1,8 @@
 let ( let* ) = Result.bind
 
 module Status = struct
-  type error = {
-    timestamp : Ptime.t;
-    category : [ `Configuration | `Transient | `Incompatible | `Internal ];
-    details : string;
-  }
+  type category = [ `Configuration | `Transient | `Incompatible | `Internal ]
+  type error = { timestamp : Ptime.t; category : category; details : string }
 
   type t =
     | Online
@@ -21,6 +18,8 @@ module Status = struct
     | Degraded { retries; log } ->
         Degraded { retries = retries + 1; log = new_error :: log }
     | Offline log -> Offline (new_error :: log)
+
+  let go_online () = Online
 
   let pp_error ppf { timestamp; category; details } =
     let category_str =
@@ -691,6 +690,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         t.status <- Status.update t.status (Status.make `Configuration str);
         Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
+        t.status <- Status.go_online ();
         raw_query stack t.configuration ~name:vmm_name certificates cmd ?push
           reply
 
