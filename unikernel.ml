@@ -26,25 +26,36 @@ struct
   module Liveliness = Liveliness_checks.Make (S)
   module Albatross_state = Albatross.Make (S)
 
-  let log_albatross_status (t : Albatross.t) category
-      (err :
-        [ `String of string
-        | `Res of (Vmm_commands.header * Vmm_commands.res) * string ]) =
-    let err =
-      match err with
-      | `String err ->
-          Fmt.str "Error querying '%s': %s"
-            (Configuration.name_to_str t.configuration.name)
-            err
-      | `Res (reply, kind) ->
-          Fmt.str "Expected a %s reply from '%s', got %a" kind
-            (Configuration.name_to_str t.configuration.name)
-            (Vmm_commands.pp_wire ~verbose:false)
-            reply
-    in
-    Logs.err (fun m -> m "%s" err);
-    t.status <-
-      Albatross.Status.update t.status (Albatross.Status.make category err)
+  let update_albatross_status (t : Albatross.t)
+      (outcome :
+        (Albatross.Status.category
+        * [ `String of string
+          | `Res of (Vmm_commands.header * Vmm_commands.res) * string ])
+        option) =
+    match outcome with
+    | None ->
+        if t.status <> Albatross.Status.Online then
+          Logs.info (fun m ->
+              m "Service '%s' is back online"
+                (Configuration.name_to_str t.configuration.name));
+        t.status <- Albatross.Status.go_online ()
+    | Some (category, err) ->
+        let err_str =
+          match err with
+          | `String s ->
+              Fmt.str "Error querying '%s': %s"
+                (Configuration.name_to_str t.configuration.name)
+                s
+          | `Res (reply, kind) ->
+              Fmt.str "Expected a %s reply from '%s', got %a" kind
+                (Configuration.name_to_str t.configuration.name)
+                (Vmm_commands.pp_wire ~verbose:false)
+                reply
+        in
+        Logs.err (fun m -> m "%s" err_str);
+        t.status <-
+          Albatross.Status.update t.status
+            (Albatross.Status.make category err_str)
 
   let js_contents assets =
     KV_ASSETS.get assets (Mirage_kv.Key.v "main.js") >|= function
@@ -399,11 +410,14 @@ struct
     Albatross_state.query stack state ~domain:user_name (`Block_cmd `Block_info)
     >|= function
     | Error msg ->
-        log_albatross_status state `Configuration (`String msg);
+        update_albatross_status state (Some (`Configuration, `String msg));
         []
-    | Ok (_hdr, `Success (`Block_devices blocks)) -> blocks
+    | Ok (_hdr, `Success (`Block_devices blocks)) ->
+        update_albatross_status state None;
+        blocks
     | Ok reply ->
-        log_albatross_status state `Transient (`Res (reply, "block info"));
+        update_albatross_status state
+          (Some (`Transient, `Res (reply, "block info")));
         []
 
   let user_unikernels_by_instance stack (state : Albatross.t) user_name =
@@ -411,14 +425,16 @@ struct
       (`Unikernel_cmd `Unikernel_info)
     >|= function
     | Error msg ->
-        log_albatross_status state `Configuration (`String msg);
+        update_albatross_status state (Some (`Configuration, `String msg));
         []
     | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
     | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
     | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
+        update_albatross_status state None;
         unikernels
     | Ok reply ->
-        log_albatross_status state `Transient (`Res (reply, "unikernel info"));
+        update_albatross_status state
+          (Some (`Transient, `Res (reply, "unikernel info")));
         []
 
   let user_unikernels stack (albatross_instances : Albatross_state.a_map)
@@ -429,15 +445,17 @@ struct
           (`Unikernel_cmd `Unikernel_info)
         >|= function
         | Error msg ->
-            log_albatross_status instance `Configuration (`String msg);
+            update_albatross_status instance
+              (Some (`Configuration, `String msg));
             (instance.configuration.name, [])
         | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
         | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
         | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
+            update_albatross_status instance None;
             (instance.configuration.name, unikernels)
         | Ok reply ->
-            log_albatross_status instance `Transient
-              (`Res (reply, "unikernel info"));
+            update_albatross_status instance
+              (Some (`Transient, `Res (reply, "unikernel info")));
             (instance.configuration.name, []))
       (Albatross.Albatross_map.bindings albatross_instances)
 
@@ -451,11 +469,12 @@ struct
             (Configuration.name_to_str state.configuration.name)
             err
         in
-        log_albatross_status state `Transient (`String err_msg);
+        update_albatross_status state (Some (`Configuration, `String err));
         Error err_msg
     | Ok (_hdr, `Success (`Unikernel_info [ unikernel ]))
     | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ]))
     | Ok (_hdr, `Success (`Old_unikernel_info4 [ unikernel ])) ->
+        update_albatross_status state None;
         Ok unikernel
     | Ok (_hdr, `Success (`Unikernel_info unikernels))
     | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
@@ -463,7 +482,7 @@ struct
         let message =
           Fmt.str "Expected one unikernel, but got %u" (List.length unikernels)
         in
-        log_albatross_status state `Transient (`String message);
+        update_albatross_status state (Some (`Transient, `String message));
         Error message
     | Ok reply ->
         let message =
@@ -471,7 +490,8 @@ struct
             (Vmm_commands.pp_wire ~verbose:false)
             reply
         in
-        log_albatross_status state `Transient (`Res (reply, "unikernel info"));
+        update_albatross_status state
+          (Some (`Transient, `Res (reply, "unikernel info")));
         Error message
 
   let sign_up reqd =
@@ -1071,7 +1091,8 @@ struct
           (`Unikernel_cmd `Unikernel_info)
         >>= function
         | Error msg ->
-            log_albatross_status instance `Transient (`String msg);
+            update_albatross_status instance
+              (Some (`Configuration, `String msg));
             let failure =
               `Assoc
                 [
@@ -1081,6 +1102,7 @@ struct
             in
             Lwt.return (successes, failure :: failures)
         | Ok (_hdr, res) -> (
+            update_albatross_status instance None;
             match Albatross_json.res res with
             | Error (`String err) ->
                 Logs.err (fun m ->
@@ -1333,17 +1355,20 @@ struct
       (`Unikernel_cmd (`Unikernel_force_create unikernel_cfg))
     >>= function
     | Error err ->
-        log_albatross_status albatross `Transient
-          (`String
-             (Fmt.str
-                "albatross-force-create: error querying albatross for creating \
-                 %s: %s"
-                unikernel_name err));
+        update_albatross_status albatross
+          (Some
+             ( `Configuration,
+               `String
+                 (Fmt.str
+                    "albatross-force-create: error querying albatross for \
+                     creating %s: %s"
+                    unikernel_name err) ));
         Lwt.return
           (Error
              ( `Msg ("Force create: Error querying albatross: " ^ err),
                `Internal_server_error ))
     | Ok (_hdr, res) -> (
+        update_albatross_status albatross None;
         match Albatross_json.res res with
         | Error (`String err) ->
             Logs.warn (fun m ->
@@ -1745,11 +1770,13 @@ struct
                   ~name:unikernel_name (`Unikernel_cmd `Unikernel_destroy)
                 >>= function
                 | Error msg ->
-                    log_albatross_status albatross `Transient (`String msg);
+                    update_albatross_status albatross
+                      (Some (`Configuration, `String msg));
                     Middleware.http_response reqd
                       ~data:(`String ("Error querying albatross: " ^ msg))
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
+                    update_albatross_status albatross None;
                     match Albatross_json.res res with
                     | Ok res -> Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
@@ -1795,11 +1822,13 @@ struct
                   (`Unikernel_cmd (`Unikernel_restart None))
                 >>= function
                 | Error msg ->
-                    log_albatross_status albatross `Transient (`String msg);
+                    update_albatross_status albatross
+                      (Some (`Configuration, `String msg));
                     Middleware.http_response reqd
                       ~data:(`String ("Error querying albatross: " ^ msg))
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
+                    update_albatross_status albatross None;
                     match Albatross_json.res res with
                     | Ok res -> Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
@@ -1897,12 +1926,13 @@ struct
                               albatross_cmd
                             >>= function
                             | Error err ->
-                                log_albatross_status albatross `Transient
-                                  (`String err);
+                                update_albatross_status albatross
+                                  (Some (`Configuration, `String err));
                                 generate_http_error_response
                                   ("Albatross Query Error: " ^ err)
                                   `Internal_server_error
                             | Ok (_hdr, res) -> (
+                                update_albatross_status albatross None;
                                 match Albatross_json.res res with
                                 | Ok res_json ->
                                     Middleware.http_response reqd ~data:res_json
@@ -1973,9 +2003,11 @@ struct
       ~name:unikernel_name f
     >>= function
     | Error err ->
-        log_albatross_status albatross `Transient (`String err);
+        update_albatross_status albatross (Some (`Configuration, `String err));
         Lwt.return_unit
-    | Ok () -> Lwt.return_unit
+    | Ok () ->
+        update_albatross_status albatross None;
+        Lwt.return_unit
 
   let view_user stack albatross_instances store uuid _ (user : User_model.user)
       reqd =
@@ -2181,13 +2213,15 @@ struct
                   ~name:block_name (`Block_cmd `Block_remove)
                 >>= function
                 | Error err ->
-                    log_albatross_status albatross `Transient (`String err);
+                    update_albatross_status albatross
+                      (Some (`Configuration, `String err));
                     Middleware.http_response reqd
                       ~data:
                         (`String
                            ("Error querying albatross: " ^ String.escaped err))
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
+                    update_albatross_status albatross None;
                     match Albatross_json.res res with
                     | Ok res -> Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
@@ -2256,13 +2290,14 @@ struct
                           (`Block_cmd (`Block_add block_size))
                         >>= function
                         | Error err ->
-                            log_albatross_status albatross `Transient
-                              (`String err);
+                            update_albatross_status albatross
+                              (Some (`Configuration, `String err));
                             generate_http_error_response
                               (Fmt.str "an error with albatross. got %s" err)
                               `Internal_server_error
                             >|= fun () -> Error ()
                         | Ok (_hdr, res) -> (
+                            update_albatross_status albatross None;
                             match Albatross_json.res res with
                             | Error (`String err) ->
                                 generate_http_error_response
@@ -2280,12 +2315,13 @@ struct
                           (`Block_cmd (`Block_set block_compressed))
                         >>= function
                         | Error err ->
-                            log_albatross_status albatross `Transient
-                              (`String err);
+                            update_albatross_status albatross
+                              (Some (`Configuration, `String err));
                             generate_http_error_response
                               (Fmt.str "an error with albatross. got %s" err)
                               `Internal_server_error
                         | Ok (_hdr, res) -> (
+                            update_albatross_status albatross None;
                             match Albatross_json.res res with
                             | Error (`String err) ->
                                 generate_http_error_response
@@ -2445,9 +2481,12 @@ struct
                 >>= function
                 | Error err ->
                     if not !fini then
-                      log_albatross_status albatross `Transient (`String err);
+                      update_albatross_status albatross
+                        (Some (`Configuration, `String err));
                     Lwt.return_unit
-                | Ok () -> Lwt.return_unit)
+                | Ok () ->
+                    update_albatross_status albatross None;
+                    Lwt.return_unit)
             | _ ->
                 Logs.err (fun m ->
                     m "Couldn't find albatross instance with name %s"
