@@ -400,7 +400,6 @@ struct
     >|= function
     | Error msg ->
         log_albatross_status state `Configuration (`String msg);
-
         []
     | Ok (_hdr, `Success (`Block_devices blocks)) -> blocks
     | Ok reply ->
