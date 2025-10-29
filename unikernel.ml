@@ -42,10 +42,7 @@ struct
     | Some (category, err) ->
         let err_str =
           match err with
-          | `String s ->
-              Fmt.str "Error querying '%s': %s"
-                (Configuration.name_to_str t.configuration.name)
-                s
+          | `String s -> Fmt.str "Error: %s" s
           | `Res (reply, kind) ->
               Fmt.str "Expected a %s reply, got %a" kind
                 (Vmm_commands.pp_wire ~verbose:false)
