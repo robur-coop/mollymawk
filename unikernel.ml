@@ -38,7 +38,7 @@ struct
           Logs.info (fun m ->
               m "Service '%s' is back online"
                 (Configuration.name_to_str t.configuration.name));
-        t.status <- Albatross.Status.go_online ()
+        Albatross.set_online t;
     | Some (category, err) ->
         let err_str =
           match err with
