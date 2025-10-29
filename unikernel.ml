@@ -251,9 +251,7 @@ struct
   let extract_json_csrf_token f token_or_cookie user reqd =
     extract_json_body reqd >>= function
     | Error (`Msg err) ->
-        Middleware.http_response reqd
-          ~data:(`String (String.escaped err))
-          `Bad_request
+        Middleware.http_response reqd ~data:(`String err) `Bad_request
     | Ok json_dict -> (
         match token_or_cookie with
         | `Token -> f user json_dict reqd
@@ -374,8 +372,7 @@ struct
         Store.update_cookie_usage store cookie user reqd >>= function
         | Error (`Msg err) ->
             Logs.err (fun m -> m "Error with storage: %s" err);
-            Middleware.http_response reqd
-              ~data:(`String (String.escaped err))
+            Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error
         | Ok () -> f `Cookie user reqd)
 
@@ -574,8 +571,7 @@ struct
                             ~data:(User_model.user_to_json user)
                             `OK
                       | Error (`Msg err) ->
-                          Middleware.http_response reqd
-                            ~data:(`String (String.escaped err))
+                          Middleware.http_response reqd ~data:(`String err)
                             `Internal_server_error)
                   | _ ->
                       Middleware.http_response reqd
@@ -625,9 +621,7 @@ struct
         | Some (`String email), Some (`String password) -> (
             match validate_user_input ~email ~password with
             | Error err ->
-                Middleware.http_response reqd
-                  ~data:(`String (String.escaped err))
-                  `Bad_request
+                Middleware.http_response reqd ~data:(`String err) `Bad_request
             | Ok _ -> (
                 let now = Mirage_ptime.now () in
                 let user = Store.find_by_email store email in
@@ -637,8 +631,7 @@ struct
                     user now
                 with
                 | Error (`Msg err) ->
-                    Middleware.http_response reqd
-                      ~data:(`String (String.escaped err))
+                    Middleware.http_response reqd ~data:(`String err)
                       `Bad_request
                 | Ok (user, cookie) -> (
                     Store.update_user store user >>= function
@@ -657,8 +650,7 @@ struct
                           ~data:(User_model.user_to_json user)
                           `OK
                     | Error (`Msg err) ->
-                        Middleware.http_response reqd
-                          ~data:(`String (String.escaped err))
+                        Middleware.http_response reqd ~data:(`String err)
                           `Internal_server_error)))
         | _ ->
             Middleware.http_response reqd
@@ -691,8 +683,7 @@ struct
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
         | Error (`Msg err) ->
-            Middleware.http_response ~api_meth:false reqd
-              ~data:(`String (String.escaped err))
+            Middleware.http_response ~api_meth:false reqd ~data:(`String err)
               `Internal_server_error)
     | Error err ->
         Middleware.http_response ~api_meth:false reqd ~title:err.title
@@ -714,8 +705,7 @@ struct
           Store.update_user store user >>= function
           | Ok () -> Middleware.redirect_to_page ~path:"/dashboard" reqd ()
           | Error (`Msg msg) ->
-              Middleware.http_response reqd
-                ~data:(`String (String.escaped msg))
+              Middleware.http_response reqd ~data:(`String msg)
                 `Internal_server_error
         else
           Middleware.http_response reqd
@@ -747,8 +737,7 @@ struct
                     ~data:(`String "Updated user successfully") `OK
               | Error (`Msg msg) ->
                   Logs.warn (fun m -> m "%s : Storage error with %s" key msg);
-                  Middleware.http_response reqd
-                    ~data:(`String (String.escaped msg))
+                  Middleware.http_response reqd ~data:(`String msg)
                     `Internal_server_error))
     | _ ->
         Logs.warn (fun m -> m "%s: Failed to parse JSON - no UUID found" key);
@@ -878,8 +867,7 @@ struct
                 ~data:(`String "Updated password successfully") `OK
           | Error (`Msg err) ->
               Logs.warn (fun m -> m "Storage error with %s" err);
-              Middleware.http_response reqd
-                ~data:(`String (String.escaped err))
+              Middleware.http_response reqd ~data:(`String err)
                 `Internal_server_error)
     | _ ->
         Middleware.http_response reqd
@@ -899,9 +887,7 @@ struct
     | Ok () -> redirect
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Storage error with %s" err);
-        Middleware.http_response reqd
-          ~data:(`String (String.escaped err))
-          `Internal_server_error
+        Middleware.http_response reqd ~data:(`String err) `Internal_server_error
 
   let close_sessions ?to_logout_cookie ?(logout = false) store
       (user : User_model.user) _json_dict reqd =
@@ -959,8 +945,7 @@ struct
               ~data:(`String "Session closed succesfully") `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
-            Middleware.http_response reqd
-              ~data:(`String (String.escaped err))
+            Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error)
     | _ ->
         Middleware.http_response reqd
@@ -1053,13 +1038,10 @@ struct
                 Middleware.http_response reqd
                   ~data:(`String "Configuration delete successfully") `OK
             | Error (`Msg err) ->
-                Middleware.http_response reqd
-                  ~data:(`String (String.escaped err))
+                Middleware.http_response reqd ~data:(`String err)
                   `Internal_server_error)
         | Error (`Msg err) ->
-            Middleware.http_response reqd
-              ~data:(`String (String.escaped err))
-              `Bad_request)
+            Middleware.http_response reqd ~data:(`String err) `Bad_request)
     | _ ->
         Middleware.http_response reqd
           ~data:
@@ -1788,8 +1770,7 @@ struct
                     match Albatross_json.res res with
                     | Ok res -> Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
-                        Middleware.http_response reqd
-                          ~data:(`String (String.escaped err))
+                        Middleware.http_response reqd ~data:(`String err)
                           `Internal_server_error))
             | _ ->
                 Logs.err (fun m ->
@@ -1838,8 +1819,7 @@ struct
                     match Albatross_json.res res with
                     | Ok res -> Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
-                        Middleware.http_response reqd
-                          ~data:(`String (String.escaped err))
+                        Middleware.http_response reqd ~data:(`String err)
                           `Internal_server_error))
             | _ ->
                 Logs.err (fun m ->
@@ -2143,14 +2123,10 @@ struct
                                    root policy: %s"
                                   err);
                             Middleware.http_response reqd
-                              ~data:
-                                (`String
-                                   ("error with root policy: "
-                                  ^ String.escaped err))
+                              ~data:(`String ("error with root policy: " ^ err))
                               `Internal_server_error)
                     | Error (`Msg err) ->
-                        Middleware.http_response reqd
-                          ~data:(`String (String.escaped err))
+                        Middleware.http_response reqd ~data:(`String err)
                           `Bad_request)
                 | _ ->
                     Logs.err (fun m ->
@@ -2221,17 +2197,14 @@ struct
                 >>= function
                 | Error err ->
                     Middleware.http_response reqd
-                      ~data:
-                        (`String
-                           ("Error querying albatross: " ^ String.escaped err))
+                      ~data:(`String ("Error querying albatross: " ^ err))
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
                     Albatross.set_online albatross;
                     match Albatross_json.res res with
                     | Ok res -> Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
-                        Middleware.http_response reqd
-                          ~data:(`String (String.escaped err))
+                        Middleware.http_response reqd ~data:(`String err)
                           `Internal_server_error))
             | _ ->
                 Logs.err (fun m ->
@@ -2587,8 +2560,7 @@ struct
               `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
-            Middleware.http_response reqd
-              ~data:(`String (String.escaped err))
+            Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error)
     | _ ->
         Middleware.http_response reqd
@@ -2617,8 +2589,7 @@ struct
               ~data:(`String "Token deleted succesfully") `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
-            Middleware.http_response reqd
-              ~data:(`String (String.escaped err))
+            Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error)
     | _ ->
         Middleware.http_response reqd
@@ -2663,8 +2634,7 @@ struct
                   `OK
             | Error (`Msg err) ->
                 Logs.warn (fun m -> m "Storage error with %s" err);
-                Middleware.http_response reqd
-                  ~data:(`String (String.escaped err))
+                Middleware.http_response reqd ~data:(`String err)
                   `Internal_server_error)
         | None ->
             Middleware.http_response reqd ~data:(`String "Token not found")
