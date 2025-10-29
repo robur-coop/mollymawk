@@ -38,7 +38,7 @@ struct
           Logs.info (fun m ->
               m "Service '%s' is back online"
                 (Configuration.name_to_str t.configuration.name));
-        Albatross.set_online t;
+        Albatross.set_online t
     | Some (category, err) ->
         let err_str =
           match err with
@@ -47,8 +47,7 @@ struct
                 (Configuration.name_to_str t.configuration.name)
                 s
           | `Res (reply, kind) ->
-              Fmt.str "Expected a %s reply from '%s', got %a" kind
-                (Configuration.name_to_str t.configuration.name)
+              Fmt.str "Expected a %s reply, got %a" kind
                 (Vmm_commands.pp_wire ~verbose:false)
                 reply
         in
