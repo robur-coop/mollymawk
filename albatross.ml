@@ -1,7 +1,7 @@
 let ( let* ) = Result.bind
 
 module Status = struct
-  type category = [ `Configuration | `Transient | `Incompatible | `Internal ]
+  type category = [ `Configuration | `Transient | `Incompatible ]
   type error = { timestamp : Ptime.t; category : category; details : string }
 
   type t =
@@ -30,7 +30,6 @@ module Status = struct
       | `Configuration -> "configuration"
       | `Transient -> "transient"
       | `Incompatible -> "incompatible"
-      | `Internal -> "internal"
     in
     Fmt.pf ppf "[%a] %s: %s" Ptime.pp timestamp category_str details
 end
@@ -658,7 +657,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 w
             in
             Logs.warn (fun m -> m "%s" err);
-            let error = Status.make `Internal err in
+            let error = Status.make `Incompatible err in
             state.status <- Status.update state.status error;
             Lwt.return state
         | Error str ->
