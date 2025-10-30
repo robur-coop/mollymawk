@@ -976,22 +976,11 @@ struct
         !albatross_instances;
     match new_albatross_instance.status with
     | Online ->
-        Albatross.set_online albatross;
         Middleware.http_response reqd
           ~data:
             (`String "Re-initialization successful, instance is back online")
           `OK
-    | Degraded _ ->
-        albatross.status <-
-          Albatross.Status.update albatross.status
-            (Albatross.Status.make `Transient "Re-initialization failed.");
-        Middleware.http_response reqd
-          ~data:(`String "Re-initialization failed. See error logs")
-          `Internal_server_error
-    | Offline _ ->
-        albatross.status <-
-          Albatross.Status.update albatross.status
-            (Albatross.Status.make `Configuration "Re-initialization failed.");
+    | _ ->
         Middleware.http_response reqd
           ~data:(`String "Re-initialization failed. See error logs")
           `Internal_server_error
