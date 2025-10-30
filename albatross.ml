@@ -9,6 +9,11 @@ module Status = struct
     | Degraded of { retries : int; log : error list }
     | Offline of error list
 
+  let to_string = function
+    | Online -> "online"
+    | Degraded { retries; _ } -> Fmt.str "degraded (%d retries)" retries
+    | Offline err -> Fmt.str "offline (%d errors)" (List.length err)
+
   let make category details =
     { timestamp = Mirage_ptime.now (); category; details }
 

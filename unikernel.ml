@@ -949,20 +949,49 @@ struct
         Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
-  let settings store _ (user : User_model.user) reqd =
+  let settings store albatross_instances _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Settings"
-             ~content:
-               (Settings_page.settings_layout (Store.configurations store))
+             ~content:(Settings_page.settings_layout albatross_instances)
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
     | Error err ->
         Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
+
+  let retry_initializing_instance stack albatross_instances
+      (albatross : Albatross.t) _ _user reqd =
+    Albatross_state.init stack albatross.configuration
+    >>= fun new_albatross_instance ->
+    albatross_instances :=
+      Albatross.Albatross_map.update albatross.configuration.name
+        (fun _prev -> Some new_albatross_instance)
+        !albatross_instances;
+    match new_albatross_instance.status with
+    | Online ->
+        Albatross.set_online albatross;
+        Middleware.http_response reqd
+          ~data:
+            (`String "Re-initialization successful, instance is back online")
+          `OK
+    | Degraded _ ->
+        albatross.status <-
+          Albatross.Status.update albatross.status
+            (Albatross.Status.make `Transient "Re-initialization failed.");
+        Middleware.http_response reqd
+          ~data:(`String "Re-initialization failed. See error logs")
+          `Internal_server_error
+    | Offline _ ->
+        albatross.status <-
+          Albatross.Status.update albatross.status
+            (Albatross.Status.make `Configuration "Re-initialization failed.");
+        Middleware.http_response reqd
+          ~data:(`String "Re-initialization failed. See error logs")
+          `Internal_server_error
 
   let update_settings stack store albatross_instances
       (update_or_create : [ `Update | `Create ]) _user json_dict reqd =
@@ -2822,12 +2851,18 @@ struct
                       reqd `Bad_request)
         | "/admin/settings" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true store reqd (settings store))
+                authenticate ~check_admin:true store reqd
+                  (settings store !albatross_instances))
         | "/admin/albatross/errors" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd
                   (albatross_instance req.H1.Request.target
                      (view_albatross_error_logs store)))
+        | "/api/admin/albatross/retry" ->
+            check_meth `GET (fun () ->
+                authenticate ~check_admin:true ~api_meth:true store reqd
+                  (albatross_instance req.H1.Request.target
+                     (retry_initializing_instance stack albatross_instances)))
         | "/api/admin/settings/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
