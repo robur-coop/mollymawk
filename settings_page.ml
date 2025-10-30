@@ -1,12 +1,45 @@
 let delimit_string str =
   if String.length str <= 20 then str else String.sub str 0 20 ^ "..."
 
-let config_table_row (configuration : Configuration.t) =
+let albatross_table_row ((_, albatross) : Vmm_core.Name.t * Albatross.t) =
+  let configuration = albatross.configuration in
   let ip = Ipaddr.to_string configuration.server_ip in
   let port = string_of_int configuration.server_port in
   let certificate = X509.Certificate.encode_pem configuration.certificate in
   let private_key = X509.Private_key.encode_pem configuration.private_key in
   let last_update = Utils.TimeHelper.string_of_ptime configuration.updated_at in
+  let name = Configuration.name_to_str configuration.name in
+  let error_buttons =
+    Tyxml_html.(
+      div
+        [
+          p
+            ~a:[ a_class [ "text-secondary-500 font-semibold" ] ]
+            [ txt (Albatross.Status.to_string albatross.status) ];
+          div
+            ~a:[ a_class [ "my-2 space-x-1 flex" ] ]
+            [
+              a
+                ~a:
+                  [
+                    a_href ("/admin/albatross/errors?instance=" ^ name);
+                    a_class
+                      [
+                        "bg-secondary-500 text-gray-100 font-semibold py-2 \
+                         px-2 rounded-md hover:bg-secondary-800";
+                      ];
+                  ]
+                [ txt "View Errors" ];
+              Utils.button_component
+                ~attribs:
+                  [
+                    a_id ("retry-btn-" ^ name);
+                    a_onclick ("retryConnectingAlbatross(`" ^ name ^ "`)");
+                  ]
+                ~content:(txt "Retry connecting") ~btn_type:`Primary_full ();
+            ];
+        ])
+  in
   Tyxml_html.(
     tr
       [
@@ -19,7 +52,16 @@ let config_table_row (configuration : Configuration.t) =
                    text-gray-800";
                 ];
             ]
-          [ txt (Configuration.name_to_str configuration.name) ];
+          [
+            txt name;
+            (match albatross.status with
+            | Online ->
+                p
+                  ~a:[ a_class [ "text-primary-500 font-semibold" ] ]
+                  [ txt (Albatross.Status.to_string albatross.status) ]
+            | Degraded _ -> error_buttons
+            | Offline _ -> error_buttons);
+          ];
         td
           ~a:
             [
@@ -67,30 +109,23 @@ let config_table_row (configuration : Configuration.t) =
               ~attribs:
                 [
                   a_onclick
-                    ("openConfigForm(`"
-                    ^ Configuration.name_to_str configuration.name
-                    ^ "`,`" ^ ip ^ "`,`" ^ port ^ "`,`" ^ certificate ^ "`,`"
-                    ^ private_key ^ "`)");
+                    ("openConfigForm(`" ^ name ^ "`,`" ^ ip ^ "`,`" ^ port
+                   ^ "`,`" ^ certificate ^ "`,`" ^ private_key ^ "`)");
                 ]
               ~content:(i ~a:[ a_class [ "fa-solid fa-pen" ] ] [])
               ~btn_type:`Primary_outlined ();
             Utils.button_component
               ~attribs:
                 [
-                  a_id
-                    ("delete-config-btn-"
-                    ^ Configuration.name_to_str configuration.name);
-                  a_onclick
-                    ("deleteConfig(`"
-                    ^ Configuration.name_to_str configuration.name
-                    ^ "`)");
+                  a_id ("delete-config-btn-" ^ name);
+                  a_onclick ("deleteConfig(`" ^ name ^ "`)");
                 ]
               ~content:(i ~a:[ a_class [ "fa-solid fa-trash" ] ] [])
               ~btn_type:`Danger_full ();
           ];
       ])
 
-let settings_layout (configurations : Configuration.t list) =
+let settings_layout albatross_instances =
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -323,6 +358,7 @@ let settings_layout (configurations : Configuration.t list) =
         div
           ~a:[ a_id "config-body"; a_class [ "flex flex-col block" ] ]
           [
+            p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
             div
               ~a:[ a_class [ "-m-1.5 overflow-x-auto" ] ]
               [
@@ -405,7 +441,9 @@ let settings_layout (configurations : Configuration.t list) =
                                        [ txt "Action" ];
                                    ];
                                ])
-                          (List.map config_table_row configurations);
+                          (List.map albatross_table_row
+                             (Albatross.Albatross_map.to_list
+                                albatross_instances));
                       ];
                   ];
               ];

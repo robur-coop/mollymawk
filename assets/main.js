@@ -281,6 +281,43 @@ async function deleteConfig(name) {
 	formButton.innerHTML = `<i class="fa-solid fa-trash"></i>`
 }
 
+async function retryConnectingAlbatross(name) {
+	const formAlert = document.getElementById("form-alert");
+	const formButton = document.getElementById(`retry-btn-${name}`);
+	formButton.classList.add("disabled");
+	formButton.innerHTML = `Connecting <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
+	formButton.disabled = true;
+	try {
+		const response = await fetch(("/api/admin/albatross/retry?instance=" + name), {
+			method: 'GET',
+			headers: {
+				"Accept": "application/json",
+			},
+		})
+		const data = await response.json();
+		if (data.status === 200) {
+			formAlert.classList.remove("hidden", "text-secondary-500");
+			formAlert.classList.add("text-primary-500");
+			formAlert.textContent = "Connection succesful";
+			postAlert("bg-primary-300", data.data);
+			setTimeout(function () {
+				window.location.reload();
+			}, 2000);
+		} else {
+			formAlert.classList.remove("hidden", "text-primary-500");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = data.data
+			postAlert("bg-secondary-300", data.data);
+		}
+	} catch (error) {
+		formAlert.classList.remove("hidden");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = error
+	}
+	formButton.disabled = false;
+	formButton.innerHTML = `Retry connecting`
+}
+
 function closeBanner() {
 	var banner = document.getElementById("banner-message");
 	banner.style.display = "none";
