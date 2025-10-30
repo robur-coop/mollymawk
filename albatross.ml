@@ -670,7 +670,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                   str);
             let error =
               Status.make `Configuration
-                (Fmt.str "Initialisation error: raw_qeury failed for %s with %s"
+                (Fmt.str "Initialisation error: raw_query failed for %s with %s"
                    (Configuration.name_to_str configuration.name)
                    str)
             in
