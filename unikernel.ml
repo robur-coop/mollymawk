@@ -37,7 +37,10 @@ struct
         (Vmm_commands.pp_wire ~verbose:false)
         reply
     in
-    Logs.err (fun m -> m "%s" err_str);
+    Logs.err (fun m ->
+        m "albatross %s: %s"
+          (Configuration.name_to_str t.configuration.name)
+          err_str);
     t.status <-
       Albatross.Status.update t.status (Albatross.Status.make category err_str)
 

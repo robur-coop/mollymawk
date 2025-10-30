@@ -484,18 +484,17 @@ module Make (S : Tcpip.Stack.V4V6) = struct
       ?push f =
     let open Lwt.Infix in
     let config = t.configuration in
+    let config_name = Configuration.name_to_str config.name in
     S.TCP.create_connection (S.tcp stack) (config.server_ip, config.server_port)
     >>= function
     | Error e ->
         let err =
-          Fmt.str
-            "albatross %s connection failure %a:%u while quering %a %a: %a"
-            (Configuration.name_to_str config.name)
-            Ipaddr.pp config.server_ip config.server_port Vmm_core.Name.pp name
+          Fmt.str "Connection failure %a:%u while quering %a %a: %a" Ipaddr.pp
+            config.server_ip config.server_port Vmm_core.Name.pp name
             (Vmm_commands.pp ~verbose:false)
             cmd S.TCP.pp_error e
         in
-        Logs.err (fun m -> m "%s" err);
+        Logs.err (fun m -> m "albatross %s: %s" config_name err);
         t.status <- Status.update t.status (Status.make `Transient err);
         Lwt.return (Error err)
     | Ok flow -> (
@@ -508,12 +507,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
           Tls.Config.client ~authenticator ~certificates ()
         with
         | Error (`Msg msg) ->
-            let err =
-              Fmt.str "albatross TLS config error for %s: %s"
-                (Configuration.name_to_str config.name)
-                msg
-            in
-            Logs.err (fun m -> m "%s" err);
+            let err = Fmt.str "TLS config error: %s" msg in
+            Logs.err (fun m -> m "albatross %s: %s" config_name err);
             t.status <- Status.update t.status (Status.make `Configuration err);
             Lwt.return (Error err)
         | Ok tls_config -> (
@@ -522,15 +517,13 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 S.TCP.close flow >|= fun () ->
                 let err =
                   Fmt.str
-                    "albatross %s establishing TLS to %a:%u while querying %a \
-                     %a: %a"
-                    (Configuration.name_to_str config.name)
+                    "Error establishing TLS to %a:%u while querying %a %a: %a"
                     Ipaddr.pp config.server_ip config.server_port
                     Vmm_core.Name.pp name
                     (Vmm_commands.pp ~verbose:false)
                     cmd TLS.pp_write_error e
                 in
-                Logs.err (fun m -> m "%s" err);
+                Logs.err (fun m -> m "albatross %s: %s" config_name err);
                 t.status <- Status.update t.status (Status.make `Transient err);
                 Error err
             | Ok tls_flow -> (
@@ -538,7 +531,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                   | Ok () -> Lwt.return (Ok ())
                   | Error `Closed ->
                       let err = "TLS write error: connection closed" in
-                      Logs.err (fun m -> m "Albatross: %s" err);
+                      Logs.err (fun m -> m "albatross %s: %s" config_name err);
                       t.status <-
                         Status.update t.status (Status.make `Transient err);
                       Lwt.return (Error err)
@@ -547,7 +540,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                         Fmt.str "TLS write error (underlying TCP): %a"
                           S.TCP.pp_write_error err
                       in
-                      Logs.err (fun m -> m "Albatross: %s" err);
+                      Logs.err (fun m -> m "albatross %s: %s" config_name err);
                       t.status <-
                         Status.update t.status (Status.make `Transient err);
                       Lwt.return (Error err)
@@ -555,7 +548,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                       let err =
                         Fmt.str "TLS write error: %a" TLS.pp_write_error e
                       in
-                      Logs.err (fun m -> m "Albatross: %s" err);
+                      Logs.err (fun m -> m "albatross %s: %s" config_name err);
                       t.status <-
                         Status.update t.status (Status.make `Transient err);
                       Lwt.return (Error err)
@@ -592,13 +585,13 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                     | Ok `Eof ->
                         TLS.close tls_flow >|= fun () ->
                         let err =
-                          Fmt.str "eof from albatross %s %a:%u querying %a %a"
-                            (Configuration.name_to_str config.name)
-                            Ipaddr.pp config.server_ip config.server_port
-                            Vmm_core.Name.pp name
+                          Fmt.str "Eof error %a:%u querying %a %a" Ipaddr.pp
+                            config.server_ip config.server_port Vmm_core.Name.pp
+                            name
                             (Vmm_commands.pp ~verbose:false)
                             cmd
                         in
+                        Logs.err (fun m -> m "albatross %s: %s" config_name err);
                         t.status <-
                           Status.update t.status (Status.make `Transient err);
                         Error err
@@ -606,18 +599,19 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                         TLS.close tls_flow >|= fun () ->
                         let err =
                           Fmt.str
-                            "albatross %s received error reading from %a:%u \
-                             querying %a %a: %a"
-                            (Configuration.name_to_str config.name)
+                            "Received error reading from %a:%u querying %a %a: \
+                             %a"
                             Ipaddr.pp config.server_ip config.server_port
                             Vmm_core.Name.pp name
                             (Vmm_commands.pp ~verbose:false)
                             cmd TLS.pp_error e
                         in
+                        Logs.err (fun m -> m "albatross %s: %s" config_name err);
                         t.status <-
                           Status.update t.status (Status.make `Transient err);
                         Error err)
                 | Error err ->
+                    Logs.err (fun m -> m "albatross %s: %s" config_name err);
                     t.status <-
                       Status.update t.status (Status.make `Transient err);
                     Lwt.return_error err)))
