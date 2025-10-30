@@ -113,10 +113,7 @@ let albatross_status_layout (albatross : Albatross.t) =
                 p
                   ~a:[ a_class [ "divide-y-1" ] ]
                   (List.map
-                     (fun error ->
-                       code
-                         ~a:[ a_class [ "block" ] ]
-                         [ txt (render_log error) ])
+                     (fun error -> code [ txt (render_log error) ])
                      errors);
               ]);
       ])
