@@ -67,9 +67,6 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         bridges = Vmm_core.String_set.empty;
       }
 
-  let dummy_state ?(status = Status.Online) configuration =
-    { status; policies = Vmm_trie.empty; configuration }
-
   let policy ?domain t =
     let ( let* ) = Result.bind in
     let* path =
@@ -623,6 +620,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
 
   let init stack (configuration : Configuration.t) =
     let open Lwt.Infix in
+    let state =
+      { status = Status.Online; policies = Vmm_trie.empty; configuration }
+    in
     let cmd = `Policy_cmd `Policy_info in
     match
       key_cert ~is_ca:false ~cmd configuration.private_key "."
@@ -639,18 +639,18 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                (Configuration.name_to_str configuration.name)
                s)
         in
-        Lwt.return (dummy_state ~status:(Offline [ error ]) configuration)
+        state.status <- Offline [ error ];
+        Lwt.return state
     | Ok (key, cert) -> (
         let certificates = `Single ([ cert ], key) in
-        raw_query stack (dummy_state configuration) certificates cmd reply
-        >>= function
+        raw_query stack state certificates cmd reply >>= function
         | Ok (_hdr, `Success (`Policies ps)) ->
             let policies =
               List.fold_left
                 (fun trie (name, p) -> fst (Vmm_trie.insert name p trie))
                 Vmm_trie.empty ps
             in
-            let state = { status = Online; policies; configuration } in
+            state.policies <- policies;
             Lwt.return state
         | Ok w ->
             let err =
@@ -661,13 +661,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             in
             Logs.warn (fun m -> m "%s" err);
             let error = Status.make `Internal err in
-            let state =
-              {
-                status = Status.update Online error;
-                policies = Vmm_trie.empty;
-                configuration;
-              }
-            in
+            state.status <- Status.update state.status error;
             Lwt.return state
         | Error str ->
             Logs.warn (fun m ->
@@ -680,13 +674,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                    (Configuration.name_to_str configuration.name)
                    str)
             in
-            let state =
-              {
-                status = Offline [ error ];
-                policies = Vmm_trie.empty;
-                configuration;
-              }
-            in
+            state.status <- Status.update state.status error;
             Lwt.return state)
 
   let init_all stack (configs : Configuration.t list) =
