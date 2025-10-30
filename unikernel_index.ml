@@ -3,10 +3,7 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
   Tyxml_html.(
     List.map
       (fun (name, unikernel) ->
-        let name =
-          Option.value ~default:"no name"
-            (Option.map Vmm_core.Name.Label.to_string (Vmm_core.Name.name name))
-        in
+        let name = Configuration.name_to_str name in
         tr
           ~a:[ a_class [ "border-b border-gray-200" ] ]
           [
@@ -114,6 +111,17 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
       albatross_instance_unikernels)
 
 let unikernel_index_layout unikernels_by_albatross_instance current_time =
+  let online_instances_count =
+    List.fold_left
+      (fun count (_, unikernels) ->
+        if List.length unikernels > 0 then count + 1 else count)
+      0 unikernels_by_albatross_instance
+  in
+  let total_unikernels_count =
+    List.fold_left
+      (fun acc (_, us) -> acc + List.length us)
+      0 unikernels_by_albatross_instance
+  in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -127,19 +135,34 @@ let unikernel_index_layout unikernels_by_albatross_instance current_time =
                   ~a:[ a_class [ "font-bold text-gray-700" ] ]
                   [
                     txt
-                      ("Showing "
-                      ^ string_of_int
-                          (List.fold_left
-                             (fun acc (_, us) -> acc + List.length us)
-                             0 unikernels_by_albatross_instance)
-                      ^ " unikernels from "
-                      ^ string_of_int
-                          (List.length unikernels_by_albatross_instance)
-                      ^ " running Albatross instances");
+                      (Fmt.str "Showing %d unikernels from %d online instances"
+                         total_unikernels_count online_instances_count);
                   ];
               ];
             div
+              ~a:[ a_class [ "flex gap-4" ] ]
               [
+                select
+                  ~a:
+                    [
+                      a_onchange "filterAlbatrossInstance(event)";
+                      a_id "filterAlbatrossIntances";
+                      a_class
+                        [
+                          "rounded py-2 px-3 border border-primary-200 \
+                           focus:border-primary-500 outline-0";
+                        ];
+                    ]
+                  (option ~a:[ a_value "all" ] (txt "All instances")
+                  :: List.map
+                       (fun (name, unikernels) ->
+                         option
+                           ~a:[ a_value (Configuration.name_to_str name) ]
+                           (txt
+                              (Fmt.str "%s (%d unikernels)"
+                                 (Configuration.name_to_str name)
+                                 (List.length unikernels))))
+                       unikernels_by_albatross_instance);
                 input
                   ~a:
                     [

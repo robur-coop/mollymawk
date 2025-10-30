@@ -149,6 +149,25 @@ function filterData() {
 	});
 }
 
+function filterAlbatrossInstance(event) {
+	const searchTerm = event.target.value.toLowerCase();
+	const table = document.getElementById("data-table");
+	const rows = table.querySelectorAll("tbody tr");
+	if (searchTerm === "all") {
+		rows.forEach(row => {
+			row.style.display = "";
+		});
+	} else {
+		rows.forEach(row => {
+			const cells = row.querySelectorAll("td");
+			const match = Array.from(cells).some(cell =>
+				cell.textContent.toLowerCase().includes(searchTerm)
+			);
+			row.style.display = match ? "" : "none";
+		});
+	}
+}
+
 var newConfig = false;
 function openConfigForm(name, ip, port, certificate, p_key) {
 	const formSection = document.getElementById("config-form");
