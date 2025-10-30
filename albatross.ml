@@ -508,7 +508,11 @@ module Make (S : Tcpip.Stack.V4V6) = struct
           Tls.Config.client ~authenticator ~certificates ()
         with
         | Error (`Msg msg) ->
-            let err = Fmt.str "albatross TLS config error: %s" msg in
+            let err =
+              Fmt.str "albatross TLS config error for %s: %s"
+                (Configuration.name_to_str config.name)
+                msg
+            in
             Logs.err (fun m -> m "%s" err);
             t.status <- Status.update t.status (Status.make `Configuration err);
             Lwt.return (Error err)
