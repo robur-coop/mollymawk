@@ -4,6 +4,7 @@ let select_instance (user : User_model.user) albatross_instances
     section
       ~a:[ a_id "instance-form"; a_class [ "p-4 bg-gray-50 my-1" ] ]
       [
+        p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
         h2
           ~a:[ a_class [ "font-semibold text-2xl" ] ]
           [ txt ("Select an instance for " ^ user.name) ];
@@ -21,6 +22,7 @@ let select_instance (user : User_model.user) albatross_instances
             ]
           (List.map
              (fun (instance, (pol : Albatross.t)) ->
+               let name = Configuration.name_to_str instance in
                match pol.status with
                | Online ->
                    a
@@ -52,13 +54,14 @@ let select_instance (user : User_model.user) albatross_instances
                          [
                            div
                              [
+                               p ~a:[ a_class [ "font-bold" ] ] [ txt name ];
                                p
                                  ~a:
                                    [
                                      a_class
-                                       [ "font-medium"; "text-primary-500" ];
+                                       [ "text-primary-500 font-semibold" ];
                                    ]
-                                 [ txt (Configuration.name_to_str instance) ];
+                                 [ txt (Albatross.Status.to_string pol.status) ];
                              ];
                            div
                              [
@@ -77,61 +80,28 @@ let select_instance (user : User_model.user) albatross_instances
                          ];
                      ]
                | _ ->
-                   a
-                     ~a:
-                       [
-                         a_href
-                           ("/admin/albatross/errors?instance="
-                           ^ Configuration.name_to_str instance);
-                         a_class
-                           [
-                             "block";
-                             "p-4";
-                             "transition";
-                             "duration-150";
-                             "ease-in-out";
-                             "bg-gray-100";
-                           ];
-                         Unsafe.string_attrib "aria-disabled" "true";
-                         a_tabindex (-1);
-                       ]
+                   div
+                     ~a:[ a_class [ "my-2 p-4" ] ]
                      [
                        div
-                         ~a:
-                           [
-                             a_class
-                               [ "flex"; "items-center"; "justify-between" ];
-                           ]
                          [
-                           div
-                             [
-                               p
-                                 ~a:
-                                   [
-                                     a_class
-                                       [ "font-medium"; "text-secondary-500" ];
-                                   ]
-                                 [
-                                   txt (Configuration.name_to_str instance);
-                                   br ();
-                                   small [ txt "Click to view error logs." ];
-                                 ];
-                             ];
-                           div
-                             [
-                               i
-                                 ~a:
-                                   [
-                                     a_class
-                                       [
-                                         "fa-solid";
-                                         "fa-chevron-right";
-                                         "text-gray-400";
-                                       ];
-                                   ]
-                                 [];
-                             ];
+                           p ~a:[ a_class [ "font-bold" ] ] [ txt name ];
+                           p
+                             ~a:
+                               [
+                                 a_class [ "text-secondary-500 font-semibold" ];
+                               ]
+                             [ txt (Albatross.Status.to_string pol.status) ];
                          ];
+                       Utils.button_component
+                         ~attribs:
+                           [
+                             a_id ("retry-btn-" ^ name);
+                             a_onclick
+                               ("retryConnectingAlbatross(`" ^ name ^ "`)");
+                           ]
+                         ~content:(txt "Retry connecting")
+                         ~btn_type:`Danger_outlined ();
                      ])
              albatross_instances);
       ])
