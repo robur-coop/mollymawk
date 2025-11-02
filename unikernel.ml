@@ -2953,28 +2953,17 @@ struct
                       reqd `Bad_request)
         | "/admin/settings" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true store reqd
-                  (settings store !albatross_instances))
-        | "/admin/albatross/errors" ->
-            check_meth `GET (fun () ->
-                authenticate ~check_admin:true store reqd
-                  (albatross_instance req.H1.Request.target
-                     (view_albatross_error_logs store)))
-        | "/api/admin/albatross/retry" ->
-            check_meth `GET (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store reqd
-                  (albatross_instance req.H1.Request.target
-                     (retry_initializing_instance stack albatross_instances)))
-        | "/api/admin/settings/update" ->
+                authenticate ~check_admin:true store reqd (settings store))
+        | "/api/admin/settings/albatross/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (update_settings stack store albatross_instances `Update)))
-        | "/api/admin/settings/create" ->
+                     (update_albatross_configuration stack store albatross_instances `Update)))
+        | "/api/admin/settings/albatross/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (update_settings stack store albatross_instances `Create)))
+                     (update_albatross_configuration stack store albatross_instances `Create)))
         | "/api/admin/settings/delete" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
