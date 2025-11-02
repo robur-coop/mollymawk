@@ -195,7 +195,7 @@ async function saveConfig() {
 		formAlert.textContent = "Please use alphanumeric characters, dashes or underscores for the name";
 	} else {
 		try {
-			const response = await fetch(newConfig ? "/api/admin/settings/create" : "/api/admin/settings/update", {
+			const response = await fetch(newConfig ? "/api/admin/settings/albatross/create" : "/api/admin/settings/albatross/update", {
 				method: 'POST',
 				headers: {
 					"Content-Type": "application/json",
