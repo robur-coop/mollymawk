@@ -624,18 +624,13 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         (X509.Certificate.subject configuration.certificate)
     with
     | Error s ->
-        Logs.warn (fun m ->
-            m "init: key_cert failed for %s: %s"
-              (Configuration.name_to_str configuration.name)
-              s);
-        let error =
-          Status.make `Configuration
-            (Fmt.str "Initialisation error: key_cert failed for %s with %s"
-               (Configuration.name_to_str configuration.name)
-               s)
+        let err =
+          Fmt.str "Initialisation error: key_cert failed for %s with %s"
+            (Configuration.name_to_str configuration.name)
+            s
         in
-        state.status <- Offline [ error ];
-        Lwt.return state
+        Logs.warn (fun m -> m "%s" err);
+        Lwt.return (Error err)
     | Ok (key, cert) -> (
         let certificates = `Single ([ cert ], key) in
         raw_query stack state certificates cmd reply >>= function
@@ -646,7 +641,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 Vmm_trie.empty ps
             in
             state.policies <- policies;
-            Lwt.return state
+            Lwt.return (Ok state)
         | Ok w ->
             let err =
               Fmt.str "Unexpected policy reply for %s: %a"
@@ -655,29 +650,28 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 w
             in
             Logs.warn (fun m -> m "%s" err);
-            let error = Status.make `Incompatible err in
-            state.status <- Status.update state.status error;
-            Lwt.return state
+            Lwt.return (Error err)
         | Error str ->
-            Logs.warn (fun m ->
-                m "init: raw_query failed for %s: %s"
-                  (Configuration.name_to_str configuration.name)
-                  str);
-            let error =
-              Status.make `Configuration
-                (Fmt.str "Initialisation error: raw_query failed for %s with %s"
-                   (Configuration.name_to_str configuration.name)
-                   str)
+            let err =
+              Fmt.str "Initialisation error: raw_query failed for %s with %s"
+                (Configuration.name_to_str configuration.name)
+                str
             in
-            state.status <- Status.update state.status error;
-            Lwt.return state)
+            Logs.warn (fun m -> m "%s" err);
+            Lwt.return (Error err))
 
   let init_all stack (configs : Configuration.t list) =
     let open Lwt.Infix in
     Lwt_list.fold_left_s
       (fun acc_map (configuration : Configuration.t) ->
-        init stack configuration >|= fun state ->
-        Albatross_map.add configuration.name state acc_map)
+        init stack configuration >|= function
+        | Error msg ->
+            Logs.err (fun m ->
+                m "albatross: failed to init instance %s: %s"
+                  (Configuration.name_to_str configuration.name)
+                  msg);
+            acc_map
+        | Ok state -> Albatross_map.add configuration.name state acc_map)
       Albatross_map.empty configs
 
   let find_instance_by_name (albatross_map : a_map) name =
