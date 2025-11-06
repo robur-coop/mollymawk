@@ -578,9 +578,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 | Ok () -> (
                     TLS.read tls_flow >>= fun r ->
                     match r with
-                    | Ok (`Data d) ->
-                        set_online t;
-                        f tls_flow (Cstruct.to_string d)
+                    | Ok (`Data d) -> f tls_flow (Cstruct.to_string d)
                     | Ok `Eof ->
                         TLS.close tls_flow >|= fun () ->
                         let err =
@@ -705,7 +703,6 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         t.status <- Status.update t.status (Status.make `Configuration str);
         Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
-        set_online t;
         raw_query stack t ~name:vmm_name certificates cmd ?push reply
 
   let query_console stack t ~domain ~name f =
