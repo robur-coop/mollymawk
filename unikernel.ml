@@ -973,41 +973,42 @@ struct
 
   let retry_initializing_instance stack albatross_instances
       (albatross : Albatross.t) _ _user reqd =
-    Albatross_state.init stack albatross.configuration
-    >>= fun new_albatross_instance ->
-    albatross_instances :=
-      Albatross.Albatross_map.update albatross.configuration.name
-        (fun _prev -> Some new_albatross_instance)
-        !albatross_instances;
-    match new_albatross_instance.status with
-    | Online ->
+    Albatross_state.init stack albatross.configuration >>= function
+    | Ok new_albatross_instance ->
+        albatross_instances :=
+          Albatross.Albatross_map.update albatross.configuration.name
+            (fun _prev -> Some new_albatross_instance)
+            !albatross_instances;
         Middleware.http_response reqd
           ~data:
             (`String "Re-initialization successful, instance is back online")
           `OK
-    | _ ->
+    | Error err ->
         Middleware.http_response reqd
-          ~data:(`String "Re-initialization failed. See error logs")
+          ~data:(`String ("Re-initialization failed. See error logs: " ^ err))
           `Internal_server_error
 
   let update_settings stack store albatross_instances
       (update_or_create : [ `Update | `Create ]) _user json_dict reqd =
     match Configuration.of_json_from_http json_dict (Mirage_ptime.now ()) with
     | Ok configuration_settings -> (
-        Store.upsert_configuration store configuration_settings update_or_create
-        >>= function
-        | Ok _new_configurations ->
-            Albatross_state.init stack configuration_settings
-            >>= fun new_albatross_instance ->
-            albatross_instances :=
-              Albatross.Albatross_map.update configuration_settings.name
-                (fun _prev -> Some new_albatross_instance)
-                !albatross_instances;
-            Middleware.http_response reqd
-              ~data:(`String "Configuration updated successfully") `OK
-        | Error (`Msg err) ->
-            Middleware.http_response reqd
-              ~data:(`String (String.escaped err))
+        Albatross_state.init stack configuration_settings >>= function
+        | Ok new_albatross_instance -> (
+            Store.upsert_configuration store configuration_settings
+              update_or_create
+            >>= function
+            | Ok _new_configurations ->
+                albatross_instances :=
+                  Albatross.Albatross_map.update configuration_settings.name
+                    (fun _prev -> Some new_albatross_instance)
+                    !albatross_instances;
+                Middleware.http_response reqd
+                  ~data:(`String "Configuration updated successfully") `OK
+            | Error (`Msg err) ->
+                Middleware.http_response reqd ~data:(`String err)
+                  `Internal_server_error)
+        | Error err ->
+            Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error)
     | Error (`Msg err) ->
         Middleware.http_response
