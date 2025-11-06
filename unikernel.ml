@@ -397,7 +397,9 @@ struct
     Albatross_state.query stack state ~domain:user_name (`Block_cmd `Block_info)
     >|= function
     | Error _msg -> []
-    | Ok (_hdr, `Success (`Block_devices blocks)) -> blocks
+    | Ok (_hdr, `Success (`Block_devices blocks)) ->
+        Albatross.set_online state;
+        blocks
     | Ok reply ->
         update_albatross_status state (`Incompatible, reply, "block info");
         []
@@ -410,6 +412,7 @@ struct
     | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
     | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
     | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
+        Albatross.set_online state;
         unikernels
     | Ok reply ->
         update_albatross_status state (`Incompatible, reply, "unikernel info");
@@ -426,6 +429,7 @@ struct
         | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
         | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
         | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
+            Albatross.set_online instance;
             (instance.configuration.name, unikernels)
         | Ok reply ->
             update_albatross_status instance
@@ -445,6 +449,7 @@ struct
     | Ok (_hdr, `Success (`Unikernel_info [ unikernel ]))
     | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ]))
     | Ok (_hdr, `Success (`Old_unikernel_info4 [ unikernel ])) ->
+        Albatross.set_online state;
         Ok unikernel
     | Ok ((_hdr, `Success (`Unikernel_info unikernels)) as e)
     | Ok ((_hdr, `Success (`Old_unikernel_info3 unikernels)) as e)
@@ -1101,7 +1106,9 @@ struct
                     ]
                 in
                 Lwt.return (successes, failure :: failures)
-            | Ok parsed -> Lwt.return (parsed :: successes, failures)))
+            | Ok parsed ->
+                Albatross.set_online instance;
+                Lwt.return (parsed :: successes, failures)))
       ([], [])
       (Albatross.Albatross_map.bindings albatross_instances)
     >>= fun (successes, failures) ->
@@ -1353,6 +1360,7 @@ struct
                   unikernel_name err);
             Lwt.return (Error (`Msg err, `Internal_server_error))
         | Ok res ->
+            Albatross.set_online albatross;
             Logs.info (fun m ->
                 m
                   "albatross-force-create: succesfully created %s with result \
@@ -1750,7 +1758,9 @@ struct
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
                     match Albatross_json.res res with
-                    | Ok res -> Middleware.http_response reqd ~data:res `OK
+                    | Ok res ->
+                        Albatross.set_online albatross;
+                        Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
                         Middleware.http_response reqd
                           ~data:(`String (String.escaped err))
@@ -1799,7 +1809,9 @@ struct
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
                     match Albatross_json.res res with
-                    | Ok res -> Middleware.http_response reqd ~data:res `OK
+                    | Ok res ->
+                        Albatross.set_online albatross;
+                        Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
                         Middleware.http_response reqd
                           ~data:(`String (String.escaped err))
@@ -1901,6 +1913,7 @@ struct
                             | Ok (_hdr, res) -> (
                                 match Albatross_json.res res with
                                 | Ok res_json ->
+                                    Albatross.set_online albatross;
                                     Middleware.http_response reqd ~data:res_json
                                       `OK
                                 | Error (`String err_str) ->
@@ -1968,7 +1981,9 @@ struct
       ~name:unikernel_name f
     >>= function
     | Error _err -> Lwt.return_unit
-    | Ok () -> Lwt.return_unit
+    | Ok () ->
+        Albatross.set_online albatross;
+        Lwt.return_unit
 
   let view_user stack albatross_instances store uuid _ (user : User_model.user)
       reqd =
@@ -2181,7 +2196,9 @@ struct
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
                     match Albatross_json.res res with
-                    | Ok res -> Middleware.http_response reqd ~data:res `OK
+                    | Ok res ->
+                        Albatross.set_online albatross;
+                        Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
                         Middleware.http_response reqd
                           ~data:(`String (String.escaped err))
@@ -2259,7 +2276,9 @@ struct
                                   (Fmt.str "unexpected field. got %s" err)
                                   `Bad_request
                                 >|= fun () -> Error ()
-                            | Ok _ -> Lwt.return (Ok ()))
+                            | Ok _ ->
+                                Albatross.set_online albatross;
+                                Lwt.return (Ok ()))
                       in
 
                       let stream_to_albatross stack albatross block_name
@@ -2280,6 +2299,7 @@ struct
                                   (Fmt.str "unexpected field. got %s" err)
                                   `Bad_request
                             | Ok res ->
+                                Albatross.set_online albatross;
                                 Middleware.http_response reqd ~data:res `OK)
                       in
                       let parsed_json =
@@ -2432,7 +2452,9 @@ struct
                   ~domain:user.name ~name:block_name compression_level response
                 >>= function
                 | Error _err -> Lwt.return_unit
-                | Ok () -> Lwt.return_unit)
+                | Ok () ->
+                    Albatross.set_online albatross;
+                    Lwt.return_unit)
             | _ ->
                 Logs.err (fun m ->
                     m "Couldn't find albatross instance with name %s"
