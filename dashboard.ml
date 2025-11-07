@@ -135,7 +135,14 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [ span [ txt user.name ] ];
+                                   [
+                                     span
+                                       [
+                                         txt
+                                           (Vmm_core.Name.string_of_label
+                                              user.name);
+                                       ];
+                                   ];
                                ];
                            ];
                        ];
