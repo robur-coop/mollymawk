@@ -483,12 +483,14 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     >>= function
     | Error e ->
         let err =
-          Fmt.str "Connection failure %a:%u while quering %a %a: %a" Ipaddr.pp
-            config.server_ip config.server_port Vmm_core.Name.pp name
+          Fmt.str "Connection failure while quering %a %a: %a" Vmm_core.Name.pp
+            name
             (Vmm_commands.pp ~verbose:false)
             cmd S.TCP.pp_error e
         in
-        Logs.err (fun m -> m "albatross %s: %s" config_name err);
+        Logs.err (fun m ->
+            m "albatross %s (%a:%u): %s" config_name Ipaddr.pp config.server_ip
+              config.server_port err);
         t.status <- Status.update t.status (Status.make `Network err);
         Lwt.return (Error err)
     | Ok flow -> (
@@ -501,7 +503,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
           Tls.Config.client ~authenticator ~certificates ()
         with
         | Error (`Msg msg) ->
-            let err = Fmt.str "TLS config error: %s" msg in
+            let err = Fmt.str "TLS configuration error: %s" msg in
             Logs.err (fun m -> m "albatross %s: %s" config_name err);
             t.status <- Status.update t.status (Status.make `Credentials err);
             Lwt.return (Error err)
@@ -511,13 +513,14 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 S.TCP.close flow >|= fun () ->
                 let err =
                   Fmt.str
-                    "Error establishing TLS to %a:%u while querying %a %a: %a"
-                    Ipaddr.pp config.server_ip config.server_port
+                    "Error establishing TLS connection while querying %a %a: %a"
                     Vmm_core.Name.pp name
                     (Vmm_commands.pp ~verbose:false)
                     cmd TLS.pp_write_error e
                 in
-                Logs.err (fun m -> m "albatross %s: %s" config_name err);
+                Logs.err (fun m ->
+                    m "albatross %s (%a:%u): %s" config_name Ipaddr.pp
+                      config.server_ip config.server_port err);
                 t.status <-
                   Status.update t.status (Status.make `Credentials err);
                 Error err
@@ -578,35 +581,33 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                     | Ok `Eof ->
                         TLS.close tls_flow >|= fun () ->
                         let err =
-                          Fmt.str "Eof error %a:%u querying %a %a" Ipaddr.pp
-                            config.server_ip config.server_port Vmm_core.Name.pp
+                          Fmt.str "Eof while querying %a %a" Vmm_core.Name.pp
                             name
                             (Vmm_commands.pp ~verbose:false)
                             cmd
                         in
-                        Logs.err (fun m -> m "albatross %s: %s" config_name err);
+                        Logs.err (fun m ->
+                            m "albatross %s (%a:%u): %s" config_name Ipaddr.pp
+                              config.server_ip config.server_port err);
                         t.status <-
                           Status.update t.status (Status.make `Incompatible err);
                         Error err
                     | Error e ->
                         TLS.close tls_flow >|= fun () ->
                         let err =
-                          Fmt.str
-                            "Received error reading from %a:%u querying %a %a: \
-                             %a"
-                            Ipaddr.pp config.server_ip config.server_port
+                          Fmt.str "Error reading while querying %a %a: %a"
                             Vmm_core.Name.pp name
                             (Vmm_commands.pp ~verbose:false)
                             cmd TLS.pp_error e
                         in
-                        Logs.err (fun m -> m "albatross %s: %s" config_name err);
+                        Logs.err (fun m ->
+                            m "albatross %s (%a:%u): %s" config_name Ipaddr.pp
+                              config.server_ip config.server_port err);
                         t.status <-
                           Status.update t.status (Status.make `Incompatible err);
                         Error err)
                 | Error err ->
-                    Logs.err (fun m -> m "albatross %s: %s" config_name err);
-                    t.status <-
-                      Status.update t.status (Status.make `Network err);
+                    (* the above call to send_data already set the status *)
                     Lwt.return_error err)))
 
   let init stack (configuration : Configuration.t) =
