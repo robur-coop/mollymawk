@@ -1093,6 +1093,7 @@ struct
             in
             Lwt.return (successes, failure :: failures)
         | Ok (_hdr, res) -> (
+            Albatross.set_online instance;
             match Albatross_json.res res with
             | Error (`String err) ->
                 Logs.err (fun m ->
@@ -1107,9 +1108,7 @@ struct
                     ]
                 in
                 Lwt.return (successes, failure :: failures)
-            | Ok parsed ->
-                Albatross.set_online instance;
-                Lwt.return (parsed :: successes, failures)))
+            | Ok parsed -> Lwt.return (parsed :: successes, failures)))
       ([], [])
       (Albatross.Albatross_map.bindings albatross_instances)
     >>= fun (successes, failures) ->
@@ -1352,6 +1351,7 @@ struct
              ( `Msg ("Force create: Error querying albatross: " ^ err),
                `Internal_server_error ))
     | Ok (_hdr, res) -> (
+        Albatross.set_online albatross;
         match Albatross_json.res res with
         | Error (`String err) ->
             Logs.warn (fun m ->
@@ -1361,7 +1361,6 @@ struct
                   unikernel_name err);
             Lwt.return (Error (`Msg err, `Internal_server_error))
         | Ok res ->
-            Albatross.set_online albatross;
             Logs.info (fun m ->
                 m
                   "albatross-force-create: succesfully created %s with result \
@@ -1758,10 +1757,9 @@ struct
                       ~data:(`String ("Error querying albatross: " ^ msg))
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
+                    Albatross.set_online albatross;
                     match Albatross_json.res res with
-                    | Ok res ->
-                        Albatross.set_online albatross;
-                        Middleware.http_response reqd ~data:res `OK
+                    | Ok res -> Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
                         Middleware.http_response reqd
                           ~data:(`String (String.escaped err))
@@ -1809,10 +1807,9 @@ struct
                       ~data:(`String ("Error querying albatross: " ^ msg))
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
+                    Albatross.set_online albatross;
                     match Albatross_json.res res with
-                    | Ok res ->
-                        Albatross.set_online albatross;
-                        Middleware.http_response reqd ~data:res `OK
+                    | Ok res -> Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
                         Middleware.http_response reqd
                           ~data:(`String (String.escaped err))
@@ -1912,9 +1909,9 @@ struct
                                   ("Albatross Query Error: " ^ err)
                                   `Internal_server_error
                             | Ok (_hdr, res) -> (
+                                Albatross.set_online albatross;
                                 match Albatross_json.res res with
                                 | Ok res_json ->
-                                    Albatross.set_online albatross;
                                     Middleware.http_response reqd ~data:res_json
                                       `OK
                                 | Error (`String err_str) ->
@@ -2196,10 +2193,9 @@ struct
                            ("Error querying albatross: " ^ String.escaped err))
                       `Internal_server_error
                 | Ok (_hdr, res) -> (
+                    Albatross.set_online albatross;
                     match Albatross_json.res res with
-                    | Ok res ->
-                        Albatross.set_online albatross;
-                        Middleware.http_response reqd ~data:res `OK
+                    | Ok res -> Middleware.http_response reqd ~data:res `OK
                     | Error (`String err) ->
                         Middleware.http_response reqd
                           ~data:(`String (String.escaped err))
@@ -2271,15 +2267,14 @@ struct
                               `Internal_server_error
                             >|= fun () -> Error ()
                         | Ok (_hdr, res) -> (
+                            Albatross.set_online albatross;
                             match Albatross_json.res res with
                             | Error (`String err) ->
                                 generate_http_error_response
                                   (Fmt.str "unexpected field. got %s" err)
                                   `Bad_request
                                 >|= fun () -> Error ()
-                            | Ok _ ->
-                                Albatross.set_online albatross;
-                                Lwt.return (Ok ()))
+                            | Ok _ -> Lwt.return (Ok ()))
                       in
 
                       let stream_to_albatross stack albatross block_name
@@ -2294,13 +2289,13 @@ struct
                               (Fmt.str "an error with albatross. got %s" err)
                               `Internal_server_error
                         | Ok (_hdr, res) -> (
+                            Albatross.set_online albatross;
                             match Albatross_json.res res with
                             | Error (`String err) ->
                                 generate_http_error_response
                                   (Fmt.str "unexpected field. got %s" err)
                                   `Bad_request
                             | Ok res ->
-                                Albatross.set_online albatross;
                                 Middleware.http_response reqd ~data:res `OK)
                       in
                       let parsed_json =
