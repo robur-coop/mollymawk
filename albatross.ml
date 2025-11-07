@@ -1,7 +1,7 @@
 let ( let* ) = Result.bind
 
 module Status = struct
-  type category = [ `Configuration | `Network | `Credentials | `Incompatible ]
+  type category = [ `Certificate | `Network | `Credentials | `Incompatible ]
   type error = { timestamp : Ptime.t; category : category; details : string }
   type t = Online | Degraded of { retries : int; log : error list }
 
@@ -21,7 +21,7 @@ module Status = struct
   let pp_error ppf { timestamp; category; details } =
     let category_str =
       match category with
-      | `Configuration -> "configuration"
+      | `Certificate -> "certificate"
       | `Network -> "network"
       | `Credentials -> "credentials"
       | `Incompatible -> "incompatible"
@@ -683,15 +683,19 @@ module Make (S : Tcpip.Stack.V4V6) = struct
       Result.bind (Vmm_core.Name.path_of_string domain) (fun path ->
           Vmm_core.Name.create path name)
     with
-    | Error (`Msg msg) -> Error msg
+    | Error (`Msg msg) ->
+        t.status <- Status.update t.status (Status.make `Certificate msg);
+        Error msg
     | Ok vmm_name ->
-        Result.map (fun c -> (vmm_name, c)) (gen_cert t ~domain cmd name)
+        Result.map_error
+          (fun msg ->
+            t.status <- Status.update t.status (Status.make `Certificate msg);
+            msg)
+          (Result.map (fun c -> (vmm_name, c)) (gen_cert t ~domain cmd name))
 
   let query stack t ~domain ?(name = ".") ?push cmd =
     match certs t domain name cmd with
-    | Error str ->
-        t.status <- Status.update t.status (Status.make `Configuration str);
-        Lwt.return (Error str)
+    | Error str -> Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
         raw_query stack t ~name:vmm_name certificates cmd ?push reply
 
