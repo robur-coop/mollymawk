@@ -577,7 +577,14 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 | Ok () -> (
                     TLS.read tls_flow >>= fun r ->
                     match r with
-                    | Ok (`Data d) -> f tls_flow (Cstruct.to_string d)
+                    | Ok (`Data d) -> (
+                        f tls_flow (Cstruct.to_string d) >|= function
+                        | Ok _ as o -> o
+                        | Error msg as e ->
+                            t.status <-
+                              Status.update t.status
+                                (Status.make `Incompatible msg);
+                            e)
                     | Ok `Eof ->
                         TLS.close tls_flow >|= fun () ->
                         let err =
