@@ -1,7 +1,7 @@
 let ( let* ) = Result.bind
 
 module Status = struct
-  type category = [ `Configuration | `Transient | `Incompatible ]
+  type category = [ `Configuration | `Network | `Credentials | `Incompatible ]
   type error = { timestamp : Ptime.t; category : category; details : string }
   type t = Online | Degraded of { retries : int; log : error list }
 
@@ -22,7 +22,8 @@ module Status = struct
     let category_str =
       match category with
       | `Configuration -> "configuration"
-      | `Transient -> "transient"
+      | `Network -> "network"
+      | `Credentials -> "credentials"
       | `Incompatible -> "incompatible"
     in
     Fmt.pf ppf "[%a] %s: %s" Ptime.pp timestamp category_str details
@@ -488,7 +489,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             cmd S.TCP.pp_error e
         in
         Logs.err (fun m -> m "albatross %s: %s" config_name err);
-        t.status <- Status.update t.status (Status.make `Transient err);
+        t.status <- Status.update t.status (Status.make `Network err);
         Lwt.return (Error err)
     | Ok flow -> (
         match
@@ -502,7 +503,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         | Error (`Msg msg) ->
             let err = Fmt.str "TLS config error: %s" msg in
             Logs.err (fun m -> m "albatross %s: %s" config_name err);
-            t.status <- Status.update t.status (Status.make `Configuration err);
+            t.status <- Status.update t.status (Status.make `Credentials err);
             Lwt.return (Error err)
         | Ok tls_config -> (
             TLS.client_of_flow tls_config flow >>= function
@@ -517,7 +518,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                     cmd TLS.pp_write_error e
                 in
                 Logs.err (fun m -> m "albatross %s: %s" config_name err);
-                t.status <- Status.update t.status (Status.make `Transient err);
+                t.status <-
+                  Status.update t.status (Status.make `Credentials err);
                 Error err
             | Ok tls_flow -> (
                 let handle_res () = function
@@ -526,7 +528,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                       let err = "TLS write error: connection closed" in
                       Logs.err (fun m -> m "albatross %s: %s" config_name err);
                       t.status <-
-                        Status.update t.status (Status.make `Transient err);
+                        Status.update t.status (Status.make `Network err);
                       Lwt.return (Error err)
                   | Error (`Write err) ->
                       let err =
@@ -535,7 +537,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                       in
                       Logs.err (fun m -> m "albatross %s: %s" config_name err);
                       t.status <-
-                        Status.update t.status (Status.make `Transient err);
+                        Status.update t.status (Status.make `Network err);
                       Lwt.return (Error err)
                   | Error e ->
                       let err =
@@ -543,7 +545,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                       in
                       Logs.err (fun m -> m "albatross %s: %s" config_name err);
                       t.status <-
-                        Status.update t.status (Status.make `Transient err);
+                        Status.update t.status (Status.make `Network err);
                       Lwt.return (Error err)
                 in
                 let write_one data =
@@ -584,7 +586,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                         in
                         Logs.err (fun m -> m "albatross %s: %s" config_name err);
                         t.status <-
-                          Status.update t.status (Status.make `Transient err);
+                          Status.update t.status (Status.make `Incompatible err);
                         Error err
                     | Error e ->
                         TLS.close tls_flow >|= fun () ->
@@ -599,12 +601,12 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                         in
                         Logs.err (fun m -> m "albatross %s: %s" config_name err);
                         t.status <-
-                          Status.update t.status (Status.make `Transient err);
+                          Status.update t.status (Status.make `Incompatible err);
                         Error err)
                 | Error err ->
                     Logs.err (fun m -> m "albatross %s: %s" config_name err);
                     t.status <-
-                      Status.update t.status (Status.make `Transient err);
+                      Status.update t.status (Status.make `Network err);
                     Lwt.return_error err)))
 
   let init stack (configuration : Configuration.t) =
