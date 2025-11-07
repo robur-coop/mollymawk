@@ -332,7 +332,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
           let policy = Option.value ~default:empty_policy policy in
           let cmd = `Policy_cmd (`Policy_add policy) in
           let* key, cert =
-            key_cert ~is_ca:true ~cmd c.private_key domain
+            key_cert ~is_ca:true ~cmd c.private_key
+              (Vmm_core.Name.string_of_label domain)
               (X509.Certificate.subject c.certificate)
           in
           Ok (key, cert, [ cert ])

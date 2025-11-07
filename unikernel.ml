@@ -505,8 +505,7 @@ struct
           `Bad_request
     | Ok (`Assoc json_dict) -> (
         let validate_user_input ~name ~email ~password ~form_csrf =
-          if name = "" || email = "" || password = "" then
-            Error "All fields must be filled."
+          if email = "" || password = "" then Error "All fields must be filled."
           else if String.length name < 4 then
             Error "Name must be at least 3 characters long."
           else if not (Utils.Email.validate_email email) then
@@ -515,6 +514,12 @@ struct
             Error "Password must be at least 8 characters long."
           else if form_csrf = "" then
             Error "CSRF token mismatch error. Please referesh and try again."
+          else if not (Vmm_core.Name.valid_label name) then
+            Error
+              (Fmt.str
+                 "Name is invalid (%S): must be 1–63 characters, use only \
+                  [A-Za-z0-9.-], and must not start with '-'"
+                 name)
           else Ok "Validation passed."
         in
         match
@@ -535,53 +540,61 @@ struct
                   `Bad_request
             | Ok _ ->
                 if Middleware.csrf_cookie_verification form_csrf reqd then
-                  let existing_email = Store.find_by_email store email in
-                  let existing_name = Store.find_by_name store name in
-                  match (existing_name, existing_email) with
-                  | Some _, None ->
+                  match Vmm_core.Name.label_of_string name with
+                  | Error (`Msg err) ->
                       Middleware.http_response reqd
-                        ~data:(`String "A user with this name already exist.")
+                        ~data:(`String ("The user name is invalid: " ^ err))
                         `Bad_request
-                  | None, Some _ ->
-                      Middleware.http_response reqd
-                        ~data:(`String "A user with this email already exist.")
-                        `Bad_request
-                  | None, None -> (
-                      let created_at = Mirage_ptime.now () in
-                      let user, cookie =
-                        let active, super_user =
-                          if Store.count_users store = 0 then (true, true)
-                          else (false, false)
-                        in
-                        User_model.create_user ~name ~email ~password
-                          ~created_at ~active ~super_user
-                          ~user_agent:(Middleware.user_agent reqd)
-                      in
-                      Store.add_user store user >>= function
-                      | Ok () ->
-                          let cookie_value =
-                            cookie.name ^ "=" ^ cookie.value
-                            ^ ";Path=/;HttpOnly=true"
-                          in
-                          let header_list =
-                            [
-                              ("Set-Cookie", cookie_value);
-                              ("location", "/dashboard");
-                            ]
-                          in
-                          Middleware.http_response reqd ~header_list
-                            ~data:(User_model.user_to_json user)
-                            `OK
-                      | Error (`Msg err) ->
+                  | Ok name -> (
+                      let existing_email = Store.find_by_email store email in
+                      let existing_name = Store.find_by_name store name in
+                      match (existing_name, existing_email) with
+                      | Some _, None ->
                           Middleware.http_response reqd
-                            ~data:(`String (String.escaped err))
-                            `Internal_server_error)
-                  | _ ->
-                      Middleware.http_response reqd
-                        ~data:
-                          (`String
-                             "A user with this name or email already exist.")
-                        `Bad_request
+                            ~data:
+                              (`String "A user with this name already exist.")
+                            `Bad_request
+                      | None, Some _ ->
+                          Middleware.http_response reqd
+                            ~data:
+                              (`String "A user with this email already exist.")
+                            `Bad_request
+                      | None, None -> (
+                          let created_at = Mirage_ptime.now () in
+                          let user, cookie =
+                            let active, super_user =
+                              if Store.count_users store = 0 then (true, true)
+                              else (false, false)
+                            in
+                            User_model.create_user ~name ~email ~password
+                              ~created_at ~active ~super_user
+                              ~user_agent:(Middleware.user_agent reqd)
+                          in
+                          Store.add_user store user >>= function
+                          | Ok () ->
+                              let cookie_value =
+                                cookie.name ^ "=" ^ cookie.value
+                                ^ ";Path=/;HttpOnly=true"
+                              in
+                              let header_list =
+                                [
+                                  ("Set-Cookie", cookie_value);
+                                  ("location", "/dashboard");
+                                ]
+                              in
+                              Middleware.http_response reqd ~header_list
+                                ~data:(User_model.user_to_json user)
+                                `OK
+                          | Error (`Msg err) ->
+                              Middleware.http_response reqd
+                                ~data:(`String (String.escaped err))
+                                `Internal_server_error)
+                      | _ ->
+                          Middleware.http_response reqd
+                            ~data:
+                              (`String
+                                 "A user with this name or email already exist.")
+                            `Bad_request)
                 else
                   Middleware.http_response reqd
                     ~data:
@@ -1994,7 +2007,9 @@ struct
         | Ok csrf ->
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:(String.capitalize_ascii u.name)
+                 ~page_title:
+                   (String.capitalize_ascii
+                      (Vmm_core.Name.string_of_label u.name))
                  ~content:
                    (User_single.user_single_layout u unikernels
                       ~empty_policy:Albatross_state.empty_policy
@@ -2028,7 +2043,9 @@ struct
             | Ok csrf ->
                 reply reqd ~content_type:"text/html"
                   (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:(String.capitalize_ascii u.name)
+                     ~page_title:
+                       (String.capitalize_ascii
+                          (Vmm_core.Name.string_of_label u.name))
                      ~content:
                        (Update_policy.update_policy_layout u
                           albatross.configuration.name ~user_policy
@@ -2090,7 +2107,9 @@ struct
                                 | Error err ->
                                     Logs.err (fun m ->
                                         m "error setting policy %a for %s: %s"
-                                          Vmm_core.Policy.pp policy u.name err);
+                                          Vmm_core.Policy.pp policy
+                                          (Vmm_core.Name.string_of_label u.name)
+                                          err);
                                     Middleware.http_response reqd
                                       ~data:
                                         (`String ("error setting policy: " ^ err))
@@ -2160,7 +2179,9 @@ struct
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
-             ~page_title:(String.capitalize_ascii user.name)
+             ~page_title:
+               (String.capitalize_ascii
+                  (Vmm_core.Name.string_of_label user.name))
              ~content:
                (Volume_index.volume_index_layout albatross.configuration.name
                   blocks policy)

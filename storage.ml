@@ -197,7 +197,7 @@ module Make (BLOCK : Mirage_block.S) = struct
 
   let find_by_name store name =
     List.find_opt
-      (fun user -> String.equal user.User_model.name name)
+      (fun user -> Vmm_core.Name.compare_label user.User_model.name name = 0)
       store.users
 
   let find_by_uuid store uuid =
