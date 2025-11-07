@@ -441,7 +441,7 @@ let settings_layout albatross_instances =
                                    ];
                                ])
                           (List.map albatross_table_row
-                             (Albatross.Albatross_map.to_list
+                             (Albatross.Albatross_map.bindings
                                 albatross_instances));
                       ];
                   ];
