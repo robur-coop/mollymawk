@@ -3,16 +3,11 @@ let ( let* ) = Result.bind
 module Status = struct
   type category = [ `Configuration | `Transient | `Incompatible ]
   type error = { timestamp : Ptime.t; category : category; details : string }
-
-  type t =
-    | Online
-    | Degraded of { retries : int; log : error list }
-    | Offline of error list
+  type t = Online | Degraded of { retries : int; log : error list }
 
   let to_string = function
     | Online -> "online"
     | Degraded { retries; _ } -> Fmt.str "degraded (%d retries)" retries
-    | Offline err -> Fmt.str "offline (%d errors)" (List.length err)
 
   let make category details =
     { timestamp = Mirage_ptime.now (); category; details }
@@ -22,7 +17,6 @@ module Status = struct
     | Online -> Degraded { retries = 1; log = [ new_error ] }
     | Degraded { retries; log } ->
         Degraded { retries = retries + 1; log = new_error :: log }
-    | Offline log -> Offline (new_error :: log)
 
   let pp_error ppf { timestamp; category; details } =
     let category_str =
