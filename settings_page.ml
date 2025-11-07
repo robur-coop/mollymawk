@@ -59,8 +59,7 @@ let albatross_table_row ((_, albatross) : Vmm_core.Name.t * Albatross.t) =
                 p
                   ~a:[ a_class [ "text-primary-500 font-semibold" ] ]
                   [ txt (Albatross.Status.to_string albatross.status) ]
-            | Degraded _ -> error_buttons
-            | Offline _ -> error_buttons);
+            | Degraded _ -> error_buttons);
           ];
         td
           ~a:
