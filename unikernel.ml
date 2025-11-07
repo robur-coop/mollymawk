@@ -983,7 +983,7 @@ struct
           ~data:
             (`String "Re-initialization successful, instance is back online")
           `OK
-    | Error err ->
+    | Error (_, err) ->
         Middleware.http_response reqd
           ~data:(`String ("Re-initialization failed. See error logs: " ^ err))
           `Internal_server_error
@@ -1007,7 +1007,7 @@ struct
             | Error (`Msg err) ->
                 Middleware.http_response reqd ~data:(`String err)
                   `Internal_server_error)
-        | Error err ->
+        | Error (_, err) ->
             Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error)
     | Error (`Msg err) ->
