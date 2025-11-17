@@ -46,8 +46,10 @@ let unikernel_info (unikernel_name, info) =
   `Assoc
     [
       ( "name",
-        `String (Option.value ~default:"" (Vmm_core.Name.name unikernel_name))
-      );
+        `String
+          (Option.value ~default:""
+             (Option.map Vmm_core.Name.Label.to_string
+                (Vmm_core.Name.name unikernel_name))) );
       ("fail_behaviour", fail_behaviour info.Vmm_core.Unikernel.fail_behaviour);
       ("cpuid", cpuid info.cpuid);
       ("memory", memory info.memory);
@@ -98,6 +100,7 @@ let success = function
   | `Unikernel_image _ -> `String "unikernel image not supported"
   | `Old_block_device_image (_, bd) -> `String bd
   | `Block_device_image _compressed -> `String "block device image"
+  | `Consoles _names -> `String "consoles"
 
 let console_data_to_json (ts, data) =
   `Assoc

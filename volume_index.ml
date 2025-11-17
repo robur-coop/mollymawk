@@ -232,7 +232,8 @@ let volume_index_layout instance_name volumes policy =
                                         Vmm_core.Name.t * int * bool) ->
                                    let name =
                                      Option.value ~default:"no name"
-                                       (Vmm_core.Name.name name)
+                                       (Option.map Vmm_core.Name.Label.to_string
+                                          (Vmm_core.Name.name name))
                                    in
                                    tr
                                      ~a:

@@ -117,7 +117,7 @@ module Make (BLOCK : Mirage_block.S) = struct
   let upsert_configuration t (configuration : Configuration.t)
       (mode : [ `Create | `Update ]) =
     let name_eq (c : Configuration.t) =
-      Vmm_core.Name.equal c.name configuration.name
+      Vmm_core.Name.Label.equal c.name configuration.name
     in
     let exists = List.exists name_eq t.configurations in
     match mode with
@@ -144,7 +144,8 @@ module Make (BLOCK : Mirage_block.S) = struct
     let before = t.configurations in
     let configurations =
       List.filter
-        (fun (c : Configuration.t) -> not (Vmm_core.Name.equal c.name name))
+        (fun (c : Configuration.t) ->
+          not (Vmm_core.Name.Label.equal c.name name))
         before
     in
     let deleted_any = List.length configurations <> List.length before in
