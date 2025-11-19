@@ -112,11 +112,15 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                   [ txt "Block devices" ];
                 Utils.dynamic_dropdown_form blocks
                   ~get_label:(fun (name, size, used) ->
-                    Option.value ~default:"" (Vmm_core.Name.name name)
+                    Option.value ~default:""
+                      (Option.map Vmm_core.Name.Label.to_string
+                         (Vmm_core.Name.name name))
                     ^ " - " ^ Int.to_string size ^ "MB (used: "
                     ^ Bool.to_string used ^ ")")
                   ~get_value:(fun (name, _, _) ->
-                    Option.value ~default:"" (Vmm_core.Name.name name))
+                    Option.value ~default:""
+                      (Option.map Vmm_core.Name.Label.to_string
+                         (Vmm_core.Name.name name)))
                   ~id:"block";
               ];
             hr ();

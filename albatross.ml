@@ -38,13 +38,7 @@ type t = {
 let set_online t = t.status <- Online
 
 module String_set = Set.Make (String)
-
-module Albatross_map = Map.Make (struct
-  type t = Vmm_core.Name.t
-
-  let compare a b =
-    String.compare (Configuration.name_to_str a) (Configuration.name_to_str b)
-end)
+module Albatross_map = Map.Make (Vmm_core.Name.Label)
 
 module Make (S : Tcpip.Stack.V4V6) = struct
   module TLS = Tls_mirage.Make (S.TCP)
@@ -67,11 +61,11 @@ module Make (S : Tcpip.Stack.V4V6) = struct
       match domain with
       | None -> Ok Vmm_core.Name.root
       | Some domain -> (
-          match Vmm_core.Name.path_of_string domain with
+          match Vmm_core.Name.Path.of_string domain with
           | Error (`Msg msg) ->
               Error
                 (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
-          | Ok path -> Ok (Vmm_core.Name.create_of_path path))
+          | Ok path -> Ok (Vmm_core.Name.make_of_path path))
     in
     Ok (Vmm_trie.find path t.policies)
 
@@ -79,9 +73,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     let ( let* ) = Result.bind in
     let* path =
       match domain with
-      | None -> Ok Vmm_core.Name.root_path
+      | None -> Ok Vmm_core.Name.Path.root
       | Some domain -> (
-          match Vmm_core.Name.path_of_string domain with
+          match Vmm_core.Name.Path.of_string domain with
           | Error (`Msg msg) ->
               Error
                 (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
@@ -694,8 +688,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
 
   let certs t domain name cmd =
     match
-      Result.bind (Vmm_core.Name.path_of_string domain) (fun path ->
-          Vmm_core.Name.create path name)
+      Result.bind (Vmm_core.Name.Path.of_string domain) (fun path ->
+          Result.map (Vmm_core.Name.make path)
+            (Vmm_core.Name.Label.of_string name))
     with
     | Error (`Msg msg) ->
         t.status <- Status.update t.status (Status.make `Certificate msg);
@@ -730,11 +725,11 @@ module Make (S : Tcpip.Stack.V4V6) = struct
 
   let set_policy stack t ~domain policy =
     let open Lwt.Infix in
-    match Vmm_core.Name.path_of_string domain with
+    match Vmm_core.Name.Path.of_string domain with
     | Error (`Msg msg) -> Lwt.return (Error ("couldn't set policy: " ^ msg))
     | Ok p -> (
         let old_policies = t.policies in
-        let name = Vmm_core.Name.create_of_path p in
+        let name = Vmm_core.Name.make_of_path p in
         (* we set it locally - which is then used for the next command *)
         t.policies <- fst (Vmm_trie.insert name policy t.policies);
         (* now we tell albatross about it, using a command for throwing it away *)

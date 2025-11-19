@@ -1,7 +1,7 @@
 let delimit_string str =
   if String.length str <= 20 then str else String.sub str 0 20 ^ "..."
 
-let albatross_table_row ((_, albatross) : Vmm_core.Name.t * Albatross.t) =
+let albatross_table_row ((_, albatross) : Vmm_core.Name.Label.t * Albatross.t) =
   let configuration = albatross.configuration in
   let ip = Ipaddr.to_string configuration.server_ip in
   let port = string_of_int configuration.server_port in

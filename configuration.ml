@@ -1,7 +1,7 @@
 open Utils.Json
 
 type t = {
-  name : Vmm_core.Name.t;
+  name : Vmm_core.Name.Label.t;
   certificate : X509.Certificate.t;
   private_key : X509.Private_key.t;
   server_ip : Ipaddr.t;
@@ -9,20 +9,8 @@ type t = {
   updated_at : Ptime.t;
 }
 
-let name_to_str name =
-  (* this is safe since all constructors check Vmm_core.Name.valid_label *)
-  Option.get (Vmm_core.Name.name name)
-
-let name_of_str name =
-  if Vmm_core.Name.valid_label name then
-    Ok (Vmm_core.Name.create_exn Vmm_core.Name.root_path name)
-  else
-    Error
-      (`Msg
-         (Fmt.str
-            "invalid 'name' (%S): must be 1–63 characters, use only \
-             [A-Za-z0-9.-], and must not start with '-'"
-            name))
+let name_to_str name = Vmm_core.Name.Label.to_string name
+let name_of_str name = Vmm_core.Name.Label.of_string name
 
 let to_json t =
   let one_to_json c =

@@ -1256,7 +1256,8 @@ struct
                             ~path:
                               ("/unikernel/info?unikernel="
                               ^ Option.value ~default:""
-                                  (Vmm_core.Name.name name)
+                                  (Option.map Vmm_core.Name.Label.to_string
+                                     (Vmm_core.Name.name name))
                               ^ "&instance="
                               ^ Configuration.name_to_str
                                   albatross.configuration.name)
