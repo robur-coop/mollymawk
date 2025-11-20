@@ -109,7 +109,7 @@ let console_data_to_json (ts, data) =
 let res = function
   | `Command _ -> Error (`String "command not supported")
   | `Success s -> Ok (success s)
-  | `Failure f -> Error (`String ("failure: " ^ f))
+  | `Failure f -> Error (`String ("failure: " ^ String.escaped f))
   | `Data (`Console_data (ts, data)) -> Ok (console_data_to_json (ts, data))
   | `Data (`Utc_console_data (ts, data)) -> Ok (console_data_to_json (ts, data))
   | `Data (`Stats_data _) -> Error (`String "stats not supported")
@@ -220,13 +220,12 @@ let policy_of_json json_dict =
       Error
         (`Msg
            (Fmt.str "policy: unexpected types, got %s"
-              (Yojson.Basic.to_string (`Assoc json_dict))))
+              (to_string (`Assoc json_dict))))
 
 let config_of_json str =
   let ( let* ) = Result.bind in
   let* json =
-    try Ok (Yojson.Basic.from_string str)
-    with Yojson.Json_error s -> Error (`Msg s)
+    try Ok (from_string str) with Yojson.Json_error s -> Error (`Msg s)
   in
   let* dict =
     match json with `Assoc r -> Ok r | _ -> Error (`Msg "not a json assoc")
