@@ -9,7 +9,7 @@ let update_policy_layout (user : User_model.user) ~user_policy
           [
             txt
               ("Set Policy for "
-              ^ Vmm_core.Name.string_of_label user.name
+              ^ Configuration.name_to_str user.name
               ^ "on albatross instance "
               ^ Configuration.name_to_str instance_name);
           ];

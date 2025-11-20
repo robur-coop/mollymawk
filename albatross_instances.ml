@@ -8,9 +8,7 @@ let select_instance (user : User_model.user) albatross_instances
         h2
           ~a:[ a_class [ "font-semibold text-2xl" ] ]
           [
-            txt
-              ("Select an instance for "
-              ^ Vmm_core.Name.string_of_label user.name);
+            txt ("Select an instance for " ^ Configuration.name_to_str user.name);
           ];
         p
           ~a:[ a_class [ "text-gray-600 my-2" ] ]

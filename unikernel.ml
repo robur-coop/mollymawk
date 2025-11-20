@@ -514,7 +514,7 @@ struct
             Error "Password must be at least 8 characters long."
           else if form_csrf = "" then
             Error "CSRF token mismatch error. Please referesh and try again."
-          else if not (Vmm_core.Name.valid_label name) then
+          else if Result.is_error (Configuration.name_of_str name) then
             Error
               (Fmt.str
                  "Name is invalid (%S): must be 1–63 characters, use only \
@@ -540,7 +540,7 @@ struct
                   `Bad_request
             | Ok _ ->
                 if Middleware.csrf_cookie_verification form_csrf reqd then
-                  match Vmm_core.Name.label_of_string name with
+                  match Configuration.name_of_str name with
                   | Error (`Msg err) ->
                       Middleware.http_response reqd
                         ~data:(`String ("The user name is invalid: " ^ err))
@@ -2008,8 +2008,7 @@ struct
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
                  ~page_title:
-                   (String.capitalize_ascii
-                      (Vmm_core.Name.string_of_label u.name))
+                   (String.capitalize_ascii (Configuration.name_to_str u.name))
                  ~content:
                    (User_single.user_single_layout u unikernels
                       ~empty_policy:Albatross_state.empty_policy
@@ -2045,7 +2044,7 @@ struct
                   (Dashboard.dashboard_layout ~csrf user
                      ~page_title:
                        (String.capitalize_ascii
-                          (Vmm_core.Name.string_of_label u.name))
+                          (Configuration.name_to_str u.name))
                      ~content:
                        (Update_policy.update_policy_layout u
                           albatross.configuration.name ~user_policy
@@ -2108,7 +2107,7 @@ struct
                                     Logs.err (fun m ->
                                         m "error setting policy %a for %s: %s"
                                           Vmm_core.Policy.pp policy
-                                          (Vmm_core.Name.string_of_label u.name)
+                                          (Configuration.name_to_str u.name)
                                           err);
                                     Middleware.http_response reqd
                                       ~data:
@@ -2180,8 +2179,7 @@ struct
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
              ~page_title:
-               (String.capitalize_ascii
-                  (Vmm_core.Name.string_of_label user.name))
+               (String.capitalize_ascii (Configuration.name_to_str user.name))
              ~content:
                (Volume_index.volume_index_layout albatross.configuration.name
                   blocks policy)

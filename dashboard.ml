@@ -139,8 +139,7 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                                      span
                                        [
                                          txt
-                                           (Vmm_core.Name.string_of_label
-                                              user.name);
+                                           (Configuration.name_to_str user.name);
                                        ];
                                    ];
                                ];

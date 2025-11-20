@@ -216,8 +216,8 @@ let users_index_layout (users : User_model.user list) current_time =
                                                p
                                                  [
                                                    txt
-                                                     (Vmm_core.Name
-                                                      .string_of_label user.name);
+                                                     (Configuration.name_to_str
+                                                        user.name);
                                                  ];
                                                (match user.active with
                                                | true ->

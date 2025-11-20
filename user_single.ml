@@ -102,7 +102,7 @@ let policy_row ?(error = "") instance_name policy (user : User_model.user) =
 
 let user_single_layout ~empty_policy (user : User_model.user) unikernels
     policies current_time =
-  let user_name = Vmm_core.Name.string_of_label user.name in
+  let user_name = Configuration.name_to_str user.name in
   Tyxml_html.(
     section
       ~a:[ a_class [ "p-4 bg-gray-50 my-1" ] ]
