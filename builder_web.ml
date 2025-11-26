@@ -73,12 +73,12 @@ let duniverse_detailed_diff_of_json = function
           Error
             (`Msg
                ("invalid json for duniverse_detailed_diff: "
-               ^ Yojson.Basic.to_string (`Assoc xs))))
+               ^ Utils.Json.to_string (`Assoc xs))))
   | js ->
       Error
         (`Msg
            ("invalid json for builder_web duniverse_detailed_diff_of_json: "
-          ^ Yojson.Basic.to_string js))
+          ^ Utils.Json.to_string js))
 
 let duniverse_of_json = function
   | `Assoc xs -> (
@@ -88,11 +88,10 @@ let duniverse_of_json = function
           Error
             (`Msg
                ("invalid json for duniverse: "
-               ^ Yojson.Basic.to_string (`Assoc xs))))
+               ^ Utils.Json.to_string (`Assoc xs))))
   | js ->
       Error
-        (`Msg
-           ("invalid json for duniverse_of_json: " ^ Yojson.Basic.to_string js))
+        (`Msg ("invalid json for duniverse_of_json: " ^ Utils.Json.to_string js))
 
 let duniverse_diff_of_json json =
   match
@@ -111,7 +110,7 @@ let duniverse_diff_of_json json =
       Error
         (`Msg
            ("invalid json for duniverse_diff_of_json: "
-           ^ Yojson.Basic.to_string (`Assoc json)))
+           ^ Utils.Json.to_string (`Assoc json)))
 
 let o_diff_of_json = function
   | `Assoc xs -> (
@@ -126,13 +125,13 @@ let o_diff_of_json = function
       | _ ->
           Error
             (`Msg
-               ("invalid json for o_diff: " ^ Yojson.Basic.to_string (`Assoc xs)))
+               ("invalid json for o_diff: " ^ Utils.Json.to_string (`Assoc xs)))
       )
   | js ->
       Error
         (`Msg
            ("invalid json for o_diff list, expected a list: "
-          ^ Yojson.Basic.to_string js))
+          ^ Utils.Json.to_string js))
 
 let package_of_json = function
   | `Assoc xs -> (
@@ -142,12 +141,12 @@ let package_of_json = function
           Error
             (`Msg
                ("invalid json for builder_web package_of_json: "
-               ^ Yojson.Basic.to_string (`Assoc xs))))
+               ^ Utils.Json.to_string (`Assoc xs))))
   | js ->
       Error
         (`Msg
            ("invalid json for builder_web package_of_json, expected a list: "
-          ^ Yojson.Basic.to_string js))
+          ^ Utils.Json.to_string js))
 
 let package_version_of_json = function
   | `Assoc xs -> (
@@ -162,19 +161,19 @@ let package_version_of_json = function
           Error
             (`Msg
                ("invalid json for builder_web package_version_of_json: "
-               ^ Yojson.Basic.to_string (`Assoc xs))))
+               ^ Utils.Json.to_string (`Assoc xs))))
   | js ->
       Error
         (`Msg
            ("invalid json for builder_web package_version_of_json, expected a \
-             list: " ^ Yojson.Basic.to_string js))
+             list: " ^ Utils.Json.to_string js))
 
 let int_or_none field = function
   | None | Some `Null -> Ok None
   | Some (`Int v) -> Ok (Some v)
   | Some json ->
       Error
-        (`Msg ("invalid json for " ^ field ^ ": " ^ Yojson.Basic.to_string json))
+        (`Msg ("invalid json for " ^ field ^ ": " ^ Utils.Json.to_string json))
 
 let build_of_json = function
   | `Assoc xs -> (
@@ -214,12 +213,12 @@ let build_of_json = function
           Error
             (`Msg
                ("invalid json for builder_web build_of_json: "
-               ^ Yojson.Basic.to_string (`Assoc xs))))
+               ^ Utils.Json.to_string (`Assoc xs))))
   | js ->
       Error
         (`Msg
            ("invalid json for builder_web build_of_json, expected a dict: "
-          ^ Yojson.Basic.to_string js))
+          ^ Utils.Json.to_string js))
 
 let diff_of_json json =
   match
@@ -241,7 +240,7 @@ let diff_of_json json =
       Error
         (`Msg
            ("invalid json for builder_web env/package_diff_of_json: "
-           ^ Yojson.Basic.to_string (`Assoc json)))
+           ^ Utils.Json.to_string (`Assoc json)))
 
 let opam_diff_of_json json =
   match
@@ -270,7 +269,7 @@ let opam_diff_of_json json =
       Error
         (`Msg
            ("invalid json for builder_web: "
-           ^ Yojson.Basic.to_string (`Assoc json)))
+           ^ Utils.Json.to_string (`Assoc json)))
 
 let compare_of_json = function
   | `Assoc xs -> (
@@ -297,9 +296,9 @@ let compare_of_json = function
           Error
             (`Msg
                ("invalid json for builder_web diff: "
-               ^ Yojson.Basic.to_string (`Assoc xs))))
+               ^ Utils.Json.to_string (`Assoc xs))))
   | js ->
       Error
         (`Msg
            ("invalid json for builder_web diff, expected a dict: "
-          ^ Yojson.Basic.to_string js))
+          ^ Utils.Json.to_string js))

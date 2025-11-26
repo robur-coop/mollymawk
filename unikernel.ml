@@ -237,7 +237,7 @@ struct
   let extract_json_body reqd =
     decode_request_body reqd >>= fun data ->
     match
-      try Ok (Yojson.Basic.from_string data)
+      try Ok (Utils.Json.from_string data)
       with Yojson.Json_error s -> Error (`Msg s)
     with
     | Error (`Msg err) ->
@@ -491,7 +491,7 @@ struct
   let register store reqd =
     decode_request_body reqd >>= fun data ->
     let json =
-      try Ok (Yojson.Basic.from_string data)
+      try Ok (Utils.Json.from_string data)
       with Yojson.Json_error s -> Error (`Msg s)
     in
     match json with
@@ -590,7 +590,7 @@ struct
               ~data:
                 (`String
                    (Fmt.str "Register: Unexpected fields. Got %s"
-                      (Yojson.Basic.to_string (`Assoc json_dict))))
+                      (Utils.Json.to_string (`Assoc json_dict))))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd
@@ -599,7 +599,7 @@ struct
   let login store reqd =
     decode_request_body reqd >>= fun data ->
     let json =
-      try Ok (Yojson.Basic.from_string data)
+      try Ok (Utils.Json.from_string data)
       with Yojson.Json_error s -> Error (`Msg s)
     in
     match json with
@@ -657,7 +657,7 @@ struct
               ~data:
                 (`String
                    (Fmt.str "Update password: Unexpected fields. Got %s"
-                      (Yojson.Basic.to_string (`Assoc json_dict))))
+                      (Utils.Json.to_string (`Assoc json_dict))))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd
@@ -874,7 +874,7 @@ struct
           ~data:
             (`String
                (Fmt.str "Update password: Unexpected fields. Got %s"
-                  (Yojson.Basic.to_string (`Assoc json_dict))))
+                  (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
   let new_user_cookies ~user ~filter ~redirect store reqd =
@@ -952,7 +952,7 @@ struct
           ~data:
             (`String
                (Fmt.str "Close session: Unexpected fields. Got %s"
-                  (Yojson.Basic.to_string (`Assoc json_dict))))
+                  (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
   let users store _ (user : User_model.user) reqd =
@@ -1047,7 +1047,7 @@ struct
           ~data:
             (`String
                (Fmt.str "Delete albatross config: Unexpected fields. Got %s"
-                  (Yojson.Basic.to_string (`Assoc json_dict))))
+                  (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
   let deploy_form stack store albatross _ (user : User_model.user) reqd =
@@ -1196,7 +1196,7 @@ struct
               reqd `Internal_server_error
         | Ok response_body -> (
             match
-              Builder_web.build_of_json (Yojson.Basic.from_string response_body)
+              Builder_web.build_of_json (Utils.Json.from_string response_body)
             with
             | Error (`Msg err) ->
                 Logs.err (fun m ->
@@ -1234,7 +1234,7 @@ struct
                 | Ok response_body -> (
                     match
                       Builder_web.build_of_json
-                        (Yojson.Basic.from_string response_body)
+                        (Utils.Json.from_string response_body)
                     with
                     | Error (`Msg err) ->
                         Logs.err (fun m ->
@@ -1301,7 +1301,7 @@ struct
                           | Ok response_body -> (
                               match
                                 Builder_web.compare_of_json
-                                  (Yojson.Basic.from_string response_body)
+                                  (Utils.Json.from_string response_body)
                               with
                               | Ok build_comparison -> (
                                   let now = Mirage_ptime.now () in
@@ -1374,8 +1374,7 @@ struct
                 m
                   "albatross-force-create: succesfully created %s with result \
                    %s"
-                  unikernel_name
-                  (Yojson.Basic.to_string res));
+                  unikernel_name (Utils.Json.to_string res));
             Lwt.return (Ok ()))
 
   let process_change stack ~unikernel_name ~job ~to_be_updated_unikernel
@@ -1398,7 +1397,7 @@ struct
     Store.update_user_unikernel_updates store unikernel_update user >>= function
     | Error (`Msg err) ->
         let data =
-          Yojson.Basic.to_string
+          Utils.Json.to_string
             (User_model.unikernel_update_to_json unikernel_update)
         in
         Logs.warn (fun m ->
@@ -1572,14 +1571,13 @@ struct
     let config_or_none field = function
       | None | Some `Null -> Ok None
       | Some json -> (
-          match Albatross_json.config_of_json (Yojson.Basic.to_string json) with
+          match Albatross_json.config_of_json (Utils.Json.to_string json) with
           | Ok cfg -> Ok (Some cfg)
           | Error (`Msg err) ->
               Error
                 (`Msg
                    ("invalid json for " ^ field ^ ": "
-                   ^ Yojson.Basic.to_string json
-                   ^ "failed with: " ^ err)))
+                  ^ Utils.Json.to_string json ^ "failed with: " ^ err)))
     in
     match
       Utils.Json.
@@ -1980,7 +1978,7 @@ struct
     let response = Middleware.http_event_source_response reqd `OK in
     let f (ts, data) =
       let json = Albatross_json.console_data_to_json (ts, data) in
-      response (Yojson.Basic.to_string json)
+      response (Utils.Json.to_string json)
     in
     Albatross_state.query_console stack albatross ~domain:user.name
       ~name:unikernel_name f
@@ -2152,7 +2150,7 @@ struct
           ~data:
             (`String
                (Fmt.str "Update policy: Unexpected fields. Got %s"
-                  (Yojson.Basic.to_string (`Assoc json_dict))))
+                  (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
   let volumes stack store albatross _ (user : User_model.user) reqd =
@@ -2305,7 +2303,7 @@ struct
                                 Middleware.http_response reqd ~data:res `OK)
                       in
                       let parsed_json =
-                        try Ok (Yojson.Basic.from_string json)
+                        try Ok (Utils.Json.from_string json)
                         with Yojson.Json_error s -> Error (`Msg s)
                       in
                       match Configuration.name_of_str albatross_instance with
@@ -2368,7 +2366,7 @@ struct
                                   | _ ->
                                       generate_http_error_response
                                         (Fmt.str "unexpected field. got %s"
-                                           (Yojson.Basic.to_string
+                                           (Utils.Json.to_string
                                               (`Assoc json_dict)))
                                         `Bad_request)
                               | _ ->
@@ -2567,7 +2565,7 @@ struct
           ~data:
             (`String
                (Fmt.str "Create token: Unexpected fields. Got %s"
-                  (Yojson.Basic.to_string (`Assoc json_dict))))
+                  (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
   let delete_token store (user : User_model.user) json_dict reqd =
@@ -2596,7 +2594,7 @@ struct
           ~data:
             (`String
                (Fmt.str "Delete token: Unexpected fields. Got %s"
-                  (Yojson.Basic.to_string (`Assoc json_dict))))
+                  (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
   let update_token store (user : User_model.user) json_dict reqd =
@@ -2644,7 +2642,7 @@ struct
           ~data:
             (`String
                (Fmt.str "Update token: Unexpected fields. Got %s"
-                  (Yojson.Basic.to_string (`Assoc json_dict))))
+                  (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
   let view_albatross_error_logs store albatross _ (user : User_model.user) reqd
