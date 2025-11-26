@@ -505,22 +505,18 @@ struct
           `Bad_request
     | Ok (`Assoc json_dict) -> (
         let validate_user_input ~name ~email ~password ~form_csrf =
-          if email = "" || password = "" then Error "All fields must be filled."
+          if name = "" || email = "" || password = "" then
+            Error (`Msg "All fields must be filled.")
           else if String.length name < 4 then
-            Error "Name must be at least 3 characters long."
+            Error (`Msg "Name must be at least 3 characters long.")
           else if not (Utils.Email.validate_email email) then
-            Error "Invalid email address."
+            Error (`Msg "Invalid email address.")
           else if not (User_model.password_validation password) then
-            Error "Password must be at least 8 characters long."
+            Error (`Msg "Password must be at least 8 characters long.")
           else if form_csrf = "" then
-            Error "CSRF token mismatch error. Please referesh and try again."
-          else if Result.is_error (Configuration.name_of_str name) then
             Error
-              (Fmt.str
-                 "Name is invalid (%S): must be 1–63 characters, use only \
-                  [A-Za-z0-9.-], and must not start with '-'"
-                 name)
-          else Ok "Validation passed."
+              (`Msg "CSRF token mismatch error. Please referesh and try again.")
+          else Configuration.name_of_str name
         in
         match
           Utils.Json.
@@ -534,67 +530,59 @@ struct
             Some (`String name),
             Some (`String form_csrf) ) -> (
             match validate_user_input ~name ~email ~password ~form_csrf with
-            | Error err ->
+            | Error (`Msg err) ->
                 Middleware.http_response reqd
                   ~data:(`String (String.escaped err))
                   `Bad_request
-            | Ok _ ->
+            | Ok name ->
                 if Middleware.csrf_cookie_verification form_csrf reqd then
-                  match Configuration.name_of_str name with
-                  | Error (`Msg err) ->
+                  let existing_email = Store.find_by_email store email in
+                  let existing_name = Store.find_by_name store name in
+                  match (existing_name, existing_email) with
+                  | Some _, None ->
                       Middleware.http_response reqd
-                        ~data:(`String ("The user name is invalid: " ^ err))
+                        ~data:(`String "A user with this name already exist.")
                         `Bad_request
-                  | Ok name -> (
-                      let existing_email = Store.find_by_email store email in
-                      let existing_name = Store.find_by_name store name in
-                      match (existing_name, existing_email) with
-                      | Some _, None ->
-                          Middleware.http_response reqd
-                            ~data:
-                              (`String "A user with this name already exist.")
-                            `Bad_request
-                      | None, Some _ ->
-                          Middleware.http_response reqd
-                            ~data:
-                              (`String "A user with this email already exist.")
-                            `Bad_request
-                      | None, None -> (
-                          let created_at = Mirage_ptime.now () in
-                          let user, cookie =
-                            let active, super_user =
-                              if Store.count_users store = 0 then (true, true)
-                              else (false, false)
-                            in
-                            User_model.create_user ~name ~email ~password
-                              ~created_at ~active ~super_user
-                              ~user_agent:(Middleware.user_agent reqd)
+                  | None, Some _ ->
+                      Middleware.http_response reqd
+                        ~data:(`String "A user with this email already exist.")
+                        `Bad_request
+                  | None, None -> (
+                      let created_at = Mirage_ptime.now () in
+                      let user, cookie =
+                        let active, super_user =
+                          if Store.count_users store = 0 then (true, true)
+                          else (false, false)
+                        in
+                        User_model.create_user ~name ~email ~password
+                          ~created_at ~active ~super_user
+                          ~user_agent:(Middleware.user_agent reqd)
+                      in
+                      Store.add_user store user >>= function
+                      | Ok () ->
+                          let cookie_value =
+                            cookie.name ^ "=" ^ cookie.value
+                            ^ ";Path=/;HttpOnly=true"
                           in
-                          Store.add_user store user >>= function
-                          | Ok () ->
-                              let cookie_value =
-                                cookie.name ^ "=" ^ cookie.value
-                                ^ ";Path=/;HttpOnly=true"
-                              in
-                              let header_list =
-                                [
-                                  ("Set-Cookie", cookie_value);
-                                  ("location", "/dashboard");
-                                ]
-                              in
-                              Middleware.http_response reqd ~header_list
-                                ~data:(User_model.user_to_json user)
-                                `OK
-                          | Error (`Msg err) ->
-                              Middleware.http_response reqd
-                                ~data:(`String (String.escaped err))
-                                `Internal_server_error)
-                      | _ ->
+                          let header_list =
+                            [
+                              ("Set-Cookie", cookie_value);
+                              ("location", "/dashboard");
+                            ]
+                          in
+                          Middleware.http_response reqd ~header_list
+                            ~data:(User_model.user_to_json user)
+                            `OK
+                      | Error (`Msg err) ->
                           Middleware.http_response reqd
-                            ~data:
-                              (`String
-                                 "A user with this name or email already exist.")
-                            `Bad_request)
+                            ~data:(`String (String.escaped err))
+                            `Internal_server_error)
+                  | _ ->
+                      Middleware.http_response reqd
+                        ~data:
+                          (`String
+                             "A user with this name or email already exist.")
+                        `Bad_request
                 else
                   Middleware.http_response reqd
                     ~data:
