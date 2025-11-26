@@ -7,7 +7,9 @@ let select_instance (user : User_model.user) albatross_instances
         p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
         h2
           ~a:[ a_class [ "font-semibold text-2xl" ] ]
-          [ txt ("Select an instance for " ^ user.name) ];
+          [
+            txt ("Select an instance for " ^ Configuration.name_to_str user.name);
+          ];
         p
           ~a:[ a_class [ "text-gray-600 my-2" ] ]
           [ txt "Please choose the Albatross instance for this operation." ];

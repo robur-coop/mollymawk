@@ -102,13 +102,14 @@ let policy_row ?(error = "") instance_name policy (user : User_model.user) =
 
 let user_single_layout ~empty_policy (user : User_model.user) unikernels
     policies current_time =
+  let user_name = Configuration.name_to_str user.name in
   Tyxml_html.(
     section
       ~a:[ a_class [ "p-4 bg-gray-50 my-1" ] ]
       [
         p
           ~a:[ a_class [ "text-3xl font-semibold uppercase" ] ]
-          [ txt user.name ];
+          [ txt user_name ];
         section
           ~a:[ a_class [ "my-5" ] ]
           [
@@ -224,7 +225,7 @@ let user_single_layout ~empty_policy (user : User_model.user) unikernels
                     i ~a:[ a_class [ "fa-solid fa-circle-user text-7xl" ] ] [];
                     p
                       ~a:[ a_class [ "text-3xl font-semibold uppercase" ] ]
-                      [ txt user.name ];
+                      [ txt user_name ];
                   ];
                 div
                   ~a:[ a_class [ "grid grid-cols-2 my-4" ] ]

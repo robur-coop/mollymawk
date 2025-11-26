@@ -506,16 +506,17 @@ struct
     | Ok (`Assoc json_dict) -> (
         let validate_user_input ~name ~email ~password ~form_csrf =
           if name = "" || email = "" || password = "" then
-            Error "All fields must be filled."
+            Error (`Msg "All fields must be filled.")
           else if String.length name < 4 then
-            Error "Name must be at least 3 characters long."
+            Error (`Msg "Name must be at least 3 characters long.")
           else if not (Utils.Email.validate_email email) then
-            Error "Invalid email address."
+            Error (`Msg "Invalid email address.")
           else if not (User_model.password_validation password) then
-            Error "Password must be at least 8 characters long."
+            Error (`Msg "Password must be at least 8 characters long.")
           else if form_csrf = "" then
-            Error "CSRF token mismatch error. Please referesh and try again."
-          else Ok "Validation passed."
+            Error
+              (`Msg "CSRF token mismatch error. Please referesh and try again.")
+          else Configuration.name_of_str name
         in
         match
           Utils.Json.
@@ -529,11 +530,11 @@ struct
             Some (`String name),
             Some (`String form_csrf) ) -> (
             match validate_user_input ~name ~email ~password ~form_csrf with
-            | Error err ->
+            | Error (`Msg err) ->
                 Middleware.http_response reqd
                   ~data:(`String (String.escaped err))
                   `Bad_request
-            | Ok _ ->
+            | Ok name ->
                 if Middleware.csrf_cookie_verification form_csrf reqd then
                   let existing_email = Store.find_by_email store email in
                   let existing_name = Store.find_by_name store name in
@@ -1994,7 +1995,8 @@ struct
         | Ok csrf ->
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:(String.capitalize_ascii u.name)
+                 ~page_title:
+                   (String.capitalize_ascii (Configuration.name_to_str u.name))
                  ~content:
                    (User_single.user_single_layout u unikernels
                       ~empty_policy:Albatross_state.empty_policy
@@ -2028,7 +2030,9 @@ struct
             | Ok csrf ->
                 reply reqd ~content_type:"text/html"
                   (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:(String.capitalize_ascii u.name)
+                     ~page_title:
+                       (String.capitalize_ascii
+                          (Configuration.name_to_str u.name))
                      ~content:
                        (Update_policy.update_policy_layout u
                           albatross.configuration.name ~user_policy
@@ -2090,7 +2094,9 @@ struct
                                 | Error err ->
                                     Logs.err (fun m ->
                                         m "error setting policy %a for %s: %s"
-                                          Vmm_core.Policy.pp policy u.name err);
+                                          Vmm_core.Policy.pp policy
+                                          (Configuration.name_to_str u.name)
+                                          err);
                                     Middleware.http_response reqd
                                       ~data:
                                         (`String ("error setting policy: " ^ err))
@@ -2160,7 +2166,8 @@ struct
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
-             ~page_title:(String.capitalize_ascii user.name)
+             ~page_title:
+               (String.capitalize_ascii (Configuration.name_to_str user.name))
              ~content:
                (Volume_index.volume_index_layout albatross.configuration.name
                   blocks policy)

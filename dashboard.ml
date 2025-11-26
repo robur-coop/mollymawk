@@ -135,7 +135,13 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                                             hover:text-primary-500";
                                          ];
                                      ]
-                                   [ span [ txt user.name ] ];
+                                   [
+                                     span
+                                       [
+                                         txt
+                                           (Configuration.name_to_str user.name);
+                                       ];
+                                   ];
                                ];
                            ];
                        ];

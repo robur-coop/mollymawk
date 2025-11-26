@@ -213,7 +213,12 @@ let users_index_layout (users : User_model.user list) current_time =
                                                    ];
                                                ]
                                              [
-                                               p [ txt user.name ];
+                                               p
+                                                 [
+                                                   txt
+                                                     (Configuration.name_to_str
+                                                        user.name);
+                                                 ];
                                                (match user.active with
                                                | true ->
                                                    i

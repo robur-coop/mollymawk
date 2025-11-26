@@ -8,7 +8,9 @@ let update_policy_layout (user : User_model.user) ~user_policy
           ~a:[ a_class [ "font-semibold text-2xl" ] ]
           [
             txt
-              ("Set Policy for " ^ user.name ^ "on albatross instance "
+              ("Set Policy for "
+              ^ Configuration.name_to_str user.name
+              ^ "on albatross instance "
               ^ Configuration.name_to_str instance_name);
           ];
         p ~a:[ a_id "form-alert"; a_class [ "my-4" ] ] [];

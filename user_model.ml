@@ -30,7 +30,7 @@ type unikernel_update = {
 }
 
 type user = {
-  name : string;
+  name : Vmm_core.Name.Label.t;
   email : string;
   email_verified : Ptime.t option;
   password : string;
@@ -322,7 +322,7 @@ let token_of_json = function
 let user_to_json (u : user) =
   `Assoc
     [
-      ("name", `String u.name);
+      ("name", `String (Configuration.name_to_str u.name));
       ("email", `String u.email);
       ("email_verified", Utils.TimeHelper.ptime_to_json u.email_verified);
       ("password", `String u.password);
@@ -410,6 +410,7 @@ let user_v1_of_json = function
                      ("invalid json data for email verification UUID, expected \
                        a string: " ^ Yojson.Basic.to_string js))
           in
+          let* name = Configuration.name_of_str name in
           Ok
             {
               name;
@@ -508,6 +509,7 @@ let user_v2_of_json = function
                      ("invalid json data for email verification UUID, expected \
                        a string: " ^ Yojson.Basic.to_string js))
           in
+          let* name = Configuration.name_of_str name in
           Ok
             {
               name;
@@ -608,6 +610,7 @@ let user_v3_of_json cookie_fn = function
                      ("invalid json data for email verification UUID, expected \
                        a string: " ^ Yojson.Basic.to_string js))
           in
+          let* name = Configuration.name_of_str name in
           Ok
             {
               name;
@@ -708,6 +711,7 @@ let user_v4_of_json cookie_fn = function
                      ("invalid json data for email verification UUID, expected \
                        a string: " ^ Yojson.Basic.to_string js))
           in
+          let* name = Configuration.name_of_str name in
           Ok
             {
               name;
@@ -818,6 +822,7 @@ let user_of_json cookie_fn = function
                 Ok (unikernel_update :: acc))
               (Ok []) unikernel_updates
           in
+          let* name = Configuration.name_of_str name in
           Ok
             {
               name;

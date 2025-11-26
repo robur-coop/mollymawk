@@ -56,16 +56,11 @@ module Make (S : Tcpip.Stack.V4V6) = struct
       }
 
   let policy ?domain t =
-    let ( let* ) = Result.bind in
-    let* path =
-      match domain with
-      | None -> Ok Vmm_core.Name.root
-      | Some domain -> (
-          match Vmm_core.Name.Path.of_string domain with
-          | Error (`Msg msg) ->
-              Error
-                (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
-          | Ok path -> Ok (Vmm_core.Name.make_of_path path))
+    let path =
+      Option.value ~default:Vmm_core.Name.root
+        (Option.map
+           (fun d -> Vmm_core.Name.make_of_path (Vmm_core.Name.Path.of_label d))
+           domain)
     in
     Ok (Vmm_trie.find path t.policies)
 
@@ -332,7 +327,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
           let policy = Option.value ~default:empty_policy policy in
           let cmd = `Policy_cmd (`Policy_add policy) in
           let* key, cert =
-            key_cert ~is_ca:true ~cmd c.private_key domain
+            key_cert ~is_ca:true ~cmd c.private_key
+              (Configuration.name_to_str domain)
               (X509.Certificate.subject c.certificate)
           in
           Ok (key, cert, [ cert ])
@@ -688,9 +684,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
 
   let certs t domain name cmd =
     match
-      Result.bind (Vmm_core.Name.Path.of_string domain) (fun path ->
-          Result.map (Vmm_core.Name.make path)
-            (Vmm_core.Name.Label.of_string name))
+      Result.map
+        (Vmm_core.Name.make (Vmm_core.Name.Path.of_label domain))
+        (Vmm_core.Name.Label.of_string name)
     with
     | Error (`Msg msg) ->
         t.status <- Status.update t.status (Status.make `Certificate msg);
@@ -725,19 +721,18 @@ module Make (S : Tcpip.Stack.V4V6) = struct
 
   let set_policy stack t ~domain policy =
     let open Lwt.Infix in
-    match Vmm_core.Name.Path.of_string domain with
-    | Error (`Msg msg) -> Lwt.return (Error ("couldn't set policy: " ^ msg))
-    | Ok p -> (
-        let old_policies = t.policies in
-        let name = Vmm_core.Name.make_of_path p in
-        (* we set it locally - which is then used for the next command *)
-        t.policies <- fst (Vmm_trie.insert name policy t.policies);
-        (* now we tell albatross about it, using a command for throwing it away *)
-        (* note that the 'certs' / 'gen_cert' uses the policies for intermediate certificates *)
-        query stack t ~domain (`Unikernel_cmd `Unikernel_info) >|= function
-        | Ok _ -> Ok (name, policy)
-        | Error msg ->
-            Logs.warn (fun m -> m "error updating policies: %s" msg);
-            t.policies <- old_policies;
-            Error msg)
+    let old_policies = t.policies in
+    let name =
+      Vmm_core.Name.make_of_path (Vmm_core.Name.Path.of_label domain)
+    in
+    (* we set it locally - which is then used for the next command *)
+    t.policies <- fst (Vmm_trie.insert name policy t.policies);
+    (* now we tell albatross about it, using a command for throwing it away *)
+    (* note that the 'certs' / 'gen_cert' uses the policies for intermediate certificates *)
+    query stack t ~domain (`Unikernel_cmd `Unikernel_info) >|= function
+    | Ok _ -> Ok (name, policy)
+    | Error msg ->
+        Logs.warn (fun m -> m "error updating policies: %s" msg);
+        t.policies <- old_policies;
+        Error msg
 end
