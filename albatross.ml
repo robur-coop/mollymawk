@@ -56,12 +56,11 @@ module Make (S : Tcpip.Stack.V4V6) = struct
       }
 
   let policy ?domain t =
-    let ( let* ) = Result.bind in
-    let* path =
-      match domain with
-      | None -> Ok Vmm_core.Name.root
-      | Some domain ->
-          Ok (Vmm_core.Name.make_of_path (Vmm_core.Name.Path.of_label domain))
+    let path =
+      Option.value ~default:Vmm_core.Name.root
+        (Option.map
+           (fun d -> Vmm_core.Name.make_of_path (Vmm_core.Name.Path.of_label d))
+           domain)
     in
     Ok (Vmm_trie.find path t.policies)
 
