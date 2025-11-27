@@ -3,7 +3,7 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
   Tyxml_html.(
     List.map
       (fun (name, unikernel) ->
-        let name = Configuration.name_to_str name in
+        let name = Vmm_core.Name.to_string name in
         tr
           ~a:[ a_class [ "border-b border-gray-200" ] ]
           [
