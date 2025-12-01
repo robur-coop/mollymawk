@@ -120,6 +120,56 @@ module Email = struct
 
   let generate_verification_link uuid =
     "/auth/verify?token=" ^ Uuidm.to_string uuid
+
+  module Type_converter = struct
+    let to_colombe_domain (d : Emile.domain) =
+      match d with
+      | `Domain parts -> Ok (Colombe.Domain.Domain parts)
+      | `Addr (IPv4 ip) -> Ok (Colombe.Domain.IPv4 ip)
+      | `Addr (IPv6 ip) -> Ok (Colombe.Domain.IPv6 ip)
+      | `Addr (Ext (k, v)) -> Ok (Colombe.Domain.Extension (k, v))
+      | `Literal s -> (
+          match Ipaddr.of_string s with
+          | Ok (Ipaddr.V4 ip) -> Ok (Colombe.Domain.IPv4 ip)
+          | Ok (Ipaddr.V6 ip) -> Ok (Colombe.Domain.IPv6 ip)
+          | Error _ -> Ok (Colombe.Domain.Domain [ s ]))
+
+    let to_colombe_local (l : Emile.local) =
+      let rec all_atoms acc = function
+        | [] -> Some (List.rev acc)
+        | `Atom s :: rest -> all_atoms (s :: acc) rest
+        | `String _ :: _ -> None
+      in
+      match all_atoms [] l with
+      | Some atoms -> `Dot_string atoms
+      | None ->
+          let raw_string = Format.asprintf "%a" Emile.pp_local l in
+          `String raw_string
+
+    let to_colombe_path (mbox : Emile.mailbox) =
+      let primary_domain, rest_domains = mbox.domain in
+      match to_colombe_domain primary_domain with
+      | Error _ as e -> e
+      | Ok colombe_domain -> (
+          let rec convert_rest acc = function
+            | [] -> Ok (List.rev acc)
+            | d :: ds -> (
+                match to_colombe_domain d with
+                | Ok cd -> convert_rest (cd :: acc) ds
+                | Error _ -> Error (`Msg "Invalid domain in source route"))
+          in
+          match convert_rest [] rest_domains with
+          | Error _ as e -> e
+          | Ok colombe_rest ->
+              let colombe_local = to_colombe_local mbox.local in
+
+              Ok
+                {
+                  Colombe.Path.local = colombe_local;
+                  Colombe.Path.domain = colombe_domain;
+                  Colombe.Path.rest = colombe_rest;
+                })
+  end
 end
 
 module Status = struct

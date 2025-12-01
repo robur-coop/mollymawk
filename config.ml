@@ -24,6 +24,8 @@ let mollymawk =
       package ~min:"0.2.0" "ohex";
       package "http-mirage-client";
       package "multipart_form-lwt";
+      package "sendmail-mirage";
+      package "dns-client-mirage";
     ]
   in
   main ~packages "Unikernel.Main"
