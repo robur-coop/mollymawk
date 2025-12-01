@@ -2752,6 +2752,28 @@ struct
         Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
           reqd `Internal_server_error
 
+  let update_email_configuration store _user json_dict reqd =
+    match Utils.Email.t_of_json json_dict with
+    | Ok email_settings -> (
+        Store.store_email store (Some email_settings) >>= function
+        | Ok _ ->
+            Middleware.http_response reqd
+              ~data:(`String "Email settings updated successfully") `OK
+        | Error (`Msg err) ->
+            Middleware.http_response reqd
+              ~data:(`String (String.escaped err))
+              `Internal_server_error)
+    | Error (`Msg err) ->
+        Middleware.http_response
+          ~data:(`String (String.escaped err))
+          reqd `Bad_request
+    | Error (`Invalid (ms1, ms2)) ->
+        Middleware.http_response reqd
+          ~data:
+            (`String
+               (Fmt.str "Unexpected error parsing email settings: %s %s" ms1 ms2))
+          `Bad_request
+
   let request_handler stack albatross_instances js_file css_file imgs store
       http_client flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
