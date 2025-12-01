@@ -173,7 +173,7 @@ function openConfigForm(name, ip, port, certificate, p_key) {
 	}
 }
 
-async function saveConfig() {
+async function saveAlbatrossConfig() {
 	const nameInput = document.getElementById("albatross-name").value;
 	const ipInput = document.getElementById("server-ip").value;
 	const portInput = document.getElementById("server-port").value;
@@ -234,7 +234,7 @@ async function saveConfig() {
 	formButton.disabled = false;
 }
 
-async function deleteConfig(name) {
+async function deleteAlbatrossConfig(name) {
 	const formAlert = document.getElementById("form-alert");
 	const formButton = document.getElementById(`delete-config-btn-${name}`);
 	const molly_csrf = document.getElementById("molly-csrf").value;
@@ -242,7 +242,7 @@ async function deleteConfig(name) {
 	formButton.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
 	formButton.disabled = true;
 	try {
-		const response = await fetch("/api/admin/settings/delete", {
+		const response = await fetch("/api/admin/settings/albatross/delete", {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",

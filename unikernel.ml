@@ -955,13 +955,33 @@ struct
         Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
-  let settings store albatross_instances _ (user : User_model.user) reqd =
+  let albatross_settings store albatross_instances _ (user : User_model.user)
+      reqd =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Settings"
-             ~content:(Settings_page.settings_layout albatross_instances)
+          (Dashboard.dashboard_layout ~csrf user
+             ~page_title:"Albatross Settings"
+             ~content:
+               (Settings_page.settings_layout ~active_tab:Albatross
+                  (Albatross_config.albatross_config_layout albatross_instances))
+             ~icon:"/images/robur.png" ())
+          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+          `OK
+    | Error err ->
+        Middleware.http_response ~api_meth:false reqd ~title:err.title
+          ~data:err.data `Internal_server_error
+
+  let email_settings store _ (user : User_model.user) reqd =
+    let now = Mirage_ptime.now () in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        reply reqd ~content_type:"text/html"
+          (Dashboard.dashboard_layout ~csrf user ~page_title:"Email Settings"
+             ~content:
+               (Settings_page.settings_layout ~active_tab:Email
+                  (Email_config.email_config_layout (Store.email store)))
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
@@ -986,7 +1006,7 @@ struct
           ~data:(`String ("Re-initialization failed. See error logs: " ^ err))
           `Internal_server_error
 
-  let update_settings stack store albatross_instances
+  let update_albatross_configuration stack store albatross_instances
       (update_or_create : [ `Update | `Create ]) _user json_dict reqd =
     match Configuration.of_json_from_http json_dict (Mirage_ptime.now ()) with
     | Ok configuration_settings -> (
@@ -2951,24 +2971,34 @@ struct
                 | Error err ->
                     Middleware.http_response ~api_meth:false ~data:(`String err)
                       reqd `Bad_request)
-        | "/admin/settings" ->
+        | "/admin/settings/albatross" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true store reqd (settings store))
+                authenticate ~check_admin:true store reqd
+                  (albatross_settings store !albatross_instances))
+        | "/admin/settings/email" ->
+            check_meth `GET (fun () ->
+                authenticate ~check_admin:true store reqd (email_settings store))
         | "/api/admin/settings/albatross/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (update_albatross_configuration stack store albatross_instances `Update)))
+                     (update_albatross_configuration stack store
+                        albatross_instances `Update)))
         | "/api/admin/settings/albatross/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (update_albatross_configuration stack store albatross_instances `Create)))
-        | "/api/admin/settings/delete" ->
+                     (update_albatross_configuration stack store
+                        albatross_instances `Create)))
+        | "/api/admin/settings/albatross/delete" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
                      (delete_albatross_config store albatross_instances)))
+        | "/api/admin/settings/email/update" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_admin:true ~api_meth:true store reqd
+                  (extract_json_csrf_token (update_email_configuration store)))
         | "/api/admin/u/policy/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
