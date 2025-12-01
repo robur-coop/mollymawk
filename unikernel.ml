@@ -25,6 +25,101 @@ struct
   module Paf = Paf_mirage.Make (S.TCP)
   module Liveliness = Liveliness_checks.Make (S)
   module Albatross_state = Albatross.Make (S)
+  module HE = Happy_eyeballs_mirage.Make (S)
+  module Mailer = Sendmail_mirage.Make (S.TCP) (HE)
+  module Dns = Dns_client_mirage.Make (S) (HE)
+
+  let recipients emails =
+    List.fold_left
+      (fun acc email ->
+        match Emile.of_string email with
+        | Ok mailbox -> (
+            match Utils.Email.Type_converter.to_colombe_path mailbox with
+            | Ok path -> Colombe.Forward_path.Forward_path path :: acc
+            | Error (`Msg e) ->
+                Logs.err (fun m ->
+                    m "Type conversion failed for %s: %s" email e);
+                acc)
+        | Error (`Invalid (committed, rest)) ->
+            Logs.err (fun m ->
+                m "Failed to parse email syntax: '%s'. Error at: '%s'" committed
+                  rest);
+            acc)
+      [] emails
+
+  let send_mail stack email_config user_emails (msg : Utils.Email.message) =
+    let message_stream =
+      let msg =
+        Fmt.str
+          "\n\
+          \        From %s \r\n\
+          \ \n\
+          \        To: %s \r\n\
+          \ \n\
+          \        Subject: %s \r\n\n\
+          \        %s \r\n"
+          (Emile.to_string email_config.Utils.Email.sender_email)
+          (String.concat "," user_emails)
+          msg.subject msg.body
+      in
+      let sent = ref false in
+      fun () ->
+        if !sent then Lwt.return_none
+        else (
+          sent := true;
+          Lwt.return_some (msg, 0, String.length msg))
+    in
+    let dns = Dns.create (stack, HE.create stack) in
+    let getaddrinfo : HE.getaddrinfo =
+     fun record_type destination ->
+      match record_type with
+      | `A -> (
+          Dns.gethostbyname dns destination >>= function
+          | Ok addr ->
+              Logs.info (fun m ->
+                  m "Resolved `A record for %s to %a"
+                    (Domain_name.to_string destination)
+                    Ipaddr.V4.pp addr);
+              Ipaddr.Set.of_list [ Ipaddr.V4 addr ] |> Lwt.return_ok
+          | Error e -> Lwt.return_error e)
+      | `AAAA -> (
+          Dns.gethostbyname6 dns destination >>= function
+          | Ok addr ->
+              Logs.info (fun m ->
+                  m "Resolved `AAAA record for %s to %a"
+                    (Domain_name.to_string destination)
+                    Ipaddr.V6.pp addr);
+              Ipaddr.Set.of_list [ Ipaddr.V6 addr ] |> Lwt.return_ok
+          | Error e -> Lwt.return_error e)
+    in
+    let happy_eyeballs = HE.create ~getaddrinfo stack in
+    let ip = email_config.Utils.Email.server in
+    let addr =
+      match Ipaddr.to_v4 ip with Some addr -> addr | None -> Ipaddr.V4.any
+    in
+    let sender =
+      match
+        Utils.Email.Type_converter.to_colombe_path email_config.sender_email
+      with
+      | Ok path -> Some path
+      | Error _ -> None
+    in
+    let domain = Colombe.Domain.IPv4 addr in
+    Mailer.submit ~domain ~destination:(`Ipaddrs [ ip ]) ~port:email_config.port
+      happy_eyeballs sender (recipients user_emails) (fun () ->
+        message_stream ())
+    >>= fun email ->
+    match email with
+    | Ok () -> Lwt.return_ok ()
+    | Error e -> (
+        match e with
+        | `Msg e ->
+            Logs.info (fun m -> m "Email not sent-: %s" e);
+            Lwt.return_error e
+        | #Sendmail_with_starttls.error as e ->
+            let msg = Fmt.str "%a" Sendmail_with_starttls.pp_error e in
+            Logs.info (fun m -> m "Email not sent: %s" msg);
+            Lwt.return_error msg)
 
   let update_albatross_status (t : Albatross.t)
       (err :
