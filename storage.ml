@@ -1,6 +1,6 @@
 open Utils.Json
 
-let current_version = 8
+let current_version = 9
 (* version history:
    1 was initial (fields until email_verification_uuid)
    2 added active
@@ -10,24 +10,32 @@ let current_version = 8
    6 tokens has 3 new fields: name, last_access and usage_count
    7 added unikernel_updates to keep track of when unikernels are updated
    8 we now store a list of configurations, and each has a name field. also, no more version field in configuration
+   9 email configuration is now stored
 *)
 
-let t_to_json users configurations =
+let t_to_json users configurations email =
   `Assoc
     [
       ("version", `Int current_version);
       ("users", `List (List.map User_model.user_to_json users));
       ("configuration", Configuration.to_json configurations);
+      ("email", Utils.Email.to_json email);
     ]
 
 let t_of_json json =
   match json with
   | `Assoc xs -> (
       let ( let* ) = Result.bind in
-      match (get "version" xs, get "users" xs, get "configuration" xs) with
-      | Some (`Int v), Some (`List users), Some configuration ->
+      match
+        ( get "version" xs,
+          get "users" xs,
+          get "configuration" xs,
+          get "email" xs )
+      with
+      | Some (`Int v), Some (`List users), Some configuration, email ->
           let* () =
             if v = current_version then Ok ()
+            else if v = 8 then Ok ()
             else if v = 7 then Ok ()
             else if v = 6 then Ok ()
             else if v = 5 then Ok ()
@@ -62,7 +70,17 @@ let t_of_json json =
             if v < 8 then Configuration.of_json_v1 configuration
             else Configuration.of_json configuration
           in
-          Ok (users, configurations)
+          let* email =
+            match email with
+            | None -> Ok None
+            | Some e -> (
+                if v < 9 then Ok None
+                else
+                  match Utils.Email.of_json e with
+                  | Ok email -> Ok (Some email)
+                  | Error _msg -> Ok None)
+          in
+          Ok (users, configurations, email)
       | _ -> Error (`Msg "invalid data: no version and users field"))
   | _ -> Error (`Msg "invalid data: not an assoc")
 
@@ -76,11 +94,12 @@ module Make (BLOCK : Mirage_block.S) = struct
     disk : Stored_data.t;
     mutable users : User_model.user list;
     mutable configurations : Configuration.t list;
+    mutable email : Utils.Email.t option;
   }
 
   let write_data t =
     Stored_data.write t.disk
-      (Yojson.Basic.to_string (t_to_json t.users t.configurations))
+      (Yojson.Basic.to_string (t_to_json t.users t.configurations t.email))
 
   let read_data disk =
     Stored_data.read disk >|= function
@@ -89,7 +108,7 @@ module Make (BLOCK : Mirage_block.S) = struct
         let* json = Utils.Json.from_string s in
         let* t = t_of_json json in
         Ok t
-    | Ok None -> Ok ([], [])
+    | Ok None -> Ok ([], [], None)
     | Error e ->
         error_msgf "error while reading storage: %a" Stored_data.pp_error e
 
@@ -97,9 +116,11 @@ module Make (BLOCK : Mirage_block.S) = struct
     Stored_data.connect block >>= fun disk ->
     read_data disk >|= function
     | Error _ as e -> e
-    | Ok (users, configurations) -> Ok { disk; users; configurations }
+    | Ok (users, configurations, email) ->
+        Ok { disk; users; configurations; email }
 
   let configurations { configurations; _ } = configurations
+  let email { email; _ } = email
 
   let store_configurations t configurations =
     let t' = { t with configurations } in
@@ -107,6 +128,16 @@ module Make (BLOCK : Mirage_block.S) = struct
     | Ok () ->
         t.configurations <- configurations;
         Ok t.configurations
+    | Error we ->
+        error_msgf "error while writing storage: %a" Stored_data.pp_write_error
+          we
+
+  let store_email t email =
+    let t' = { t with email } in
+    write_data t' >|= function
+    | Ok () ->
+        t.email <- email;
+        Ok t.email
     | Error we ->
         error_msgf "error while writing storage: %a" Stored_data.pp_write_error
           we
