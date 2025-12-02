@@ -559,6 +559,28 @@ async function toggleUserAdminStatus(uuid) {
 	await toggleUserStatus(uuid, "/api/admin/user/admin/toggle");
 }
 
+async function updateUserName(uuid) {
+	try {
+		const molly_csrf = document.getElementById("molly-csrf").value;
+		const name = document.getElementById("user-name").value;
+		const response = await fetch("/api/admin/user/name/update", {
+			method: 'POST',
+			body: JSON.stringify({ uuid, name, molly_csrf }),
+			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+		});
+
+		const data = await response.json();
+		if (response.status === 200) {
+			postAlert("bg-primary-300", data.data);
+			setTimeout(() => window.location.reload(), 1000);
+		} else {
+			postAlert("bg-secondary-300", data.data);
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+	}
+}
+
 
 function multiselect(selected, options) {
 	return {

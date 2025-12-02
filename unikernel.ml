@@ -725,6 +725,43 @@ struct
         Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
           ~with_error:true reqd ~msg:s ()
 
+  let update_user_name store _user json_dict reqd =
+    match Utils.Json.(get "uuid" json_dict, get "name" json_dict) with
+    | Some (`String uuid), Some (`String name) -> (
+        match Store.find_by_uuid store uuid with
+        | None ->
+            Logs.warn (fun m -> m "update-user-name : Account not found");
+            Middleware.http_response reqd ~data:(`String "Account not found")
+              `Not_found
+        | Some user -> (
+            match Configuration.name_of_str name with
+            | Ok name -> (
+                let updated_user =
+                  User_model.update_user user ~name
+                    ~updated_at:(Mirage_ptime.now ()) ()
+                in
+                Store.update_user store updated_user >>= function
+                | Ok () ->
+                    Middleware.http_response reqd
+                      ~data:(`String "Updated user successfully") `OK
+                | Error (`Msg msg) ->
+                    Logs.warn (fun m ->
+                        m "update-user-name : Storage error with %s" msg);
+                    Middleware.http_response reqd
+                      ~data:(`String (String.escaped msg))
+                      `Internal_server_error)
+            | Error (`Msg err) ->
+                Logs.warn (fun m ->
+                    m "update-user-name : Invalid username %s" err);
+                Middleware.http_response reqd
+                  ~data:(`String (String.escaped err))
+                  `Bad_request))
+    | _ ->
+        Logs.warn (fun m -> m "update-user-name: Failed to parse JSON");
+        Middleware.http_response reqd
+          ~data:(`String "Couldn't find a UUID or Name in the JSON.")
+          `Bad_request
+
   let toggle_account_attribute json_dict store reqd ~key update_fn error_on_last
       ~error_message =
     match Utils.Json.get "uuid" json_dict with
@@ -2909,6 +2946,10 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token (toggle_admin_activation store)))
+        | "/api/admin/user/name/update" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_admin:true ~api_meth:true store reqd
+                  (extract_json_csrf_token (update_user_name store)))
         | "/api/unikernels" ->
             check_meth `GET (fun () ->
                 authenticate ~api_meth:true ~check_token:true store reqd

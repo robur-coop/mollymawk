@@ -225,7 +225,46 @@ let user_single_layout ~empty_policy (user : User_model.user) unikernels
                     i ~a:[ a_class [ "fa-solid fa-circle-user text-7xl" ] ] [];
                     p
                       ~a:[ a_class [ "text-3xl font-semibold uppercase" ] ]
-                      [ txt user_name ];
+                      [
+                        txt user_name;
+                        button
+                          ~a:
+                            [
+                              a_class [ "mx-1" ];
+                              a_onclick
+                                "const form = \
+                                 document.getElementById('edit-user-name-form').classList.toggle('hidden',false)";
+                            ]
+                          [
+                            i
+                              ~a:
+                                [
+                                  a_class
+                                    [ "fa-solid fa-pen-to-square text-xl" ];
+                                ]
+                              [ txt "Edit" ];
+                          ];
+                      ];
+                  ];
+                div
+                  ~a:[ a_class [ "my-4 hidden" ]; a_id "edit-user-name-form" ]
+                  [
+                    div
+                      [
+                        label [ txt "Name" ];
+                        input
+                          ~a:
+                            [
+                              a_id "user-name";
+                              a_class [ "rounded border py-2 px-4 w-full" ];
+                              a_value user_name;
+                            ]
+                          ();
+                      ];
+                    Utils.button_component ~extra_css:"my-4"
+                      ~attribs:
+                        [ a_onclick ("updateUserName('" ^ user.uuid ^ "')") ]
+                      ~content:(txt "Update Name") ~btn_type:`Primary_full ();
                   ];
                 div
                   ~a:[ a_class [ "grid grid-cols-2 my-4" ] ]
