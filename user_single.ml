@@ -270,6 +270,10 @@ let user_single_layout ~empty_policy (user : User_model.user) unikernels
                     div
                       ~a:[ a_class [ "flex justify-center space-x-4 my-4" ] ]
                       [
+                        Utils.button_component
+                          ~attribs:
+                            [ a_onclick ("deleteUser('" ^ user.uuid ^ "')") ]
+                          ~content:(txt "Delete User") ~btn_type:`Danger_full ();
                         (if user.active then
                            Utils.button_component
                              ~attribs:

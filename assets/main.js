@@ -551,6 +551,27 @@ async function toggleUserStatus(uuid, endpoint) {
 	}
 }
 
+async function deleteUser(uuid) {
+	try {
+		const molly_csrf = document.getElementById("molly-csrf").value;
+		const response = await fetch('/api/admin/user/account/delete', {
+			method: 'POST',
+			body: JSON.stringify({ uuid, molly_csrf }),
+			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
+		});
+
+		const data = await response.json();
+		if (response.status === 200) {
+			postAlert("bg-primary-300", data.data);
+			setTimeout(() => window.location.assign("/admin/users"), 1000);
+		} else {
+			postAlert("bg-secondary-300", data.data);
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+	}
+}
+
 async function toggleUserActiveStatus(uuid) {
 	await toggleUserStatus(uuid, "/api/admin/user/activate/toggle");
 }
