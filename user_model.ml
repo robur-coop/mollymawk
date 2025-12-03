@@ -410,7 +410,11 @@ let user_v1_of_json = function
                      ("invalid json data for email verification UUID, expected \
                        a string: " ^ Yojson.Basic.to_string js))
           in
-          let* name = Configuration.name_of_str name in
+          let name =
+            match Configuration.name_of_str name with
+            | Ok name -> name
+            | _ -> Result.get_ok (Vmm_core.Name.Label.of_string "invalid_name")
+          in
           Ok
             {
               name;
@@ -509,7 +513,11 @@ let user_v2_of_json = function
                      ("invalid json data for email verification UUID, expected \
                        a string: " ^ Yojson.Basic.to_string js))
           in
-          let* name = Configuration.name_of_str name in
+          let name =
+            match Configuration.name_of_str name with
+            | Ok name -> name
+            | _ -> Result.get_ok (Vmm_core.Name.Label.of_string "invalid_name")
+          in
           Ok
             {
               name;
@@ -610,7 +618,11 @@ let user_v3_of_json cookie_fn = function
                      ("invalid json data for email verification UUID, expected \
                        a string: " ^ Yojson.Basic.to_string js))
           in
-          let* name = Configuration.name_of_str name in
+          let name =
+            match Configuration.name_of_str name with
+            | Ok name -> name
+            | _ -> Result.get_ok (Vmm_core.Name.Label.of_string "invalid_name")
+          in
           Ok
             {
               name;
@@ -711,7 +723,11 @@ let user_v4_of_json cookie_fn = function
                      ("invalid json data for email verification UUID, expected \
                        a string: " ^ Yojson.Basic.to_string js))
           in
-          let* name = Configuration.name_of_str name in
+          let name =
+            match Configuration.name_of_str name with
+            | Ok name -> name
+            | _ -> Result.get_ok (Vmm_core.Name.Label.of_string "invalid_name")
+          in
           Ok
             {
               name;
@@ -822,7 +838,11 @@ let user_of_json cookie_fn = function
                 Ok (unikernel_update :: acc))
               (Ok []) unikernel_updates
           in
-          let* name = Configuration.name_of_str name in
+          let name =
+            match Configuration.name_of_str name with
+            | Ok name -> name
+            | _ -> Result.get_ok (Vmm_core.Name.Label.of_string "invalid_name")
+          in
           Ok
             {
               name;
