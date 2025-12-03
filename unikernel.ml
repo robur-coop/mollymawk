@@ -771,6 +771,31 @@ struct
       (fun user -> user.super_user && Store.count_superusers store <= 1)
       ~error_message:(`String "Cannot remove last administrator")
 
+  let delete_account store _user json_dict reqd =
+    match Utils.Json.get "uuid" json_dict with
+    | Some (`String uuid) -> (
+        match Store.find_by_uuid store uuid with
+        | None ->
+            Logs.warn (fun m -> m "delete-account : Account not found");
+            Middleware.http_response reqd ~data:(`String "Account not found")
+              `Not_found
+        | Some user -> (
+            Store.delete_user store user >>= function
+            | Ok () ->
+                Middleware.http_response reqd
+                  ~data:(`String "Deleted user successfully") `OK
+            | Error (`Msg msg) ->
+                Logs.warn (fun m -> m "delete-user : Storage error with %s" msg);
+                Middleware.http_response reqd
+                  ~data:(`String (String.escaped msg))
+                  `Internal_server_error))
+    | _ ->
+        Logs.warn (fun m ->
+            m "delete-user: Failed to parse JSON - no UUID found");
+        Middleware.http_response reqd
+          ~data:(`String "delete-user: Couldn't find a UUID in the JSON.")
+          `Bad_request
+
   let dashboard stack albatross_instances store _ (user : User_model.user) reqd
       =
     let now = Mirage_ptime.now () in
@@ -2909,6 +2934,10 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token (toggle_admin_activation store)))
+        | "/api/admin/user/account/delete" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_admin:true ~api_meth:true store reqd
+                  (extract_json_csrf_token (delete_account store)))
         | "/api/unikernels" ->
             check_meth `GET (fun () ->
                 authenticate ~api_meth:true ~check_token:true store reqd
