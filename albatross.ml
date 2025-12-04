@@ -275,7 +275,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
       let ext =
         Option.map Vmm_asn.to_cert_extension cmd
         |> Option.fold ~none:Extension.empty ~some:(fun p ->
-               Extension.singleton (Unsupported Vmm_asn.oid) (false, p))
+            Extension.singleton (Unsupported Vmm_asn.oid) (false, p))
       in
       let ku, bc =
         if is_ca then
@@ -561,8 +561,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                       | Ok () -> send_data push)
                 in
                 (match push with
-                | None -> Lwt.return (Ok ())
-                | Some f -> send_data f)
+                  | None -> Lwt.return (Ok ())
+                  | Some f -> send_data f)
                 >>= function
                 | Ok () -> (
                     TLS.read tls_flow >>= fun r ->

@@ -179,15 +179,15 @@ module Make (S : Tcpip.Stack.V4V6) = struct
           match delay_intervals with
           | [] ->
               (match failed_checks with
-              | [] -> Ok ()
-              | _ ->
-                  let err_msg =
-                    "Liveliness checks failed with error(s): "
-                    ^ String.concat ", " (List.rev failed_checks)
-                  in
-                  Logs.info (fun m ->
-                      m "liveliness-checks for %s: %s" unikernel_name err_msg);
-                  Error (`Msg err_msg))
+                | [] -> Ok ()
+                | _ ->
+                    let err_msg =
+                      "Liveliness checks failed with error(s): "
+                      ^ String.concat ", " (List.rev failed_checks)
+                    in
+                    Logs.info (fun m ->
+                        m "liveliness-checks for %s: %s" unikernel_name err_msg);
+                    Error (`Msg err_msg))
               |> Lwt.return
           | delay :: rest -> (
               Mirage_sleep.ns (Duration.of_sec delay) >>= fun () ->
