@@ -34,7 +34,7 @@ struct
       (fun acc email ->
         match Emile.of_string email with
         | Ok mailbox -> (
-            match Utils.Email.Type_converter.to_colombe_path mailbox with
+            match Colombe_emile.to_path mailbox with
             | Ok path -> Colombe.Forward_path.Forward_path path :: acc
             | Error (`Msg e) ->
                 Logs.err (fun m ->
@@ -98,9 +98,7 @@ struct
       match Ipaddr.to_v4 ip with Some addr -> addr | None -> Ipaddr.V4.any
     in
     let sender =
-      match
-        Utils.Email.Type_converter.to_colombe_path email_config.sender_email
-      with
+      match Colombe_emile.to_path email_config.sender_email with
       | Ok path -> Some path
       | Error _ -> None
     in
