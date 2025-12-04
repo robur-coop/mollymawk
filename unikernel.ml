@@ -13,7 +13,7 @@ module K = struct
 
   let port =
     let doc = Arg.info ~doc:"HTTP listen port." [ "port" ] in
-    Mirage_runtime.register_arg Arg.(value & opt int 80 doc)
+    Mirage_runtime.register_arg Arg.(value & opt int 8080 doc)
 end
 
 module Main
@@ -3032,13 +3032,12 @@ struct
         let albatross_instances = ref albatross_instances in
         let port = K.port () in
         Logs.info (fun m ->
-            m "Initialise an HTTP server (no HTTPS) on http://127.0.0.1:%u/"
-              port);
+            m "Initialise an HTTP server (no HTTPS) on port %u" port);
         let request_handler =
           request_handler stack albatross_instances js_file css_file imgs store
             http_client
         in
-        Paf.init ~port:8080 (S.tcp stack) >>= fun service ->
+        Paf.init ~port (S.tcp stack) >>= fun service ->
         let http = Paf.http_service ~error_handler request_handler in
         let (`Initialized th) = Paf.serve http service in
         th
