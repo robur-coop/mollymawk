@@ -637,7 +637,7 @@ async function updatePolicy(instance_name) {
 			formAlert.textContent = "Successfully updated";
 			postAlert("bg-primary-300", "Policy updated successfully");
 			setTimeout(function () {
-				window.history.back();
+				window.location.href = "/admin/user/policy?uuid=" + user_id;
 			}, 2000);
 		} else {
 			formAlert.classList.remove("hidden", "text-primary-500");
