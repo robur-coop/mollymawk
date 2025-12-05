@@ -15,30 +15,6 @@ document.addEventListener('DOMContentLoaded', function () {
 		}, 400);
 	}
 
-	if (window.location.pathname.startsWith("/admin/user/")) {
-		const tabs = document.querySelectorAll(".tab-link");
-		const tabPanes = document.querySelectorAll(".tab-pane");
-
-		tabs.forEach((tab) => {
-			tab.addEventListener("click", function (event) {
-				event.preventDefault();
-
-				// Remove active class from all tabs
-				tabs.forEach((t) => t.classList.remove("active"));
-
-				// Hide all tab content
-				tabPanes.forEach((pane) => pane.classList.add("hidden"));
-
-				// Add active class to the clicked tab
-				tab.classList.add("active");
-
-				// Show the corresponding tab content
-				const target = document.querySelector(tab.getAttribute("href"));
-				target.classList.remove("hidden");
-			});
-		});
-	}
-
 	if (window.location.pathname.startsWith("/unikernel/update/")) {
 		const targetElements = document.querySelectorAll(".code-diff");
 		targetElements.forEach((targetElement) => {
