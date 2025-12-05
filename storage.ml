@@ -86,10 +86,7 @@ module Make (BLOCK : Mirage_block.S) = struct
     Stored_data.read disk >|= function
     | Ok (Some s) ->
         let ( let* ) = Result.bind in
-        let* json =
-          try Ok (Yojson.Basic.from_string s)
-          with Yojson.Json_error msg -> Error (`Msg ("Invalid json: " ^ msg))
-        in
+        let* json = Utils.Json.from_string s in
         let* t = t_of_json json in
         Ok t
     | Ok None -> Ok ([], [])

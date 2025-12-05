@@ -224,9 +224,7 @@ let policy_of_json json_dict =
 
 let config_of_json str =
   let ( let* ) = Result.bind in
-  let* json =
-    try Ok (from_string str) with Yojson.Json_error s -> Error (`Msg s)
-  in
+  let* json = from_string str in
   let* dict =
     match json with `Assoc r -> Ok r | _ -> Error (`Msg "not a json assoc")
   in
