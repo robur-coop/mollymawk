@@ -2036,7 +2036,7 @@ struct
     let response = Middleware.http_event_source_response reqd `OK in
     let f (ts, data) =
       let json = Albatross_json.console_data_to_json (ts, data) in
-      response (Utils.Json.to_string json)
+      response (Yojson.Basic.to_string json)
     in
     Albatross_state.query_console stack albatross ~domain:user.name
       ~name:unikernel_name f
