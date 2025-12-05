@@ -380,6 +380,8 @@ struct
         [
           ("content-length", string_of_int (String.length data));
           ("content-type", content_type);
+          ("x-frame-options", "DENY");
+          ("content-security-policy", "frame-ancestors 'none'");
         ]
     in
     let headers = H1.Headers.add_list h header_list in

@@ -46,6 +46,8 @@ let http_response ?title ~data ?(api_meth = true) ?(header_list = []) reqd
         ([
            ("content-length", string_of_int (String.length data));
            ("content-type", if api_meth then "application/json" else "text/html");
+           ("x-frame-options", "DENY");
+           ("content-security-policy", "frame-ancestors 'none'");
          ]
         @ header_list))
   in
@@ -83,8 +85,12 @@ let redirect_to_instance_selector callback_link reqd ?(msg = "") () =
     reqd ~msg ()
 
 let http_event_source_response
-    ?(header_list = [ ("Content-Type", "text/event-stream") ]) reqd http_status
-    =
+    ?(header_list =
+      [
+        ("Content-Type", "text/event-stream");
+        ("x-frame-options", "DENY");
+        ("content-security-policy", "frame-ancestors 'none'");
+      ]) reqd http_status =
   let headers = H1.Headers.(of_list header_list) in
   let response = H1.Response.create ~headers http_status in
   let writer = H1.Reqd.respond_with_streaming reqd response in
