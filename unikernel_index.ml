@@ -138,7 +138,7 @@ let unikernel_index_layout unikernels_by_albatross_instance current_time =
                   ~a:[ a_class [ "font-bold text-gray-700" ] ]
                   [
                     txt
-                      (Fmt.str "Showing %d unikernels from %d online instances"
+                      (Fmt.str "Showing %u unikernels from %u online instances"
                          total_unikernels_count online_instances_count);
                   ];
               ];
@@ -162,7 +162,7 @@ let unikernel_index_layout unikernels_by_albatross_instance current_time =
                          option
                            ~a:[ a_value (Configuration.name_to_str name) ]
                            (txt
-                              (Fmt.str "%s (%d unikernels)"
+                              (Fmt.str "%s (%u unikernels)"
                                  (Configuration.name_to_str name)
                                  (List.length unikernels))))
                        unikernels_by_albatross_instance);
