@@ -16,5 +16,5 @@ let error_layout (error : Utils.Status.t) =
           ];
         p
           ~a:[ a_class [ "text-xl my-6" ] ]
-          [ txt (Yojson.Basic.to_string error.data) ];
+          [ txt (Utils.Json.to_string error.data) ];
       ])

@@ -77,7 +77,7 @@ let unikernel_update_of_json = function
           Some (`String timestamp_str) ) ->
           let* timestamp = Utils.TimeHelper.ptime_of_string timestamp_str in
           let* config =
-            Albatross_json.config_of_json (Yojson.Basic.to_string config)
+            Albatross_json.config_of_json (Utils.Json.to_string config)
           in
           Ok { name; job; uuid; config; timestamp }
       | _ ->
@@ -85,12 +85,12 @@ let unikernel_update_of_json = function
             (`Msg
                ("Invalid JSON for unikernel_update: requires name, job, uuid, \
                  config and timestamp but got: "
-               ^ Yojson.Basic.to_string (`Assoc xs))))
+               ^ Utils.Json.to_string (`Assoc xs))))
   | js ->
       Error
         (`Msg
            ("Invalid JSON for unikernel_update: expected a dictionary, got: "
-          ^ Yojson.Basic.to_string js))
+          ^ Utils.Json.to_string js))
 
 let cookie_to_json (cookie : cookie) =
   `Assoc
@@ -148,13 +148,13 @@ let cookie_v1_of_json = function
       | _ ->
           Error
             (`Msg
-               ("invalid json for cookie: " ^ Yojson.Basic.to_string (`Assoc xs)))
+               ("invalid json for cookie: " ^ Utils.Json.to_string (`Assoc xs)))
       )
   | js ->
       Error
         (`Msg
            ("invalid json for cookie, expected a dict: "
-          ^ Yojson.Basic.to_string js))
+          ^ Utils.Json.to_string js))
 
 let cookie_of_json = function
   | `Assoc xs -> (
@@ -208,13 +208,13 @@ let cookie_of_json = function
       | _ ->
           Error
             (`Msg
-               ("invalid json for cookie: " ^ Yojson.Basic.to_string (`Assoc xs)))
+               ("invalid json for cookie: " ^ Utils.Json.to_string (`Assoc xs)))
       )
   | js ->
       Error
         (`Msg
            ("invalid json for cookie, expected a dict: "
-          ^ Yojson.Basic.to_string js))
+          ^ Utils.Json.to_string js))
 
 let token_to_json t =
   `Assoc
@@ -261,12 +261,12 @@ let token_v1_of_json = function
             (`Msg
                ("invalid json for token: requires token_type, value, and \
                  expires_in: "
-               ^ Yojson.Basic.to_string (`Assoc xs))))
+               ^ Utils.Json.to_string (`Assoc xs))))
   | js ->
       Error
         (`Msg
            ("invalid json for token: expected a dict: "
-          ^ Yojson.Basic.to_string js))
+          ^ Utils.Json.to_string js))
 
 let token_of_json = function
   | `Assoc xs -> (
@@ -312,12 +312,12 @@ let token_of_json = function
             (`Msg
                ("invalid json for token: requires token_type, value, and \
                  expires_in: "
-               ^ Yojson.Basic.to_string (`Assoc xs))))
+               ^ Utils.Json.to_string (`Assoc xs))))
   | js ->
       Error
         (`Msg
            ("invalid json for token: expected a dict: "
-          ^ Yojson.Basic.to_string js))
+          ^ Utils.Json.to_string js))
 
 let user_to_json (u : user) =
   `Assoc
@@ -408,7 +408,7 @@ let user_v1_of_json = function
                 Error
                   (`Msg
                      ("invalid json data for email verification UUID, expected \
-                       a string: " ^ Yojson.Basic.to_string js))
+                       a string: " ^ Utils.Json.to_string js))
           in
           let* name = Configuration.name_of_str name in
           Ok
@@ -429,14 +429,12 @@ let user_v1_of_json = function
             }
       | _ ->
           Error
-            (`Msg
-               ("invalid json for user: " ^ Yojson.Basic.to_string (`Assoc xs)))
+            (`Msg ("invalid json for user: " ^ Utils.Json.to_string (`Assoc xs)))
       )
   | js ->
       Error
         (`Msg
-           ("invalid json for user, expected a dict: "
-          ^ Yojson.Basic.to_string js))
+           ("invalid json for user, expected a dict: " ^ Utils.Json.to_string js))
 
 let user_v2_of_json = function
   | `Assoc xs -> (
@@ -507,7 +505,7 @@ let user_v2_of_json = function
                 Error
                   (`Msg
                      ("invalid json data for email verification UUID, expected \
-                       a string: " ^ Yojson.Basic.to_string js))
+                       a string: " ^ Utils.Json.to_string js))
           in
           let* name = Configuration.name_of_str name in
           Ok
@@ -528,14 +526,12 @@ let user_v2_of_json = function
             }
       | _ ->
           Error
-            (`Msg
-               ("invalid json for user: " ^ Yojson.Basic.to_string (`Assoc xs)))
+            (`Msg ("invalid json for user: " ^ Utils.Json.to_string (`Assoc xs)))
       )
   | js ->
       Error
         (`Msg
-           ("invalid json for user, expected a dict: "
-          ^ Yojson.Basic.to_string js))
+           ("invalid json for user, expected a dict: " ^ Utils.Json.to_string js))
 
 let user_v3_of_json cookie_fn = function
   | `Assoc xs -> (
@@ -608,7 +604,7 @@ let user_v3_of_json cookie_fn = function
                 Error
                   (`Msg
                      ("invalid json data for email verification UUID, expected \
-                       a string: " ^ Yojson.Basic.to_string js))
+                       a string: " ^ Utils.Json.to_string js))
           in
           let* name = Configuration.name_of_str name in
           Ok
@@ -629,14 +625,12 @@ let user_v3_of_json cookie_fn = function
             }
       | _ ->
           Error
-            (`Msg
-               ("invalid json for user: " ^ Yojson.Basic.to_string (`Assoc xs)))
+            (`Msg ("invalid json for user: " ^ Utils.Json.to_string (`Assoc xs)))
       )
   | js ->
       Error
         (`Msg
-           ("invalid json for user, expected a dict: "
-          ^ Yojson.Basic.to_string js))
+           ("invalid json for user, expected a dict: " ^ Utils.Json.to_string js))
 
 let user_v4_of_json cookie_fn = function
   | `Assoc xs -> (
@@ -709,7 +703,7 @@ let user_v4_of_json cookie_fn = function
                 Error
                   (`Msg
                      ("invalid json data for email verification UUID, expected \
-                       a string: " ^ Yojson.Basic.to_string js))
+                       a string: " ^ Utils.Json.to_string js))
           in
           let* name = Configuration.name_of_str name in
           Ok
@@ -730,14 +724,12 @@ let user_v4_of_json cookie_fn = function
             }
       | _ ->
           Error
-            (`Msg
-               ("invalid json for user: " ^ Yojson.Basic.to_string (`Assoc xs)))
+            (`Msg ("invalid json for user: " ^ Utils.Json.to_string (`Assoc xs)))
       )
   | js ->
       Error
         (`Msg
-           ("invalid json for user, expected a dict: "
-          ^ Yojson.Basic.to_string js))
+           ("invalid json for user, expected a dict: " ^ Utils.Json.to_string js))
 
 let user_of_json cookie_fn = function
   | `Assoc xs -> (
@@ -812,7 +804,7 @@ let user_of_json cookie_fn = function
                 Error
                   (`Msg
                      ("invalid json data for email verification UUID, expected \
-                       a string: " ^ Yojson.Basic.to_string js))
+                       a string: " ^ Utils.Json.to_string js))
           in
           let* unikernel_updates =
             List.fold_left
@@ -841,14 +833,12 @@ let user_of_json cookie_fn = function
             }
       | _ ->
           Error
-            (`Msg
-               ("invalid json for user: " ^ Yojson.Basic.to_string (`Assoc xs)))
+            (`Msg ("invalid json for user: " ^ Utils.Json.to_string (`Assoc xs)))
       )
   | js ->
       Error
         (`Msg
-           ("invalid json for user, expected a dict: "
-          ^ Yojson.Basic.to_string js))
+           ("invalid json for user, expected a dict: " ^ Utils.Json.to_string js))
 
 let hash_password ~password ~uuid =
   let hash =

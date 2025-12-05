@@ -34,7 +34,7 @@ let http_response ?title ~data ?(api_meth = true) ?(header_list = []) reqd
   let status = { Utils.Status.code; title; data; success } in
   let data =
     if api_meth then Utils.Status.to_json status
-    else if success then Yojson.Basic.to_string data
+    else if success then Utils.Json.to_string data
     else
       Guest_layout.guest_layout ~page_title:title
         ~content:(Error_page.error_layout status)

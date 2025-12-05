@@ -6,13 +6,17 @@ module Json = struct
   let get key assoc =
     Option.map snd (List.find_opt (fun (k, _) -> String.equal k key) assoc)
 
+  let to_string t = Yojson.Basic.to_string t |> String.escaped
+
+  let from_string data =
+    try Ok (Yojson.Basic.from_string data)
+    with Yojson.Json_error s -> Error (`Msg (String.escaped s))
+
   let string_or_none field = function
     | None | Some `Null -> Ok None
     | Some (`String v) -> Ok (Some v)
     | Some json ->
-        Error
-          (`Msg
-             ("invalid json for " ^ field ^ ": " ^ Yojson.Basic.to_string json))
+        Error (`Msg ("invalid json for " ^ field ^ ": " ^ to_string json))
 end
 
 module TimeHelper = struct
