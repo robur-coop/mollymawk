@@ -77,7 +77,7 @@ let unikernel_update_of_json = function
           Some (`String timestamp_str) ) ->
           let* timestamp = Utils.TimeHelper.ptime_of_string timestamp_str in
           let* config =
-            Albatross_json.config_of_json (Utils.Json.to_string config)
+            Albatross_json.config_of_json (Yojson.Basic.to_string config)
           in
           Ok { name; job; uuid; config; timestamp }
       | _ ->
