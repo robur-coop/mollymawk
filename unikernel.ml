@@ -2010,27 +2010,44 @@ struct
         Albatross.set_online albatross;
         Lwt.return_unit
 
-  let view_user stack albatross_instances store uuid _ (user : User_model.user)
+  let view_user stack albatross_instances store uuid
+      (page : [> `Profile | `Unikernels | `Policy ]) _ (user : User_model.user)
       reqd =
     match Store.find_by_uuid store uuid with
     | Some u -> (
         user_unikernels stack albatross_instances u.name >>= fun unikernels ->
         let now = Mirage_ptime.now () in
         generate_csrf_token store user now reqd >>= function
-        | Ok csrf ->
-            reply reqd ~content_type:"text/html"
-              (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:
-                   (String.capitalize_ascii (Configuration.name_to_str u.name))
-                 ~content:
-                   (User_single.user_single_layout u unikernels
-                      ~empty_policy:Albatross_state.empty_policy
-                      (Albatross_state.all_policies ~domain:u.name
-                         albatross_instances)
-                      now)
-                 ~icon:"/images/robur.png" ())
-              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-              `OK
+        | Ok csrf -> (
+            let reply content =
+              reply reqd ~content_type:"text/html"
+                (Dashboard.dashboard_layout ~csrf user
+                   ~page_title:
+                     (String.capitalize_ascii
+                        (Configuration.name_to_str u.name))
+                   ~content ~icon:"/images/robur.png" ())
+                ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                `OK
+            in
+            match page with
+            | `Profile ->
+                reply
+                  (User_single.user_single_layout ~active_tab:Profile
+                     (User_single.user_profile u)
+                     u.uuid)
+            | `Unikernels ->
+                reply
+                  (User_single.user_single_layout ~active_tab:Unikernels
+                     (Unikernel_index.unikernel_index_layout unikernels now)
+                     u.uuid)
+            | `Policy ->
+                reply
+                  (User_single.user_single_layout ~active_tab:Policy
+                     (User_single.user_policy u
+                        ~empty_policy:Albatross_state.empty_policy
+                        (Albatross_state.all_policies ~domain:u.name
+                           albatross_instances))
+                     u.uuid))
         | Error err ->
             Middleware.http_response ~api_meth:false ~title:err.title
               ~data:err.data reqd `Internal_server_error)
@@ -2873,12 +2890,31 @@ struct
                 in
                 authenticate store reqd
                   (choose_instance store !albatross_instances callback_link))
-        | "/admin/user" ->
+        | "/admin/user/profile" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "uuid" with
                 | Ok uuid ->
                     authenticate ~check_admin:true store reqd
-                      (view_user stack !albatross_instances store uuid)
+                      (view_user stack !albatross_instances store uuid `Profile)
+                | Error err ->
+                    Middleware.http_response ~api_meth:false ~data:(`String err)
+                      reqd `Bad_request)
+        | "/admin/user/unikernels" ->
+            check_meth `GET (fun () ->
+                match get_query_parameter "uuid" with
+                | Ok uuid ->
+                    authenticate ~check_admin:true store reqd
+                      (view_user stack !albatross_instances store uuid
+                         `Unikernels)
+                | Error err ->
+                    Middleware.http_response ~api_meth:false ~data:(`String err)
+                      reqd `Bad_request)
+        | "/admin/user/policy" ->
+            check_meth `GET (fun () ->
+                match get_query_parameter "uuid" with
+                | Ok uuid ->
+                    authenticate ~check_admin:true store reqd
+                      (view_user stack !albatross_instances store uuid `Policy)
                 | Error err ->
                     Middleware.http_response ~api_meth:false ~data:(`String err)
                       reqd `Bad_request)
