@@ -171,6 +171,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
 
   let interval_liveliness_checks ~unikernel_name ~http_liveliness_address
       ~dns_liveliness stack http_client =
+    let unikernel_name = Configuration.name_to_str unikernel_name in
     match
       prepare_liveliness_parameters ~http_liveliness_address ~dns_liveliness
     with

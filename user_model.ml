@@ -22,8 +22,8 @@ type cookie = {
 }
 
 type unikernel_update = {
-  name : string;
-  job : string;
+  name : Vmm_core.Name.Label.t;
+  job : Vmm_core.Name.Label.t;
   uuid : string;
   config : Vmm_core.Unikernel.config;
   timestamp : Ptime.t;
@@ -52,8 +52,8 @@ let csrf_cookie = "molly_csrf"
 let unikernel_update_to_json (u : unikernel_update) : Yojson.Basic.t =
   `Assoc
     [
-      ("name", `String u.name);
-      ("job", `String u.job);
+      ("name", `String (Configuration.name_to_str u.name));
+      ("job", `String (Configuration.name_to_str u.job));
       ("uuid", `String u.uuid);
       ("config", Albatross_json.config_to_json u.config);
       ("timestamp", `String (Utils.TimeHelper.string_of_ptime u.timestamp));
@@ -79,6 +79,8 @@ let unikernel_update_of_json = function
           let* config =
             Albatross_json.config_of_json (Yojson.Basic.to_string config)
           in
+          let* name = Configuration.name_of_str name in
+          let* job = Configuration.name_of_str job in
           Ok { name; job; uuid; config; timestamp }
       | _ ->
           Error

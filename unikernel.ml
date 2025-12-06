@@ -439,7 +439,8 @@ struct
     >|= function
     | Error err ->
         Error
-          (Fmt.str "Error fetching '%s' from '%s': %s" unikernel_name
+          (Fmt.str "Error fetching '%s' from '%s': %s"
+             (Configuration.name_to_str unikernel_name)
              (Configuration.name_to_str state.configuration.name)
              err)
     | Ok (_hdr, `Success (`Unikernel_info [ unikernel ]))
@@ -457,7 +458,8 @@ struct
         Error message
     | Ok reply ->
         let message =
-          Fmt.str "Expected unikernel info for '%s', got %a" unikernel_name
+          Fmt.str "Expected unikernel info for '%s', got %a"
+            (Configuration.name_to_str unikernel_name)
             (Vmm_commands.pp_wire ~verbose:false)
             reply
         in
@@ -1075,7 +1077,7 @@ struct
     (* TODO use uuid in the future *)
     Lwt_list.fold_left_s
       (fun (successes, failures) (name, (instance : Albatross.t)) ->
-        Albatross_state.query stack instance ~domain:user.name
+        Albatross_state.query stack instance ~domain:user.name ~name:user.name
           (`Unikernel_cmd `Unikernel_info)
         >>= function
         | Error msg ->
@@ -1116,295 +1118,333 @@ struct
   let unikernel_info_one stack store ~unikernel_name albatross _
       (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    user_unikernel stack albatross ~user_name:user.name ~unikernel_name
-    >>= function
-    | Error err ->
-        let data =
-          "An error occured trying to fetch " ^ unikernel_name
-          ^ "from albatross: " ^ err
-        in
-        Middleware.http_response ~api_meth:false reqd ~data:(`String data)
-          `Internal_server_error
-    | Ok unikernel -> (
-        let now = Mirage_ptime.now () in
-        generate_csrf_token store user now reqd >>= function
-        | Ok csrf ->
-            let last_update_time =
-              match
-                List.find_opt
-                  (fun (u : User_model.unikernel_update) ->
-                    String.equal u.name unikernel_name)
-                  user.unikernel_updates
-              with
-              | Some unikernel_update -> Some unikernel_update.timestamp
-              | None -> None
-            in
-            reply reqd ~content_type:"text/html"
-              (Dashboard.dashboard_layout ~csrf user
-                 ~content:
-                   (Unikernel_single.unikernel_single_layout ~unikernel_name
-                      ~instance_name:albatross.configuration.name unikernel
-                      ~last_update_time ~current_time:now)
-                 ~icon:"/images/robur.png" ())
-              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-              `OK
+    match Configuration.name_of_str unikernel_name with
+    | Error (`Msg err) ->
+        Middleware.http_response ~api_meth:false reqd ~data:(`String err)
+          `Bad_request
+    | Ok unikernel_name -> (
+        user_unikernel stack albatross ~user_name:user.name ~unikernel_name
+        >>= function
         | Error err ->
-            Middleware.http_response ~api_meth:false reqd ~title:err.title
-              ~data:err.data `Internal_server_error)
+            let data =
+              "An error occured trying to fetch "
+              ^ Configuration.name_to_str unikernel_name
+              ^ "from albatross: " ^ err
+            in
+            Middleware.http_response ~api_meth:false reqd ~data:(`String data)
+              `Internal_server_error
+        | Ok unikernel -> (
+            let now = Mirage_ptime.now () in
+            generate_csrf_token store user now reqd >>= function
+            | Ok csrf ->
+                let last_update_time =
+                  match
+                    List.find_opt
+                      (fun (u : User_model.unikernel_update) ->
+                        Vmm_core.Name.Label.equal u.name unikernel_name)
+                      user.unikernel_updates
+                  with
+                  | Some unikernel_update -> Some unikernel_update.timestamp
+                  | None -> None
+                in
+                reply reqd ~content_type:"text/html"
+                  (Dashboard.dashboard_layout ~csrf user
+                     ~content:
+                       (Unikernel_single.unikernel_single_layout ~unikernel_name
+                          ~instance_name:albatross.configuration.name unikernel
+                          ~last_update_time ~current_time:now)
+                     ~icon:"/images/robur.png" ())
+                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+                  `OK
+            | Error err ->
+                Middleware.http_response ~api_meth:false reqd ~title:err.title
+                  ~data:err.data `Internal_server_error))
 
   let unikernel_prepare_update stack store ~unikernel_name http_client albatross
       _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    user_unikernel stack albatross ~user_name:user.name ~unikernel_name
-    >>= function
-    | Error err ->
-        Middleware.http_response ~api_meth:false
-          ~data:
-            (`String
-               ("An error occured while fetching " ^ unikernel_name
-              ^ " from albatross with error " ^ err))
-          reqd `Internal_server_error
-    | Ok (name, unikernel) -> (
-        Utils.send_http_request http_client ~base_url:Builder_web.base_url
-          ~path:("/hash?sha256=" ^ Ohex.encode unikernel.digest)
+    match Configuration.name_of_str unikernel_name with
+    | Error (`Msg err) ->
+        Middleware.http_response ~api_meth:false reqd ~data:(`String err)
+          `Bad_request
+    | Ok unikernel_name -> (
+        user_unikernel stack albatross ~user_name:user.name ~unikernel_name
         >>= function
-        | Error (`Msg err) ->
-            Logs.err (fun m ->
-                m
-                  "builds.robur.coop: Error while fetching the current build \
-                   info of %s with error: %s"
-                  unikernel_name err);
+        | Error err ->
             Middleware.http_response ~api_meth:false
               ~data:
                 (`String
-                   ("An error occured while fetching the current build \
-                     information from builds.robur.coop. The error is: " ^ err))
-              ~title:(unikernel_name ^ " update Error")
+                   ("An error occured while fetching "
+                   ^ Configuration.name_to_str unikernel_name
+                   ^ " from albatross with error " ^ err))
               reqd `Internal_server_error
-        | Ok response_body -> (
-            match Utils.Json.from_string response_body with
+        | Ok (name, unikernel) -> (
+            let unikernel_name = Configuration.name_to_str unikernel_name in
+            Utils.send_http_request http_client ~base_url:Builder_web.base_url
+              ~path:("/hash?sha256=" ^ Ohex.encode unikernel.digest)
+            >>= function
             | Error (`Msg err) ->
                 Logs.err (fun m ->
                     m
-                      "Failed to parse JSON response from builds.robur.coop \
-                       for unikernel %s: %s"
+                      "builds.robur.coop: Error while fetching the current \
+                       build info of %s with error: %s"
                       unikernel_name err);
                 Middleware.http_response ~api_meth:false
                   ~data:
                     (`String
-                       ("An error occured while parsing the json response from \
-                         builds.robur.coop. The error is: " ^ err))
+                       ("An error occured while fetching the current build \
+                         information from builds.robur.coop. The error is: "
+                      ^ err))
                   ~title:(unikernel_name ^ " update Error")
                   reqd `Internal_server_error
-            | Ok json -> (
-                match Builder_web.build_of_json json with
+            | Ok response_body -> (
+                match Utils.Json.from_string response_body with
                 | Error (`Msg err) ->
                     Logs.err (fun m ->
                         m
-                          "JSON parsing of the current build of %s from \
-                           builds.robur.coop failed with error: %s"
+                          "Failed to parse JSON response from \
+                           builds.robur.coop for unikernel %s: %s"
                           unikernel_name err);
                     Middleware.http_response ~api_meth:false
                       ~data:
                         (`String
-                           ("An error occured while parsing the json of the \
-                             current build from builds.robur.coop. The error \
-                             is: " ^ err))
+                           ("An error occured while parsing the json response \
+                             from builds.robur.coop. The error is: " ^ err))
                       ~title:(unikernel_name ^ " update Error")
                       reqd `Internal_server_error
-                | Ok current_job_data -> (
-                    Utils.send_http_request http_client
-                      ~base_url:Builder_web.base_url
-                      ~path:("/job/" ^ current_job_data.job ^ "/build/latest")
-                    >>= function
+                | Ok json -> (
+                    match Builder_web.build_of_json json with
                     | Error (`Msg err) ->
                         Logs.err (fun m ->
                             m
-                              "builds.robur.coop: Error while fetching the \
-                               latest build info of %s with error: %s"
+                              "JSON parsing of the current build of %s from \
+                               builds.robur.coop failed with error: %s"
                               unikernel_name err);
-                        Middleware.http_response
+                        Middleware.http_response ~api_meth:false
                           ~data:
                             (`String
-                               ("An error occured while fetching the latest \
-                                 build information from builds.robur.coop. The \
+                               ("An error occured while parsing the json of \
+                                 the current build from builds.robur.coop. The \
                                  error is: " ^ err))
                           ~title:(unikernel_name ^ " update Error")
-                          ~api_meth:false reqd `Internal_server_error
-                    | Ok response_body -> (
-                        match Utils.Json.from_string response_body with
+                          reqd `Internal_server_error
+                    | Ok current_job_data -> (
+                        Utils.send_http_request http_client
+                          ~base_url:Builder_web.base_url
+                          ~path:
+                            ("/job/" ^ current_job_data.job ^ "/build/latest")
+                        >>= function
                         | Error (`Msg err) ->
                             Logs.err (fun m ->
                                 m
-                                  "Failed to parse JSON response from \
-                                   builds.robur.coop for latest unikernel %s: \
-                                   %s"
+                                  "builds.robur.coop: Error while fetching the \
+                                   latest build info of %s with error: %s"
                                   unikernel_name err);
-                            Middleware.http_response ~api_meth:false
+                            Middleware.http_response
                               ~data:
                                 (`String
-                                   ("An error occured while parsing the json \
-                                     response of the latest unikernel from \
+                                   ("An error occured while fetching the \
+                                     latest build information from \
                                      builds.robur.coop. The error is: " ^ err))
                               ~title:(unikernel_name ^ " update Error")
-                              reqd `Internal_server_error
-                        | Ok json -> (
-                            match Builder_web.build_of_json json with
+                              ~api_meth:false reqd `Internal_server_error
+                        | Ok response_body -> (
+                            match Utils.Json.from_string response_body with
                             | Error (`Msg err) ->
                                 Logs.err (fun m ->
                                     m
-                                      "JSON parsing of the latest build of %s \
-                                       from builds.robur.coop failed with \
-                                       error: %s"
+                                      "Failed to parse JSON response from \
+                                       builds.robur.coop for latest unikernel \
+                                       %s: %s"
                                       unikernel_name err);
-                                Middleware.http_response
+                                Middleware.http_response ~api_meth:false
                                   ~data:
                                     (`String
                                        ("An error occured while parsing the \
-                                         json of the latest build from \
-                                         builds.robur.coop. The error is: "
-                                      ^ err))
-                                  ~title:(unikernel_name ^ "update Error")
-                                  ~api_meth:false reqd `Internal_server_error
-                            | Ok latest_job_data -> (
-                                if
-                                  String.equal latest_job_data.uuid
-                                    current_job_data.uuid
-                                then (
-                                  Logs.info (fun m ->
-                                      m
-                                        "There is no new update of %s found \
-                                         with uuid  %s"
-                                        unikernel_name latest_job_data.uuid);
-                                  Middleware.redirect_to_page
-                                    ~path:
-                                      ("/unikernel/info?unikernel="
-                                      ^ Option.value ~default:""
-                                          (Option.map
-                                             Vmm_core.Name.Label.to_string
-                                             (Vmm_core.Name.name name))
-                                      ^ "&instance="
-                                      ^ Configuration.name_to_str
-                                          albatross.configuration.name)
-                                    reqd
-                                    ~msg:
-                                      ("There is no update of " ^ unikernel_name
-                                     ^ " found on builds.robur.coop")
-                                    ())
-                                else
-                                  Utils.send_http_request http_client
-                                    ~base_url:Builder_web.base_url
-                                    ~path:
-                                      ("/compare/" ^ current_job_data.uuid ^ "/"
-                                     ^ latest_job_data.uuid ^ "")
-                                  >>= function
-                                  | Error (`Msg err) ->
-                                      Logs.err (fun m ->
+                                         json response of the latest unikernel \
+                                         from builds.robur.coop. The error \
+                                         is: " ^ err))
+                                  ~title:(unikernel_name ^ " update Error")
+                                  reqd `Internal_server_error
+                            | Ok json -> (
+                                match Builder_web.build_of_json json with
+                                | Error (`Msg err) ->
+                                    Logs.err (fun m ->
+                                        m
+                                          "JSON parsing of the latest build of \
+                                           %s from builds.robur.coop failed \
+                                           with error: %s"
+                                          unikernel_name err);
+                                    Middleware.http_response
+                                      ~data:
+                                        (`String
+                                           ("An error occured while parsing \
+                                             the json of the latest build from \
+                                             builds.robur.coop. The error is: "
+                                          ^ err))
+                                      ~title:(unikernel_name ^ "update Error")
+                                      ~api_meth:false reqd
+                                      `Internal_server_error
+                                | Ok latest_job_data -> (
+                                    if
+                                      String.equal latest_job_data.uuid
+                                        current_job_data.uuid
+                                    then (
+                                      Logs.info (fun m ->
                                           m
-                                            "builds.robur.coop: Error while \
-                                             fetching the diff between the \
-                                             current and latest build info of \
-                                             %s with error: %s"
-                                            unikernel_name err);
-                                      Middleware.http_response
-                                        ~data:
-                                          (`String
-                                             ("An error occured while fetching \
-                                               the diff between the latest and \
-                                               the current build information \
-                                               from builds.robur.coop. The \
-                                               error is: " ^ err))
-                                        ~title:(unikernel_name ^ " update Error")
-                                        ~api_meth:false reqd
-                                        `Internal_server_error
-                                  | Ok response_body -> (
-                                      match
-                                        Utils.Json.from_string response_body
-                                      with
+                                            "There is no new update of %s \
+                                             found with uuid  %s"
+                                            unikernel_name latest_job_data.uuid);
+                                      Middleware.redirect_to_page
+                                        ~path:
+                                          ("/unikernel/info?unikernel="
+                                          ^ Option.value ~default:""
+                                              (Option.map
+                                                 Vmm_core.Name.Label.to_string
+                                                 (Vmm_core.Name.name name))
+                                          ^ "&instance="
+                                          ^ Configuration.name_to_str
+                                              albatross.configuration.name)
+                                        reqd
+                                        ~msg:
+                                          ("There is no update of "
+                                         ^ unikernel_name
+                                         ^ " found on builds.robur.coop")
+                                        ())
+                                    else
+                                      Utils.send_http_request http_client
+                                        ~base_url:Builder_web.base_url
+                                        ~path:
+                                          ("/compare/" ^ current_job_data.uuid
+                                         ^ "/" ^ latest_job_data.uuid ^ "")
+                                      >>= function
                                       | Error (`Msg err) ->
                                           Logs.err (fun m ->
                                               m
-                                                "Failed to parse JSON response \
-                                                 of the diff between the \
-                                                 current and latest build from \
-                                                 builds.robur.coop for \
-                                                 unikernel %s: %s"
+                                                "builds.robur.coop: Error \
+                                                 while fetching the diff \
+                                                 between the current and \
+                                                 latest build info of %s with \
+                                                 error: %s"
                                                 unikernel_name err);
                                           Middleware.http_response
-                                            ~api_meth:false
                                             ~data:
                                               (`String
                                                  ("An error occured while \
-                                                   parsing the json response \
-                                                   of the diff between the \
-                                                   current and latest build \
-                                                   from builds.robur.coop. The \
+                                                   fetching the diff between \
+                                                   the latest and the current \
+                                                   build information from \
+                                                   builds.robur.coop. The \
                                                    error is: " ^ err))
                                             ~title:
                                               (unikernel_name ^ " update Error")
-                                            reqd `Internal_server_error
-                                      | Ok json -> (
+                                            ~api_meth:false reqd
+                                            `Internal_server_error
+                                      | Ok response_body -> (
                                           match
-                                            Builder_web.compare_of_json json
+                                            Utils.Json.from_string response_body
                                           with
-                                          | Ok build_comparison -> (
-                                              let now = Mirage_ptime.now () in
-                                              generate_csrf_token store user now
-                                                reqd
-                                              >>= function
-                                              | Ok csrf ->
-                                                  reply reqd
-                                                    ~content_type:"text/html"
-                                                    (Dashboard.dashboard_layout
-                                                       ~csrf user
-                                                       ~page_title:
-                                                         (Vmm_core.Name
-                                                          .to_string name
-                                                         ^ " Update")
-                                                       ~content:
-                                                         (Unikernel_update
-                                                          .unikernel_update_layout
-                                                            ~instance_name:
-                                                              albatross
-                                                                .configuration
-                                                                .name
-                                                            ~unikernel_name
-                                                            (name, unikernel)
-                                                            now build_comparison)
-                                                       ~icon:"/images/robur.png"
-                                                       ())
-                                                    ~header_list:
-                                                      [ ("X-MOLLY-CSRF", csrf) ]
-                                                    `OK
-                                              | Error err ->
-                                                  Middleware.http_response
-                                                    ~api_meth:false reqd
-                                                    ~title:err.title
-                                                    ~data:err.data
-                                                    `Internal_server_error)
                                           | Error (`Msg err) ->
                                               Logs.err (fun m ->
                                                   m
-                                                    "JSON parsing of the diff \
-                                                     between the latest and \
-                                                     current build of %s from \
-                                                     builds.robur.coop failed \
-                                                     with error: %s"
+                                                    "Failed to parse JSON \
+                                                     response of the diff \
+                                                     between the current and \
+                                                     latest build from \
+                                                     builds.robur.coop for \
+                                                     unikernel %s: %s"
                                                     unikernel_name err);
                                               Middleware.http_response
+                                                ~api_meth:false
                                                 ~data:
                                                   (`String
                                                      ("An error occured while \
-                                                       parsing the json of the \
-                                                       diff between the latest \
-                                                       and curent build from \
+                                                       parsing the json \
+                                                       response of the diff \
+                                                       between the current and \
+                                                       latest build from \
                                                        builds.robur.coop. The \
                                                        error is: " ^ err))
                                                 ~title:
                                                   (unikernel_name
                                                  ^ " update Error")
-                                                ~api_meth:false reqd
-                                                `Internal_server_error)))))))))
+                                                reqd `Internal_server_error
+                                          | Ok json -> (
+                                              match
+                                                Builder_web.compare_of_json json
+                                              with
+                                              | Ok build_comparison -> (
+                                                  let now =
+                                                    Mirage_ptime.now ()
+                                                  in
+                                                  generate_csrf_token store user
+                                                    now reqd
+                                                  >>= function
+                                                  | Ok csrf ->
+                                                      reply reqd
+                                                        ~content_type:
+                                                          "text/html"
+                                                        (Dashboard
+                                                         .dashboard_layout ~csrf
+                                                           user
+                                                           ~page_title:
+                                                             (Vmm_core.Name
+                                                              .to_string name
+                                                             ^ " Update")
+                                                           ~content:
+                                                             (Unikernel_update
+                                                              .unikernel_update_layout
+                                                                ~instance_name:
+                                                                  albatross
+                                                                    .configuration
+                                                                    .name
+                                                                ~unikernel_name
+                                                                (name, unikernel)
+                                                                now
+                                                                build_comparison)
+                                                           ~icon:
+                                                             "/images/robur.png"
+                                                           ())
+                                                        ~header_list:
+                                                          [
+                                                            ( "X-MOLLY-CSRF",
+                                                              csrf );
+                                                          ]
+                                                        `OK
+                                                  | Error err ->
+                                                      Middleware.http_response
+                                                        ~api_meth:false reqd
+                                                        ~title:err.title
+                                                        ~data:err.data
+                                                        `Internal_server_error)
+                                              | Error (`Msg err) ->
+                                                  Logs.err (fun m ->
+                                                      m
+                                                        "JSON parsing of the \
+                                                         diff between the \
+                                                         latest and current \
+                                                         build of %s from \
+                                                         builds.robur.coop \
+                                                         failed with error: %s"
+                                                        unikernel_name err);
+                                                  Middleware.http_response
+                                                    ~data:
+                                                      (`String
+                                                         ("An error occured \
+                                                           while parsing the \
+                                                           json of the diff \
+                                                           between the latest \
+                                                           and curent build \
+                                                           from \
+                                                           builds.robur.coop. \
+                                                           The error is: " ^ err
+                                                         ))
+                                                    ~title:
+                                                      (unikernel_name
+                                                     ^ " update Error")
+                                                    ~api_meth:false reqd
+                                                    `Internal_server_error))))))
+                    ))))
 
   let force_create_unikernel stack albatross ~unikernel_name ~push
       (unikernel_cfg : Vmm_core.Unikernel.config) (user : User_model.user) =
@@ -1418,6 +1458,7 @@ struct
              ( `Msg ("Force create: Error querying albatross: " ^ err),
                `Internal_server_error ))
     | Ok (_hdr, res) -> (
+        let unikernel_name = Configuration.name_to_str unikernel_name in
         Albatross.set_online albatross;
         match Albatross_json.res res with
         | Error (`String err) ->
@@ -1443,6 +1484,7 @@ struct
       | `Rollback -> "rollback"
       | `Update -> "update"
     in
+    let unikernel_name_str = Configuration.name_to_str unikernel_name in
     let unikernel_update : User_model.unikernel_update =
       {
         name = unikernel_name;
@@ -1463,20 +1505,21 @@ struct
               "%s: storing update information for %s failed with: %s for data \
                %s"
               (change_string change_kind)
-              unikernel_name err data);
+              unikernel_name_str err data);
         Lwt.return
           (Error
              ( `Msg
                  (change_string change_kind ^ " storing update information for "
-                ^ unikernel_name ^ " failed with: " ^ err ^ " for data: " ^ data
-                 ),
+                ^ unikernel_name_str ^ " failed with: " ^ err ^ " for data: "
+                ^ data),
                (`Internal_server_error : H1.Status.t) ))
     | Ok () -> (
         let data_stream, push_chunks = Lwt_stream.create () in
         let push () = Lwt_stream.get data_stream in
         let url =
-          Builder_web.base_url ^ "/job/" ^ job ^ "/build/"
-          ^ to_be_updated_unikernel ^ "/main-binary"
+          Builder_web.base_url ^ "/job/"
+          ^ Configuration.name_to_str job
+          ^ "/build/" ^ to_be_updated_unikernel ^ "/main-binary"
         in
         let f resp _acc chunk =
           if
@@ -1515,7 +1558,7 @@ struct
                   "%s: builds.robur.coop: Error while fetching the binary of \
                    %s with error: %s"
                   (change_string change_kind)
-                  unikernel_name err);
+                  unikernel_name_str err);
             Lwt.return
               (Error
                  ( `Msg
@@ -1545,7 +1588,7 @@ struct
     match
       List.find_opt
         (fun (u : User_model.unikernel_update) ->
-          String.equal u.name unikernel_name)
+          Vmm_core.Name.Label.equal u.name unikernel_name)
         user.unikernel_updates
     with
     | Some old_unikernel ->
@@ -1563,31 +1606,33 @@ struct
               Middleware.http_response reqd ~title:"Rollback Successful"
                 ~data:
                   (`String
-                     ("Rollback succesful. " ^ unikernel_name
-                    ^ " is now running on build " ^ old_unikernel.uuid))
+                     ("Rollback succesful. "
+                     ^ Configuration.name_to_str unikernel_name
+                     ^ " is now running on build " ^ old_unikernel.uuid))
                 `OK
           | Error (`Msg err, http_status) ->
               Middleware.http_response reqd ~title:"Rollback Error"
                 ~data:
                   (`String
-                     ("Rollback failed. " ^ unikernel_name
-                    ^ " failed to revert to build " ^ old_unikernel.uuid
-                    ^ " with error " ^ err))
+                     ("Rollback failed. "
+                     ^ Configuration.name_to_str unikernel_name
+                     ^ " failed to revert to build " ^ old_unikernel.uuid
+                     ^ " with error " ^ err))
                 http_status
         else
           Middleware.http_response reqd ~title:"Rollback Failed"
             ~data:
               (`String
-                 (unikernel_name
-                ^ " rollback failed. We can't do a rollback after 10 minutes \
-                   of an update."))
+                 (Configuration.name_to_str unikernel_name
+                 ^ " rollback failed. We can't do a rollback after 10 minutes \
+                    of an update."))
             `Bad_request
     | None ->
         Middleware.http_response reqd ~title:"Rollback Error"
           ~data:
             (`String
-               (unikernel_name
-              ^ " rollback failed. Could not find the build information."))
+               (Configuration.name_to_str unikernel_name
+               ^ " rollback failed. Could not find the build information."))
           `Not_found
 
   let process_unikernel_update ~unikernel_name ~job ~to_be_updated_unikernel
@@ -1597,6 +1642,7 @@ struct
       ~currently_running_unikernel cfg user store http_client `Update albatross
     >>= function
     | Ok _res -> (
+        let unikernel_name_str = Configuration.name_to_str unikernel_name in
         Liveliness.interval_liveliness_checks ~unikernel_name
           ~http_liveliness_address ~dns_liveliness stack http_client
         >>= function
@@ -1605,23 +1651,24 @@ struct
                 m
                   "liveliness-checks for %s and build %s failed with error(s) \
                    %s. now performing a rollback"
-                  unikernel_name to_be_updated_unikernel err);
+                  unikernel_name_str to_be_updated_unikernel err);
             process_rollback stack albatross ~unikernel_name
               (Mirage_ptime.now ()) store http_client reqd user
         | Ok () ->
             Middleware.http_response reqd ~title:"Update Successful"
               ~data:
                 (`String
-                   ("Update succesful. " ^ unikernel_name
+                   ("Update succesful. " ^ unikernel_name_str
                   ^ " is now running on build " ^ to_be_updated_unikernel))
               `OK)
     | Error (`Msg err, http_status) ->
         Middleware.http_response reqd ~title:"Update Error"
           ~data:
             (`String
-               ("Update failed. " ^ unikernel_name
-              ^ " failed to update to build " ^ to_be_updated_unikernel
-              ^ " with error " ^ err))
+               ("Update failed. "
+               ^ Configuration.name_to_str unikernel_name
+               ^ " failed to update to build " ^ to_be_updated_unikernel
+               ^ " with error " ^ err))
           http_status
 
   let unikernel_update stack store albatross_instances http_client
@@ -1660,8 +1707,12 @@ struct
           stack http_client
         >>= function
         | Ok () -> (
-            match Configuration.name_of_str instance_name with
-            | Ok instance_name -> (
+            match
+              ( Configuration.name_of_str instance_name,
+                Configuration.name_of_str unikernel_name,
+                Configuration.name_of_str job )
+            with
+            | Ok instance_name, Ok unikernel_name, Ok job -> (
                 match
                   Albatross_state.find_instance_by_name albatross_instances
                     instance_name
@@ -1744,11 +1795,22 @@ struct
                            ("An error occured while finding albatross instance "
                            ^ Configuration.name_to_str instance_name))
                       ~title:"Albatross Instance Error" reqd `Not_found)
-            | Error (`Msg err) ->
+            | Error (`Msg err), _, _ ->
                 Middleware.http_response reqd ~title:"Error: Bad instance name"
                   ~data:
                     (`String
-                       ("Couldn't convert the instance to a name, error: " ^ err))
+                       ("Couldn't convert the instance name, error: " ^ err))
+                  `Bad_request
+            | _, Error (`Msg err), _ ->
+                Middleware.http_response reqd ~title:"Error: Bad unikernel name"
+                  ~data:
+                    (`String
+                       ("Couldn't convert the unikernel name, error: " ^ err))
+                  `Bad_request
+            | _, _, Error (`Msg err) ->
+                Middleware.http_response reqd ~title:"Error: Bad job name"
+                  ~data:
+                    (`String ("Couldn't convert the job name, error: " ^ err))
                   `Bad_request)
         | Error (`Msg err) ->
             Logs.info (fun m ->
@@ -1775,8 +1837,11 @@ struct
         (get "unikernel_name" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String unikernel_name), Some (`String instance_name) -> (
-        match Configuration.name_of_str instance_name with
-        | Ok instance_name -> (
+        match
+          ( Configuration.name_of_str instance_name,
+            Configuration.name_of_str unikernel_name )
+        with
+        | Ok instance_name, Ok unikernel_name -> (
             match
               Albatross_state.find_instance_by_name albatross_instances
                 instance_name
@@ -1791,10 +1856,13 @@ struct
                        ("Couldn't find albatross instance, "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
-        | Error (`Msg err) ->
+        | Error (`Msg err), _ ->
             Middleware.http_response reqd
-              ~data:
-                (`String ("Couldn't convert name to albatross instance, " ^ err))
+              ~data:(`String ("Couldn't convert instance name, " ^ err))
+              `Bad_request
+        | _, Error (`Msg err) ->
+            Middleware.http_response reqd
+              ~data:(`String ("Couldn't convert unikernel name, " ^ err))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd
@@ -1807,8 +1875,11 @@ struct
       Utils.Json.(get "name" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String unikernel_name), Some (`String instance_name) -> (
-        match Configuration.name_of_str instance_name with
-        | Ok instance_name -> (
+        match
+          ( Configuration.name_of_str instance_name,
+            Configuration.name_of_str unikernel_name )
+        with
+        | Ok instance_name, Ok unikernel_name -> (
             match
               Albatross_state.find_instance_by_name albatross_instances
                 instance_name
@@ -1838,11 +1909,13 @@ struct
                        ("Error finding albatross instance: "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
-        | Error (`Msg err) ->
+        | Error (`Msg err), _ ->
             Middleware.http_response reqd
-              ~data:
-                (`String
-                   ("Error converting albatross name to instance name: " ^ err))
+              ~data:(`String ("Error converting instance name: " ^ err))
+              `Bad_request
+        | _, Error (`Msg err) ->
+            Middleware.http_response reqd
+              ~data:(`String ("Error converting unikernel name: " ^ err))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd
@@ -1855,8 +1928,11 @@ struct
       Utils.Json.(get "name" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String unikernel_name), Some (`String instance_name) -> (
-        match Configuration.name_of_str instance_name with
-        | Ok instance_name -> (
+        match
+          ( Configuration.name_of_str instance_name,
+            Configuration.name_of_str unikernel_name )
+        with
+        | Ok instance_name, Ok unikernel_name -> (
             match
               Albatross_state.find_instance_by_name albatross_instances
                 instance_name
@@ -1887,11 +1963,13 @@ struct
                        ("Error finding albatross instance: "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
-        | Error (`Msg err) ->
+        | Error (`Msg err), _ ->
             Middleware.http_response reqd
-              ~data:
-                (`String
-                   ("Error converting albatross name to instance name: " ^ err))
+              ~data:(`String ("Error converting instance name: " ^ err))
+              `Bad_request
+        | _, Error (`Msg err) ->
+            Middleware.http_response reqd
+              ~data:(`String ("Error converting unikernel name: " ^ err))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd
@@ -1950,7 +2028,8 @@ struct
                       Some cfg,
                       Some force_create,
                       Some csrf ) -> (
-                      let process_unikernel_create albatross _reqd =
+                      let process_unikernel_create albatross unikernel_name
+                          _reqd =
                         match Albatross_json.config_of_json cfg with
                         | Error (`Msg err) ->
                             generate_http_error_response
@@ -1986,8 +2065,11 @@ struct
                                       ("Albatross JSON Error: " ^ err_msg)
                                       `Internal_server_error))
                       in
-                      match Configuration.name_of_str instance_name with
-                      | Ok instance_name -> (
+                      match
+                        ( Configuration.name_of_str instance_name,
+                          Configuration.name_of_str unikernel_name )
+                      with
+                      | Ok instance_name, Ok unikernel_name -> (
                           match
                             Albatross_state.find_instance_by_name
                               albatross_instances instance_name
@@ -1995,19 +2077,25 @@ struct
                           | Ok albatross -> (
                               match token_or_cookie with
                               | `Token ->
-                                  process_unikernel_create albatross reqd
+                                  process_unikernel_create albatross
+                                    unikernel_name reqd
                               | `Cookie ->
                                   csrf_verification
-                                    (process_unikernel_create albatross)
+                                    (process_unikernel_create albatross
+                                       unikernel_name)
                                     user csrf reqd)
                           | _ ->
                               generate_http_error_response
                                 ("Error finding albatross instance: "
                                 ^ Configuration.name_to_str instance_name)
                                 `Not_found)
-                      | Error (`Msg err) ->
+                      | Error (`Msg err), _ ->
                           generate_http_error_response
-                            ("Error converting name to albatross: " ^ err)
+                            ("Error converting instance name: " ^ err)
+                            `Bad_request
+                      | _, Error (`Msg err) ->
+                          generate_http_error_response
+                            ("Error converting unikernel name: " ^ err)
                             `Bad_request)
                   | _ ->
                       Logs.info (fun m -> m "Missing Fields");
@@ -2033,18 +2121,24 @@ struct
   let unikernel_console stack ~unikernel_name albatross _
       (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    let response = Middleware.http_event_source_response reqd `OK in
-    let f (ts, data) =
-      let json = Albatross_json.console_data_to_json (ts, data) in
-      response (Yojson.Basic.to_string json)
-    in
-    Albatross_state.query_console stack albatross ~domain:user.name
-      ~name:unikernel_name f
-    >>= function
-    | Error _err -> Lwt.return_unit
-    | Ok () ->
-        Albatross.set_online albatross;
-        Lwt.return_unit
+    match Configuration.name_of_str unikernel_name with
+    | Error (`Msg err) ->
+        Middleware.http_response reqd
+          ~data:(`String ("Couldn't convert unikernel name: " ^ err))
+          `Bad_request
+    | Ok unikernel_name -> (
+        let response = Middleware.http_event_source_response reqd `OK in
+        let f (ts, data) =
+          let json = Albatross_json.console_data_to_json (ts, data) in
+          response (Yojson.Basic.to_string json)
+        in
+        Albatross_state.query_console stack albatross ~domain:user.name
+          ~name:unikernel_name f
+        >>= function
+        | Error _err -> Lwt.return_unit
+        | Ok () ->
+            Albatross.set_online albatross;
+            Lwt.return_unit)
 
   let view_user stack albatross_instances store uuid
       (page : [> `Profile | `Unikernels | `Policy ]) _ (user : User_model.user)
@@ -2258,8 +2352,11 @@ struct
       Utils.Json.(get "block_name" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String block_name), Some (`String instance_name) -> (
-        match Configuration.name_of_str instance_name with
-        | Ok instance_name -> (
+        match
+          ( Configuration.name_of_str instance_name,
+            Configuration.name_of_str block_name )
+        with
+        | Ok instance_name, Ok block_name -> (
             match
               Albatross_state.find_instance_by_name albatross_instances
                 instance_name
@@ -2289,10 +2386,13 @@ struct
                        ("Couldn't find albatross instance with name: "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
-        | Error (`Msg err) ->
+        | Error (`Msg err), _ ->
             Middleware.http_response reqd
-              ~data:
-                (`String ("Couldn't convert name to albatross instance: " ^ err))
+              ~data:(`String ("Couldn't convert instance name: " ^ err))
+              `Bad_request
+        | _, Error (`Msg err) ->
+            Middleware.http_response reqd
+              ~data:(`String ("Couldn't convert block name: " ^ err))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd
@@ -2355,7 +2455,6 @@ struct
                                 >|= fun () -> Error ()
                             | Ok _ -> Lwt.return (Ok ()))
                       in
-
                       let stream_to_albatross stack albatross block_name
                           block_compressed =
                         let push () = Lwt_stream.get contents in
@@ -2388,53 +2487,59 @@ struct
                               match parsed_json with
                               | Ok (`Assoc json_dict) -> (
                                   match
-                                    ( c_or_u,
-                                      Utils.Json.
-                                        ( get "block_name" json_dict,
-                                          get "block_size" json_dict,
-                                          get "block_compressed" json_dict ) )
+                                    Utils.Json.
+                                      ( get "block_name" json_dict,
+                                        get "block_size" json_dict,
+                                        get "block_compressed" json_dict )
                                   with
-                                  | ( `Create,
-                                      ( Some (`String block_name),
-                                        Some (`Int block_size),
-                                        Some (`Bool block_compressed) ) ) -> (
-                                      match token_or_cookie with
-                                      | `Token -> (
-                                          add_block stack albatross block_name
-                                            block_size
-                                          >>= function
-                                          | Ok () ->
-                                              stream_to_albatross stack
-                                                albatross block_name
-                                                block_compressed
-                                          | Error () -> Lwt.return_unit)
-                                      | `Cookie ->
-                                          csrf_verification
-                                            (fun _reqd ->
-                                              add_block stack albatross
-                                                block_name block_size
-                                              >>= function
-                                              | Ok () ->
+                                  | ( Some (`String block_name),
+                                      Some (`Int block_size),
+                                      Some (`Bool block_compressed) ) -> (
+                                      match
+                                        Configuration.name_of_str block_name
+                                      with
+                                      | Error (`Msg err) ->
+                                          generate_http_error_response
+                                            (Fmt.str "Invalid block name: %s"
+                                               err)
+                                            `Bad_request
+                                      | Ok block_name -> (
+                                          let add_block stack albatross
+                                              block_name block_size =
+                                            add_block stack albatross block_name
+                                              block_size
+                                            >>= function
+                                            | Ok () ->
+                                                stream_to_albatross stack
+                                                  albatross block_name
+                                                  block_compressed
+                                            | Error () -> Lwt.return_unit
+                                          in
+                                          match token_or_cookie with
+                                          | `Token -> (
+                                              match c_or_u with
+                                              | `Create ->
+                                                  add_block stack albatross
+                                                    block_name block_size
+                                              | `Upload ->
                                                   stream_to_albatross stack
                                                     albatross block_name
-                                                    block_compressed
-                                              | Error () -> Lwt.return_unit)
-                                            user csrf reqd)
-                                  | ( `Upload,
-                                      ( Some (`String block_name),
-                                        None,
-                                        Some (`Bool block_compressed) ) ) -> (
-                                      match token_or_cookie with
-                                      | `Token ->
-                                          stream_to_albatross stack albatross
-                                            block_name block_compressed
-                                      | `Cookie ->
-                                          csrf_verification
-                                            (fun _reqd ->
-                                              stream_to_albatross stack
-                                                albatross block_name
-                                                block_compressed)
-                                            user csrf reqd)
+                                                    block_compressed)
+                                          | `Cookie -> (
+                                              match c_or_u with
+                                              | `Create ->
+                                                  csrf_verification
+                                                    (fun _reqd ->
+                                                      add_block stack albatross
+                                                        block_name block_size)
+                                                    user csrf reqd
+                                              | `Upload ->
+                                                  csrf_verification
+                                                    (fun _reqd ->
+                                                      stream_to_albatross stack
+                                                        albatross block_name
+                                                        block_compressed)
+                                                    user csrf reqd)))
                                   | _ ->
                                       generate_http_error_response
                                         (Fmt.str "unexpected field. got %s"
@@ -2513,8 +2618,11 @@ struct
                 H1.Body.Writer.flush writer Fun.id;
                 Ok ())
         in
-        match Configuration.name_of_str instance_name with
-        | Ok instance_name -> (
+        match
+          ( Configuration.name_of_str instance_name,
+            Configuration.name_of_str block_name )
+        with
+        | Ok instance_name, Ok block_name -> (
             match
               Albatross_state.find_instance_by_name albatross_instances
                 instance_name
@@ -2527,20 +2635,26 @@ struct
                 | Ok () ->
                     Albatross.set_online albatross;
                     Lwt.return_unit)
-            | _ ->
+            | Error err ->
                 Logs.err (fun m ->
-                    m "Couldn't find albatross instance with name %s"
-                      (Configuration.name_to_str instance_name));
+                    m "Couldn't find albatross instance with name %s: %s"
+                      (Configuration.name_to_str instance_name)
+                      err);
                 Middleware.http_response reqd
                   ~data:
                     (`String
                        ("Couldn't find albatross instance with name: "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
-        | Error (`Msg err) ->
+        | Error (`Msg err), _ ->
+            Middleware.http_response reqd
+              ~data:(`String ("Couldn't convert instance name: " ^ err))
+              `Bad_request
+        | _, Error (`Msg err) ->
             Middleware.http_response reqd
               ~data:
-                (`String ("Couldn't convert name to albatross instance: " ^ err))
+                (`String
+                   ("Couldn't convert block name: " ^ block_name ^ ": " ^ err))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd

@@ -698,7 +698,10 @@ module Make (S : Tcpip.Stack.V4V6) = struct
             msg)
           (Result.map (fun c -> (vmm_name, c)) (gen_cert t ~domain cmd name))
 
-  let query stack t ~domain ?(name = ".") ?push cmd =
+  let query stack t ~domain ?name ?push cmd =
+    let name =
+      match name with None -> "." | Some n -> Configuration.name_to_str n
+    in
     match certs t domain name cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
@@ -706,14 +709,14 @@ module Make (S : Tcpip.Stack.V4V6) = struct
 
   let query_console stack t ~domain ~name f =
     let cmd = `Console_cmd (`Console_subscribe (`Count 40)) in
-    match certs t domain name cmd with
+    match certs t domain (Configuration.name_to_str name) cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
         raw_query stack t ~name:vmm_name certificates cmd (console vmm_name f)
 
   let query_block_dump stack t ~domain ~name compression f =
     let cmd = `Block_cmd (`Block_dump compression) in
-    match certs t domain name cmd with
+    match certs t domain (Configuration.name_to_str name) cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
         raw_query stack t ~name:vmm_name certificates cmd
