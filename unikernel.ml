@@ -1077,7 +1077,7 @@ struct
     (* TODO use uuid in the future *)
     Lwt_list.fold_left_s
       (fun (successes, failures) (name, (instance : Albatross.t)) ->
-        Albatross_state.query stack instance ~domain:user.name ~name:user.name
+        Albatross_state.query stack instance ~domain:user.name
           (`Unikernel_cmd `Unikernel_info)
         >>= function
         | Error msg ->
