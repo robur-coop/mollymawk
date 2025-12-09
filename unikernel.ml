@@ -2883,15 +2883,15 @@ struct
                 authenticate store reqd (api_tokens store))
         | "/api/tokens/create" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store reqd
+                authenticate ~api_meth:true ~check_token:true store reqd
                   (extract_json_csrf_token (create_token store)))
         | "/api/tokens/delete" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store reqd
+                authenticate ~api_meth:true ~check_token:true store reqd
                   (extract_json_csrf_token (delete_token store)))
         | "/api/tokens/update" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store reqd
+                authenticate ~api_meth:true ~check_token:true store reqd
                   (extract_json_csrf_token (update_token store)))
         | "/admin/users" ->
             check_meth `GET (fun () ->
