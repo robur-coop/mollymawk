@@ -2394,26 +2394,6 @@ struct
               | (Some "block_data", _), _, contents -> (
                   match (!albatross_ref, !csrf_ref, !json_data_ref) with
                   | Some albatross_instance, Some csrf, Some json -> (
-                      let add_block stack albatross block_name block_size =
-                        Albatross_state.query stack albatross ~domain:user.name
-                          ~name:block_name
-                          (`Block_cmd (`Block_add block_size))
-                        >>= function
-                        | Error err ->
-                            generate_http_error_response
-                              (Fmt.str "an error with albatross. got %s" err)
-                              `Internal_server_error
-                            >|= fun () -> Error ()
-                        | Ok (_hdr, res) -> (
-                            Albatross.set_online albatross;
-                            match Albatross_json.res res with
-                            | Error (`String err) ->
-                                generate_http_error_response
-                                  (Fmt.str "unexpected field. got %s" err)
-                                  `Bad_request
-                                >|= fun () -> Error ()
-                            | Ok _ -> Lwt.return (Ok ()))
-                      in
                       let stream_to_albatross stack albatross block_name
                           block_compressed =
                         let push () = Lwt_stream.get contents in
@@ -2434,6 +2414,27 @@ struct
                                   `Bad_request
                             | Ok res ->
                                 Middleware.http_response reqd ~data:res `OK)
+                      in
+                      let add_block stack albatross block_name block_size
+                          block_compressed =
+                        Albatross_state.query stack albatross ~domain:user.name
+                          ~name:block_name
+                          (`Block_cmd (`Block_add block_size))
+                        >>= function
+                        | Error err ->
+                            generate_http_error_response
+                              (Fmt.str "an error with albatross. got %s" err)
+                              `Internal_server_error
+                        | Ok (_hdr, res) -> (
+                            Albatross.set_online albatross;
+                            match Albatross_json.res res with
+                            | Error (`String err) ->
+                                generate_http_error_response
+                                  (Fmt.str "unexpected field. got %s" err)
+                                  `Bad_request
+                            | Ok _ ->
+                                stream_to_albatross stack albatross block_name
+                                  block_compressed)
                       in
                       let parsed_json = Utils.Json.from_string json in
                       match Configuration.name_of_str albatross_instance with
@@ -2463,23 +2464,13 @@ struct
                                                err)
                                             `Bad_request
                                       | Ok block_name -> (
-                                          let add_block stack albatross
-                                              block_name block_size =
-                                            add_block stack albatross block_name
-                                              block_size
-                                            >>= function
-                                            | Ok () ->
-                                                stream_to_albatross stack
-                                                  albatross block_name
-                                                  block_compressed
-                                            | Error () -> Lwt.return_unit
-                                          in
                                           match token_or_cookie with
                                           | `Token -> (
                                               match c_or_u with
                                               | `Create ->
                                                   add_block stack albatross
                                                     block_name block_size
+                                                    block_compressed
                                               | `Upload ->
                                                   stream_to_albatross stack
                                                     albatross block_name
@@ -2490,7 +2481,8 @@ struct
                                                   csrf_verification
                                                     (fun _reqd ->
                                                       add_block stack albatross
-                                                        block_name block_size)
+                                                        block_name block_size
+                                                        block_compressed)
                                                     user csrf reqd
                                               | `Upload ->
                                                   csrf_verification
