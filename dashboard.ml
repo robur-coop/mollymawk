@@ -527,7 +527,7 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                                 a
                                   ~a:
                                     [
-                                      a_href "/admin/settings";
+                                      a_href "/admin/settings/albatross";
                                       a_class
                                         [
                                           "hover:bg-gray-200 \

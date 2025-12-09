@@ -25,6 +25,99 @@ struct
   module Paf = Paf_mirage.Make (S.TCP)
   module Liveliness = Liveliness_checks.Make (S)
   module Albatross_state = Albatross.Make (S)
+  module HE = Happy_eyeballs_mirage.Make (S)
+  module Mailer = Sendmail_mirage.Make (S.TCP) (HE)
+  module Dns = Dns_client_mirage.Make (S) (HE)
+
+  let recipients emails =
+    List.fold_left
+      (fun acc email ->
+        match Emile.of_string email with
+        | Ok mailbox -> (
+            match Colombe_emile.to_path mailbox with
+            | Ok path -> Colombe.Forward_path.Forward_path path :: acc
+            | Error (`Msg e) ->
+                Logs.err (fun m ->
+                    m "Type conversion failed for %s: %s" email e);
+                acc)
+        | Error (`Invalid (committed, rest)) ->
+            Logs.err (fun m ->
+                m "Failed to parse email syntax: '%s'. Error at: '%s'" committed
+                  rest);
+            acc)
+      [] emails
+
+  let send_mail stack email_config user_emails (msg : Utils.Email.message) =
+    let message_stream =
+      let msg =
+        Fmt.str
+          "\n\
+          \        From %s \r\n\
+          \ \n\
+          \        To: %s \r\n\
+          \ \n\
+          \        Subject: %s \r\n\n\
+          \        %s \r\n"
+          (Emile.to_string email_config.Utils.Email.sender_email)
+          (String.concat "," user_emails)
+          msg.subject msg.body
+      in
+      let sent = ref false in
+      fun () ->
+        if !sent then Lwt.return_none
+        else (
+          sent := true;
+          Lwt.return_some (msg, 0, String.length msg))
+    in
+    let dns = Dns.create (stack, HE.create stack) in
+    let getaddrinfo : HE.getaddrinfo =
+     fun record_type destination ->
+      match record_type with
+      | `A -> (
+          Dns.gethostbyname dns destination >>= function
+          | Ok addr ->
+              Logs.info (fun m ->
+                  m "Resolved `A record for %s to %a"
+                    (Domain_name.to_string destination)
+                    Ipaddr.V4.pp addr);
+              Ipaddr.Set.of_list [ Ipaddr.V4 addr ] |> Lwt.return_ok
+          | Error e -> Lwt.return_error e)
+      | `AAAA -> (
+          Dns.gethostbyname6 dns destination >>= function
+          | Ok addr ->
+              Logs.info (fun m ->
+                  m "Resolved `AAAA record for %s to %a"
+                    (Domain_name.to_string destination)
+                    Ipaddr.V6.pp addr);
+              Ipaddr.Set.of_list [ Ipaddr.V6 addr ] |> Lwt.return_ok
+          | Error e -> Lwt.return_error e)
+    in
+    let happy_eyeballs = HE.create ~getaddrinfo stack in
+    let ip = email_config.Utils.Email.server in
+    let addr =
+      match Ipaddr.to_v4 ip with Some addr -> addr | None -> Ipaddr.V4.any
+    in
+    let sender =
+      match Colombe_emile.to_path email_config.sender_email with
+      | Ok path -> Some path
+      | Error _ -> None
+    in
+    let domain = Colombe.Domain.IPv4 addr in
+    Mailer.submit ~domain ~destination:(`Ipaddrs [ ip ]) ~port:email_config.port
+      happy_eyeballs sender (recipients user_emails) (fun () ->
+        message_stream ())
+    >>= fun email ->
+    match email with
+    | Ok () -> Lwt.return_ok ()
+    | Error e -> (
+        match e with
+        | `Msg e ->
+            Logs.info (fun m -> m "Email not sent-: %s" e);
+            Lwt.return_error e
+        | #Sendmail_with_starttls.error as e ->
+            let msg = Fmt.str "%a" Sendmail_with_starttls.pp_error e in
+            Logs.info (fun m -> m "Email not sent: %s" msg);
+            Lwt.return_error msg)
 
   let update_albatross_status (t : Albatross.t)
       (err :
@@ -955,13 +1048,33 @@ struct
         Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
-  let settings store albatross_instances _ (user : User_model.user) reqd =
+  let albatross_settings store albatross_instances _ (user : User_model.user)
+      reqd =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Settings"
-             ~content:(Settings_page.settings_layout albatross_instances)
+          (Dashboard.dashboard_layout ~csrf user
+             ~page_title:"Albatross Settings"
+             ~content:
+               (Settings_page.settings_layout ~active_tab:Albatross
+                  (Albatross_config.albatross_config_layout albatross_instances))
+             ~icon:"/images/robur.png" ())
+          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+          `OK
+    | Error err ->
+        Middleware.http_response ~api_meth:false reqd ~title:err.title
+          ~data:err.data `Internal_server_error
+
+  let email_settings store _ (user : User_model.user) reqd =
+    let now = Mirage_ptime.now () in
+    generate_csrf_token store user now reqd >>= function
+    | Ok csrf ->
+        reply reqd ~content_type:"text/html"
+          (Dashboard.dashboard_layout ~csrf user ~page_title:"Email Settings"
+             ~content:
+               (Settings_page.settings_layout ~active_tab:Email
+                  (Email_config.email_config_layout (Store.email store)))
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
@@ -986,7 +1099,7 @@ struct
           ~data:(`String ("Re-initialization failed. See error logs: " ^ err))
           `Internal_server_error
 
-  let update_settings stack store albatross_instances
+  let update_albatross_configuration stack store albatross_instances
       (update_or_create : [ `Update | `Create ]) _user json_dict reqd =
     match Configuration.of_json_from_http json_dict (Mirage_ptime.now ()) with
     | Ok configuration_settings -> (
@@ -2732,6 +2845,28 @@ struct
         Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
           reqd `Internal_server_error
 
+  let update_email_configuration store _user json_dict reqd =
+    match Utils.Email.t_of_json json_dict with
+    | Ok email_settings -> (
+        Store.store_email store (Some email_settings) >>= function
+        | Ok _ ->
+            Middleware.http_response reqd
+              ~data:(`String "Email settings updated successfully") `OK
+        | Error (`Msg err) ->
+            Middleware.http_response reqd
+              ~data:(`String (String.escaped err))
+              `Internal_server_error)
+    | Error (`Msg err) ->
+        Middleware.http_response
+          ~data:(`String (String.escaped err))
+          reqd `Bad_request
+    | Error (`Invalid (ms1, ms2)) ->
+        Middleware.http_response reqd
+          ~data:
+            (`String
+               (Fmt.str "Unexpected error parsing email settings: %s %s" ms1 ms2))
+          `Bad_request
+
   let request_handler stack albatross_instances js_file css_file imgs store
       http_client flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
@@ -2951,35 +3086,34 @@ struct
                 | Error err ->
                     Middleware.http_response ~api_meth:false ~data:(`String err)
                       reqd `Bad_request)
-        | "/admin/settings" ->
+        | "/admin/settings/albatross" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd
-                  (settings store !albatross_instances))
-        | "/admin/albatross/errors" ->
+                  (albatross_settings store !albatross_instances))
+        | "/admin/settings/email" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true store reqd
-                  (albatross_instance req.H1.Request.target
-                     (view_albatross_error_logs store)))
-        | "/api/admin/albatross/retry" ->
-            check_meth `GET (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store reqd
-                  (albatross_instance req.H1.Request.target
-                     (retry_initializing_instance stack albatross_instances)))
-        | "/api/admin/settings/update" ->
+                authenticate ~check_admin:true store reqd (email_settings store))
+        | "/api/admin/settings/albatross/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (update_settings stack store albatross_instances `Update)))
-        | "/api/admin/settings/create" ->
+                     (update_albatross_configuration stack store
+                        albatross_instances `Update)))
+        | "/api/admin/settings/albatross/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (update_settings stack store albatross_instances `Create)))
-        | "/api/admin/settings/delete" ->
+                     (update_albatross_configuration stack store
+                        albatross_instances `Create)))
+        | "/api/admin/settings/albatross/delete" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
                      (delete_albatross_config store albatross_instances)))
+        | "/api/admin/settings/email/update" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_admin:true ~api_meth:true store reqd
+                  (extract_json_csrf_token (update_email_configuration store)))
         | "/api/admin/u/policy/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd

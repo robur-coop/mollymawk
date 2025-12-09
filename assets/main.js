@@ -173,7 +173,7 @@ function openConfigForm(name, ip, port, certificate, p_key) {
 	}
 }
 
-async function saveConfig() {
+async function saveAlbatrossConfig() {
 	const nameInput = document.getElementById("albatross-name").value;
 	const ipInput = document.getElementById("server-ip").value;
 	const portInput = document.getElementById("server-port").value;
@@ -195,7 +195,7 @@ async function saveConfig() {
 		formAlert.textContent = "Please use alphanumeric characters, dashes or underscores for the name";
 	} else {
 		try {
-			const response = await fetch(newConfig ? "/api/admin/settings/create" : "/api/admin/settings/update", {
+			const response = await fetch(newConfig ? "/api/admin/settings/albatross/create" : "/api/admin/settings/albatross/update", {
 				method: 'POST',
 				headers: {
 					"Content-Type": "application/json",
@@ -234,7 +234,7 @@ async function saveConfig() {
 	formButton.disabled = false;
 }
 
-async function deleteConfig(name) {
+async function deleteAlbatrossConfig(name) {
 	const formAlert = document.getElementById("form-alert");
 	const formButton = document.getElementById(`delete-config-btn-${name}`);
 	const molly_csrf = document.getElementById("molly-csrf").value;
@@ -242,7 +242,7 @@ async function deleteConfig(name) {
 	formButton.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
 	formButton.disabled = true;
 	try {
-		const response = await fetch("/api/admin/settings/delete", {
+		const response = await fetch("/api/admin/settings/albatross/delete", {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",
@@ -274,6 +274,59 @@ async function deleteConfig(name) {
 	}
 	formButton.disabled = false;
 	formButton.innerHTML = `<i class="fa-solid fa-trash"></i>`
+}
+
+async function updateEmailConfig() {
+	const serverInput = document.getElementById("email-ip").value;
+	const portInput = document.getElementById("email-port").value;
+	const senderInput = document.getElementById("email-sender").value;
+	const formAlert = document.getElementById("form-alert");
+	const formButton = document.getElementById('update-email-config-btn');
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	formButton.classList.add("disabled");
+	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
+	formButton.disabled = true;
+	if (serverInput === '' || portInput === '' || senderInput === '') {
+		formAlert.classList.remove("hidden");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Please fill all fields";
+	} else {
+		try {
+			const response = await fetch("/api/admin/settings/email/update", {
+				method: 'POST',
+				headers: {
+					"Content-Type": "application/json",
+					"Accept": "application/json",
+				},
+				body: JSON.stringify({
+					"server": serverInput,
+					"port": Number(portInput),
+					"sender_email": senderInput,
+					"molly_csrf": molly_csrf
+				})
+			})
+			const data = await response.json();
+			if (data.status === 200) {
+				formAlert.classList.remove("hidden", "text-secondary-500");
+				formAlert.classList.add("text-primary-500");
+				formAlert.textContent = "Succesfully updated";
+				postAlert("bg-primary-300", data.data);
+				setTimeout(function () {
+					window.location.reload();
+				}, 2000);
+			} else {
+				formAlert.classList.remove("hidden", "text-primary-500");
+				formAlert.classList.add("text-secondary-500");
+				formAlert.textContent = data.data
+			}
+		} catch (error) {
+			formAlert.classList.remove("hidden");
+			formAlert.classList.add("text-secondary-500");
+			formAlert.textContent = error
+		}
+	}
+	formButton.innerHTML = "Update"
+	formButton.disabled = false;
 }
 
 async function retryConnectingAlbatross(name) {

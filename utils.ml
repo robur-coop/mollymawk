@@ -77,12 +77,39 @@ module TimeHelper = struct
 end
 
 module Email = struct
-  type config = {
-    smtp_host : string;
-    smtp_port : int;
-    username : string;
-    password : string;
-  }
+  type t = { server : Ipaddr.t; port : int; sender_email : Emile.mailbox }
+
+  let to_json config =
+    match config with
+    | None -> `Null
+    | Some config ->
+        `Assoc
+          [
+            ("server", `String (Ipaddr.to_string config.server));
+            ("port", `Int config.port);
+            ("sender_email", `String (Emile.to_string config.sender_email));
+          ]
+
+  let t_of_json assoc =
+    match
+      Json.(get "server" assoc, get "port" assoc, get "sender_email" assoc)
+    with
+    | Some (`String server), Some (`Int port), Some (`String sender_email) ->
+        let* server = Ipaddr.of_string server in
+        let* sender_email = Emile.of_string sender_email in
+        Ok { server; port; sender_email }
+    | _ ->
+        Error
+          (`Msg
+             (Fmt.str "missing fields in email configuration json, got %s"
+                (Yojson.Basic.to_string (`Assoc assoc))))
+
+  let of_json json =
+    match json with
+    | `Assoc assoc -> t_of_json assoc
+    | _ -> Error (`Msg "invalid json for email configuration")
+
+  type message = { subject : string; body : string }
 
   let validate_email email =
     match Emile.of_string email with
