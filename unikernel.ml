@@ -1206,52 +1206,47 @@ struct
     Middleware.http_response reqd ~title:"Unikernel Information"
       ~data:response_data `OK
 
-  let unikernel_info_one stack store ~unikernel_name albatross _
+  let unikernel_info_one stack store albatross unikernel_name _
       (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    match Configuration.name_of_str unikernel_name with
-    | Error (`Msg err) ->
-        Middleware.http_response ~api_meth:false reqd ~data:(`String err)
-          `Bad_request
-    | Ok unikernel_name -> (
-        user_unikernel stack albatross ~user_name:user.name ~unikernel_name
-        >>= function
-        | Error err ->
-            let data =
-              "An error occured trying to fetch "
-              ^ Configuration.name_to_str unikernel_name
-              ^ "from albatross: " ^ err
+    user_unikernel stack albatross ~user_name:user.name ~unikernel_name
+    >>= function
+    | Error err ->
+        let data =
+          "An error occured trying to fetch "
+          ^ Configuration.name_to_str unikernel_name
+          ^ "from albatross: " ^ err
+        in
+        Middleware.http_response ~api_meth:false reqd ~data:(`String data)
+          `Internal_server_error
+    | Ok unikernel -> (
+        let now = Mirage_ptime.now () in
+        generate_csrf_token store user now reqd >>= function
+        | Ok csrf ->
+            let last_update_time =
+              match
+                List.find_opt
+                  (fun (u : User_model.unikernel_update) ->
+                    Vmm_core.Name.Label.equal u.name unikernel_name)
+                  user.unikernel_updates
+              with
+              | Some unikernel_update -> Some unikernel_update.timestamp
+              | None -> None
             in
-            Middleware.http_response ~api_meth:false reqd ~data:(`String data)
-              `Internal_server_error
-        | Ok unikernel -> (
-            let now = Mirage_ptime.now () in
-            generate_csrf_token store user now reqd >>= function
-            | Ok csrf ->
-                let last_update_time =
-                  match
-                    List.find_opt
-                      (fun (u : User_model.unikernel_update) ->
-                        Vmm_core.Name.Label.equal u.name unikernel_name)
-                      user.unikernel_updates
-                  with
-                  | Some unikernel_update -> Some unikernel_update.timestamp
-                  | None -> None
-                in
-                reply reqd ~content_type:"text/html"
-                  (Dashboard.dashboard_layout ~csrf user
-                     ~content:
-                       (Unikernel_single.unikernel_single_layout ~unikernel_name
-                          ~instance_name:albatross.configuration.name unikernel
-                          ~last_update_time ~current_time:now)
-                     ~icon:"/images/robur.png" ())
-                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-                  `OK
-            | Error err ->
-                Middleware.http_response ~api_meth:false reqd ~title:err.title
-                  ~data:err.data `Internal_server_error))
+            reply reqd ~content_type:"text/html"
+              (Dashboard.dashboard_layout ~csrf user
+                 ~content:
+                   (Unikernel_single.unikernel_single_layout ~unikernel_name
+                      ~instance_name:albatross.configuration.name unikernel
+                      ~last_update_time ~current_time:now)
+                 ~icon:"/images/robur.png" ())
+              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+              `OK
+        | Error err ->
+            Middleware.http_response ~api_meth:false reqd ~title:err.title
+              ~data:err.data `Internal_server_error)
 
-  let unikernel_prepare_update stack store ~unikernel_name http_client albatross
+  let unikernel_prepare_update stack store http_client albatross unikernel_name
       _ (user : User_model.user) reqd =
     let open Update_flow in
     let pipeline =
@@ -1974,27 +1969,21 @@ struct
                 m "Multipart streamed correctly and unikernel created.");
             Lwt.return_unit)
 
-  let unikernel_console stack ~unikernel_name albatross _
+  let unikernel_console stack albatross unikernel_name _
       (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
-    match Configuration.name_of_str unikernel_name with
-    | Error (`Msg err) ->
-        Middleware.http_response reqd
-          ~data:(`String ("Couldn't convert unikernel name: " ^ err))
-          `Bad_request
-    | Ok unikernel_name -> (
-        let response = Middleware.http_event_source_response reqd `OK in
-        let f (ts, data) =
-          let json = Albatross_json.console_data_to_json (ts, data) in
-          response (Yojson.Basic.to_string json)
-        in
-        Albatross_state.query_console stack albatross ~domain:user.name
-          ~name:unikernel_name f
-        >>= function
-        | Error _err -> Lwt.return_unit
-        | Ok () ->
-            Albatross.set_online albatross;
-            Lwt.return_unit)
+    let response = Middleware.http_event_source_response reqd `OK in
+    let f (ts, data) =
+      let json = Albatross_json.console_data_to_json (ts, data) in
+      response (Yojson.Basic.to_string json)
+    in
+    Albatross_state.query_console stack albatross ~domain:user.name
+      ~name:unikernel_name f
+    >>= function
+    | Error _err -> Lwt.return_unit
+    | Ok () ->
+        Albatross.set_online albatross;
+        Lwt.return_unit
 
   let view_user stack albatross_instances store uuid
       (page : [> `Profile | `Unikernels | `Policy ]) _ (user : User_model.user)
@@ -2741,6 +2730,21 @@ struct
           | Some param -> Ok param
           | None -> Error (Fmt.str "Couldn't find %s in query params" name)
         in
+        let unikernel fn (token_or_cookie : [> `Cookie | `Token ])
+            (user : User_model.user) reqd =
+          match get_query_parameter "unikernel" with
+          | Ok unikernel -> (
+              match Configuration.name_of_str unikernel with
+              | Ok unikernel -> fn unikernel token_or_cookie user reqd
+              | Error (`Msg err) ->
+                  Middleware.http_response ~api_meth:false
+                    ~title:"Unikernel name error"
+                    ~data:(`String ("Error with unikernel name: " ^ err))
+                    reqd `Bad_request)
+          | Error err ->
+              Middleware.http_response ~api_meth:false ~data:(`String err) reqd
+                `Bad_request
+        in
         let albatross_instance endpoint fn
             (token_or_cookie : [> `Cookie | `Token ]) (user : User_model.user)
             reqd =
@@ -3004,14 +3008,9 @@ struct
                   (unikernel_info stack !albatross_instances))
         | "/unikernel/info" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "unikernel" with
-                | Ok unikernel_name ->
-                    authenticate store reqd
-                      (albatross_instance req.H1.Request.target
-                         (unikernel_info_one stack store ~unikernel_name))
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                authenticate store reqd
+                  (albatross_instance req.H1.Request.target (fun albatross ->
+                       unikernel (unikernel_info_one stack store albatross))))
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
                 authenticate store reqd
@@ -3029,14 +3028,9 @@ struct
                      (unikernel_restart stack !albatross_instances)))
         | "/api/unikernel/console" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "unikernel" with
-                | Ok unikernel_name ->
-                    authenticate store reqd ~check_token:true ~api_meth:true
-                      (albatross_instance req.H1.Request.target
-                         (unikernel_console stack ~unikernel_name))
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                authenticate store reqd ~check_token:true ~api_meth:true
+                  (albatross_instance req.H1.Request.target (fun albatross ->
+                       unikernel (unikernel_console stack albatross))))
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -3045,15 +3039,11 @@ struct
                       user reqd))
         | "/unikernel/update" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "unikernel" with
-                | Ok unikernel_name ->
-                    authenticate store reqd
-                      (albatross_instance req.H1.Request.target
-                         (unikernel_prepare_update stack store ~unikernel_name
-                            http_client))
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                authenticate store reqd
+                  (albatross_instance req.H1.Request.target (fun albatross ->
+                       unikernel
+                         (unikernel_prepare_update stack store http_client
+                            albatross))))
         | "/api/unikernel/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
