@@ -86,7 +86,8 @@ let footer =
                     a
                       ~a:
                         [
-                          a_href "https://robur-coop.github.io/mollymawk-handbook/index.html";
+                          a_href
+                            "https://robur-coop.github.io/mollymawk-handbook/index.html";
                           a_class [ "hover:text-primary-500 transition-colors" ];
                         ]
                       [ txt "Docs" ];
