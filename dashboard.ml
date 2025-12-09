@@ -446,7 +446,8 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                          a
                            ~a:
                              [
-                               a_href "/documentation";
+                               a_href
+                                 "https://robur-coop.github.io/mollymawk-handbook/index.html";
                                a_class
                                  [
                                    "hover:bg-gray-200 hover:text-primary-400 \
