@@ -1482,9 +1482,8 @@ struct
         let data_stream, push_chunks = Lwt_stream.create () in
         let push () = Lwt_stream.get data_stream in
         let url =
-          Builder_web.base_url ^ "/job/"
-          ^ Configuration.name_to_str job
-          ^ "/build/" ^ to_be_updated_unikernel ^ "/main-binary"
+          Builder_web.base_url ^ "/job/" ^ job ^ "/build/"
+          ^ to_be_updated_unikernel ^ "/main-binary"
         in
         let f resp _acc chunk =
           if
@@ -1562,7 +1561,7 @@ struct
             ~check_time:old_unikernel.timestamp
           < Utils.rollback_seconds_limit
         then
-          process_change stack ~unikernel_name ~job:old_unikernel.name
+          process_change stack ~unikernel_name ~job:old_unikernel.job
             ~to_be_updated_unikernel:old_unikernel.uuid
             ~currently_running_unikernel:old_unikernel.uuid old_unikernel.config
             user store http_client `Rollback albatross
@@ -1674,10 +1673,9 @@ struct
         | Ok () -> (
             match
               ( Configuration.name_of_str instance_name,
-                Configuration.name_of_str unikernel_name,
-                Configuration.name_of_str job )
+                Configuration.name_of_str unikernel_name )
             with
-            | Ok instance_name, Ok unikernel_name, Ok job -> (
+            | Ok instance_name, Ok unikernel_name -> (
                 match
                   Albatross_state.find_instance_by_name albatross_instances
                     instance_name
@@ -1760,22 +1758,17 @@ struct
                            ("An error occured while finding albatross instance "
                            ^ Configuration.name_to_str instance_name))
                       ~title:"Albatross Instance Error" reqd `Not_found)
-            | Error (`Msg err), _, _ ->
+            | Error (`Msg err), _ ->
                 Middleware.http_response reqd ~title:"Error: Bad instance name"
                   ~data:
                     (`String
                        ("Couldn't convert the instance name, error: " ^ err))
                   `Bad_request
-            | _, Error (`Msg err), _ ->
+            | _, Error (`Msg err) ->
                 Middleware.http_response reqd ~title:"Error: Bad unikernel name"
                   ~data:
                     (`String
                        ("Couldn't convert the unikernel name, error: " ^ err))
-                  `Bad_request
-            | _, _, Error (`Msg err) ->
-                Middleware.http_response reqd ~title:"Error: Bad job name"
-                  ~data:
-                    (`String ("Couldn't convert the job name, error: " ^ err))
                   `Bad_request)
         | Error (`Msg err) ->
             Logs.info (fun m ->
