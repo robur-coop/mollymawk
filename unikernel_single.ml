@@ -1,6 +1,7 @@
 let unikernel_single_layout ~unikernel_name ~instance_name
     ?(last_update_time = None) ~current_time unikernel =
   let u_name, data = unikernel in
+  let unikernel_name_str = Configuration.name_to_str unikernel_name in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-10 p-4 bg-gray-50 my-1" ] ]
@@ -64,7 +65,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                               ~attribs:
                                 [
                                   a_onclick
-                                    ("restartUnikernel('" ^ unikernel_name
+                                    ("restartUnikernel('" ^ unikernel_name_str
                                    ^ "', '"
                                     ^ Configuration.name_to_str instance_name
                                     ^ "')");
@@ -79,7 +80,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                 [
                                   a_href
                                     ("/unikernel/update?unikernel="
-                                   ^ unikernel_name ^ "&instance="
+                                   ^ unikernel_name_str ^ "&instance="
                                     ^ Configuration.name_to_str instance_name);
                                   a_class
                                     [
@@ -104,8 +105,8 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                     [
                                       a_id "unikernel-rollback";
                                       a_onclick
-                                        ("rollbackUnikernel('" ^ unikernel_name
-                                       ^ "', '"
+                                        ("rollbackUnikernel('"
+                                       ^ unikernel_name_str ^ "', '"
                                         ^ Configuration.name_to_str
                                             instance_name
                                         ^ "')");
@@ -120,7 +121,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                               ~attribs:
                                 [
                                   a_onclick
-                                    ("destroyUnikernel('" ^ unikernel_name
+                                    ("destroyUnikernel('" ^ unikernel_name_str
                                    ^ "', '"
                                     ^ Configuration.name_to_str instance_name
                                     ^ "')");
