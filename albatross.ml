@@ -129,8 +129,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
   let manifest_devices_match ~bridges ~block_devices binary =
     let cachet =
       let map () ~pos len =
-        if pos >= String.length binary || len <= 0 then
-          Bstr.empty
+        if pos >= String.length binary || len <= 0 then Bstr.empty
         else
           let len = min len (max 0 (String.length binary - pos)) in
           let b = Bstr.create len in
