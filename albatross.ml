@@ -130,12 +130,10 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     let cachet =
       let map () ~pos len =
         if pos >= String.length binary || len <= 0 then
-          (Cachet.Bstr.empty :> Cachet.bigstring)
+          Bstr.empty
         else
           let len = min len (max 0 (String.length binary - pos)) in
-          let b : Cachet.bigstring =
-            Bigarray.Array1.create Bigarray.char Bigarray.c_layout len
-          in
+          let b = Bstr.create len in
           for i = 0 to len - 1 do
             b.{i} <- binary.[pos + i]
           done;

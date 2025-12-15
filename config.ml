@@ -25,6 +25,8 @@ let mollymawk =
       package "http-mirage-client";
       package "solo5-elftool" ~min:"0.4.0";
       package "multipart_form-lwt";
+      package "cachet" ~min:"0.0.3";
+      package "bstr";
     ]
   in
   main ~packages "Unikernel.Main"
