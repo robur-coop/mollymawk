@@ -30,7 +30,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     | Ok _response -> Ok ()
 
   let check_http http_client base_url =
-    Utils.send_http_request http_client ~base_url >|= function
+    Update_flow.send_http_request http_client ~base_url >|= function
     | Error (`Msg err) ->
         Logs.err (fun m ->
             m "http-liveliness-check: Error response of %s with error: %s"
