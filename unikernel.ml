@@ -599,7 +599,11 @@ struct
           else if form_csrf = "" then
             Error
               (`Msg "CSRF token mismatch error. Please referesh and try again.")
-          else Configuration.name_of_str name
+          else
+            let open Result.Syntax in
+            let* name = Configuration.name_of_str name in
+            let* email = Mrmime.Mailbox.of_string email in
+            Ok (name, email)
         in
         match
           Utils.Json.
@@ -617,7 +621,7 @@ struct
                 Middleware.http_response reqd
                   ~data:(`String (String.escaped err))
                   `Bad_request
-            | Ok name ->
+            | Ok (name, email) ->
                 if Middleware.csrf_cookie_verification form_csrf reqd then
                   let existing_email = Store.find_by_email store email in
                   let existing_name = Store.find_by_name store name in
@@ -690,19 +694,20 @@ struct
         Middleware.http_response reqd ~data:(`String err) `Bad_request
     | Ok (`Assoc json_dict) -> (
         let validate_user_input ~email ~password =
-          if email = "" || password = "" then Error "All fields must be filled."
+          if email = "" || password = "" then
+            Error (`Msg "All fields must be filled.")
           else if not (Utils.Email.validate_email email) then
-            Error "Invalid email address."
+            Error (`Msg "Invalid email address.")
           else if String.length password < 8 then
-            Error "Password must be at least 8 characters long."
-          else Ok "Validation passed."
+            Error (`Msg "Password must be at least 8 characters long.")
+          else Mrmime.Mailbox.of_string email
         in
         match Utils.Json.(get "email" json_dict, get "password" json_dict) with
         | Some (`String email), Some (`String password) -> (
             match validate_user_input ~email ~password with
-            | Error err ->
+            | Error (`Msg err) ->
                 Middleware.http_response reqd ~data:(`String err) `Bad_request
-            | Ok _ -> (
+            | Ok email -> (
                 let now = Mirage_ptime.now () in
                 let user = Store.find_by_email store email in
                 match

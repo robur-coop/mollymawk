@@ -77,7 +77,7 @@ module TimeHelper = struct
 end
 
 module Email = struct
-  type t = { server : Ipaddr.t; port : int; sender_email : Emile.mailbox }
+  type t = { server : Ipaddr.t; port : int; sender_email : Mrmime.Mailbox.t }
 
   let to_json config =
     match config with
@@ -87,7 +87,8 @@ module Email = struct
           [
             ("server", `String (Ipaddr.to_string config.server));
             ("port", `Int config.port);
-            ("sender_email", `String (Emile.to_string config.sender_email));
+            ( "sender_email",
+              `String (Mrmime.Mailbox.to_string config.sender_email) );
           ]
 
   let t_of_json assoc =
@@ -96,7 +97,7 @@ module Email = struct
     with
     | Some (`String server), Some (`Int port), Some (`String sender_email) ->
         let* server = Ipaddr.of_string server in
-        let* sender_email = Emile.of_string sender_email in
+        let* sender_email = Mrmime.Mailbox.of_string sender_email in
         Ok { server; port; sender_email }
     | _ ->
         Error
@@ -112,10 +113,10 @@ module Email = struct
   type message = { subject : string; body : string }
 
   let validate_email email =
-    match Emile.of_string email with
+    match Mrmime.Mailbox.of_string email with
     | Ok _ -> true
-    | Error s ->
-        Logs.err (fun m -> m "Emile-Email-Validation: %a" Emile.pp_error s);
+    | Error (`Msg err) ->
+        Logs.err (fun m -> m "Emile-Email-Validation: %s" err);
         false
 
   let generate_verification_link uuid =

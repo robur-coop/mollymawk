@@ -134,7 +134,7 @@ let user_profile (user : User_model.user) =
                 p
                   ~a:[ a_class [ "rounded border py-2 px-4 w-full" ] ]
                   [
-                    txt user.email;
+                    txt (Mrmime.Mailbox.to_string user.email);
                     (match user.email_verified with
                     | Some _ptime ->
                         span

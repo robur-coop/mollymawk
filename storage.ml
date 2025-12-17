@@ -235,7 +235,7 @@ module Make (BLOCK : Mirage_block.S) = struct
 
   let find_by_email store email =
     List.find_opt
-      (fun user -> String.equal user.User_model.email email)
+      (fun user -> Mrmime.Mailbox.equal user.User_model.email email)
       store.users
 
   let find_by_name store name =
