@@ -65,7 +65,7 @@ let user_account_layout (user : User_model.user) ~active_cookie_value
                                 ];
                               a_disabled ();
                               a_input_type `Text;
-                              a_value user.email;
+                              a_value (Mrmime.Mailbox.to_string user.email);
                             ]
                           ();
                       ];

@@ -31,7 +31,7 @@ type unikernel_update = {
 
 type user = {
   name : Vmm_core.Name.Label.t;
-  email : string;
+  email : Mrmime.Mailbox.t;
   email_verified : Ptime.t option;
   password : string;
   uuid : string;
@@ -323,7 +323,7 @@ let user_to_json (u : user) =
   `Assoc
     [
       ("name", `String (Configuration.name_to_str u.name));
-      ("email", `String u.email);
+      ("email", `String (Mrmime.Mailbox.to_string u.email));
       ("email_verified", Utils.TimeHelper.ptime_to_json u.email_verified);
       ("password", `String u.password);
       ("uuid", `String u.uuid);
@@ -411,6 +411,7 @@ let user_v1_of_json = function
                        a string: " ^ Utils.Json.to_string js))
           in
           let* name = Configuration.name_of_str name in
+          let* email = Mrmime.Mailbox.of_string email in
           Ok
             {
               name;
@@ -508,6 +509,7 @@ let user_v2_of_json = function
                        a string: " ^ Utils.Json.to_string js))
           in
           let* name = Configuration.name_of_str name in
+          let* email = Mrmime.Mailbox.of_string email in
           Ok
             {
               name;
@@ -607,6 +609,7 @@ let user_v3_of_json cookie_fn = function
                        a string: " ^ Utils.Json.to_string js))
           in
           let* name = Configuration.name_of_str name in
+          let* email = Mrmime.Mailbox.of_string email in
           Ok
             {
               name;
@@ -706,6 +709,7 @@ let user_v4_of_json cookie_fn = function
                        a string: " ^ Utils.Json.to_string js))
           in
           let* name = Configuration.name_of_str name in
+          let* email = Mrmime.Mailbox.of_string email in
           Ok
             {
               name;
@@ -815,6 +819,7 @@ let user_of_json cookie_fn = function
               (Ok []) unikernel_updates
           in
           let* name = Configuration.name_of_str name in
+          let* email = Mrmime.Mailbox.of_string email in
           Ok
             {
               name;
@@ -985,7 +990,9 @@ let login_user ~email ~password ~user_agent user now =
         Error (`Msg "This account is not active")
       else
         let pass = hash_password ~password ~uuid:u.uuid in
-        match String.equal u.password pass && String.equal u.email email with
+        match
+          String.equal u.password pass && Mrmime.Mailbox.equal u.email email
+        with
         | true ->
             let new_session =
               generate_cookie ~name:session_cookie ~expires_in:week ~uuid:u.uuid

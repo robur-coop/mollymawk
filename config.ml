@@ -17,7 +17,7 @@ let mollymawk =
       package "mirage-crypto-rng";
       package "uuidm";
       package "emile";
-      package ~sublibs:["emile"] "colombe" ~min:"0.12.0";
+      package ~sublibs:[ "emile" ] "colombe" ~min:"0.12.0";
       package "sendmail";
       package "paf" ~sublibs:[ "mirage" ] ~min:"0.5.0";
       package "oneffs";
@@ -27,6 +27,7 @@ let mollymawk =
       package "multipart_form-lwt";
       package "sendmail-mirage";
       package "dns-client-mirage";
+      package "mrmime";
     ]
   in
   main ~packages "Unikernel.Main"
