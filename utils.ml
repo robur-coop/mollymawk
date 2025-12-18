@@ -145,7 +145,7 @@ module Email = struct
               ( Field_name.content_type,
                 Content,
                 Content_type.(
-                  make `Text (Subtype.v `Text "plain") Parameters.empty) );
+                  make `Text (Subtype.v `Text "html") Parameters.empty) );
           ]
     in
     let body_stream =
