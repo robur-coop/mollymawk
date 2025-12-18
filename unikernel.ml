@@ -29,46 +29,18 @@ struct
   module Mailer = Sendmail_mirage.Make (S.TCP) (HE)
   module Dns = Dns_client_mirage.Make (S) (HE)
 
-  let recipients emails =
-    List.fold_left
-      (fun acc email ->
-        match Emile.of_string email with
-        | Ok mailbox -> (
-            match Colombe_emile.to_path mailbox with
-            | Ok path -> Colombe.Forward_path.Forward_path path :: acc
-            | Error (`Msg e) ->
-                Logs.err (fun m ->
-                    m "Type conversion failed for %s: %s" email e);
-                acc)
-        | Error (`Invalid (committed, rest)) ->
-            Logs.err (fun m ->
-                m "Failed to parse email syntax: '%s'. Error at: '%s'" committed
-                  rest);
-            acc)
-      [] emails
+  let recipient email =
+    match Colombe_emile.to_path email with
+    | Ok path -> [ Colombe.Forward_path.Forward_path path ]
+    | Error (`Msg e) ->
+        Logs.err (fun m ->
+            m "Type conversion failed for %s: %s"
+              (Mrmime.Mailbox.to_string email)
+              e);
+        []
 
-  let send_mail stack email_config user_emails (msg : Utils.Email.message) =
-    let message_stream =
-      let msg =
-        Fmt.str
-          "\n\
-          \        From %s \r\n\
-          \ \n\
-          \        To: %s \r\n\
-          \ \n\
-          \        Subject: %s \r\n\n\
-          \        %s \r\n"
-          (Emile.to_string email_config.Utils.Email.sender_email)
-          (String.concat "," user_emails)
-          msg.subject msg.body
-      in
-      let sent = ref false in
-      fun () ->
-        if !sent then Lwt.return_none
-        else (
-          sent := true;
-          Lwt.return_some (msg, 0, String.length msg))
-    in
+  let send_email stack email_config user_email ~subject ~body =
+    let email = Utils.Email.construct_email user_email ~subject ~body in
     let dns = Dns.create (stack, HE.create stack) in
     let getaddrinfo : HE.getaddrinfo =
      fun record_type destination ->
@@ -102,10 +74,13 @@ struct
       | Ok path -> Some path
       | Error _ -> None
     in
+    let streamer =
+      let s = Mrmime.Mt.to_stream email in
+      fun () -> Lwt.return (s ())
+    in
     let domain = Colombe.Domain.IPv4 addr in
     Mailer.submit ~domain ~destination:(`Ipaddrs [ ip ]) ~port:email_config.port
-      happy_eyeballs sender (recipients user_emails) (fun () ->
-        message_stream ())
+      happy_eyeballs sender (recipient user_email) (fun () -> streamer ())
     >>= fun email ->
     match email with
     | Ok () -> Lwt.return_ok ()
