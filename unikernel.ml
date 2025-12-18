@@ -575,7 +575,7 @@ struct
             Error
               (`Msg "CSRF token mismatch error. Please referesh and try again.")
           else
-            let open Result.Syntax in
+            let ( let* ) = Result.bind in
             let* name = Configuration.name_of_str name in
             let* email = Mrmime.Mailbox.of_string email in
             Ok (name, email)
