@@ -1,4 +1,5 @@
 open Lwt.Infix
+open Mrmime
 
 let ( let* ) = Result.bind
 
@@ -110,8 +111,6 @@ module Email = struct
     | `Assoc assoc -> t_of_json assoc
     | _ -> Error (`Msg "invalid json for email configuration")
 
-  type message = { subject : string; body : string }
-
   let validate_email email =
     match Mrmime.Mailbox.of_string email with
     | Ok _ -> true
@@ -121,6 +120,44 @@ module Email = struct
 
   let generate_verification_link uuid =
     "/auth/verify?token=" ^ Uuidm.to_string uuid
+
+  let subject_of_strings xs =
+    List.fold_left
+      (fun acc s -> acc @ Unstructured.Craft.[ sp 1; v s ])
+      []
+      (String.split_on_char ' ' xs)
+
+  let construct_email user_email ~subject ~body =
+    let header =
+      Header.of_list
+        Field.
+          [
+            Field
+              ( Field_name.subject,
+                Unstructured,
+                Unstructured.Craft.(compile (subject_of_strings subject)) );
+            Field (Field_name.v "To", Addresses, [ `Mailbox user_email ]);
+            Field
+              ( Field_name.date,
+                Date,
+                Date.of_ptime ~zone:GMT (Mirage_ptime.now ()) );
+            Field
+              ( Field_name.content_type,
+                Content,
+                Content_type.(
+                  make `Text (Subtype.v `Text "plain") Parameters.empty) );
+          ]
+    in
+    let body_stream =
+      let sent = ref false in
+      fun () ->
+        if !sent then None
+        else (
+          sent := true;
+          Some (body, 0, String.length body))
+    in
+    let part = Mt.part body_stream in
+    Mt.make header Mt.simple part
 end
 
 module Status = struct
