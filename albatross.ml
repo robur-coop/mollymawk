@@ -55,6 +55,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         bridges = Vmm_core.String_set.empty;
       }
 
+  let dot_name = Result.get_ok (Vmm_core.Name.Label.of_string ".")
+
   let policy ?domain t =
     let path =
       Option.value ~default:Vmm_core.Name.root
@@ -165,7 +167,11 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     let tmp_key = Private_key.generate key_type in
     match
       let name =
-        [ Distinguished_name.(Relative_distinguished_name.singleton (CN name)) ]
+        [
+          Distinguished_name.(
+            Relative_distinguished_name.singleton
+              (CN (Vmm_core.Name.Label.to_string name)));
+        ]
       in
       let extensions = Signing_request.Ext.(singleton Extensions exts) in
       Signing_request.create name ~extensions tmp_key
@@ -203,8 +209,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
           let policy = Option.value ~default:empty_policy policy in
           let cmd = `Policy_cmd (`Policy_add policy) in
           let* key, cert =
-            key_cert ~is_ca:true ~cmd c.private_key
-              (Configuration.name_to_str domain)
+            key_cert ~is_ca:true ~cmd c.private_key domain
               (X509.Certificate.subject c.certificate)
           in
           Ok (key, cert, [ cert ])
@@ -490,7 +495,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     in
     let cmd = `Policy_cmd `Policy_info in
     match
-      key_cert ~is_ca:false ~cmd configuration.private_key "."
+      key_cert ~is_ca:false ~cmd configuration.private_key dot_name
         (X509.Certificate.subject configuration.certificate)
     with
     | Error s ->
@@ -559,22 +564,16 @@ module Make (S : Tcpip.Stack.V4V6) = struct
              (Configuration.name_to_str name))
 
   let certs t domain name cmd =
-    match
-      Result.map
-        (Vmm_core.Name.make (Vmm_core.Name.Path.of_label domain))
-        (Vmm_core.Name.Label.of_string name)
-    with
-    | Error (`Msg msg) ->
+    let vmm_name =
+      Vmm_core.Name.make (Vmm_core.Name.Path.of_label domain) name
+    in
+    Result.map_error
+      (fun msg ->
         t.status <- Status.update t.status (Status.make `Certificate msg);
-        Error msg
-    | Ok vmm_name ->
-        Result.map_error
-          (fun msg ->
-            t.status <- Status.update t.status (Status.make `Certificate msg);
-            msg)
-          (Result.map (fun c -> (vmm_name, c)) (gen_cert t ~domain cmd name))
+        msg)
+      (Result.map (fun c -> (vmm_name, c)) (gen_cert t ~domain cmd name))
 
-  let query stack t ~domain ?(name = ".") ?push cmd =
+  let query stack t ~domain ?(name = dot_name) ?push cmd =
     match certs t domain name cmd with
     | Error str -> Lwt.return (Error str)
     | Ok (vmm_name, certificates) ->
