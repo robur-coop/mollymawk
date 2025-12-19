@@ -89,7 +89,7 @@ module Email = struct
             ("server", `String (Ipaddr.to_string config.server));
             ("port", `Int config.port);
             ( "sender_email",
-              `String (Mrmime.Mailbox.to_string config.sender_email) );
+              `String (Emile.to_string config.sender_email) );
           ]
 
   let t_of_json assoc =

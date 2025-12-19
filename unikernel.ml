@@ -35,7 +35,7 @@ struct
     | Error (`Msg e) ->
         Logs.err (fun m ->
             m "Type conversion failed for %s: %s"
-              (Mrmime.Mailbox.to_string email)
+              (Emile.to_string email)
               e);
         []
 
