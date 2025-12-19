@@ -34,9 +34,7 @@ struct
     | Ok path -> [ Colombe.Forward_path.Forward_path path ]
     | Error (`Msg e) ->
         Logs.err (fun m ->
-            m "Type conversion failed for %s: %s"
-              (Emile.to_string email)
-              e);
+            m "Type conversion failed for %s: %s" (Emile.to_string email) e);
         []
 
   let send_email stack email_config user_email ~subject ~body =
