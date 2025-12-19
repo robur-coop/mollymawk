@@ -58,7 +58,7 @@ let verify_page ~csrf ~icon (user : User_model.user) =
                          p [ txt "You're almost there! We sent an email to" ];
                          p
                            ~a:[ a_class [ "font-bold text-xl" ] ]
-                           [ txt (Mrmime.Mailbox.to_string user.email) ];
+                           [ txt (Emile.to_string user.email) ];
                        ];
                      div
                        ~a:[ a_class [ "my-3" ] ]

@@ -323,7 +323,7 @@ let user_to_json (u : user) =
   `Assoc
     [
       ("name", `String (Configuration.name_to_str u.name));
-      ("email", `String (Mrmime.Mailbox.to_string u.email));
+      ("email", `String (Emile.to_string u.email));
       ("email_verified", Utils.TimeHelper.ptime_to_json u.email_verified);
       ("password", `String u.password);
       ("uuid", `String u.uuid);
