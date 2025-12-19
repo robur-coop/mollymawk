@@ -281,9 +281,7 @@ let users_index_layout (users : User_model.user list) current_time =
                                          [
                                            p
                                              [
-                                               txt
-                                                 (Emile.to_string
-                                                    user.email);
+                                               txt (Emile.to_string user.email);
                                              ];
                                            (match user.email_verified with
                                            | Some _ ->
