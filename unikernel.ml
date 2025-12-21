@@ -2865,6 +2865,16 @@ struct
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd
                   (albatross_settings store !albatross_instances))
+        | "/admin/albatross/errors" ->
+            check_meth `GET (fun () ->
+                authenticate ~check_admin:true store reqd
+                  (albatross_instance req.H1.Request.target
+                     (view_albatross_error_logs store)))
+        | "/api/admin/albatross/retry" ->
+            check_meth `GET (fun () ->
+                authenticate ~check_admin:true ~api_meth:true store reqd
+                  (albatross_instance req.H1.Request.target
+                     (retry_initializing_instance stack albatross_instances)))
         | "/admin/settings/email" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd (email_settings store))
