@@ -93,6 +93,9 @@ let welcome_email (user : User_model.user) verification_link =
                    ~text:"Verify email address";
                  br ();
                  paragraph
+                   [ txt "This verification link will expire in 1 hour." ];
+                 br ();
+                 paragraph
                    [
                      txt
                        "If the button doesn't work, copy and paste this link \
@@ -157,6 +160,10 @@ let verification_email (user : User_model.user) verification_link =
                  br ();
                  link_button ~href:verification_link
                    ~text:"Verify email address";
+                 br ();
+                 paragraph
+                   [ txt "This verification link will expire in 1 hour." ];
+                 br ();
                  paragraph
                    [
                      txt
