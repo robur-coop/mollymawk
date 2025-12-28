@@ -38,7 +38,11 @@ struct
         []
 
   let send_email stack email_config user_email ~subject ~body =
-    let email = Utils.Email.construct_email user_email ~subject ~body in
+    let email =
+      Utils.Email.construct_email
+        ~from_email:email_config.Utils.Email.sender_email ~to_email:user_email
+        ~subject ~body ()
+    in
     let dns = Dns.create (stack, HE.create stack) in
     let getaddrinfo : HE.getaddrinfo =
      fun record_type destination ->
@@ -63,7 +67,7 @@ struct
           | Error e -> Lwt.return_error e)
     in
     let happy_eyeballs = HE.create ~getaddrinfo stack in
-    let ip = email_config.Utils.Email.server in
+    let ip = email_config.server in
     let addr =
       match Ipaddr.to_v4 ip with Some addr -> addr | None -> Ipaddr.V4.any
     in

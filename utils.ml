@@ -126,7 +126,7 @@ module Email = struct
       []
       (String.split_on_char ' ' xs)
 
-  let construct_email user_email ~subject ~body =
+  let construct_email ~from_email ~to_email ~subject ~body () =
     let header =
       Header.of_list
         Field.
@@ -135,7 +135,8 @@ module Email = struct
               ( Field_name.subject,
                 Unstructured,
                 Unstructured.Craft.(compile (subject_of_strings subject)) );
-            Field (Field_name.v "To", Addresses, [ `Mailbox user_email ]);
+            Field (Field_name.v "From", Addresses, [ `Mailbox from_email ]);
+            Field (Field_name.v "To", Addresses, [ `Mailbox to_email ]);
             Field
               ( Field_name.date,
                 Date,
