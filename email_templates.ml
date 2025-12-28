@@ -57,7 +57,7 @@ let welcome_email (user : User_model.user) verification_link =
            ~a:
              [
                a_style
-                 "margin:0; padding:20px; background-color:#f9fafb; \
+                 "margin:0; padding:0; background-color:#f9fafb; \
                   font-family:Arial, Helvetica, sans-serif; color:#1f2937;";
              ]
            [
@@ -68,45 +68,49 @@ let welcome_email (user : User_model.user) verification_link =
                      "max-width:600px; margin:0 auto; \
                       background-color:#ffffff; padding:24px;";
                  ]
-               [ header1 "Welcome to Mollymawk" ];
-             paragraph
                [
-                 txt "Hello ";
-                 span
-                   ~a:[ a_style "font-weight:700;" ]
-                   [ txt (Configuration.name_to_str user.name) ];
-                 txt ",";
+                 header1 "Welcome to Mollymawk";
+                 paragraph
+                   [
+                     txt "Hello ";
+                     span
+                       ~a:[ a_style "font-weight:700;" ]
+                       [ txt (Configuration.name_to_str user.name) ];
+                     txt ",";
+                   ];
+                 paragraph
+                   [
+                     txt
+                       "Thank you for signing up with Mollymawk. Your account \
+                        has been created successfully. An administrator will \
+                        activate your account shortly. Once activated, you \
+                        will be able to log in and start deploying unikernels. \
+                        Please use the link below to verify your email \
+                        address:";
+                   ];
+                 br ();
+                 link_button ~href:verification_link
+                   ~text:"Verify email address";
+                 br ();
+                 paragraph
+                   [
+                     txt
+                       "If the button doesn't work, copy and paste this link \
+                        into your browser:";
+                   ];
+                 a
+                   ~a:[ a_href verification_link; a_style "color:#007bff;" ]
+                   [ txt verification_link ];
+                 br ();
+                 paragraph
+                   [
+                     txt
+                       "You will also receive email notifications for \
+                        important events, including unikernel updates.";
+                   ];
+                 br ();
+                 email_footer ();
                ];
-             paragraph
-               [
-                 txt
-                   "Thank you for signing up with Mollymawk. Your account has \
-                    been created successfully. An administrator will activate \
-                    your account shortly. Once activated, you will be able to \
-                    log in and start deploying unikernels. Please use the link \
-                    below to verify your email address:";
-               ];
-             br ();
-             link_button ~href:verification_link ~text:"Verify email address";
-             br ();
-             paragraph
-               [
-                 txt
-                   "If the button doesn't work, copy and paste this link into \
-                    your browser:";
-               ];
-             a
-               ~a:[ a_href verification_link; a_style "color:#007bff;" ]
-               [ txt verification_link ];
-             br ();
-             paragraph
-               [
-                 txt
-                   "You will also receive email notifications for important \
-                    events, including unikernel updates.";
-               ];
-             br ();
-             email_footer ();
            ]))
   in
   Format.asprintf "%a\n" (Tyxml_html.pp ()) page
