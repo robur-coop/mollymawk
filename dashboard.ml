@@ -147,7 +147,27 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                        ];
                    ];
                ];
-             Utils.display_banner message;
+             (if not (User_model.is_email_verified user) then
+                Utils.display_banner `Error
+                  (div
+                     [
+                       a
+                         ~a:
+                           [
+                             a_href "/verify-email";
+                             a_class [ "underline font-bold ml-1" ];
+                           ]
+                         [
+                           txt
+                             "Your email is not verified. Click to resend \
+                              verification email";
+                         ];
+                     ])
+              else div []);
+             Option.map
+               (fun msg -> Utils.display_banner `Success (div [ txt msg ]))
+               message
+             |> Option.value ~default:(div []);
              section
                ~a:[ a_class [ "grid grid-cols-12 bg-gray-100 min-h-screen" ] ]
                [

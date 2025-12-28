@@ -126,7 +126,7 @@ module Email = struct
       []
       (String.split_on_char ' ' xs)
 
-  let construct_email user_email ~subject ~body =
+  let construct_email ~from_email ~to_email ~subject ~body () =
     let header =
       Header.of_list
         Field.
@@ -135,7 +135,8 @@ module Email = struct
               ( Field_name.subject,
                 Unstructured,
                 Unstructured.Craft.(compile (subject_of_strings subject)) );
-            Field (Field_name.v "To", Addresses, [ `Mailbox user_email ]);
+            Field (Field_name.v "From", Addresses, [ `Mailbox from_email ]);
+            Field (Field_name.v "To", Addresses, [ `Mailbox to_email ]);
             Field
               ( Field_name.date,
                 Date,
@@ -279,28 +280,43 @@ let increment_or_decrement_ui ~max_value ~min_value ?(step = 1)
           ~btn_type:`Primary_outlined ();
       ])
 
-let display_banner = function
-  | Some message ->
-      Tyxml_html.(
-        section
-          ~a:
-            [
-              a_class
-                [
-                  "w-full bg-primary-200 py-4 text-center text-gray-200 border \
-                   border-primary-400 font-semibold flex justify-center px-5 \
-                   space-x-5";
-                ];
-              a_id "banner-message";
-            ]
-          [
-            p [ txt message ];
-            button_component
-              ~attribs:[ a_id "close-banner-btn"; a_onclick "closeBanner()" ]
-              ~content:(i ~a:[ a_class [ "fa-solid fa-x text-sm" ] ] [])
-              ~btn_type:`Primary_outlined ();
-          ])
-  | None -> Tyxml_html.div []
+let display_banner status content =
+  let bg_style, border_style, text_style =
+    match status with
+    | `Error ->
+        ("bg-secondary-100", "border-secondary-400", "text-secondary-800")
+    | `Success -> ("bg-primary-100", "border-primary-400", "text-primary-800")
+  in
+  let base_classes =
+    [
+      "w-full";
+      "py-4";
+      "border-b";
+      "font-semibold";
+      "flex";
+      "items-center";
+      "justify-center";
+      "px-5";
+      "space-x-5";
+      bg_style;
+      border_style;
+      text_style;
+    ]
+  in
+  Tyxml_html.(
+    section
+      ~a:[ a_class base_classes; a_id "banner-message" ]
+      [
+        div ~a:[ a_class [ "flex-grow text-center" ] ] [ content ];
+        button_component
+          ~attribs:[ a_id "close-banner-btn"; a_onclick "closeBanner()" ]
+          ~content:(i ~a:[ a_class [ "fa-solid fa-x text-sm" ] ] [])
+          ~btn_type:
+            (match status with
+            | `Error -> `Danger_outlined
+            | `Success -> `Primary_outlined)
+          ();
+      ])
 
 let bytes_to_megabytes bytes =
   let megabytes = float_of_int bytes /. (1024.0 *. 1024.0) in

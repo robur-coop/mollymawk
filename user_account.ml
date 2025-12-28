@@ -45,15 +45,20 @@ let user_account_layout (user : User_model.user) ~active_cookie_value
                           ~a:[ a_class [ "text-sm my-2" ] ]
                           [
                             txt "Email";
+                            br ();
                             (match user.email_verified with
                             | Some _ ->
                                 span
                                   ~a:[ a_class [ "text-primary-500" ] ]
-                                  [ txt " verified" ]
+                                  [ txt " verified." ]
                             | None ->
-                                span
-                                  ~a:[ a_class [ "text-secondary-500" ] ]
-                                  [ txt " not verified" ]);
+                                a
+                                  ~a:
+                                    [
+                                      a_class [ "text-secondary-500" ];
+                                      a_href "/verify-email";
+                                    ]
+                                  [ txt "Click here to verify your email" ]);
                           ];
                         input
                           ~a:
