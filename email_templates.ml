@@ -4,7 +4,7 @@ let link_button ~href ~text =
   let base_style =
     "display:inline-block; background-color:rgb(54 156 140); color:#ffffff; \
      font-weight:700; text-decoration:none; padding:12px 16px; \
-     border-radius:8px;"
+     border-radius:8px; text-align:center;"
   in
   Tyxml_html.(a ~a:[ a_href href; a_style base_style ] [ txt text ])
 
@@ -18,6 +18,34 @@ let header1 text =
   in
   Tyxml_html.(h1 ~a:[ a_style base_style ] [ Tyxml_html.txt text ])
 
+let email_footer () =
+  Tyxml_html.(
+    div
+      [
+        p
+          [
+            txt "Need help with Mollymawk? Read our handbook: ";
+            a ~a:[ a_href handbook_link ] [ txt "Mollymawk Handbook" ];
+          ];
+        p
+          [
+            txt "Check out our blog: ";
+            a ~a:[ a_href "https://blog.robur.coop" ] [ txt "Robur's Blog" ];
+          ];
+        p
+          [
+            txt "Check out our website: ";
+            a ~a:[ a_href "https://robur.coop" ] [ txt "Robur's Website" ];
+          ];
+        p
+          [
+            txt "For any other inquiries, contact us at ";
+            a ~a:[ a_href "team@robur.coop" ] [ txt "team@robur.coop" ];
+          ];
+        br ();
+        p [ txt "© Robur.coop" ];
+      ])
+
 let welcome_email (user : User_model.user) verification_link =
   let page =
     Tyxml_html.(
@@ -29,7 +57,7 @@ let welcome_email (user : User_model.user) verification_link =
            ~a:
              [
                a_style
-                 "margin:0; padding:0; background-color:#f9fafb; \
+                 "margin:0; padding:20px; background-color:#f9fafb; \
                   font-family:Arial, Helvetica, sans-serif; color:#1f2937;";
              ]
            [
@@ -52,40 +80,33 @@ let welcome_email (user : User_model.user) verification_link =
              paragraph
                [
                  txt
-                   "Thank you for signing up for Mollymawk. Your account has \
+                   "Thank you for signing up with Mollymawk. Your account has \
                     been created successfully. An administrator will activate \
                     your account shortly. Once activated, you will be able to \
                     log in and start deploying unikernels. Please use the link \
                     below to verify your email address:";
                ];
+             br ();
              link_button ~href:verification_link ~text:"Verify email address";
+             br ();
+             paragraph
+               [
+                 txt
+                   "If the button doesn't work, copy and paste this link into \
+                    your browser:";
+               ];
+             a
+               ~a:[ a_href verification_link; a_style "color:#007bff;" ]
+               [ txt verification_link ];
+             br ();
              paragraph
                [
                  txt
                    "You will also receive email notifications for important \
                     events, including unikernel updates.";
                ];
-             paragraph
-               [
-                 txt
-                   "To get started and learn more about using Mollymawk, \
-                    please refer to our handbook: ";
-                 link_button ~href:handbook_link ~text:"Mollymawk Handbook.";
-               ];
-             hr
-               ~a:
-                 [
-                   a_style
-                     "border:none; border-top:1px solid #e5e7eb; margin:32px 0;";
-                 ]
-               ();
-             paragraph
-               [
-                 txt
-                   "If you have any questions or run into issues, feel free to \
-                    reply to this email. We’re happy to help.";
-               ];
-             paragraph [ txt "Robur.coop" ];
+             br ();
+             email_footer ();
            ]))
   in
   Format.asprintf "%a\n" (Tyxml_html.pp ()) page
@@ -129,42 +150,24 @@ let verification_email (user : User_model.user) verification_link =
                         your Mollymawk account. Please confirm your email by \
                         clicking the link below:";
                    ];
-                 paragraph
-                   [
-                     link_button ~href:verification_link
-                       ~text:"Verify email address";
-                   ];
+                 br ();
+                 link_button ~href:verification_link
+                   ~text:"Verify email address";
                  paragraph
                    [
                      txt
                        "If the button doesn't work, copy and paste this link \
                         into your browser:";
                    ];
-                 paragraph
-                   [
-                     link_button ~href:verification_link ~text:verification_link;
-                   ];
+                 a ~a:[ a_href verification_link ] [ txt verification_link ];
                  paragraph
                    [
                      txt
                        "If you didn't request this email, you can safely \
                         ignore it; no changes will be made to your account.";
                    ];
-                 hr
-                   ~a:
-                     [
-                       a_style
-                         "border:none; border-top:1px solid #e5e7eb; \
-                          margin:28px 0;";
-                     ]
-                   ();
-                 paragraph
-                   [
-                     txt "Need help getting started? Read our handbook: ";
-                     link_button ~href:handbook_link ~text:"Mollymawk Handbook";
-                     txt ".";
-                   ];
-                 paragraph [ txt "Robur.coop" ];
+                 br ();
+                 email_footer ();
                ];
            ]))
   in
