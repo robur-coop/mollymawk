@@ -78,7 +78,12 @@ module TimeHelper = struct
 end
 
 module Email = struct
-  type t = { server : Ipaddr.t; port : int; sender_email : Mrmime.Mailbox.t }
+  type t = {
+    server : Ipaddr.t;
+    port : int;
+    sender_email : Mrmime.Mailbox.t;
+    mollymawk_domain : string;
+  }
 
   let to_json config =
     match config with
@@ -89,16 +94,24 @@ module Email = struct
             ("server", `String (Ipaddr.to_string config.server));
             ("port", `Int config.port);
             ("sender_email", `String (Emile.to_string config.sender_email));
+            ("mollymawk_domain", `String config.mollymawk_domain);
           ]
 
   let t_of_json assoc =
     match
-      Json.(get "server" assoc, get "port" assoc, get "sender_email" assoc)
+      Json.
+        ( get "server" assoc,
+          get "port" assoc,
+          get "sender_email" assoc,
+          get "mollymawk_domain" assoc )
     with
-    | Some (`String server), Some (`Int port), Some (`String sender_email) ->
+    | ( Some (`String server),
+        Some (`Int port),
+        Some (`String sender_email),
+        Some (`String mollymawk_domain) ) ->
         let* server = Ipaddr.of_string server in
         let* sender_email = Mrmime.Mailbox.of_string sender_email in
-        Ok { server; port; sender_email }
+        Ok { server; port; sender_email; mollymawk_domain }
     | _ ->
         Error
           (`Msg
