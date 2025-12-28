@@ -639,7 +639,7 @@ struct
                                     ~subject:"Welcome to MollyMawk!"
                                     ~body:
                                       (Email_templates.welcome_email user
-                                         "verify-email")
+                                         "verify-email" email_config)
                                   >>= function
                                   | Ok () -> Lwt.return_unit
                                   | Error err ->
@@ -776,7 +776,7 @@ struct
                         ~subject:"Verify your email address"
                         ~body:
                           (Email_templates.verification_email updated_user
-                             verification_link)
+                             verification_link email_config)
                       >>= function
                       | Ok () -> Lwt.return_unit
                       | Error err ->

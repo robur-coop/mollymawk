@@ -46,7 +46,11 @@ let email_footer () =
         p [ txt "© Robur.coop" ];
       ])
 
-let welcome_email (user : User_model.user) verification_link =
+let welcome_email (user : User_model.user) verification_link
+    (email_config : Utils.Email.t) =
+  let verification_link =
+    Fmt.str "%s/%s" email_config.mollymawk_domain verification_link
+  in
   let page =
     Tyxml_html.(
       html
@@ -118,7 +122,11 @@ let welcome_email (user : User_model.user) verification_link =
   in
   Format.asprintf "%a\n" (Tyxml_html.pp ()) page
 
-let verification_email (user : User_model.user) verification_link =
+let verification_email (user : User_model.user) verification_link
+    (email_config : Utils.Email.t) =
+  let verification_link =
+    Fmt.str "%s/%s" email_config.mollymawk_domain verification_link
+  in
   let page =
     Tyxml_html.(
       html
@@ -287,7 +295,7 @@ let updated_unikernels (updates : Update_flow.user_unikernel_available_updates)
                    [ txt "The following unikernels have updates available:" ];
                  updates_table ();
                  br ();
-                 paragraph [ txt "Robur.coop" ];
+                 email_footer ();
                ];
            ]))
   in
