@@ -92,7 +92,11 @@ struct
             Logs.info (fun m -> m "Email not sent-: %s" e);
             Lwt.return_error e
         | #Sendmail_with_starttls.error as e ->
-            let msg = Fmt.str "%a" Sendmail_with_starttls.pp_error e in
+            let msg =
+              Fmt.str "An error occured while sending email to %s: %a"
+                (Emile.to_string user_email)
+                Sendmail_with_starttls.pp_error e
+            in
             Logs.info (fun m -> m "Email not sent: %s" msg);
             Lwt.return_error msg)
 
