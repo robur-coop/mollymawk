@@ -280,6 +280,7 @@ async function updateEmailConfig() {
 	const serverInput = document.getElementById("email-ip").value;
 	const portInput = document.getElementById("email-port").value;
 	const senderInput = document.getElementById("email-sender").value;
+	const mollymawkDomainInput = document.getElementById("mollymawk-domain").value;
 	const formAlert = document.getElementById("form-alert");
 	const formButton = document.getElementById('update-email-config-btn');
 	const molly_csrf = document.getElementById("molly-csrf").value;
@@ -302,6 +303,7 @@ async function updateEmailConfig() {
 					"server": serverInput,
 					"port": Number(portInput),
 					"sender_email": senderInput,
+					"mollymawk_domain": mollymawkDomainInput,
 					"molly_csrf": molly_csrf
 				})
 			})
