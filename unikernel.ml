@@ -356,9 +356,7 @@ struct
           ~data:(`String "Expected multipart form data") `Bad_request
 
   let email_verification f _ user reqd =
-    if false (* TODO *) then
-      Middleware.email_verified_middleware user (f user) reqd
-    else f user reqd
+    Middleware.email_verified_middleware user (f user) reqd
 
   let authenticate_user ~check_admin ~check_token store reqd =
     let ( let* ) = Result.bind in
@@ -553,7 +551,7 @@ struct
           (Sign_in.login_page ~icon:"/images/robur.png" ())
           `OK
 
-  let register store reqd =
+  let register stack store reqd =
     decode_request_body reqd >>= fun data ->
     match Utils.Json.from_string data with
     | Error (`Msg err) ->
@@ -620,6 +618,27 @@ struct
                       in
                       Store.add_user store user >>= function
                       | Ok () ->
+                          Lwt.async (fun () ->
+                              match Store.email store with
+                              | None ->
+                                  Logs.info (fun m ->
+                                      m
+                                        "No email configuration found; \
+                                         skipping welcome email.");
+                                  Lwt.return_unit
+                              | Some email_config -> (
+                                  send_email stack email_config email
+                                    ~subject:"Welcome to MollyMawk!"
+                                    ~body:
+                                      (Email_templates.welcome_email user
+                                         "verify-email")
+                                  >>= function
+                                  | Ok () -> Lwt.return_unit
+                                  | Error err ->
+                                      Logs.err (fun m ->
+                                          m "Failed to send welcome email: %s"
+                                            err);
+                                      Lwt.return_unit));
                           let cookie_value =
                             cookie.name ^ "=" ^ cookie.value
                             ^ ";Path=/;HttpOnly=true"
@@ -721,7 +740,7 @@ struct
         Middleware.http_response reqd
           ~data:(`String "Update password: expected a dictionary") `Bad_request
 
-  let verify_email store (user : User_model.user) reqd =
+  let verify_email stack store _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf -> (
@@ -735,7 +754,27 @@ struct
             let verification_link =
               Utils.Email.generate_verification_link email_verification_uuid
             in
-            Logs.info (fun m -> m "Verification link is: %s" verification_link);
+            if not (User_model.is_email_verified user) then
+              Lwt.async (fun () ->
+                  match Store.email store with
+                  | None ->
+                      Logs.info (fun m ->
+                          m
+                            "No email configuration found; skipping email \
+                             verification.");
+                      Lwt.return_unit
+                  | Some email_config -> (
+                      send_email stack email_config user.email
+                        ~subject:"Verify your email address"
+                        ~body:
+                          (Email_templates.verification_email updated_user
+                             verification_link)
+                      >>= function
+                      | Ok () -> Lwt.return_unit
+                      | Error err ->
+                          Logs.err (fun m ->
+                              m "Failed to send verification email: %s" err);
+                          Lwt.return_unit));
             reply reqd ~content_type:"text/html"
               (Verify_email.verify_page user ~csrf ~icon:"/images/robur.png")
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
@@ -747,8 +786,8 @@ struct
         Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
-  let verify_email_token store verification_token (user : User_model.user) reqd
-      =
+  let verify_email_token store verification_token _ (user : User_model.user)
+      reqd =
     match
       let ( let* ) = Result.bind in
       let* uuid =
@@ -760,8 +799,10 @@ struct
     with
     | Ok user' ->
         if String.equal user.uuid user'.uuid then
-          Store.update_user store user >>= function
-          | Ok () -> Middleware.redirect_to_page ~path:"/dashboard" reqd ()
+          Store.update_user store user' >>= function
+          | Ok () ->
+              Middleware.redirect_to_page ~path:"/dashboard"
+                ~msg:"Your email has been verified." reqd ()
           | Error (`Msg msg) ->
               Middleware.http_response reqd ~data:(`String msg)
                 `Internal_server_error
@@ -2720,18 +2761,17 @@ struct
                 reply reqd ~content_type:"text/css" css_file `OK)
         | "/sign-up" -> check_meth `GET (fun () -> sign_up reqd)
         | "/sign-in" -> check_meth `GET (fun () -> sign_in reqd)
-        | "/api/register" -> check_meth `POST (fun () -> register store reqd)
+        | "/api/register" ->
+            check_meth `POST (fun () -> register stack store reqd)
         | "/api/login" -> check_meth `POST (fun () -> login store reqd)
         | "/verify-email" ->
             check_meth `GET (fun () ->
-                authenticate store reqd
-                  (email_verification (verify_email store)))
+                authenticate store reqd (verify_email stack store))
         | "/auth/verify" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "token" with
                 | Ok token ->
-                    authenticate store reqd
-                      (email_verification (verify_email_token store token))
+                    authenticate store reqd (verify_email_token store token)
                 | Error err ->
                     Middleware.http_response ~api_meth:false ~data:(`String err)
                       reqd `Bad_request)
