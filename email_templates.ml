@@ -183,3 +183,112 @@ let verification_email (user : User_model.user) verification_link =
            ]))
   in
   Format.asprintf "%a\n" (Tyxml_html.pp ()) page
+
+let updated_unikernels (updates : Update_flow.user_unikernel_available_updates)
+    (email_config : Utils.Email.t) =
+  let updates_table () =
+    Tyxml_html.(
+      let cell_style =
+        "border:1px solid #d1d5db; padding:8px 12px; text-align:left;"
+      in
+      let header_cell_style =
+        "border:1px solid #d1d5db; padding:10px 12px; \
+         background-color:#f9fafb; font-weight:700; text-align:left;"
+      in
+
+      let header =
+        thead
+          [
+            tr
+              [
+                th ~a:[ a_style header_cell_style ] [ txt "Instance" ];
+                th ~a:[ a_style header_cell_style ] [ txt "Unikernel" ];
+                th ~a:[ a_style header_cell_style ] [ txt "Action" ];
+              ];
+          ]
+      in
+
+      let rows =
+        updates.available_updates
+        |> List.concat_map (fun (instance, unikernels) ->
+            unikernels
+            |> List.map (fun (name, _info, _comparison) ->
+                let unikernel_name =
+                  Option.value ~default:"no name"
+                    (Option.map Vmm_core.Name.Label.to_string
+                       (Vmm_core.Name.name name))
+                in
+                tr
+                  [
+                    td
+                      ~a:[ a_style cell_style ]
+                      [ txt (Configuration.name_to_str instance) ];
+                    td ~a:[ a_style cell_style ] [ txt unikernel_name ];
+                    td
+                      ~a:[ a_style cell_style ]
+                      [
+                        a
+                          ~a:
+                            [
+                              a_href
+                                (Fmt.str
+                                   "%s/unikernel/update/compare-changes?instance=%s&unikernel=%s"
+                                   email_config.mollymawk_domain
+                                   (Configuration.name_to_str instance)
+                                   unikernel_name);
+                              a_target "_blank";
+                            ]
+                          [ txt "View changes" ];
+                      ];
+                  ]))
+      in
+
+      table
+        ~a:
+          [
+            a_style
+              "width:100%; border-collapse:collapse; \
+               font-family:Arial,sans-serif; font-size:14px;";
+          ]
+        ~thead:header rows)
+  in
+  let page =
+    Tyxml_html.(
+      html
+        (head
+           (title (txt "Mollymawk Unikernel Updates Available"))
+           [ meta ~a:[ a_charset "UTF-8" ] () ])
+        (body
+           ~a:
+             [
+               a_style
+                 "margin:0; padding:0; background-color:#f9fafb; \
+                  font-family:Arial, Helvetica, sans-serif; color:#1f2937;";
+             ]
+           [
+             div
+               ~a:
+                 [
+                   a_style
+                     "max-width:600px; margin:0 auto; \
+                      background-color:#ffffff; padding:24px;";
+                 ]
+               [
+                 header1 "Unikernel Updates Available";
+                 paragraph
+                   [
+                     txt "Hello ";
+                     span
+                       ~a:[ a_style "font-weight:700;" ]
+                       [ txt (Configuration.name_to_str updates.user.name) ];
+                     txt ",";
+                   ];
+                 paragraph
+                   [ txt "The following unikernels have updates available:" ];
+                 updates_table ();
+                 br ();
+                 paragraph [ txt "Robur.coop" ];
+               ];
+           ]))
+  in
+  Format.asprintf "%a\n" (Tyxml_html.pp ()) page
