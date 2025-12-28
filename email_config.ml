@@ -32,13 +32,14 @@ let render_input ~label_text ~name ~id ~input_type ~value () =
       ])
 
 let email_config_layout (current_config : Utils.Email.t option) =
-  let ip_val, port_val, sender_val =
+  let ip_val, port_val, sender_val, mollymawk_val =
     match current_config with
     | Some c ->
         ( Ipaddr.to_string c.server,
           string_of_int c.port,
-          Emile.to_string c.sender_email )
-    | None -> ("", "", "")
+          Emile.to_string c.sender_email,
+          c.mollymawk_domain )
+    | None -> ("", "", "", "")
   in
 
   Tyxml_html.(
@@ -57,6 +58,9 @@ let email_config_layout (current_config : Utils.Email.t option) =
               ~id:"email-port" ~input_type:`Number ~value:port_val ();
             render_input ~label_text:"Sender Email Address" ~name:"email_sender"
               ~id:"email-sender" ~input_type:`Email ~value:sender_val ();
+            render_input ~label_text:"Mollymawk Domain Address"
+              ~name:"mollymawk_domain" ~id:"mollymawk-domain" ~input_type:`Text
+              ~value:mollymawk_val ();
             div
               ~a:[ a_class [ "mx-auto my-6 flex justify-center px-4" ] ]
               [
