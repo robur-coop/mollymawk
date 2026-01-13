@@ -3094,12 +3094,6 @@ struct
                   (extract_json_csrf_token
                      (unikernel_rollback stack store !albatross_instances
                         http_client)))
-        | "/api/admin/unikernels/check-updates" ->
-            check_meth `GET (fun () ->
-                authenticate ~check_admin:true ~api_meth:true ~check_token:true
-                  store reqd (fun _ _ reqd ->
-                    run_background_update_check (Store.users store) stack
-                      (Store.email store) !albatross_instances http_client))
         | "/unikernel/update/compare-changes" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "unikernel" with
