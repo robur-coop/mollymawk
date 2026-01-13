@@ -3137,8 +3137,10 @@ struct
             http_client
         in
         Paf.init ~port (S.tcp stack) >>= fun service ->
+        Lwt.pause () >>= fun () ->
         let http = Paf.http_service ~error_handler request_handler in
         let (`Initialized th) = Paf.serve http service in
+        Lwt.pause () >>= fun () ->
         start_background_scheduler stack store albatross_instances http_client;
         th
 end
