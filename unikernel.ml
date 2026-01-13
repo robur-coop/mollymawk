@@ -2650,6 +2650,21 @@ struct
                (Fmt.str "Unexpected error parsing email settings: %s %s" ms1 ms2))
           `Bad_request
 
+  let seconds_until_next_midnight () =
+    let now = Mirage_ptime.now () in
+    let date, _ = Ptime.to_date_time now in
+    match Ptime.of_date_time (date, ((0, 0, 0), 0)) with
+    | None ->
+        Logs.err (fun m -> m "Failed to construct midnight time");
+        60.0
+    | Some midnight_today -> (
+        let one_day = Ptime.Span.of_int_s 86_400 in
+        match Ptime.add_span midnight_today one_day with
+        | None -> 60.0
+        | Some midnight_tomorrow ->
+            let span = Ptime.diff midnight_tomorrow now in
+            Ptime.Span.to_float_s span)
+
   let check_user_unikernel_updates stack albatross_instances user http_client =
     user_unikernels stack albatross_instances user.User_model.name
     >>= fun unikernels_per_instance ->
@@ -2681,49 +2696,61 @@ struct
       [] users
 
   let run_background_update_check users stack email_config albatross_instances
-      http_client reqd =
+      http_client =
     match email_config with
     | None ->
-        Middleware.http_response ~data:(`String "Email not configured") reqd
-          `Bad_request
+        Logs.info (fun m ->
+            m "Email not configured, skipping background update check");
+        Lwt.return_unit
     | Some email_config ->
-        Lwt.async (fun () ->
-            Lwt.catch
-              (fun () ->
-                Logs.info (fun m ->
-                    m
-                      "Starting background update check for all users' \
-                       unikernels");
-                check_available_unikernel_updates stack albatross_instances
-                  users http_client
-                >>= fun reports ->
-                Lwt_list.iter_s
-                  (fun (report : Update_flow.user_unikernel_available_updates)
-                     ->
-                    send_email stack email_config report.user.email
-                      ~subject:"Unikernel updates available"
-                      ~body:
-                        (Email_templates.updated_unikernels report email_config)
-                    >>= function
-                    | Ok () ->
-                        Logs.info (fun m ->
-                            m "Sent update report email to %s"
-                              (Emile.to_string report.user.email));
-                        Lwt.return_unit
-                    | Error err ->
-                        Logs.err (fun m ->
-                            m "Failed to send update report email to %s: %s"
-                              (Emile.to_string report.user.email)
-                              err);
-                        Lwt.return_unit)
-                  reports)
-              (fun exn ->
-                Logs.err (fun m ->
-                    m "Background update check failed: %s"
-                      (Printexc.to_string exn));
-                Lwt.return_unit));
-        Middleware.http_response
-          ~data:(`String "Update checks initiated in background") reqd `Accepted
+        Lwt.catch
+          (fun () ->
+            Logs.info (fun m ->
+                m "Starting background update check for all users' unikernels");
+            check_available_unikernel_updates stack albatross_instances users
+              http_client
+            >>= fun reports ->
+            Lwt_list.iter_s
+              (fun (report : Update_flow.user_unikernel_available_updates) ->
+                send_email stack email_config report.user.email
+                  ~subject:"Unikernel updates available"
+                  ~body:(Email_templates.updated_unikernels report email_config)
+                >>= function
+                | Ok () ->
+                    Logs.info (fun m ->
+                        m "Sent update report email to %s"
+                          (Emile.to_string report.user.email));
+                    Lwt.return_unit
+                | Error err ->
+                    Logs.err (fun m ->
+                        m "Failed to send update report email to %s: %s"
+                          (Emile.to_string report.user.email)
+                          err);
+                    Lwt.return_unit)
+              reports)
+          (fun exn ->
+            Logs.err (fun m ->
+                m "Background update check failed: %s" (Printexc.to_string exn));
+            Lwt.return_unit)
+
+  let start_background_scheduler stack store albatross_instances_ref http_client
+      =
+    let rec loop () =
+      let delay = seconds_until_next_midnight () in
+      Logs.info (fun m -> m "Next background update in %.0f seconds" delay);
+      Mirage_sleep.ns (Duration.of_sec (int_of_float delay)) >>= fun () ->
+      Lwt.catch
+        (fun () ->
+          Logs.info (fun m -> m "Starting background update...");
+          run_background_update_check (Store.users store) stack
+            (Store.email store) !albatross_instances_ref http_client)
+        (fun exn ->
+          Logs.err (fun m ->
+              m "Background update failed: %s" (Printexc.to_string exn));
+          Lwt.return_unit)
+      >>= fun () -> loop ()
+    in
+    Lwt.async loop
 
   let request_handler stack albatross_instances js_file css_file imgs store
       http_client flow (_ipaddr, _port) reqd =
@@ -3072,7 +3099,7 @@ struct
                 authenticate ~check_admin:true ~api_meth:true ~check_token:true
                   store reqd (fun _ _ reqd ->
                     run_background_update_check (Store.users store) stack
-                      (Store.email store) !albatross_instances http_client reqd))
+                      (Store.email store) !albatross_instances http_client))
         | "/unikernel/update/compare-changes" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "unikernel" with
@@ -3118,5 +3145,6 @@ struct
         Paf.init ~port (S.tcp stack) >>= fun service ->
         let http = Paf.http_service ~error_handler request_handler in
         let (`Initialized th) = Paf.serve http service in
+        start_background_scheduler stack store albatross_instances http_client;
         th
 end
