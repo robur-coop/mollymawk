@@ -1267,7 +1267,8 @@ struct
                  ~content:
                    (Unikernel_update.unikernel_update_layout
                       ~instance_name:albatross.configuration.name
-                      ~unikernel_name (name, unikernel) now build_comparison)
+                      ~unikernel_name:(Configuration.name_to_str unikernel_name)
+                      (name, unikernel) now build_comparison)
                  ~icon:"/images/robur.png" ())
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
@@ -1276,7 +1277,9 @@ struct
               ~data:err.data `Internal_server_error)
     | Ok (No_update_needed (name, uuid)) ->
         Logs.info (fun m ->
-            m "No update found for %s (uuid %s)" unikernel_name uuid);
+            m "No update found for %s (uuid %s)"
+              (Configuration.name_to_str unikernel_name)
+              uuid);
         let instance = Configuration.name_to_str albatross.configuration.name in
         let label =
           Option.value ~default:""
@@ -1287,14 +1290,17 @@ struct
             (Printf.sprintf "/unikernel/info?unikernel=%s&instance=%s" label
                instance)
           ~msg:
-            ("There is no update of " ^ unikernel_name
-           ^ " found on builds.robur.coop")
+            ("There is no update of "
+            ^ Configuration.name_to_str unikernel_name
+            ^ " found on builds.robur.coop")
           ()
     | Error err ->
-        let log_msg, web_msg = error_response_params unikernel_name err in
+        let log_msg, web_msg =
+          error_response_params (Configuration.name_to_str unikernel_name) err
+        in
         Logs.err (fun m -> m "%s" log_msg);
         Middleware.http_response ~api_meth:false ~data:(`String web_msg)
-          ~title:(unikernel_name ^ " update Error")
+          ~title:(Configuration.name_to_str unikernel_name ^ " update Error")
           reqd `Internal_server_error
 
   let force_create_unikernel stack albatross ~unikernel_name ~push
