@@ -963,17 +963,17 @@ struct
                         (String.equal c.name User_model.session_cookie
                         && c.value <> cookie.value)),
                     Middleware.http_response reqd
-                      ~data:(`String "Closed all sessions succesfully") `OK )
+                      ~data:(`String "Closed all sessions successfully") `OK )
               | _, true ->
                   ( (fun (c : User_model.cookie) ->
                       not (String.equal c.value cookie.value)),
                     Middleware.http_response reqd
-                      ~data:(`String "Logout succesful") `OK )
+                      ~data:(`String "Logout successful") `OK )
               | Some to_logout_cookie_value, false ->
                   ( (fun (c : User_model.cookie) ->
                       not (String.equal to_logout_cookie_value c.value)),
                     Middleware.redirect_to_page ~path:"/account"
-                      ~msg:"Closed session succesfully" reqd () )
+                      ~msg:"Closed session successfully" reqd () )
             in
             new_user_cookies ~user ~filter ~redirect store reqd
         | None ->
@@ -1002,7 +1002,7 @@ struct
         Store.update_user store updated_user >>= function
         | Ok () ->
             Middleware.http_response reqd
-              ~data:(`String "Session closed succesfully") `OK
+              ~data:(`String "Session closed successfully") `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
             Middleware.http_response reqd ~data:(`String err)
@@ -1328,7 +1328,7 @@ struct
         | Ok res ->
             Logs.info (fun m ->
                 m
-                  "albatross-force-create: succesfully created %s with result \
+                  "albatross-force-create: successfully created %s with result \
                    %s"
                   unikernel_name (Utils.Json.to_string res));
             Lwt.return (Ok ()))
@@ -1462,7 +1462,7 @@ struct
               Middleware.http_response reqd ~title:"Rollback Successful"
                 ~data:
                   (`String
-                     ("Rollback succesful. "
+                     ("Rollback successful. "
                      ^ Configuration.name_to_str unikernel_name
                      ^ " is now running on build " ^ old_unikernel.uuid))
                 `OK
@@ -1514,7 +1514,7 @@ struct
             Middleware.http_response reqd ~title:"Update Successful"
               ~data:
                 (`String
-                   ("Update succesful. " ^ unikernel_name_str
+                   ("Update successful. " ^ unikernel_name_str
                   ^ " is now running on build " ^ to_be_updated_unikernel))
               `OK)
     | Error (`Msg err, http_status) ->
@@ -2606,7 +2606,7 @@ struct
         Store.update_user store updated_user >>= function
         | Ok () ->
             Middleware.http_response reqd
-              ~data:(`String "Token deleted succesfully") `OK
+              ~data:(`String "Token deleted successfully") `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
             Middleware.http_response reqd ~data:(`String err)
