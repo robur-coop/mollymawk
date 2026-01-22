@@ -123,7 +123,7 @@ let session_cookie_value reqd =
 
 let email_verified_middleware user handler reqd =
   if User_model.is_email_verified user then handler reqd
-  else redirect_to_page ~path:"/verify/email" reqd ()
+  else redirect_to_page ~path:"/verify-email" reqd ()
 
 let csrf_cookie_verification form_csrf reqd =
   match cookie User_model.csrf_cookie reqd with
