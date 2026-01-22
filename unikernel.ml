@@ -1315,7 +1315,7 @@ struct
              ( `Msg ("Force create: Error querying albatross: " ^ err),
                `Internal_server_error ))
     | Ok (_hdr, res) -> (
-        let unikernel_name = Configuration.name_to_str unikernel_name in
+        let unikernel_name_str = Configuration.name_to_str unikernel_name in
         Albatross.set_online albatross;
         match Albatross_json.res res with
         | Error (`String err) ->
@@ -1323,14 +1323,14 @@ struct
                 m
                   "albatross-force-create: albatross_json.res error parsing \
                    albatross response for creating %s: %s"
-                  unikernel_name err);
+                  unikernel_name_str err);
             Lwt.return (Error (`Msg err, `Internal_server_error))
         | Ok res ->
             Logs.info (fun m ->
                 m
                   "albatross-force-create: successfully created %s with result \
                    %s"
-                  unikernel_name (Utils.Json.to_string res));
+                  unikernel_name_str (Utils.Json.to_string res));
             Lwt.return (Ok ()))
 
   let process_change stack ~unikernel_name ~job ~to_be_updated_unikernel
@@ -1441,6 +1441,7 @@ struct
 
   let process_rollback stack albatross ~unikernel_name current_time store
       http_client reqd (user : User_model.user) =
+    let unikernel_name_str = Configuration.name_to_str unikernel_name in
     match
       List.find_opt
         (fun (u : User_model.unikernel_update) ->
@@ -1462,33 +1463,31 @@ struct
               Middleware.http_response reqd ~title:"Rollback Successful"
                 ~data:
                   (`String
-                     ("Rollback successful. "
-                     ^ Configuration.name_to_str unikernel_name
-                     ^ " is now running on build " ^ old_unikernel.uuid))
+                     ("Rollback successful. " ^ unikernel_name_str
+                    ^ " is now running on build " ^ old_unikernel.uuid))
                 `OK
           | Error (`Msg err, http_status) ->
               Middleware.http_response reqd ~title:"Rollback Error"
                 ~data:
                   (`String
-                     ("Rollback failed. "
-                     ^ Configuration.name_to_str unikernel_name
-                     ^ " failed to revert to build " ^ old_unikernel.uuid
-                     ^ " with error " ^ err))
+                     ("Rollback failed. " ^ unikernel_name_str
+                    ^ " failed to revert to build " ^ old_unikernel.uuid
+                    ^ " with error " ^ err))
                 http_status
         else
           Middleware.http_response reqd ~title:"Rollback Failed"
             ~data:
               (`String
-                 (Configuration.name_to_str unikernel_name
-                 ^ " rollback failed. We can't do a rollback after 10 minutes \
-                    of an update."))
+                 (unikernel_name_str
+                ^ " rollback failed. We can't do a rollback after 10 minutes \
+                   of an update."))
             `Bad_request
     | None ->
         Middleware.http_response reqd ~title:"Rollback Error"
           ~data:
             (`String
-               (Configuration.name_to_str unikernel_name
-               ^ " rollback failed. Could not find the build information."))
+               (unikernel_name_str
+              ^ " rollback failed. Could not find the build information."))
           `Not_found
 
   let process_unikernel_update ~unikernel_name ~job ~to_be_updated_unikernel
