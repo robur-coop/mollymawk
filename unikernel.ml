@@ -2656,11 +2656,11 @@ struct
     match Ptime.of_date_time (date, ((0, 0, 0), 0)) with
     | None ->
         Logs.err (fun m -> m "Failed to construct midnight time");
-        60.0
+        3600.0
     | Some midnight_today -> (
         let one_day = Ptime.Span.of_int_s 86_400 in
         match Ptime.add_span midnight_today one_day with
-        | None -> 60.0
+        | None -> 3600.0
         | Some midnight_tomorrow ->
             let span = Ptime.diff midnight_tomorrow now in
             Ptime.Span.to_float_s span)
