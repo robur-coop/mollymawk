@@ -40,7 +40,7 @@ struct
   let send_email stack email_config user_email ~subject ~body =
     let email =
       Utils.Email.construct_email
-        ~from_email:email_config.Utils.Email.sender_email ~to_email:user_email
+        ~from_email:email_config.Utils.Email.from_email ~to_email:user_email
         ~subject ~body ()
     in
     let dns = Dns.create (stack, HE.create stack) in
@@ -72,7 +72,7 @@ struct
       match Ipaddr.to_v4 ip with Some addr -> addr | None -> Ipaddr.V4.any
     in
     let sender =
-      match Colombe_emile.to_path email_config.sender_email with
+      match Colombe_emile.to_path email_config.from_email with
       | Ok path -> Some path
       | Error _ -> None
     in

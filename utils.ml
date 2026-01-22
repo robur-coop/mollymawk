@@ -81,8 +81,8 @@ module Email = struct
   type t = {
     server : Ipaddr.t;
     port : int;
-    sender_email : Mrmime.Mailbox.t;
-    mollymawk_domain : string;
+    from_email : Mrmime.Mailbox.t;
+    base_url : string;
   }
 
   let to_json config =
@@ -93,8 +93,8 @@ module Email = struct
           [
             ("server", `String (Ipaddr.to_string config.server));
             ("port", `Int config.port);
-            ("sender_email", `String (Emile.to_string config.sender_email));
-            ("mollymawk_domain", `String config.mollymawk_domain);
+            ("from_email", `String (Emile.to_string config.from_email));
+            ("base_url", `String config.base_url);
           ]
 
   let t_of_json assoc =
@@ -102,16 +102,16 @@ module Email = struct
       Json.
         ( get "server" assoc,
           get "port" assoc,
-          get "sender_email" assoc,
-          get "mollymawk_domain" assoc )
+          get "from_email" assoc,
+          get "base_url" assoc )
     with
     | ( Some (`String server),
         Some (`Int port),
-        Some (`String sender_email),
-        Some (`String mollymawk_domain) ) ->
+        Some (`String from_email),
+        Some (`String base_url) ) ->
         let* server = Ipaddr.of_string server in
-        let* sender_email = Mrmime.Mailbox.of_string sender_email in
-        Ok { server; port; sender_email; mollymawk_domain }
+        let* from_email = Mrmime.Mailbox.of_string from_email in
+        Ok { server; port; from_email; base_url }
     | _ ->
         Error
           (`Msg

@@ -37,8 +37,8 @@ let email_config_layout (current_config : Utils.Email.t option) =
     | Some c ->
         ( Ipaddr.to_string c.server,
           string_of_int c.port,
-          Emile.to_string c.sender_email,
-          c.mollymawk_domain )
+          Emile.to_string c.from_email,
+          c.base_url )
     | None -> ("", "", "", "")
   in
 
@@ -56,10 +56,10 @@ let email_config_layout (current_config : Utils.Email.t option) =
               ~id:"email-ip" ~input_type:`Text ~value:ip_val ();
             render_input ~label_text:"Server Port" ~name:"email_port"
               ~id:"email-port" ~input_type:`Number ~value:port_val ();
-            render_input ~label_text:"Sender Email Address" ~name:"email_sender"
+            render_input ~label_text:"From" ~name:"email_from"
               ~id:"email-sender" ~input_type:`Email ~value:sender_val ();
-            render_input ~label_text:"Mollymawk Domain Address"
-              ~name:"mollymawk_domain" ~id:"mollymawk-domain" ~input_type:`Text
+            render_input ~label_text:"Base URL"
+              ~name:"base_url" ~id:"base-url" ~input_type:`Text
               ~value:mollymawk_val ();
             div
               ~a:[ a_class [ "mx-auto my-6 flex justify-center px-4" ] ]

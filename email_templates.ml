@@ -49,7 +49,7 @@ let email_footer () =
 let welcome_email (user : User_model.user) verification_link
     (email_config : Utils.Email.t) =
   let verification_link =
-    Fmt.str "%s/%s" email_config.mollymawk_domain verification_link
+    Fmt.str "%s/%s" email_config.base_url verification_link
   in
   let page =
     Tyxml_html.(
@@ -118,7 +118,7 @@ let welcome_email (user : User_model.user) verification_link
 let verification_email (user : User_model.user) verification_link
     (email_config : Utils.Email.t) =
   let verification_link =
-    Fmt.str "%s/%s" email_config.mollymawk_domain verification_link
+    Fmt.str "%s/%s" email_config.base_url verification_link
   in
   let page =
     Tyxml_html.(
@@ -230,7 +230,7 @@ let updated_unikernels (updates : Update_flow.user_unikernel_available_updates)
                               a_href
                                 (Fmt.str
                                    "%s/unikernel/update/compare-changes?instance=%s&unikernel=%s"
-                                   email_config.mollymawk_domain
+                                   email_config.base_url
                                    (Configuration.name_to_str instance)
                                    unikernel_name);
                               a_target "_blank";
