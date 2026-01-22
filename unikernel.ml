@@ -2738,7 +2738,7 @@ struct
     let rec loop () =
       let delay = seconds_until_next_midnight () in
       Logs.info (fun m -> m "Next background update in %.0f seconds" delay);
-      Mirage_sleep.ns (Duration.of_sec (int_of_float delay)) >>= fun () ->
+      Mirage_sleep.ns (Duration.of_f delay) >>= fun () ->
       Lwt.catch
         (fun () ->
           Logs.info (fun m -> m "Starting background update...");
