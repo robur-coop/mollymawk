@@ -287,7 +287,7 @@ async function updateEmailConfig() {
 	formButton.classList.add("disabled");
 	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
 	formButton.disabled = true;
-	if (serverInput === '' || portInput === '' || senderInput === '') {
+	if (serverInput === '' || portInput === '' || fromInput === '') {
 		formAlert.classList.remove("hidden");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = "Please fill all fields";
