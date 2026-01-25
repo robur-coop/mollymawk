@@ -78,7 +78,12 @@ module TimeHelper = struct
 end
 
 module Email = struct
-  type t = { server : Ipaddr.t; port : int; sender_email : Mrmime.Mailbox.t }
+  type t = {
+    server : Ipaddr.t;
+    port : int;
+    from_email : Mrmime.Mailbox.t;
+    base_url : string;
+  }
 
   let to_json config =
     match config with
@@ -88,17 +93,25 @@ module Email = struct
           [
             ("server", `String (Ipaddr.to_string config.server));
             ("port", `Int config.port);
-            ("sender_email", `String (Emile.to_string config.sender_email));
+            ("from_email", `String (Emile.to_string config.from_email));
+            ("base_url", `String config.base_url);
           ]
 
   let t_of_json assoc =
     match
-      Json.(get "server" assoc, get "port" assoc, get "sender_email" assoc)
+      Json.
+        ( get "server" assoc,
+          get "port" assoc,
+          get "from_email" assoc,
+          get "base_url" assoc )
     with
-    | Some (`String server), Some (`Int port), Some (`String sender_email) ->
+    | ( Some (`String server),
+        Some (`Int port),
+        Some (`String from_email),
+        Some (`String base_url) ) ->
         let* server = Ipaddr.of_string server in
-        let* sender_email = Mrmime.Mailbox.of_string sender_email in
-        Ok { server; port; sender_email }
+        let* from_email = Mrmime.Mailbox.of_string from_email in
+        Ok { server; port; from_email; base_url }
     | _ ->
         Error
           (`Msg
@@ -126,7 +139,7 @@ module Email = struct
       []
       (String.split_on_char ' ' xs)
 
-  let construct_email user_email ~subject ~body =
+  let construct_email ~from_email ~to_email ~subject ~body () =
     let header =
       Header.of_list
         Field.
@@ -135,7 +148,8 @@ module Email = struct
               ( Field_name.subject,
                 Unstructured,
                 Unstructured.Craft.(compile (subject_of_strings subject)) );
-            Field (Field_name.v "To", Addresses, [ `Mailbox user_email ]);
+            Field (Field_name.v "From", Addresses, [ `Mailbox from_email ]);
+            Field (Field_name.v "To", Addresses, [ `Mailbox to_email ]);
             Field
               ( Field_name.date,
                 Date,

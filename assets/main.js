@@ -279,14 +279,15 @@ async function deleteAlbatrossConfig(name) {
 async function updateEmailConfig() {
 	const serverInput = document.getElementById("email-ip").value;
 	const portInput = document.getElementById("email-port").value;
-	const senderInput = document.getElementById("email-sender").value;
+	const fromInput = document.getElementById("email-sender").value;
+	const baseUrlInput = document.getElementById("base-url").value;
 	const formAlert = document.getElementById("form-alert");
 	const formButton = document.getElementById('update-email-config-btn');
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	formButton.classList.add("disabled");
 	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
 	formButton.disabled = true;
-	if (serverInput === '' || portInput === '' || senderInput === '') {
+	if (serverInput === '' || portInput === '' || fromInput === '') {
 		formAlert.classList.remove("hidden");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = "Please fill all fields";
@@ -301,7 +302,8 @@ async function updateEmailConfig() {
 				body: JSON.stringify({
 					"server": serverInput,
 					"port": Number(portInput),
-					"sender_email": senderInput,
+					"from_email": fromInput,
+					"base_url": baseUrlInput,
 					"molly_csrf": molly_csrf
 				})
 			})

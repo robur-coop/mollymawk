@@ -38,7 +38,11 @@ struct
         []
 
   let send_email stack email_config user_email ~subject ~body =
-    let email = Utils.Email.construct_email user_email ~subject ~body in
+    let email =
+      Utils.Email.construct_email
+        ~from_email:email_config.Utils.Email.from_email ~to_email:user_email
+        ~subject ~body ()
+    in
     let dns = Dns.create (stack, HE.create stack) in
     let getaddrinfo : HE.getaddrinfo =
      fun record_type destination ->
@@ -63,12 +67,12 @@ struct
           | Error e -> Lwt.return_error e)
     in
     let happy_eyeballs = HE.create ~getaddrinfo stack in
-    let ip = email_config.Utils.Email.server in
+    let ip = email_config.server in
     let addr =
       match Ipaddr.to_v4 ip with Some addr -> addr | None -> Ipaddr.V4.any
     in
     let sender =
-      match Colombe_emile.to_path email_config.sender_email with
+      match Colombe_emile.to_path email_config.from_email with
       | Ok path -> Some path
       | Error _ -> None
     in
@@ -88,7 +92,11 @@ struct
             Logs.info (fun m -> m "Email not sent-: %s" e);
             Lwt.return_error e
         | #Sendmail_with_starttls.error as e ->
-            let msg = Fmt.str "%a" Sendmail_with_starttls.pp_error e in
+            let msg =
+              Fmt.str "An error occured while sending email to %s: %a"
+                (Emile.to_string user_email)
+                Sendmail_with_starttls.pp_error e
+            in
             Logs.info (fun m -> m "Email not sent: %s" msg);
             Lwt.return_error msg)
 
@@ -2703,6 +2711,108 @@ struct
                (Fmt.str "Unexpected error parsing email settings: %s %s" ms1 ms2))
           `Bad_request
 
+  let seconds_until_next_midnight () =
+    let now = Mirage_ptime.now () in
+    let date, _ = Ptime.to_date_time now in
+    match Ptime.of_date_time (date, ((0, 0, 0), 0)) with
+    | None ->
+        Logs.err (fun m -> m "Failed to construct midnight time");
+        3600.0
+    | Some midnight_today -> (
+        let one_day = Ptime.Span.of_int_s 86_400 in
+        match Ptime.add_span midnight_today one_day with
+        | None -> 3600.0
+        | Some midnight_tomorrow ->
+            let span = Ptime.diff midnight_tomorrow now in
+            Ptime.Span.to_float_s span)
+
+  let check_user_unikernel_updates stack albatross_instances user http_client =
+    user_unikernels stack albatross_instances user.User_model.name
+    >>= fun unikernels_per_instance ->
+    Lwt_list.map_p
+      (fun (instance_name, unikernels) ->
+        Lwt_list.filter_map_p
+          (fun (name, unikernel) ->
+            Update_flow.check_for_update name unikernel http_client >>= function
+            | Ok (Update_flow.Update_available (name, unikernel, comparison)) ->
+                Lwt.return_some (name, unikernel, comparison)
+            | _ -> Lwt.return_none)
+          unikernels
+        >>= fun updates -> Lwt.return (instance_name, updates))
+      unikernels_per_instance
+    >>= fun results ->
+    let available_updates =
+      List.filter (fun (_, updates) -> updates <> []) results
+    in
+    Lwt.return { Update_flow.user; available_updates }
+
+  let check_available_unikernel_updates stack albatross_instances users
+      http_client =
+    Lwt_list.fold_left_s
+      (fun acc user ->
+        check_user_unikernel_updates stack albatross_instances user http_client
+        >>= fun update_report ->
+        if update_report.available_updates = [] then Lwt.return acc
+        else Lwt.return (update_report :: acc))
+      [] users
+
+  let run_background_update_check users stack email_config albatross_instances
+      http_client =
+    match email_config with
+    | None ->
+        Logs.info (fun m ->
+            m "Email not configured, skipping background update check");
+        Lwt.return_unit
+    | Some email_config ->
+        Lwt.catch
+          (fun () ->
+            Logs.info (fun m ->
+                m "Starting background update check for all users' unikernels");
+            check_available_unikernel_updates stack albatross_instances users
+              http_client
+            >>= fun reports ->
+            Lwt_list.iter_s
+              (fun (report : Update_flow.user_unikernel_available_updates) ->
+                send_email stack email_config report.user.email
+                  ~subject:"Unikernel updates available"
+                  ~body:(Email_templates.updated_unikernels report email_config)
+                >>= function
+                | Ok () ->
+                    Logs.info (fun m ->
+                        m "Sent update report email to %s"
+                          (Emile.to_string report.user.email));
+                    Lwt.return_unit
+                | Error err ->
+                    Logs.err (fun m ->
+                        m "Failed to send update report email to %s: %s"
+                          (Emile.to_string report.user.email)
+                          err);
+                    Lwt.return_unit)
+              reports)
+          (fun exn ->
+            Logs.err (fun m ->
+                m "Background update check failed: %s" (Printexc.to_string exn));
+            Lwt.return_unit)
+
+  let start_background_scheduler stack store albatross_instances_ref http_client
+      =
+    let rec loop () =
+      let delay = seconds_until_next_midnight () in
+      Logs.info (fun m -> m "Next background update in %.0f seconds" delay);
+      Mirage_sleep.ns (Duration.of_f delay) >>= fun () ->
+      Lwt.catch
+        (fun () ->
+          Logs.info (fun m -> m "Starting background update...");
+          run_background_update_check (Store.users store) stack
+            (Store.email store) !albatross_instances_ref http_client)
+        (fun exn ->
+          Logs.err (fun m ->
+              m "Background update failed: %s" (Printexc.to_string exn));
+          Lwt.return_unit)
+      >>= fun () -> loop ()
+    in
+    Lwt.async loop
+
   let request_handler stack albatross_instances js_file css_file imgs store
       http_client flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
@@ -3046,6 +3156,17 @@ struct
                   (extract_json_csrf_token
                      (unikernel_rollback stack store !albatross_instances
                         http_client)))
+        | "/unikernel/update/compare-changes" ->
+            check_meth `GET (fun () ->
+                match get_query_parameter "unikernel" with
+                | Ok unikernel_name ->
+                    authenticate store reqd
+                      (albatross_instance req.H1.Request.target
+                         (unikernel_prepare_update stack store ~unikernel_name
+                            http_client))
+                | Error err ->
+                    Middleware.http_response ~api_meth:false ~data:(`String err)
+                      reqd `Bad_request)
         | _ ->
             Middleware.http_response ~api_meth:false ~title:"Page not found"
               ~data:(`String "This page cannot be found.") reqd `Bad_request)
@@ -3078,7 +3199,10 @@ struct
             http_client
         in
         Paf.init ~port (S.tcp stack) >>= fun service ->
+        Lwt.pause () >>= fun () ->
         let http = Paf.http_service ~error_handler request_handler in
         let (`Initialized th) = Paf.serve http service in
+        Lwt.pause () >>= fun () ->
+        start_background_scheduler stack store albatross_instances http_client;
         th
 end
