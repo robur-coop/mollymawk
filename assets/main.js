@@ -214,7 +214,7 @@ async function saveAlbatrossConfig() {
 			if (data.status === 200) {
 				formAlert.classList.remove("hidden", "text-secondary-500");
 				formAlert.classList.add("text-primary-500");
-				formAlert.textContent = "Succesfully updated";
+				formAlert.textContent = "Successfully updated";
 				postAlert("bg-primary-300", data.data);
 				setTimeout(function () {
 					window.location.reload();
@@ -257,7 +257,7 @@ async function deleteAlbatrossConfig(name) {
 		if (data.status === 200) {
 			formAlert.classList.remove("hidden", "text-secondary-500");
 			formAlert.classList.add("text-primary-500");
-			formAlert.textContent = "Succesfully deleted";
+			formAlert.textContent = "Successfully deleted";
 			postAlert("bg-primary-300", data.data);
 			setTimeout(function () {
 				window.location.reload();
@@ -309,7 +309,7 @@ async function updateEmailConfig() {
 			if (data.status === 200) {
 				formAlert.classList.remove("hidden", "text-secondary-500");
 				formAlert.classList.add("text-primary-500");
-				formAlert.textContent = "Succesfully updated";
+				formAlert.textContent = "Successfully updated";
 				postAlert("bg-primary-300", data.data);
 				setTimeout(function () {
 					window.location.reload();
@@ -346,7 +346,7 @@ async function retryConnectingAlbatross(name) {
 		if (data.status === 200) {
 			formAlert.classList.remove("hidden", "text-secondary-500");
 			formAlert.classList.add("text-primary-500");
-			formAlert.textContent = "Connection succesful";
+			formAlert.textContent = "Connection successful";
 			postAlert("bg-primary-300", data.data);
 			setTimeout(function () {
 				window.location.reload();
@@ -561,7 +561,7 @@ async function destroyUnikernel(unikernel_name, instance_name) {
 				window.location.href = "/dashboard";
 			}, 2000);
 		} else {
-			postAlert("bg-secondary-300", `${name} has been destroyed succesfully.`);
+			postAlert("bg-secondary-300", `${name} has been destroyed successfully.`);
 		}
 	} catch (error) {
 		postAlert("bg-secondary-300", error);
@@ -910,7 +910,7 @@ async function deleteVolume(block_name, albatross_instance) {
 			formAlert.classList.remove("hidden", "text-secondary-500");
 			formAlert.classList.add("text-primary-500");
 			formAlert.textContent = "Successfully deleted";
-			postAlert("bg-primary-300", "Volume deleted succesfully");
+			postAlert("bg-primary-300", "Volume deleted successfully");
 			setTimeout(() => window.location.reload(), 1000);
 			buttonLoading(deleteButton, false, "Delete")
 		} else {
@@ -1002,8 +1002,8 @@ async function createVolume(albatross_instance) {
 		if (data.status === 200) {
 			formAlert.classList.remove("hidden", "text-secondary-500");
 			formAlert.classList.add("text-primary-500");
-			formAlert.textContent = "Succesfully created";
-			postAlert("bg-primary-300", "Volume created succesfully");
+			formAlert.textContent = "Successfully created";
+			postAlert("bg-primary-300", "Volume created successfully");
 			setTimeout(() => window.location.reload(), 1000);
 			buttonLoading(createButton, false, "Create volume")
 		} else {
@@ -1093,7 +1093,7 @@ async function uploadToVolume(block_name, albatross_instance) {
 		})
 		const data = await response.json();
 		if (data.status === 200) {
-			postAlert("bg-primary-300", `Upload is succesful: ${data.data}`);
+			postAlert("bg-primary-300", `Upload is successful: ${data.data}`);
 			setTimeout(() => window.location.reload(), 1000);
 			buttonLoading(uploadButton, false, "Upload data")
 		} else {
@@ -1145,7 +1145,7 @@ async function createToken() {
 		})
 		const data = await response.json();
 		if (data.status === 200) {
-			postAlert("bg-primary-300", "Token created succesfully");
+			postAlert("bg-primary-300", "Token created successfully");
 			setTimeout(() => window.location.reload(), 1000);
 			buttonLoading(tokenButton, false, "Create Token")
 		} else {
@@ -1177,7 +1177,7 @@ async function deleteToken(value) {
 		})
 		const data = await response.json();
 		if (data.status === 200) {
-			postAlert("bg-primary-300", "Token deleted succesfully");
+			postAlert("bg-primary-300", "Token deleted successfully");
 			setTimeout(() => window.location.reload(), 1000);
 			buttonLoading(tokenButton, false, "Delete")
 		} else {
@@ -1229,7 +1229,7 @@ async function updateToken(value) {
 		})
 		const data = await response.json();
 		if (data.status === 200) {
-			postAlert("bg-primary-300", "Token updated succesfully");
+			postAlert("bg-primary-300", "Token updated successfully");
 			setTimeout(() => window.location.reload(), 1000);
 			buttonLoading(tokenButton, false, "Update Token")
 		} else {
@@ -1313,7 +1313,7 @@ async function updateUnikernel(job, to_be_updated_unikernel, currently_running_u
 		})
 		const data = await response.json();
 		if (data.status === 200) {
-			postAlert("bg-primary-300", "Unikernel updated succesfully");
+			postAlert("bg-primary-300", "Unikernel updated successfully");
 			setTimeout(() => window.location.reload(), 1000);
 			buttonLoading(updateButton, false, "Proceed to update")
 		} else {
@@ -1353,7 +1353,7 @@ async function rollbackUnikernel(unikernel_name, instance_name) {
 		})
 		const data = await response.json();
 		if (data.status === 200) {
-			postAlert("bg-primary-300", "Unikernel rollback succesful");
+			postAlert("bg-primary-300", "Unikernel rollback successful");
 			setTimeout(() => window.location.reload(), 1000);
 			buttonLoading(rollbackButton, false, "Rollback")
 		} else {

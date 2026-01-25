@@ -505,7 +505,8 @@ struct
     >|= function
     | Error err ->
         Error
-          (Fmt.str "Error fetching '%s' from '%s': %s" unikernel_name
+          (Fmt.str "Error fetching '%s' from '%s': %s"
+             (Configuration.name_to_str unikernel_name)
              (Configuration.name_to_str state.configuration.name)
              err)
     | Ok (_hdr, `Success (`Unikernel_info [ unikernel ]))
@@ -523,7 +524,8 @@ struct
         Error message
     | Ok reply ->
         let message =
-          Fmt.str "Expected unikernel info for '%s', got %a" unikernel_name
+          Fmt.str "Expected unikernel info for '%s', got %a"
+            (Configuration.name_to_str unikernel_name)
             (Vmm_commands.pp_wire ~verbose:false)
             reply
         in
@@ -961,17 +963,17 @@ struct
                         (String.equal c.name User_model.session_cookie
                         && c.value <> cookie.value)),
                     Middleware.http_response reqd
-                      ~data:(`String "Closed all sessions succesfully") `OK )
+                      ~data:(`String "Closed all sessions successfully") `OK )
               | _, true ->
                   ( (fun (c : User_model.cookie) ->
                       not (String.equal c.value cookie.value)),
                     Middleware.http_response reqd
-                      ~data:(`String "Logout succesful") `OK )
+                      ~data:(`String "Logout successful") `OK )
               | Some to_logout_cookie_value, false ->
                   ( (fun (c : User_model.cookie) ->
                       not (String.equal to_logout_cookie_value c.value)),
                     Middleware.redirect_to_page ~path:"/account"
-                      ~msg:"Closed session succesfully" reqd () )
+                      ~msg:"Closed session successfully" reqd () )
             in
             new_user_cookies ~user ~filter ~redirect store reqd
         | None ->
@@ -1000,7 +1002,7 @@ struct
         Store.update_user store updated_user >>= function
         | Ok () ->
             Middleware.http_response reqd
-              ~data:(`String "Session closed succesfully") `OK
+              ~data:(`String "Session closed successfully") `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
             Middleware.http_response reqd ~data:(`String err)
@@ -1204,14 +1206,15 @@ struct
     Middleware.http_response reqd ~title:"Unikernel Information"
       ~data:response_data `OK
 
-  let unikernel_info_one stack store ~unikernel_name albatross _
+  let unikernel_info_one stack store albatross unikernel_name _
       (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
     user_unikernel stack albatross ~user_name:user.name ~unikernel_name
     >>= function
     | Error err ->
         let data =
-          "An error occured trying to fetch " ^ unikernel_name
+          "An error occured trying to fetch "
+          ^ Configuration.name_to_str unikernel_name
           ^ "from albatross: " ^ err
         in
         Middleware.http_response ~api_meth:false reqd ~data:(`String data)
@@ -1224,7 +1227,7 @@ struct
               match
                 List.find_opt
                   (fun (u : User_model.unikernel_update) ->
-                    String.equal u.name unikernel_name)
+                    Vmm_core.Name.Label.equal u.name unikernel_name)
                   user.unikernel_updates
               with
               | Some unikernel_update -> Some unikernel_update.timestamp
@@ -1243,7 +1246,7 @@ struct
             Middleware.http_response ~api_meth:false reqd ~title:err.title
               ~data:err.data `Internal_server_error)
 
-  let unikernel_prepare_update stack store ~unikernel_name http_client albatross
+  let unikernel_prepare_update stack store http_client albatross unikernel_name
       _ (user : User_model.user) reqd =
     let open Update_flow in
     let pipeline =
@@ -1264,7 +1267,8 @@ struct
                  ~content:
                    (Unikernel_update.unikernel_update_layout
                       ~instance_name:albatross.configuration.name
-                      ~unikernel_name (name, unikernel) now build_comparison)
+                      ~unikernel_name:(Configuration.name_to_str unikernel_name)
+                      (name, unikernel) now build_comparison)
                  ~icon:"/images/robur.png" ())
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
@@ -1273,7 +1277,9 @@ struct
               ~data:err.data `Internal_server_error)
     | Ok (No_update_needed (name, uuid)) ->
         Logs.info (fun m ->
-            m "No update found for %s (uuid %s)" unikernel_name uuid);
+            m "No update found for %s (uuid %s)"
+              (Configuration.name_to_str unikernel_name)
+              uuid);
         let instance = Configuration.name_to_str albatross.configuration.name in
         let label =
           Option.value ~default:""
@@ -1284,14 +1290,17 @@ struct
             (Printf.sprintf "/unikernel/info?unikernel=%s&instance=%s" label
                instance)
           ~msg:
-            ("There is no update of " ^ unikernel_name
-           ^ " found on builds.robur.coop")
+            ("There is no update of "
+            ^ Configuration.name_to_str unikernel_name
+            ^ " found on builds.robur.coop")
           ()
     | Error err ->
-        let log_msg, web_msg = error_response_params unikernel_name err in
+        let log_msg, web_msg =
+          error_response_params (Configuration.name_to_str unikernel_name) err
+        in
         Logs.err (fun m -> m "%s" log_msg);
         Middleware.http_response ~api_meth:false ~data:(`String web_msg)
-          ~title:(unikernel_name ^ " update Error")
+          ~title:(Configuration.name_to_str unikernel_name ^ " update Error")
           reqd `Internal_server_error
 
   let force_create_unikernel stack albatross ~unikernel_name ~push
@@ -1306,6 +1315,7 @@ struct
              ( `Msg ("Force create: Error querying albatross: " ^ err),
                `Internal_server_error ))
     | Ok (_hdr, res) -> (
+        let unikernel_name_str = Configuration.name_to_str unikernel_name in
         Albatross.set_online albatross;
         match Albatross_json.res res with
         | Error (`String err) ->
@@ -1313,14 +1323,14 @@ struct
                 m
                   "albatross-force-create: albatross_json.res error parsing \
                    albatross response for creating %s: %s"
-                  unikernel_name err);
+                  unikernel_name_str err);
             Lwt.return (Error (`Msg err, `Internal_server_error))
         | Ok res ->
             Logs.info (fun m ->
                 m
-                  "albatross-force-create: succesfully created %s with result \
+                  "albatross-force-create: successfully created %s with result \
                    %s"
-                  unikernel_name (Utils.Json.to_string res));
+                  unikernel_name_str (Utils.Json.to_string res));
             Lwt.return (Ok ()))
 
   let process_change stack ~unikernel_name ~job ~to_be_updated_unikernel
@@ -1331,6 +1341,7 @@ struct
       | `Rollback -> "rollback"
       | `Update -> "update"
     in
+    let unikernel_name_str = Configuration.name_to_str unikernel_name in
     let unikernel_update : User_model.unikernel_update =
       {
         name = unikernel_name;
@@ -1351,13 +1362,13 @@ struct
               "%s: storing update information for %s failed with: %s for data \
                %s"
               (change_string change_kind)
-              unikernel_name err data);
+              unikernel_name_str err data);
         Lwt.return
           (Error
              ( `Msg
                  (change_string change_kind ^ " storing update information for "
-                ^ unikernel_name ^ " failed with: " ^ err ^ " for data: " ^ data
-                 ),
+                ^ unikernel_name_str ^ " failed with: " ^ err ^ " for data: "
+                ^ data),
                (`Internal_server_error : H1.Status.t) ))
     | Ok () -> (
         let data_stream, push_chunks = Lwt_stream.create () in
@@ -1403,7 +1414,7 @@ struct
                   "%s: builds.robur.coop: Error while fetching the binary of \
                    %s with error: %s"
                   (change_string change_kind)
-                  unikernel_name err);
+                  unikernel_name_str err);
             Lwt.return
               (Error
                  ( `Msg
@@ -1430,10 +1441,11 @@ struct
 
   let process_rollback stack albatross ~unikernel_name current_time store
       http_client reqd (user : User_model.user) =
+    let unikernel_name_str = Configuration.name_to_str unikernel_name in
     match
       List.find_opt
         (fun (u : User_model.unikernel_update) ->
-          String.equal u.name unikernel_name)
+          Vmm_core.Name.Label.equal u.name unikernel_name)
         user.unikernel_updates
     with
     | Some old_unikernel ->
@@ -1442,7 +1454,7 @@ struct
             ~check_time:old_unikernel.timestamp
           < Utils.rollback_seconds_limit
         then
-          process_change stack ~unikernel_name ~job:old_unikernel.name
+          process_change stack ~unikernel_name ~job:old_unikernel.job
             ~to_be_updated_unikernel:old_unikernel.uuid
             ~currently_running_unikernel:old_unikernel.uuid old_unikernel.config
             user store http_client `Rollback albatross
@@ -1451,14 +1463,14 @@ struct
               Middleware.http_response reqd ~title:"Rollback Successful"
                 ~data:
                   (`String
-                     ("Rollback succesful. " ^ unikernel_name
+                     ("Rollback successful. " ^ unikernel_name_str
                     ^ " is now running on build " ^ old_unikernel.uuid))
                 `OK
           | Error (`Msg err, http_status) ->
               Middleware.http_response reqd ~title:"Rollback Error"
                 ~data:
                   (`String
-                     ("Rollback failed. " ^ unikernel_name
+                     ("Rollback failed. " ^ unikernel_name_str
                     ^ " failed to revert to build " ^ old_unikernel.uuid
                     ^ " with error " ^ err))
                 http_status
@@ -1466,7 +1478,7 @@ struct
           Middleware.http_response reqd ~title:"Rollback Failed"
             ~data:
               (`String
-                 (unikernel_name
+                 (unikernel_name_str
                 ^ " rollback failed. We can't do a rollback after 10 minutes \
                    of an update."))
             `Bad_request
@@ -1474,7 +1486,7 @@ struct
         Middleware.http_response reqd ~title:"Rollback Error"
           ~data:
             (`String
-               (unikernel_name
+               (unikernel_name_str
               ^ " rollback failed. Could not find the build information."))
           `Not_found
 
@@ -1485,6 +1497,7 @@ struct
       ~currently_running_unikernel cfg user store http_client `Update albatross
     >>= function
     | Ok _res -> (
+        let unikernel_name_str = Configuration.name_to_str unikernel_name in
         Liveliness.interval_liveliness_checks ~unikernel_name
           ~http_liveliness_address ~dns_liveliness stack http_client
         >>= function
@@ -1493,23 +1506,24 @@ struct
                 m
                   "liveliness-checks for %s and build %s failed with error(s) \
                    %s. now performing a rollback"
-                  unikernel_name to_be_updated_unikernel err);
+                  unikernel_name_str to_be_updated_unikernel err);
             process_rollback stack albatross ~unikernel_name
               (Mirage_ptime.now ()) store http_client reqd user
         | Ok () ->
             Middleware.http_response reqd ~title:"Update Successful"
               ~data:
                 (`String
-                   ("Update succesful. " ^ unikernel_name
+                   ("Update successful. " ^ unikernel_name_str
                   ^ " is now running on build " ^ to_be_updated_unikernel))
               `OK)
     | Error (`Msg err, http_status) ->
         Middleware.http_response reqd ~title:"Update Error"
           ~data:
             (`String
-               ("Update failed. " ^ unikernel_name
-              ^ " failed to update to build " ^ to_be_updated_unikernel
-              ^ " with error " ^ err))
+               ("Update failed. "
+               ^ Configuration.name_to_str unikernel_name
+               ^ " failed to update to build " ^ to_be_updated_unikernel
+               ^ " with error " ^ err))
           http_status
 
   let unikernel_update stack store albatross_instances http_client
@@ -1548,8 +1562,11 @@ struct
           stack http_client
         >>= function
         | Ok () -> (
-            match Configuration.name_of_str instance_name with
-            | Ok instance_name -> (
+            match
+              ( Configuration.name_of_str instance_name,
+                Configuration.name_of_str unikernel_name )
+            with
+            | Ok instance_name, Ok unikernel_name -> (
                 match
                   Albatross_state.find_instance_by_name albatross_instances
                     instance_name
@@ -1632,11 +1649,17 @@ struct
                            ("An error occured while finding albatross instance "
                            ^ Configuration.name_to_str instance_name))
                       ~title:"Albatross Instance Error" reqd `Not_found)
-            | Error (`Msg err) ->
+            | Error (`Msg err), _ ->
                 Middleware.http_response reqd ~title:"Error: Bad instance name"
                   ~data:
                     (`String
-                       ("Couldn't convert the instance to a name, error: " ^ err))
+                       ("Couldn't convert the instance name, error: " ^ err))
+                  `Bad_request
+            | _, Error (`Msg err) ->
+                Middleware.http_response reqd ~title:"Error: Bad unikernel name"
+                  ~data:
+                    (`String
+                       ("Couldn't convert the unikernel name, error: " ^ err))
                   `Bad_request)
         | Error (`Msg err) ->
             Logs.info (fun m ->
@@ -1663,8 +1686,11 @@ struct
         (get "unikernel_name" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String unikernel_name), Some (`String instance_name) -> (
-        match Configuration.name_of_str instance_name with
-        | Ok instance_name -> (
+        match
+          ( Configuration.name_of_str instance_name,
+            Configuration.name_of_str unikernel_name )
+        with
+        | Ok instance_name, Ok unikernel_name -> (
             match
               Albatross_state.find_instance_by_name albatross_instances
                 instance_name
@@ -1679,10 +1705,13 @@ struct
                        ("Couldn't find albatross instance, "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
-        | Error (`Msg err) ->
+        | Error (`Msg err), _ ->
             Middleware.http_response reqd
-              ~data:
-                (`String ("Couldn't convert name to albatross instance, " ^ err))
+              ~data:(`String ("Couldn't convert instance name, " ^ err))
+              `Bad_request
+        | _, Error (`Msg err) ->
+            Middleware.http_response reqd
+              ~data:(`String ("Couldn't convert unikernel name, " ^ err))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd
@@ -1695,8 +1724,11 @@ struct
       Utils.Json.(get "name" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String unikernel_name), Some (`String instance_name) -> (
-        match Configuration.name_of_str instance_name with
-        | Ok instance_name -> (
+        match
+          ( Configuration.name_of_str instance_name,
+            Configuration.name_of_str unikernel_name )
+        with
+        | Ok instance_name, Ok unikernel_name -> (
             match
               Albatross_state.find_instance_by_name albatross_instances
                 instance_name
@@ -1726,11 +1758,13 @@ struct
                        ("Error finding albatross instance: "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
-        | Error (`Msg err) ->
+        | Error (`Msg err), _ ->
             Middleware.http_response reqd
-              ~data:
-                (`String
-                   ("Error converting albatross name to instance name: " ^ err))
+              ~data:(`String ("Error converting instance name: " ^ err))
+              `Bad_request
+        | _, Error (`Msg err) ->
+            Middleware.http_response reqd
+              ~data:(`String ("Error converting unikernel name: " ^ err))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd
@@ -1743,8 +1777,11 @@ struct
       Utils.Json.(get "name" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String unikernel_name), Some (`String instance_name) -> (
-        match Configuration.name_of_str instance_name with
-        | Ok instance_name -> (
+        match
+          ( Configuration.name_of_str instance_name,
+            Configuration.name_of_str unikernel_name )
+        with
+        | Ok instance_name, Ok unikernel_name -> (
             match
               Albatross_state.find_instance_by_name albatross_instances
                 instance_name
@@ -1775,11 +1812,13 @@ struct
                        ("Error finding albatross instance: "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
-        | Error (`Msg err) ->
+        | Error (`Msg err), _ ->
             Middleware.http_response reqd
-              ~data:
-                (`String
-                   ("Error converting albatross name to instance name: " ^ err))
+              ~data:(`String ("Error converting instance name: " ^ err))
+              `Bad_request
+        | _, Error (`Msg err) ->
+            Middleware.http_response reqd
+              ~data:(`String ("Error converting unikernel name: " ^ err))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd
@@ -1838,7 +1877,8 @@ struct
                       Some cfg,
                       Some force_create,
                       Some csrf ) -> (
-                      let process_unikernel_create albatross _reqd =
+                      let process_unikernel_create albatross unikernel_name
+                          _reqd =
                         match Albatross_json.config_of_json cfg with
                         | Error (`Msg err) ->
                             generate_http_error_response
@@ -1874,8 +1914,11 @@ struct
                                       ("Albatross JSON Error: " ^ err_msg)
                                       `Internal_server_error))
                       in
-                      match Configuration.name_of_str instance_name with
-                      | Ok instance_name -> (
+                      match
+                        ( Configuration.name_of_str instance_name,
+                          Configuration.name_of_str unikernel_name )
+                      with
+                      | Ok instance_name, Ok unikernel_name -> (
                           match
                             Albatross_state.find_instance_by_name
                               albatross_instances instance_name
@@ -1883,19 +1926,25 @@ struct
                           | Ok albatross -> (
                               match token_or_cookie with
                               | `Token ->
-                                  process_unikernel_create albatross reqd
+                                  process_unikernel_create albatross
+                                    unikernel_name reqd
                               | `Cookie ->
                                   csrf_verification
-                                    (process_unikernel_create albatross)
+                                    (process_unikernel_create albatross
+                                       unikernel_name)
                                     user csrf reqd)
                           | _ ->
                               generate_http_error_response
                                 ("Error finding albatross instance: "
                                 ^ Configuration.name_to_str instance_name)
                                 `Not_found)
-                      | Error (`Msg err) ->
+                      | Error (`Msg err), _ ->
                           generate_http_error_response
-                            ("Error converting name to albatross: " ^ err)
+                            ("Error converting instance name: " ^ err)
+                            `Bad_request
+                      | _, Error (`Msg err) ->
+                          generate_http_error_response
+                            ("Error converting unikernel name: " ^ err)
                             `Bad_request)
                   | _ ->
                       Logs.info (fun m -> m "Missing Fields");
@@ -1918,7 +1967,7 @@ struct
                 m "Multipart streamed correctly and unikernel created.");
             Lwt.return_unit)
 
-  let unikernel_console stack ~unikernel_name albatross _
+  let unikernel_console stack albatross unikernel_name _
       (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
     let response = Middleware.http_event_source_response reqd `OK in
@@ -2146,8 +2195,11 @@ struct
       Utils.Json.(get "block_name" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String block_name), Some (`String instance_name) -> (
-        match Configuration.name_of_str instance_name with
-        | Ok instance_name -> (
+        match
+          ( Configuration.name_of_str instance_name,
+            Configuration.name_of_str block_name )
+        with
+        | Ok instance_name, Ok block_name -> (
             match
               Albatross_state.find_instance_by_name albatross_instances
                 instance_name
@@ -2177,10 +2229,13 @@ struct
                        ("Couldn't find albatross instance with name: "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
-        | Error (`Msg err) ->
+        | Error (`Msg err), _ ->
             Middleware.http_response reqd
-              ~data:
-                (`String ("Couldn't convert name to albatross instance: " ^ err))
+              ~data:(`String ("Couldn't convert instance name: " ^ err))
+              `Bad_request
+        | _, Error (`Msg err) ->
+            Middleware.http_response reqd
+              ~data:(`String ("Couldn't convert block name: " ^ err))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd
@@ -2223,27 +2278,6 @@ struct
               | (Some "block_data", _), _, contents -> (
                   match (!albatross_ref, !csrf_ref, !json_data_ref) with
                   | Some albatross_instance, Some csrf, Some json -> (
-                      let add_block stack albatross block_name block_size =
-                        Albatross_state.query stack albatross ~domain:user.name
-                          ~name:block_name
-                          (`Block_cmd (`Block_add block_size))
-                        >>= function
-                        | Error err ->
-                            generate_http_error_response
-                              (Fmt.str "an error with albatross. got %s" err)
-                              `Internal_server_error
-                            >|= fun () -> Error ()
-                        | Ok (_hdr, res) -> (
-                            Albatross.set_online albatross;
-                            match Albatross_json.res res with
-                            | Error (`String err) ->
-                                generate_http_error_response
-                                  (Fmt.str "unexpected field. got %s" err)
-                                  `Bad_request
-                                >|= fun () -> Error ()
-                            | Ok _ -> Lwt.return (Ok ()))
-                      in
-
                       let stream_to_albatross stack albatross block_name
                           block_compressed =
                         let push () = Lwt_stream.get contents in
@@ -2265,6 +2299,27 @@ struct
                             | Ok res ->
                                 Middleware.http_response reqd ~data:res `OK)
                       in
+                      let add_block stack albatross block_name block_size
+                          block_compressed =
+                        Albatross_state.query stack albatross ~domain:user.name
+                          ~name:block_name
+                          (`Block_cmd (`Block_add block_size))
+                        >>= function
+                        | Error err ->
+                            generate_http_error_response
+                              (Fmt.str "an error with albatross. got %s" err)
+                              `Internal_server_error
+                        | Ok (_hdr, res) -> (
+                            Albatross.set_online albatross;
+                            match Albatross_json.res res with
+                            | Error (`String err) ->
+                                generate_http_error_response
+                                  (Fmt.str "unexpected field. got %s" err)
+                                  `Bad_request
+                            | Ok _ ->
+                                stream_to_albatross stack albatross block_name
+                                  block_compressed)
+                      in
                       let parsed_json = Utils.Json.from_string json in
                       match Configuration.name_of_str albatross_instance with
                       | Ok albatross_instance -> (
@@ -2276,53 +2331,50 @@ struct
                               match parsed_json with
                               | Ok (`Assoc json_dict) -> (
                                   match
-                                    ( c_or_u,
-                                      Utils.Json.
-                                        ( get "block_name" json_dict,
-                                          get "block_size" json_dict,
-                                          get "block_compressed" json_dict ) )
+                                    Utils.Json.
+                                      ( get "block_name" json_dict,
+                                        get "block_size" json_dict,
+                                        get "block_compressed" json_dict )
                                   with
-                                  | ( `Create,
-                                      ( Some (`String block_name),
-                                        Some (`Int block_size),
-                                        Some (`Bool block_compressed) ) ) -> (
-                                      match token_or_cookie with
-                                      | `Token -> (
-                                          add_block stack albatross block_name
-                                            block_size
-                                          >>= function
-                                          | Ok () ->
-                                              stream_to_albatross stack
-                                                albatross block_name
-                                                block_compressed
-                                          | Error () -> Lwt.return_unit)
-                                      | `Cookie ->
-                                          csrf_verification
-                                            (fun _reqd ->
-                                              add_block stack albatross
-                                                block_name block_size
-                                              >>= function
-                                              | Ok () ->
+                                  | ( Some (`String block_name),
+                                      Some (`Int block_size),
+                                      Some (`Bool block_compressed) ) -> (
+                                      match
+                                        Configuration.name_of_str block_name
+                                      with
+                                      | Error (`Msg err) ->
+                                          generate_http_error_response
+                                            (Fmt.str "Invalid block name: %s"
+                                               err)
+                                            `Bad_request
+                                      | Ok block_name -> (
+                                          match token_or_cookie with
+                                          | `Token -> (
+                                              match c_or_u with
+                                              | `Create ->
+                                                  add_block stack albatross
+                                                    block_name block_size
+                                                    block_compressed
+                                              | `Upload ->
                                                   stream_to_albatross stack
                                                     albatross block_name
-                                                    block_compressed
-                                              | Error () -> Lwt.return_unit)
-                                            user csrf reqd)
-                                  | ( `Upload,
-                                      ( Some (`String block_name),
-                                        None,
-                                        Some (`Bool block_compressed) ) ) -> (
-                                      match token_or_cookie with
-                                      | `Token ->
-                                          stream_to_albatross stack albatross
-                                            block_name block_compressed
-                                      | `Cookie ->
-                                          csrf_verification
-                                            (fun _reqd ->
-                                              stream_to_albatross stack
-                                                albatross block_name
-                                                block_compressed)
-                                            user csrf reqd)
+                                                    block_compressed)
+                                          | `Cookie -> (
+                                              match c_or_u with
+                                              | `Create ->
+                                                  csrf_verification
+                                                    (fun _reqd ->
+                                                      add_block stack albatross
+                                                        block_name block_size
+                                                        block_compressed)
+                                                    user csrf reqd
+                                              | `Upload ->
+                                                  csrf_verification
+                                                    (fun _reqd ->
+                                                      stream_to_albatross stack
+                                                        albatross block_name
+                                                        block_compressed)
+                                                    user csrf reqd)))
                                   | _ ->
                                       generate_http_error_response
                                         (Fmt.str "unexpected field. got %s"
@@ -2401,8 +2453,11 @@ struct
                 H1.Body.Writer.flush writer Fun.id;
                 Ok ())
         in
-        match Configuration.name_of_str instance_name with
-        | Ok instance_name -> (
+        match
+          ( Configuration.name_of_str instance_name,
+            Configuration.name_of_str block_name )
+        with
+        | Ok instance_name, Ok block_name -> (
             match
               Albatross_state.find_instance_by_name albatross_instances
                 instance_name
@@ -2415,20 +2470,26 @@ struct
                 | Ok () ->
                     Albatross.set_online albatross;
                     Lwt.return_unit)
-            | _ ->
+            | Error err ->
                 Logs.err (fun m ->
-                    m "Couldn't find albatross instance with name %s"
-                      (Configuration.name_to_str instance_name));
+                    m "Couldn't find albatross instance with name %s: %s"
+                      (Configuration.name_to_str instance_name)
+                      err);
                 Middleware.http_response reqd
                   ~data:
                     (`String
                        ("Couldn't find albatross instance with name: "
                        ^ Configuration.name_to_str instance_name))
                   `Not_found)
-        | Error (`Msg err) ->
+        | Error (`Msg err), _ ->
+            Middleware.http_response reqd
+              ~data:(`String ("Couldn't convert instance name: " ^ err))
+              `Bad_request
+        | _, Error (`Msg err) ->
             Middleware.http_response reqd
               ~data:
-                (`String ("Couldn't convert name to albatross instance: " ^ err))
+                (`String
+                   ("Couldn't convert block name: " ^ block_name ^ ": " ^ err))
               `Bad_request)
     | _ ->
         Middleware.http_response reqd
@@ -2544,7 +2605,7 @@ struct
         Store.update_user store updated_user >>= function
         | Ok () ->
             Middleware.http_response reqd
-              ~data:(`String "Token deleted succesfully") `OK
+              ~data:(`String "Token deleted successfully") `OK
         | Error (`Msg err) ->
             Logs.warn (fun m -> m "Storage error with %s" err);
             Middleware.http_response reqd ~data:(`String err)
@@ -2658,6 +2719,21 @@ struct
           with
           | Some param -> Ok param
           | None -> Error (Fmt.str "Couldn't find %s in query params" name)
+        in
+        let unikernel fn (token_or_cookie : [> `Cookie | `Token ])
+            (user : User_model.user) reqd =
+          match get_query_parameter "unikernel" with
+          | Ok unikernel -> (
+              match Configuration.name_of_str unikernel with
+              | Ok unikernel -> fn unikernel token_or_cookie user reqd
+              | Error (`Msg err) ->
+                  Middleware.http_response ~api_meth:false
+                    ~title:"Unikernel name error"
+                    ~data:(`String ("Error with unikernel name: " ^ err))
+                    reqd `Bad_request)
+          | Error err ->
+              Middleware.http_response ~api_meth:false ~data:(`String err) reqd
+                `Bad_request
         in
         let albatross_instance endpoint fn
             (token_or_cookie : [> `Cookie | `Token ]) (user : User_model.user)
@@ -2922,14 +2998,9 @@ struct
                   (unikernel_info stack !albatross_instances))
         | "/unikernel/info" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "unikernel" with
-                | Ok unikernel_name ->
-                    authenticate store reqd
-                      (albatross_instance req.H1.Request.target
-                         (unikernel_info_one stack store ~unikernel_name))
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                authenticate store reqd
+                  (albatross_instance req.H1.Request.target (fun albatross ->
+                       unikernel (unikernel_info_one stack store albatross))))
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
                 authenticate store reqd
@@ -2947,14 +3018,9 @@ struct
                      (unikernel_restart stack !albatross_instances)))
         | "/api/unikernel/console" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "unikernel" with
-                | Ok unikernel_name ->
-                    authenticate store reqd ~check_token:true ~api_meth:true
-                      (albatross_instance req.H1.Request.target
-                         (unikernel_console stack ~unikernel_name))
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                authenticate store reqd ~check_token:true ~api_meth:true
+                  (albatross_instance req.H1.Request.target (fun albatross ->
+                       unikernel (unikernel_console stack albatross))))
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -2963,15 +3029,11 @@ struct
                       user reqd))
         | "/unikernel/update" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "unikernel" with
-                | Ok unikernel_name ->
-                    authenticate store reqd
-                      (albatross_instance req.H1.Request.target
-                         (unikernel_prepare_update stack store ~unikernel_name
-                            http_client))
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                authenticate store reqd
+                  (albatross_instance req.H1.Request.target (fun albatross ->
+                       unikernel
+                         (unikernel_prepare_update stack store http_client
+                            albatross))))
         | "/api/unikernel/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
