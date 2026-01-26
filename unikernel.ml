@@ -3158,15 +3158,11 @@ struct
                         http_client)))
         | "/unikernel/update/compare-changes" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "unikernel" with
-                | Ok unikernel_name ->
-                    authenticate store reqd
-                      (albatross_instance req.H1.Request.target
-                         (unikernel_prepare_update stack store ~unikernel_name
-                            http_client))
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                authenticate store reqd
+                  (albatross_instance req.H1.Request.target (fun albatross ->
+                       unikernel
+                         (unikernel_prepare_update stack store http_client
+                            albatross))))
         | _ ->
             Middleware.http_response ~api_meth:false ~title:"Page not found"
               ~data:(`String "This page cannot be found.") reqd `Bad_request)
