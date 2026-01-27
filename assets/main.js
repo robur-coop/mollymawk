@@ -276,14 +276,14 @@ async function deleteAlbatrossConfig(name) {
 	formButton.innerHTML = `<i class="fa-solid fa-trash"></i>`
 }
 
-async function updateEmailConfig() {
+async function sendRequestForEmailConfig(btnId, btnText, endpoint) {
 	const serverInput = document.getElementById("email-ip").value;
 	const portInput = document.getElementById("email-port").value;
 	const fromInput = document.getElementById("email-sender").value;
 	const toInput = document.getElementById("to-email").value;
 	const baseUrlInput = document.getElementById("base-url").value;
 	const formAlert = document.getElementById("form-alert");
-	const formButton = document.getElementById('update-email-config-btn');
+	const formButton = document.getElementById(btnId);
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	formButton.classList.add("disabled");
 	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
@@ -294,7 +294,7 @@ async function updateEmailConfig() {
 		formAlert.textContent = "Please fill all fields";
 	} else {
 		try {
-			const response = await fetch("/api/admin/settings/email/update", {
+			const response = await fetch(endpoint, {
 				method: 'POST',
 				headers: {
 					"Content-Type": "application/json",
@@ -305,8 +305,8 @@ async function updateEmailConfig() {
 					"port": Number(portInput),
 					"from_email": fromInput,
 					"base_url": baseUrlInput,
-					"to_email": toInput,
 					"molly_csrf": molly_csrf,
+					...(toInput && { "to_email": toInput })
 				})
 			})
 			const data = await response.json();
@@ -329,8 +329,16 @@ async function updateEmailConfig() {
 			formAlert.textContent = error
 		}
 	}
-	formButton.innerHTML = "Update"
+	formButton.innerHTML = btnText;
 	formButton.disabled = false;
+}
+
+async function updateEmailConfig() {
+	sendRequestForEmailConfig("update-email-config-btn", "Update configuration", "/api/admin/settings/email/update")
+}
+
+async function sendTestEmail() {
+	sendRequestForEmailConfig("test-email-btn", "Send Test Email", "/api/admin/settings/email/test")
 }
 
 async function retryConnectingAlbatross(name) {

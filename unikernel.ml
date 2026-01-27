@@ -2688,39 +2688,9 @@ struct
         Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
           reqd `Internal_server_error
 
-  let update_email_configuration happy_eyeballs store _user json_dict reqd =
+  let with_valid_email_config json_dict reqd f =
     match Utils.Email.t_of_json json_dict with
-    | Ok email_settings -> (
-        let recipient =
-          Option.value ~default:email_settings.from_email
-            email_settings.to_email
-        in
-        send_email happy_eyeballs email_settings recipient
-          ~subject:"Verifying New Email Configuration"
-          ~body:"Your email configuration has been verified successfully.\n"
-        >>= function
-        | Ok () -> (
-            Store.store_email store (Some email_settings) >>= function
-            | Ok _ ->
-                Middleware.http_response reqd
-                  ~data:
-                    (`String "Email settings verified and saved successfully")
-                  `OK
-            | Error (`Msg err) ->
-                Middleware.http_response reqd
-                  ~data:
-                    (`String
-                       (Fmt.str "Configuration verified, but save failed: %s"
-                          (String.escaped err)))
-                  `Internal_server_error)
-        | Error err ->
-            Middleware.http_response reqd
-              ~data:
-                (`String
-                   (Fmt.str
-                      "Configuration rejected. Failed to send test email: %s"
-                      (String.escaped err)))
-              `Bad_request)
+    | Ok email_settings -> f email_settings
     | Error (`Msg err) ->
         Middleware.http_response reqd
           ~data:(`String (String.escaped err))
@@ -2731,6 +2701,37 @@ struct
             (`String
                (Fmt.str "Unexpected error parsing email settings: %s %s" ms1 ms2))
           `Bad_request
+
+  let update_email_configuration store _user json_dict reqd =
+    with_valid_email_config json_dict reqd (fun email_settings ->
+        Store.store_email store (Some email_settings) >>= function
+        | Ok _ ->
+            Middleware.http_response reqd
+              ~data:(`String "Email settings verified and saved successfully")
+              `OK
+        | Error (`Msg err) ->
+            Middleware.http_response reqd
+              ~data:(`String (Fmt.str "Save failed: %s" (String.escaped err)))
+              `Internal_server_error)
+
+  let test_email_configuration happy_eyeballs _user json_dict reqd =
+    with_valid_email_config json_dict reqd (fun email_settings ->
+        let recipient =
+          Option.value ~default:email_settings.from_email
+            email_settings.to_email
+        in
+
+        send_email happy_eyeballs email_settings recipient
+          ~subject:"Verifying New Email Configuration"
+          ~body:"Your email configuration has been verified successfully.\n"
+        >>= function
+        | Ok () ->
+            Middleware.http_response reqd
+              ~data:(`String "Test email sent successfully") `OK
+        | Error err ->
+            Middleware.http_response reqd
+              ~data:(`String (Fmt.str "Test failed: %s" (String.escaped err)))
+              `Bad_request)
 
   let seconds_until_next_midnight () =
     let now = Mirage_ptime.now () in
@@ -3105,8 +3106,12 @@ struct
         | "/api/admin/settings/email/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
+                  (extract_json_csrf_token (update_email_configuration store)))
+        | "/api/admin/settings/email/test" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (update_email_configuration happy_eyeballs store)))
+                     (test_email_configuration happy_eyeballs)))
         | "/api/admin/u/policy/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
