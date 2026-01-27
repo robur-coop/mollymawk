@@ -60,6 +60,8 @@ let email_config_layout (current_config : Utils.Email.t option) =
               ~id:"email-sender" ~input_type:`Email ~value:from_val ();
             render_input ~label_text:"Base URL" ~name:"base_url" ~id:"base-url"
               ~input_type:`Text ~value:base_url_val ();
+            render_input ~label_text:"Test Email Address" ~name:"to_email"
+              ~id:"to-email" ~input_type:`Text ~value:"" ();
             div
               ~a:[ a_class [ "mx-auto my-6 flex justify-center px-4" ] ]
               [
