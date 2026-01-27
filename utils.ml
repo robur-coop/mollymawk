@@ -1,4 +1,3 @@
-open Lwt.Infix
 open Mrmime
 
 let ( let* ) = Result.bind
@@ -83,6 +82,7 @@ module Email = struct
     port : int;
     from_email : Mrmime.Mailbox.t;
     base_url : string;
+    to_email : Mrmime.Mailbox.t option;
   }
 
   let to_json config =
@@ -103,15 +103,26 @@ module Email = struct
         ( get "server" assoc,
           get "port" assoc,
           get "from_email" assoc,
-          get "base_url" assoc )
+          get "base_url" assoc,
+          get "to_email" assoc )
     with
     | ( Some (`String server),
         Some (`Int port),
         Some (`String from_email),
-        Some (`String base_url) ) ->
+        Some (`String base_url),
+        to_email ) ->
         let* server = Ipaddr.of_string server in
         let* from_email = Mrmime.Mailbox.of_string from_email in
-        Ok { server; port; from_email; base_url }
+        let* to_email =
+          match to_email with
+          | None -> Ok None
+          | Some (`String email_str) -> (
+              match Mrmime.Mailbox.of_string email_str with
+              | Ok email -> Ok (Some email)
+              | Error (`Msg e) -> Error (`Msg e))
+          | Some _ -> Error (`Msg "to_email must be a string")
+        in
+        Ok { server; port; from_email; base_url; to_email }
     | _ ->
         Error
           (`Msg

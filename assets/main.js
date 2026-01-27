@@ -280,6 +280,7 @@ async function updateEmailConfig() {
 	const serverInput = document.getElementById("email-ip").value;
 	const portInput = document.getElementById("email-port").value;
 	const fromInput = document.getElementById("email-sender").value;
+	const toInput = document.getElementById("to-email").value;
 	const baseUrlInput = document.getElementById("base-url").value;
 	const formAlert = document.getElementById("form-alert");
 	const formButton = document.getElementById('update-email-config-btn');
@@ -304,7 +305,8 @@ async function updateEmailConfig() {
 					"port": Number(portInput),
 					"from_email": fromInput,
 					"base_url": baseUrlInput,
-					"molly_csrf": molly_csrf
+					"to_email": toInput,
+					"molly_csrf": molly_csrf,
 				})
 			})
 			const data = await response.json();
