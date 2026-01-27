@@ -37,36 +37,34 @@ struct
             m "Type conversion failed for %s: %s" (Emile.to_string email) e);
         []
 
-  let send_email stack email_config user_email ~subject ~body =
+  let getaddrinfo dns : HE.getaddrinfo =
+   fun record_type destination ->
+    match record_type with
+    | `A -> (
+        Dns.gethostbyname dns destination >>= function
+        | Ok addr ->
+            Logs.info (fun m ->
+                m "Resolved `A record for %s to %a"
+                  (Domain_name.to_string destination)
+                  Ipaddr.V4.pp addr);
+            Ipaddr.Set.of_list [ Ipaddr.V4 addr ] |> Lwt.return_ok
+        | Error e -> Lwt.return_error e)
+    | `AAAA -> (
+        Dns.gethostbyname6 dns destination >>= function
+        | Ok addr ->
+            Logs.info (fun m ->
+                m "Resolved `AAAA record for %s to %a"
+                  (Domain_name.to_string destination)
+                  Ipaddr.V6.pp addr);
+            Ipaddr.Set.of_list [ Ipaddr.V6 addr ] |> Lwt.return_ok
+        | Error e -> Lwt.return_error e)
+
+  let send_email happy_eyeballs email_config user_email ~subject ~body =
     let email =
       Utils.Email.construct_email
         ~from_email:email_config.Utils.Email.from_email ~to_email:user_email
         ~subject ~body ()
     in
-    let dns = Dns.create (stack, HE.create stack) in
-    let getaddrinfo : HE.getaddrinfo =
-     fun record_type destination ->
-      match record_type with
-      | `A -> (
-          Dns.gethostbyname dns destination >>= function
-          | Ok addr ->
-              Logs.info (fun m ->
-                  m "Resolved `A record for %s to %a"
-                    (Domain_name.to_string destination)
-                    Ipaddr.V4.pp addr);
-              Ipaddr.Set.of_list [ Ipaddr.V4 addr ] |> Lwt.return_ok
-          | Error e -> Lwt.return_error e)
-      | `AAAA -> (
-          Dns.gethostbyname6 dns destination >>= function
-          | Ok addr ->
-              Logs.info (fun m ->
-                  m "Resolved `AAAA record for %s to %a"
-                    (Domain_name.to_string destination)
-                    Ipaddr.V6.pp addr);
-              Ipaddr.Set.of_list [ Ipaddr.V6 addr ] |> Lwt.return_ok
-          | Error e -> Lwt.return_error e)
-    in
-    let happy_eyeballs = HE.create ~getaddrinfo stack in
     let ip = email_config.server in
     let addr =
       match Ipaddr.to_v4 ip with Some addr -> addr | None -> Ipaddr.V4.any
@@ -2756,8 +2754,8 @@ struct
         else Lwt.return (update_report :: acc))
       [] users
 
-  let run_background_update_check users stack email_config albatross_instances
-      http_client =
+  let run_background_update_check happy_eyeballs users stack email_config
+      albatross_instances http_client =
     match email_config with
     | None ->
         Logs.info (fun m ->
@@ -2773,7 +2771,7 @@ struct
             >>= fun reports ->
             Lwt_list.iter_s
               (fun (report : Update_flow.user_unikernel_available_updates) ->
-                send_email stack email_config report.user.email
+                send_email happy_eyeballs email_config report.user.email
                   ~subject:"Unikernel updates available"
                   ~body:(Email_templates.updated_unikernels report email_config)
                 >>= function
@@ -2794,8 +2792,8 @@ struct
                 m "Background update check failed: %s" (Printexc.to_string exn));
             Lwt.return_unit)
 
-  let start_background_scheduler stack store albatross_instances_ref http_client
-      =
+  let start_background_scheduler happy_eyeballs stack store
+      albatross_instances_ref http_client =
     let rec loop () =
       let delay = seconds_until_next_midnight () in
       Logs.info (fun m -> m "Next background update in %.0f seconds" delay);
@@ -2803,7 +2801,7 @@ struct
       Lwt.catch
         (fun () ->
           Logs.info (fun m -> m "Starting background update...");
-          run_background_update_check (Store.users store) stack
+          run_background_update_check happy_eyeballs (Store.users store) stack
             (Store.email store) !albatross_instances_ref http_client)
         (fun exn ->
           Logs.err (fun m ->
@@ -2814,7 +2812,7 @@ struct
     Lwt.async loop
 
   let request_handler stack albatross_instances js_file css_file imgs store
-      http_client flow (_ipaddr, _port) reqd =
+      http_client happy_eyeballs flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
           Middleware.http_response reqd
@@ -3184,6 +3182,8 @@ struct
     Store.connect storage >>= function
     | Error (`Msg msg) -> failwith msg
     | Ok store ->
+        let dns = Dns.create (stack, HE.create stack) in
+        let happy_eyeballs = HE.create ~getaddrinfo:(getaddrinfo dns) stack in
         Albatross_state.init_all stack (Store.configurations store)
         >>= fun albatross_instances ->
         let albatross_instances = ref albatross_instances in
@@ -3192,13 +3192,14 @@ struct
             m "Initialise an HTTP server (no HTTPS) on port %u" port);
         let request_handler =
           request_handler stack albatross_instances js_file css_file imgs store
-            http_client
+            http_client happy_eyeballs
         in
         Paf.init ~port (S.tcp stack) >>= fun service ->
         Lwt.pause () >>= fun () ->
         let http = Paf.http_service ~error_handler request_handler in
         let (`Initialized th) = Paf.serve http service in
         Lwt.pause () >>= fun () ->
-        start_background_scheduler stack store albatross_instances http_client;
+        start_background_scheduler happy_eyeballs stack store
+          albatross_instances http_client;
         th
 end
