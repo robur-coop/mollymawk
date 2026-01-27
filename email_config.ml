@@ -60,11 +60,20 @@ let email_config_layout (current_config : Utils.Email.t option) =
               ~id:"email-sender" ~input_type:`Email ~value:from_val ();
             render_input ~label_text:"Base URL" ~name:"base_url" ~id:"base-url"
               ~input_type:`Text ~value:base_url_val ();
-            render_input ~label_text:"Test Email Address" ~name:"to_email"
-              ~id:"to-email" ~input_type:`Text ~value:"" ();
+            render_input ~label_text:"Test Email Address (optional)"
+              ~name:"to_email" ~id:"to-email" ~input_type:`Text ~value:"" ();
             div
-              ~a:[ a_class [ "mx-auto my-6 flex justify-center px-4" ] ]
+              ~a:
+                [
+                  a_class [ "my-6 flex mx-4 justify-center px-4" ];
+                  a_style "gap: 1rem";
+                ]
               [
+                Utils.button_component
+                  ~attribs:
+                    [ a_id "test-email-btn"; a_onclick "sendTestEmail()" ]
+                  ~content:(txt "Send Test Email") ~btn_type:`Primary_outlined
+                  ();
                 Utils.button_component
                   ~attribs:
                     [
