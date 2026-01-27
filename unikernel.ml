@@ -79,8 +79,9 @@ struct
       fun () -> Lwt.return (s ())
     in
     let domain = Colombe.Domain.IPv4 addr in
-    Mailer.submit ~domain ~destination:(`Ipaddrs [ ip ]) ~port:email_config.port
-      happy_eyeballs sender (recipient user_email) (fun () -> streamer ())
+    Mailer.sendmail ~domain ~destination:(`Ipaddrs [ ip ])
+      ~port:email_config.port happy_eyeballs sender (recipient user_email)
+      (fun () -> streamer ())
     >>= fun email ->
     match email with
     | Ok () -> Lwt.return_ok ()
