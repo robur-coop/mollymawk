@@ -168,7 +168,12 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                           ];
                         p
                           ~a:[ a_class [ "text-3xl text-right" ] ]
-                          [ txt (string_of_int data.cpuid) ];
+                          [
+                            txt
+                              (String.concat ", "
+                                 (List.map string_of_int
+                                    (Vmm_core.IS.elements data.cpuids)));
+                          ];
                       ];
                     div
                       ~a:[ a_class [ "p-4 rounded border border-primary-700" ] ]
@@ -212,7 +217,12 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                           ];
                         p
                           ~a:[ a_class [ "text-3xl text-right" ] ]
-                          [ txt (match data.typ with `Solo5 -> "Solo5") ];
+                          [
+                            txt
+                              (match data.typ with
+                              | `Solo5 -> "Solo5"
+                              | `BHyve -> "BHyve");
+                          ];
                       ];
                   ];
                 div

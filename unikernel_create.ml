@@ -3,6 +3,13 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
   let total_memory_used = Utils.total_memory_used unikernels in
   let cpu_usage_count = Utils.cpu_usage_count user_policy unikernels in
   let memory_left = user_policy.memory - total_memory_used in
+  let input_classes =
+    "ring-primary-100 mt-1.5 transition appearance-none block w-full px-3 py-3 \
+     rounded-xl shadow-sm border hover:border-primary-200 \
+     focus:border-primary-300 bg-primary-50 bg-opacity-0 hover:bg-opacity-50 \
+     focus:bg-opacity-50 ring-primary-200 focus:ring-primary-200 \
+     focus:ring-[1px] focus:outline-none"
+  in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -32,46 +39,43 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                           a_name "name";
                           a_required ();
                           a_id "unikernel-name";
-                          a_class
-                            [
-                              "ring-primary-100 mt-1.5 transition \
-                               appearance-none block w-full px-3 py-3 \
-                               rounded-xl shadow-sm border \
-                               hover:border-primary-200\n\
-                              \                                           \
-                               focus:border-primary-300 bg-primary-50 \
-                               bg-opacity-0 hover:bg-opacity-50 \
-                               focus:bg-opacity-50 ring-primary-200 \
-                               focus:ring-primary-200\n\
-                              \                                           \
-                               focus:ring-[1px] focus:outline-none";
-                            ];
+                          a_class [ input_classes ];
                         ]
                       ();
                   ];
+                (* Type Selector *)
+                div
+                  [
+                    label ~a:[ a_class [ "block font-medium" ] ] [ txt "Type" ];
+                    select
+                      ~a:
+                        [
+                          a_id "unikernel-type";
+                          a_name "typ";
+                          a_class [ input_classes ];
+                          a_onchange "toggleType()";
+                        ]
+                      [
+                        option
+                          ~a:[ a_value "solo5"; a_selected () ]
+                          (txt "Solo5");
+                        option ~a:[ a_value "bhyve" ] (txt "BHyve");
+                      ];
+                  ];
+                (* CPU Ids - Multi-select *)
                 div
                   [
                     label
                       ~a:[ a_class [ "block font-medium" ] ]
-                      [ txt "CPU Id" ];
+                      [ txt "CPU Ids (Multi-select)" ];
                     select
                       ~a:
                         [
-                          a_id "cpuid";
-                          a_name "cpuid";
-                          a_class
-                            [
-                              "ring-primary-100 mt-1.5 transition block w-full \
-                               px-3 py-3 rounded-xl shadow-sm border \
-                               hover:border-primary-200\n\
-                              \                                           \
-                               focus:border-primary-300 bg-primary-50 \
-                               bg-opacity-0 hover:bg-opacity-50 \
-                               focus:bg-opacity-50 ring-primary-200 \
-                               focus:ring-primary-200\n\
-                              \                                           \
-                               focus:ring-[1px] focus:outline-none";
-                            ];
+                          a_id "cpuids";
+                          a_name "cpuids";
+                          a_multiple ();
+                          a_class [ input_classes ];
+                          a_style "height: auto; min-height: 3rem;";
                         ]
                       (List.map
                          (fun (cpu_id, count) ->
@@ -91,6 +95,33 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                 Utils.increment_or_decrement_ui ~id:"startup-priority"
                   ~max_value:100 ~min_value:0 ~default_value:50
                   ~label':"Startup Priority" ();
+              ];
+            (* BHyve Specific Options *)
+            div
+              ~a:
+                [
+                  a_id "bhyve-options";
+                  a_class [ "hidden grid grid-cols-2 gap-3" ];
+                ]
+              [
+                Utils.increment_or_decrement_ui ~id:"numcpus" ~max_value:16
+                  ~min_value:1 ~default_value:1 ~label':"vCPUs (BHyve)" ();
+                div
+                  [
+                    label
+                      ~a:[ a_class [ "block font-medium" ] ]
+                      [ txt "Linux Boot Partition" ];
+                    input
+                      ~a:
+                        [
+                          a_input_type `Text;
+                          a_name "linux_boot_partition";
+                          a_id "linux-boot-partition";
+                          a_placeholder "Optional (e.g. /dev/sda1)";
+                          a_class [ input_classes ];
+                        ]
+                      ();
+                  ];
               ];
             hr ();
             div
@@ -139,23 +170,14 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                       a_required ();
                       a_name "arguments";
                       a_id "unikernel-arguments";
-                      a_class
-                        [
-                          "ring-primary-100 mt-1.5 transition appearance-none \
-                           block w-full px-3 py-3 rounded-xl shadow-sm border \
-                           hover:border-primary-200\n\
-                          \                                           \
-                           focus:border-primary-300 bg-primary-50 bg-opacity-0 \
-                           hover:bg-opacity-50 focus:bg-opacity-50 \
-                           ring-primary-200 focus:ring-primary-200\n\
-                          \                                           \
-                           focus:ring-[1px] focus:outline-none";
-                        ];
+                      a_class [ input_classes ];
                     ]
                   (txt "");
               ];
             hr ();
+            (* Image Binary (Solo5 only) *)
             div
+              ~a:[ a_id "solo5-options" ]
               [
                 label
                   ~a:[ a_class [ "block font-medium" ] ]
@@ -167,18 +189,7 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                       a_name "binary";
                       a_required ();
                       a_id "unikernel-binary";
-                      a_class
-                        [
-                          "ring-primary-100 mt-1.5 transition appearance-none \
-                           block w-full px-3 py-3 rounded-xl shadow-sm border \
-                           hover:border-primary-200\n\
-                          \                                           \
-                           focus:border-primary-300 bg-primary-50 bg-opacity-0 \
-                           hover:bg-opacity-50 focus:bg-opacity-50 \
-                           ring-primary-200 focus:ring-primary-200\n\
-                          \                                           \
-                           focus:ring-[1px] focus:outline-none";
-                        ];
+                      a_class [ input_classes ];
                     ]
                   ();
               ];
@@ -253,4 +264,21 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                   ~content:(txt "Deploy") ~btn_type:`Primary_full ();
               ];
           ];
+        script
+          (txt
+             "function toggleType() { \n\
+             \  var type = document.getElementById('unikernel-type').value; \n\
+             \  var bhyveOpts = document.getElementById('bhyve-options'); \n\
+             \  var solo5Opts = document.getElementById('solo5-options'); \n\
+             \  var binInput = document.getElementById('unikernel-binary'); \n\n\
+             \  if (type === 'bhyve') { \n\
+             \    bhyveOpts.classList.remove('hidden'); \n\
+             \    solo5Opts.classList.add('hidden'); \n\
+             \    binInput.removeAttribute('required'); \n\
+             \  } else { \n\
+             \    bhyveOpts.classList.add('hidden'); \n\
+             \    solo5Opts.classList.remove('hidden'); \n\
+             \    binInput.setAttribute('required', ''); \n\
+             \  } \n\
+              }");
       ])

@@ -527,11 +527,13 @@ let cpu_usage_count policy unikernels =
   (* count usage of each cpuid in unikernels *)
   List.iter
     (fun (_, unikernel) ->
-      let cpuid = unikernel.Vmm_core.Unikernel.cpuid in
-      let count =
-        Hashtbl.find_opt cpuid_count cpuid |> Option.value ~default:0
-      in
-      Hashtbl.replace cpuid_count cpuid (count + 1))
+      Vmm_core.IS.iter
+        (fun cpuid ->
+          let count =
+            Hashtbl.find_opt cpuid_count cpuid |> Option.value ~default:0
+          in
+          Hashtbl.replace cpuid_count cpuid (count + 1))
+        unikernel.Vmm_core.Unikernel.cpuids)
     unikernels;
   (* Prepare list of all cpuids from policy *)
   let policy_cpuids = Vmm_core.IS.elements policy.Vmm_core.Policy.cpuids in

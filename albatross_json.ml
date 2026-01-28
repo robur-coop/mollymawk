@@ -11,7 +11,7 @@ let fail_behaviour = function
           ("all_exit_codes", `Bool (ex = None));
         ]
 
-let cpuid c = `Int c
+let cpuids cs = `List (List.map (fun c -> `Int c) (Vmm_core.IS.elements cs))
 let memory m = `Int m
 
 let argv args =
@@ -51,11 +51,16 @@ let unikernel_info (unikernel_name, info) =
              (Option.map Vmm_core.Name.Label.to_string
                 (Vmm_core.Name.name unikernel_name))) );
       ("fail_behaviour", fail_behaviour info.Vmm_core.Unikernel.fail_behaviour);
-      ("cpuid", cpuid info.cpuid);
+      ("cpuids", cpuids info.cpuids);
       ("memory", memory info.memory);
       ("block_devices", block_devices info.block_devices);
       ("network_interfaces", bridges info.bridges);
       ("arguments", argv info.argv);
+      ("numcpus", `Int info.numcpus);
+      ( "linux_boot_partition",
+        Option.fold ~none:`Null
+          ~some:(fun s -> `String s)
+          info.linux_boot_partition );
     ]
 
 let unikernel_infos is = `List (List.map unikernel_info is)
@@ -95,6 +100,7 @@ let success = function
   | `Policies ps -> policy_infos ps
   | `Old_unikernel_info3 is -> unikernel_infos is
   | `Old_unikernel_info4 is -> unikernel_infos is
+  | `Old_unikernel_info5 is -> unikernel_infos is
   | `Unikernel_info is -> unikernel_infos is
   | `Block_devices bs -> block_infos bs
   | `Unikernel_image _ -> `String "unikernel image not supported"
@@ -232,11 +238,28 @@ let config_of_json str =
     Option.fold ~none:(Ok `Quit) ~some:fail_behaviour_of_json
       (get "fail_behaviour" dict)
   in
-  let* cpuid =
-    Option.fold ~none:(Ok 0)
+  let* cpuids =
+    match get "cpuids" dict with
+    | None -> Ok Vmm_core.IS.empty
+    | Some (`List l) ->
+        let* ids =
+          try Ok (List.map (function `Int i -> i | _ -> failwith "not int") l)
+          with Failure e -> Error (`Msg ("cpuids must be int list: " ^ e))
+        in
+        Ok (Vmm_core.IS.of_list ids)
+    | Some _ -> Error (`Msg "cpuids must be a list of integers")
+  in
+  let* numcpus =
+    Option.fold ~none:(Ok 1) (* Default to 1 vCPU *)
       ~some:(function
-        | `Int n -> Ok n | _ -> Error (`Msg "cpuid must be an integer"))
-      (get "cpuid" dict)
+        | `Int n -> Ok n | _ -> Error (`Msg "numcpus must be an integer"))
+      (get "numcpus" dict)
+  in
+  let* linux_boot_partition =
+    match get "linux_boot_partition" dict with
+    | None -> Ok None
+    | Some (`String s) -> Ok (Some s)
+    | Some _ -> Error (`Msg "linux_boot_partition must be a string")
   in
   let* memory =
     Option.fold ~none:(Ok 32)
@@ -303,11 +326,13 @@ let config_of_json str =
       fail_behaviour;
       add_name = true;
       startup;
-      cpuid;
+      cpuids;
       memory;
       block_devices;
       bridges;
       argv;
+      numcpus;
+      linux_boot_partition;
     }
 
 let config_to_json (cfg : Vmm_core.Unikernel.config) =
@@ -344,14 +369,20 @@ let config_to_json (cfg : Vmm_core.Unikernel.config) =
     in
     `List (List.map bridge bs)
   in
+  let typ = match cfg.typ with `Solo5 -> "solo5" | `BHyve -> "bhyve" in
   `Assoc
     [
-      ("typ", `String "solo5");
+      ("typ", `String typ);
       ("compressed", `Bool cfg.compressed);
       ("fail_behaviour", fail_behaviour cfg.fail_behaviour);
-      ("cpuid", cpuid cfg.cpuid);
+      ("cpuids", cpuids cfg.cpuids);
       ("memory", memory cfg.memory);
       ("block_devices", block_devices cfg.block_devices);
       ("network_interfaces", bridges cfg.bridges);
       ("arguments", argv cfg.argv);
+      ("numcpus", `Int cfg.numcpus);
+      ( "linux_boot_partition",
+        Option.fold ~none:`Null
+          ~some:(fun s -> `String s)
+          cfg.linux_boot_partition );
     ]

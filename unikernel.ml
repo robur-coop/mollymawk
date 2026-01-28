@@ -1626,7 +1626,7 @@ struct
                                 add_name = true;
                                 startup = info.startup;
                                 fail_behaviour = info.fail_behaviour;
-                                cpuid = info.cpuid;
+                                cpuids = info.cpuids;
                                 memory = info.memory;
                                 block_devices =
                                   List.map
@@ -1652,6 +1652,9 @@ struct
                                         Some mac ))
                                     info.bridges;
                                 argv = info.argv;
+                                (* ADDED: New required fields for BHyve support *)
+                                numcpus = info.numcpus;
+                                linux_boot_partition = info.linux_boot_partition;
                               }
                             in
                             process_unikernel_update ~unikernel_name ~job
