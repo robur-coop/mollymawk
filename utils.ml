@@ -170,6 +170,10 @@ module Email = struct
                 Content,
                 Content_type.(
                   make `Text (Subtype.v `Text "html") Parameters.empty) );
+            Field
+              ( Field_name.content_encoding,
+                Encoding,
+                `Quoted_printable );
           ]
     in
     let body_stream =
@@ -180,7 +184,7 @@ module Email = struct
           sent := true;
           Some (body, 0, String.length body))
     in
-    let part = Mt.part body_stream in
+    let part = Mt.part ~header body_stream in
     Mt.make header Mt.simple part
 end
 
