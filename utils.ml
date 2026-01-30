@@ -170,10 +170,7 @@ module Email = struct
                 Content,
                 Content_type.(
                   make `Text (Subtype.v `Text "html") Parameters.empty) );
-            Field
-              ( Field_name.content_encoding,
-                Encoding,
-                `Quoted_printable );
+            Field (Field_name.content_encoding, Encoding, `Quoted_printable);
           ]
     in
     let body_stream =
