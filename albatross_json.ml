@@ -253,7 +253,8 @@ let config_of_json str =
   let* numcpus =
     Option.fold ~none:(Ok 1) (* Default to 1 vCPU *)
       ~some:(function
-        | `Int n -> Ok n | _ -> Error (`Msg "numcpus must be an integer"))
+        | `Int n when n > 0 -> Ok n
+        | _ -> Error (`Msg "numcpus must be an integer"))
       (get "numcpus" dict)
   in
   let* linux_boot_partition =
