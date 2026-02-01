@@ -452,67 +452,74 @@ async function deployUnikernel(albatross_instance) {
 	const formAlert = document.getElementById("form-alert");
 	const deployButton = document.getElementById("deploy-button");
 	const name = document.getElementById("unikernel-name").value;
-	const cpuid = document.getElementById("cpuid").value;
+	const type = document.getElementById("unikernel-type").value;
 	const startup = document.getElementById("startup-priority").innerText;
 	const fail_behaviour = document.getElementById("restart-on-fail").checked;
 	const force_create = document.getElementById("force-create").checked;
 	const memory = document.getElementById("unikernel-memory").innerText;
-
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	const cpuidsStr = document.getElementById("cpuids").value;
+	const cpuids = cpuidsStr ? cpuidsStr.split(',').map(Number) : [];
 	const networkData = gatherFieldsForDevices("network", "network_interfaces", formAlert);
 	const blockData = gatherFieldsForDevices("block", "block_devices", formAlert);
-
-	// Abort immediately if a device field is invalid
 	if (networkData === null || blockData === null) {
 		buttonLoading(deployButton, false, "Deploy");
 		return;
-	}
-
-	const argumentsString = document.getElementById("unikernel-arguments").value.trim();
-	const argumentsList = argumentsString ? argumentsString.split(/\s+/) : [];
-	const binary = document.getElementById("unikernel-binary").files[0];
-	const molly_csrf = document.getElementById("molly-csrf").value;
-
+	} 
 	if (!isValidName(name)) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please fill in a valid name";
+		showError(formAlert, "Please fill in a valid name");
 		buttonLoading(deployButton, false, "Deploy");
 		return;
 	}
-
-	if (!binary) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please upload the unikernel image";
-		buttonLoading(deployButton, false, "Deploy");
-		return;
+	let specificConfig = {};
+	const binary = document.getElementById("unikernel-binary").files[0];
+	if (type === 'solo5') {
+		if (!binary) {
+			showError(formAlert, "Please upload the unikernel image");
+			buttonLoading(deployButton, false, "Deploy");
+			return;
+		}
+		const argumentsString = document.getElementById("unikernel-arguments").value.trim();
+		specificConfig = {
+			typ: "solo5",
+			arguments: argumentsString ? argumentsString.split(/\s+/) : []
+		};
+	} else if (type === 'bhyve') {
+		const vcpus = document.getElementById("numcpus").innerText;
+		const bootPartition = document.getElementById("linux-boot-partition").value;
+		specificConfig = {
+			typ: "bhyve",
+			vcpus: Number(vcpus),
+			linux_boot_partition: bootPartition
+		};
 	}
-
 	buttonLoading(deployButton, true, "Deploying...");
-
 	let formData = new FormData();
 	const unikernel_config = {
-		cpuid: Number(cpuid),
+		cpuids: cpuids,
 		startup: Number(startup),
 		fail_behaviour: fail_behaviour ? { "restart": fail_behaviour } : "quit",
 		memory: Number(memory),
 		...networkData,
 		...blockData,
-		arguments: argumentsList
+		...specificConfig
 	};
-	formData.append("albatross_instance", albatross_instance,);
-	formData.append("unikernel_name", name,);
+	formData.append("albatross_instance", albatross_instance);
+	formData.append("unikernel_name", name);
+	formData.append("typ", type);
 	formData.append("unikernel_config", JSON.stringify(unikernel_config));
 	formData.append("unikernel_force_create", force_create);
 	formData.append("molly_csrf", molly_csrf);
-	formData.append("binary", binary);
-
+	if (binary) {
+		formData.append("binary", binary);
+	}
 	try {
 		const response = await fetch("/api/unikernel/create", {
 			method: 'POST',
 			body: formData
-		})
+		});
 		const data = await response.json();
+
 		if (data.status === 200 && data.success) {
 			formAlert.classList.remove("hidden", "text-secondary-500");
 			formAlert.classList.add("text-primary-500");
@@ -522,18 +529,20 @@ async function deployUnikernel(albatross_instance) {
 				window.location.href = "/dashboard";
 			}, 2000);
 		} else {
-			postAlert("bg-secondary-300", data.data);
-			formAlert.classList.remove("hidden", "text-primary-500");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = data.data;
-			buttonLoading(deployButton, false, "Deploy");
+			handleFailure(data.data);
 		}
 	} catch (error) {
-		postAlert("bg-secondary-300", error);
-		formAlert.classList.remove("hidden");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = error;
+		handleFailure(error);
+	}
+	function handleFailure(msg) {
+		postAlert("bg-secondary-300", msg);
+		showError(formAlert, msg);
 		buttonLoading(deployButton, false, "Deploy");
+	}
+	function showError(el, msg) {
+		el.classList.remove("hidden", "text-primary-500");
+		el.classList.add("text-secondary-500");
+		el.textContent = msg;
 	}
 }
 
