@@ -1,15 +1,141 @@
+let input_classes =
+  "ring-primary-100 mt-1.5 transition block w-full px-3 py-3 rounded-xl \
+   shadow-sm border hover:border-primary-200 focus:border-primary-300 \
+   bg-primary-50 bg-opacity-0 hover:bg-opacity-50 focus:bg-opacity-50 \
+   ring-primary-200 focus:ring-primary-200 focus:ring-[1px] focus:outline-none"
+
+let cpu_multiselect cpu_usage_count =
+  let options =
+    cpu_usage_count
+    |> List.sort (fun (_, c1) (_, c2) -> Int.compare c1 c2)
+    |> List.map (fun (id, cnt) ->
+        Printf.sprintf "{id:%d, txt:'CPU %d (%d)'}" id id cnt)
+    |> String.concat "," |> Printf.sprintf "[%s]"
+  in
+
+  Tyxml_html.(
+    div
+      ~a:[ a_class [ "my-3" ] ]
+      [
+        label ~a:[ a_class [ "block font-medium" ] ] [ txt "CPU Ids" ];
+        div
+          ~a:
+            [
+              a_class [ "relative" ];
+              Unsafe.string_attrib "x-on:click.outside" "open = false";
+              Unsafe.string_attrib "x-data"
+                (Printf.sprintf
+                   "{ open: false, sel: [], opts: %s, toggle(id) { \
+                    this.sel.includes(id) ? this.sel = this.sel.filter(x => \
+                    x!==id) : this.sel.push(id) } }"
+                   options);
+            ]
+          [
+            div
+              ~a:
+                [
+                  a_class
+                    [
+                      input_classes;
+                      "min-h-[3rem] h-auto flex flex-wrap gap-1 cursor-pointer";
+                    ];
+                  Unsafe.string_attrib "x-on:click" "open = !open";
+                ]
+              [
+                span
+                  ~a:
+                    [
+                      a_class [ "text-gray-500" ];
+                      Unsafe.string_attrib "x-show" "!sel.length";
+                    ]
+                  [ txt "Select CPUs..." ];
+                template
+                  ~a:[ Unsafe.string_attrib "x-for" "id in sel" ]
+                  [
+                    span
+                      ~a:
+                        [
+                          a_class
+                            [
+                              "bg-primary-100 text-primary-700 px-2 rounded \
+                               text-sm flex items-center";
+                            ];
+                        ]
+                      [
+                        span ~a:[ Unsafe.string_attrib "x-text" "'CPU '+id" ] [];
+                        button
+                          ~a:
+                            [
+                              a_class
+                                [ "ml-1 text-primary-500 hover:text-red-500" ];
+                              Unsafe.string_attrib "x-on:click.stop"
+                                "toggle(id)";
+                            ]
+                          [ txt "x" ];
+                      ];
+                  ];
+              ];
+            div
+              ~a:
+                [
+                  Unsafe.string_attrib "x-show" "open";
+                  a_style "background-color: white;";
+                  a_class
+                    [
+                      "absolute z-10 w-full border rounded shadow-lg max-h-48 \
+                       overflow-auto mt-1";
+                    ];
+                  a_style "display: none";
+                ]
+              [
+                template
+                  ~a:
+                    [
+                      Unsafe.string_attrib "x-for" "o in opts";
+                      Unsafe.string_attrib ":key" "o.id";
+                    ]
+                  [
+                    div
+                      ~a:
+                        [
+                          a_class
+                            [
+                              "p-2 hover:bg-gray-100 cursor-pointer flex \
+                               items-center";
+                            ];
+                          Unsafe.string_attrib "x-on:click" "toggle(o.id)";
+                        ]
+                      [
+                        input
+                          ~a:
+                            [
+                              a_input_type `Checkbox;
+                              a_class [ "mr-2" ];
+                              Unsafe.string_attrib ":checked"
+                                "sel.includes(o.id)";
+                              a_style "pointer-events: none";
+                            ]
+                          ();
+                        span ~a:[ Unsafe.string_attrib "x-text" "o.txt" ] [];
+                      ];
+                  ];
+              ];
+            input
+              ~a:
+                [
+                  a_input_type `Hidden;
+                  a_name "cpuids";
+                  Unsafe.string_attrib ":value" "sel.join(',') ";
+                ]
+              ();
+          ];
+      ])
+
 let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
     (blocks : (Vmm_core.Name.t * int * bool) list) albatross_instance =
   let total_memory_used = Utils.total_memory_used unikernels in
   let cpu_usage_count = Utils.cpu_usage_count user_policy unikernels in
   let memory_left = user_policy.memory - total_memory_used in
-  let input_classes =
-    "ring-primary-100 mt-1.5 transition appearance-none block w-full px-3 py-3 \
-     rounded-xl shadow-sm border hover:border-primary-200 \
-     focus:border-primary-300 bg-primary-50 bg-opacity-0 hover:bg-opacity-50 \
-     focus:bg-opacity-50 ring-primary-200 focus:ring-primary-200 \
-     focus:ring-[1px] focus:outline-none"
-  in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -62,33 +188,11 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                         option ~a:[ a_value "bhyve" ] (txt "BHyve");
                       ];
                   ];
-                (* CPU Ids - Multi-select *)
-                div
-                  [
-                    label
-                      ~a:[ a_class [ "block font-medium" ] ]
-                      [ txt "CPU Ids (Multi-select)" ];
-                    select
-                      ~a:
-                        [
-                          a_id "cpuids";
-                          a_name "cpuids";
-                          a_multiple ();
-                          a_class [ input_classes ];
-                          a_style "height: auto; min-height: 3rem;";
-                        ]
-                      (List.map
-                         (fun (cpu_id, count) ->
-                           option
-                             ~a:[ a_value (string_of_int cpu_id) ]
-                             (txt
-                                ("CPU " ^ string_of_int cpu_id ^ " (used by "
-                               ^ string_of_int count ^ " unikernels)")))
-                         (List.sort
-                            (fun (_, count1) (_, count2) ->
-                              Int.compare count1 count2)
-                            cpu_usage_count));
-                  ];
+              ];
+            div
+              ~a:[ a_class [ "grid grid-cols-3 gap-3" ] ]
+              [
+                cpu_multiselect cpu_usage_count;
                 Utils.increment_or_decrement_ui ~id:"unikernel-memory"
                   ~max_value:memory_left ~min_value:0 ~default_value:32
                   ~figure_unit:"MB" ~step:32 ~label':"Memory" ();
@@ -105,7 +209,7 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                 ]
               [
                 Utils.increment_or_decrement_ui ~id:"numcpus" ~max_value:16
-                  ~min_value:1 ~default_value:1 ~label':"vCPUs (BHyve)" ();
+                  ~min_value:1 ~default_value:1 ~label':"vCPUs" ();
                 div
                   [
                     label
