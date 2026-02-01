@@ -155,30 +155,31 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                   ~id:"block";
               ];
             hr ();
-            div
-              [
-                label ~a:[ a_class [ "block font-medium" ] ] [ txt "Arguments" ];
-                p
-                  [
-                    txt "Write arguments seperated by a whitespace e.g ";
-                    code [ txt "--ip=127.0.0.1 --port=8180" ];
-                  ];
-                textarea
-                  ~a:
-                    [
-                      a_rows 4;
-                      a_required ();
-                      a_name "arguments";
-                      a_id "unikernel-arguments";
-                      a_class [ input_classes ];
-                    ]
-                  (txt "");
-              ];
-            hr ();
-            (* Image Binary (Solo5 only) *)
+            (* Solo5 only *)
             div
               ~a:[ a_id "solo5-options" ]
               [
+                div
+                  [
+                    label
+                      ~a:[ a_class [ "block font-medium" ] ]
+                      [ txt "Arguments" ];
+                    p
+                      [
+                        txt "Write arguments seperated by a whitespace e.g ";
+                        code [ txt "--ip=127.0.0.1 --port=8180" ];
+                      ];
+                    textarea
+                      ~a:
+                        [
+                          a_rows 4;
+                          a_required ();
+                          a_name "arguments";
+                          a_id "unikernel-arguments";
+                          a_class [ input_classes ];
+                        ]
+                      (txt "");
+                  ];
                 label
                   ~a:[ a_class [ "block font-medium" ] ]
                   [ txt "Unikernel Image Binary*" ];
