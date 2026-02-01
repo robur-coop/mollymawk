@@ -320,9 +320,19 @@ let config_of_json str =
                  "startup must be an integer between 1 and 100, default is 50"))
       (get "startup" dict)
   in
+  let* typ =
+    match get "typ" dict with
+    | None -> Error (`Msg "typ must be a string of solo5 or bhyve")
+    | Some (`String t) -> (
+        match t with
+        | "solo5" -> Ok `Solo5
+        | "bhyve" -> Ok `BHyve
+        | _ -> Error (`Msg "typ must be a string of solo5 or bhyve"))
+    | Some _ -> Error (`Msg "typ must be a string of solo5 or bhyve")
+  in
   Ok
     {
-      Vmm_core.Unikernel.typ = `Solo5;
+      Vmm_core.Unikernel.typ;
       compressed = false;
       image = "";
       fail_behaviour;
