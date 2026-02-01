@@ -246,7 +246,8 @@ let config_of_json str =
           try Ok (List.map (function `Int i -> i | _ -> failwith "not int") l)
           with Failure e -> Error (`Msg ("cpuids must be int list: " ^ e))
         in
-        Ok (Vmm_core.IS.of_list ids)
+        if List.is_empty ids then Error (`Msg "cpuids cannot be an empty list")
+        else Ok (Vmm_core.IS.of_list ids)
     | Some _ -> Error (`Msg "cpuids must be a list of integers")
   in
   let* numcpus =
