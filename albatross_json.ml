@@ -240,7 +240,7 @@ let config_of_json str =
   in
   let* cpuids =
     match get "cpuids" dict with
-    | None -> Ok Vmm_core.IS.empty
+    | None -> Error (`Msg "cpuids must be a list of integers")
     | Some (`List l) ->
         let* ids =
           try Ok (List.map (function `Int i -> i | _ -> failwith "not int") l)
