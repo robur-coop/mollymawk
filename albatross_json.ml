@@ -112,7 +112,7 @@ let res = function
   | `Failure f -> Error (`String ("failure: " ^ String.escaped f))
   | `Data (`Console_data (ts, data)) -> Ok (console_data_to_json (ts, data))
   | `Data (`Utc_console_data (ts, data)) -> Ok (console_data_to_json (ts, data))
-  | `Data (`Stats_data t) -> Ok t
+  | `Data (`Stats_data _) -> Error (`String "stats data not supported")
   | `Data (`Block_data _) -> Error (`String "block data not supported")
 
 let fail_behaviour_of_json js =
