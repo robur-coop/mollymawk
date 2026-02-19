@@ -487,24 +487,31 @@ struct
         update_albatross_status state (`Incompatible, reply, "unikernel info");
         []
 
-  let user_unikernels stack (albatross_instances : Albatross_state.a_map)
-      user_name =
+  let user_unikernels_generic selector stack albatross_instances user_name =
     Lwt_list.map_p
       (fun (_name, (instance : Albatross.t)) ->
         Albatross_state.query stack instance ~domain:user_name
           (`Unikernel_cmd `Unikernel_info)
         >|= function
-        | Error _msg -> (instance.configuration.name, [])
         | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
         | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
         | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
             Albatross.set_online instance;
-            (instance.configuration.name, unikernels)
+            (selector instance, unikernels)
         | Ok reply ->
             update_albatross_status instance
               (`Incompatible, reply, "unikernel info");
-            (instance.configuration.name, []))
+            (selector instance, [])
+        | Error _msg -> (selector instance, []))
       (Albatross.Albatross_map.bindings albatross_instances)
+
+  let user_unikernels stack instances user_name =
+    user_unikernels_generic
+      (fun i -> i.Albatross.configuration.name)
+      stack instances user_name
+
+  let user_unikernels_with_albatross stack instances user_name =
+    user_unikernels_generic (fun i -> i) stack instances user_name
 
   let user_unikernel stack state ~user_name ~unikernel_name =
     Albatross_state.query stack state ~domain:user_name ~name:unikernel_name
