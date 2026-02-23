@@ -2758,7 +2758,7 @@ struct
           Autoscaler.Cluster_manager.check_group_status group key now rusage
         with
         | Ok (Autoscaler.Normal usage_pct) ->
-            Logs.info (fun m ->
+            Logs.debug (fun m ->
                 m "[%s] Normal load: %.2f%%" unikernel_name usage_pct);
             Ok ()
         | Ok (Autoscaler.Pending (ticks, usage_pct)) ->
@@ -2794,7 +2794,7 @@ struct
                           unikernel_name new_name);
                     Ok ()))
         | Error err ->
-            Logs.err (fun m ->
+            Logs.warn (fun m ->
                 m "Error checking cluster group status for unikernel %s: %s"
                   unikernel_name err);
             Ok ())
