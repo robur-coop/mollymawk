@@ -19,7 +19,7 @@ module Cpu_monitor = struct
     let sys_t = rusage_to_float r.stime in
     user_t +. sys_t
 
-  type t = { mutable last_cpu_time : float; mutable last_wall_time : Ptime.t }
+  type t = { last_cpu_time : float; last_wall_time : Ptime.t }
 
   let create now (initial_rusage : Vmm_core.Stats.rusage) =
     { last_cpu_time = get_total_cpu_time initial_rusage; last_wall_time = now }
@@ -30,8 +30,8 @@ module Cpu_monitor = struct
     let cpu_delta = curr_cpu_time -. t.last_cpu_time in
     let wall_span = Ptime.diff curr_wall_time t.last_wall_time in
     let wall_delta = Ptime.Span.to_float_s wall_span in
-    t.last_cpu_time <- curr_cpu_time;
-    t.last_wall_time <- curr_wall_time;
+    { last_cpu_time = curr_cpu_time; last_wall_time = curr_wall_time }
+    |> fun t ->
     if wall_delta <= 0.000001 then 0.0
     else
       let pct = cpu_delta /. wall_delta *. 100.0 in
