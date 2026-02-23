@@ -2757,19 +2757,20 @@ struct
         match
           Autoscaler.Cluster_manager.check_group_status group key now rusage
         with
-        | Ok (Autoscaler.Normal usage_pct) ->
+        | Ok (Autoscaler.Normal scaler) ->
             Logs.debug (fun m ->
-                m "[%s] Normal load: %.2f%%" unikernel_name usage_pct);
+                m "[%s] Normal load: %.2f%%" unikernel_name
+                  scaler.last_cpu_usage);
             Ok ()
-        | Ok (Autoscaler.Pending (ticks, usage_pct)) ->
+        | Ok (Autoscaler.Pending (ticks, scaler)) ->
             Logs.info (fun m ->
                 m "[%s] High load detected (%.2f%%). Tick %d/%d" unikernel_name
-                  usage_pct ticks Autoscaler.trigger_ticks);
+                  scaler.last_cpu_usage ticks Autoscaler.trigger_ticks);
             Ok ()
-        | Ok (Autoscaler.Cooldown usage_pct) ->
+        | Ok (Autoscaler.Cooldown scaler) ->
             Logs.info (fun m ->
                 m "[%s] Cooling down (Usage: %.2f%%)..." unikernel_name
-                  usage_pct);
+                  scaler.last_cpu_usage);
             Ok ()
         | Ok (Autoscaler.Overloaded scaler) -> (
             match

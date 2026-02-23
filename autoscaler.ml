@@ -43,11 +43,11 @@ type t = { mutable monitor : Cpu_monitor.t; mutable last_cpu_usage : float }
 
 type status =
   | Overloaded of
-      t (* the usage of the clone or cm that is checked in the group *)
-  | Pending of int * float
+      t (* the usage of the clone or vm that is checked in the group *)
+  | Pending of int * t
     (* We have a high load but waiting for required number of polls to complete*)
-  | Cooldown of float
-  | Normal of float
+  | Cooldown of t
+  | Normal of t
 
 let create now initial_rusage =
   {
@@ -219,15 +219,15 @@ module Cluster_manager = struct
     | Ok (average_usage, current_vm_state) ->
         if in_cooldown now group then (
           group.consecutive_high_ticks <- 0;
-          Ok (Cooldown average_usage))
+          Ok (Cooldown current_vm_state))
         else if average_usage > threshold_percent then (
           group.consecutive_high_ticks <- group.consecutive_high_ticks + 1;
           if group.consecutive_high_ticks >= trigger_ticks then (
             group.consecutive_high_ticks <- 0;
             group.last_scale_action <- Some (Ptime_clock.now ());
             Ok (Overloaded current_vm_state))
-          else Ok (Pending (group.consecutive_high_ticks, average_usage)))
+          else Ok (Pending (group.consecutive_high_ticks, current_vm_state)))
         else (
           group.consecutive_high_ticks <- 0;
-          Ok (Normal average_usage))
+          Ok (Normal current_vm_state))
 end
