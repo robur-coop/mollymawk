@@ -93,22 +93,14 @@ module Cluster_manager = struct
 
   let find_group_by_name primary_name = Hashtbl.find_opt clusters primary_name
 
-  let get_primary_from_clone clone =
-    let clone_name = fst clone in
-    let parts = String.split_on_char '-' clone_name in
-    match List.rev parts with
+  let extract_primary name =
+    match List.rev (String.split_on_char '-' name) with
     | _id_str :: "clone" :: primary_parts_rev ->
-        let primary_name = String.concat "-" (List.rev primary_parts_rev) in
-        Some primary_name
+        Some (String.concat "-" (List.rev primary_parts_rev))
     | _ -> None
 
-  let is_clone name =
-    if String.contains name '-' then
-      let parts = String.split_on_char '-' name in
-      match List.rev parts with
-      | _id_str :: "clone" :: _primary_parts_rev -> true
-      | _ -> false
-    else false
+  let get_primary_from_clone clone = extract_primary (fst clone)
+  let is_clone name = Option.is_some (extract_primary name)
 
   let find_or_create_group ~name ~key t =
     if is_clone name then
