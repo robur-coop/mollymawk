@@ -1,4 +1,4 @@
-let poll_interval = 300.0 (* check every 5 minutes *)
+let poll_interval = Duration.of_min 5 (* check every 5 minutes *)
 let trigger_ticks = 5
 (* number of times a unikernel is checked and is overloaded before spawning a new clone i.e trigger_ticks x poll_interval determines how load a unikernel is overloaded for before we spawn. Currently this will be 25 minutes. *)
 
