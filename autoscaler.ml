@@ -33,9 +33,10 @@ module Cpu_monitor = struct
     { last_cpu_time = curr_cpu_time; last_wall_time = curr_wall_time }
     |> fun t ->
     if wall_delta <= 0.000001 then 0.0
+    else if cpu_delta < 0.0 then 0.0
     else
       let pct = cpu_delta /. wall_delta *. 100.0 in
-      Float.min 100.0 (Float.max 0.0 pct)
+      Float.min 100.0 pct
 end
 
 type t = { mutable monitor : Cpu_monitor.t; mutable last_cpu_usage : float }
