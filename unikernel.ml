@@ -2861,8 +2861,7 @@ struct
           Logs.err (fun m ->
               m "CPU memory checks failed: %s" (Printexc.to_string exn));
           Lwt.return [])
-      >>= fun _ ->
-      Mirage_sleep.ns (Duration.of_f Autoscaler.poll_interval) >>= loop
+      >>= fun _ -> Mirage_sleep.ns Autoscaler.poll_interval >>= loop
     in
     Lwt.async loop
 
