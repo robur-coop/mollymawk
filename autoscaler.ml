@@ -8,6 +8,9 @@ let threshold_percent =
 let cooldown_period = 600.0
 (* after spawning a new clone, wait for 10 minutes before we start checking this unikernel again *)
 
+let death_timeout = 900.0
+(* Timeout in seconds. If no stats for 15 minutes, assume destroyed. *)
+
 module Cpu_monitor = struct
   let rusage_to_float (sec, usec) =
     let s = Int64.to_float sec in
@@ -63,6 +66,7 @@ module Cluster_manager = struct
     primary : string * t;
     mutable clones : (string * t) list;
     mutable last_scale_action : Ptime.t option;
+    mutable last_stats_received : Ptime.t;
     mutable next_id : int;
     mutable consecutive_high_ticks : int;
   }
@@ -223,4 +227,19 @@ module Cluster_manager = struct
         else (
           group.consecutive_high_ticks <- 0;
           Ok (Normal current_vm_state))
+
+  let prune_dead_clusters now =
+    let dead_keys =
+      Hashtbl.fold
+        (fun primary_name group acc ->
+          let span = Ptime.diff now group.last_stats_received in
+          if Ptime.Span.to_float_s span > death_timeout then primary_name :: acc
+          else acc)
+        clusters []
+    in
+    List.iter
+      (fun key ->
+        Logs.warn (fun m -> m "[Cluster Manager] Pruning dead cluster: %s" key);
+        Hashtbl.remove clusters key)
+      dead_keys
 end
