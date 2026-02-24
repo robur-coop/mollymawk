@@ -85,6 +85,7 @@ module Cluster_manager = struct
             clones = [];
             consecutive_high_ticks = 0;
             last_scale_action = None;
+            last_stats_received = Mirage_ptime.now ();
             next_id = 1;
           }
         in
@@ -155,7 +156,7 @@ module Cluster_manager = struct
         match find_group_by_name primary_name with
         | Some g ->
             g.clones <- clone :: g.clones;
-            g.last_scale_action <- Some (Ptime_clock.now ());
+            g.last_scale_action <- Some (Mirage_ptime.now ());
             Ok ()
         | None ->
             Error
@@ -170,14 +171,14 @@ module Cluster_manager = struct
         match find_group_by_name primary_name with
         | Some g ->
             g.clones <- List.filter (fun c -> fst c <> fst clone) g.clones;
-            g.last_scale_action <- Some (Ptime_clock.now ());
+            g.last_scale_action <- Some (Mirage_ptime.now ());
             Ok ()
         | None -> Error "Primary group not found during removal")
     | None -> Error "Could not derive primary name for removal"
 
   let record_action primary =
     let g = get_or_create primary in
-    g.last_scale_action <- Some (Ptime_clock.now ())
+    g.last_scale_action <- Some (Mirage_ptime.now ())
 
   let check_group_average group key now rusage =
     let all_instances = group.primary :: group.clones in
@@ -216,7 +217,7 @@ module Cluster_manager = struct
           group.consecutive_high_ticks <- group.consecutive_high_ticks + 1;
           if group.consecutive_high_ticks >= trigger_ticks then (
             group.consecutive_high_ticks <- 0;
-            group.last_scale_action <- Some (Ptime_clock.now ());
+            group.last_scale_action <- Some now;
             Ok (Overloaded current_vm_state))
           else Ok (Pending (group.consecutive_high_ticks, current_vm_state)))
         else (
