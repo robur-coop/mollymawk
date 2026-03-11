@@ -1612,7 +1612,7 @@ struct
                                 startup = info.startup;
                                 fail_behaviour = info.fail_behaviour;
                                 cpuid = info.cpuid;
-                                memory = info.cpuid;
+                                memory = info.memory;
                                 block_devices =
                                   List.map
                                     (fun {
