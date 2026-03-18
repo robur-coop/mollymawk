@@ -386,8 +386,7 @@ struct
           Error (`Cookie, "No molly-session in cookie header. " ^ err)
       | Ok cookie_value -> (
           match Store.find_by_cookie store cookie_value with
-          | None ->
-              Error (`Cookie, "Failed to find user with cookie")
+          | None -> Error (`Cookie, "Failed to find user with cookie")
           | Some (user, cookie) ->
               if User_model.is_valid_cookie cookie current_time then
                 match
@@ -396,11 +395,7 @@ struct
                 with
                 | Error msg -> Error (`Cookie, msg)
                 | Ok () -> Ok (`Cookie (user, cookie))
-              else
-                Error
-                  ( `Cookie,
-                    "Session value doesn't match user session"
-                  ))
+              else Error (`Cookie, "Session value doesn't match user session"))
     in
     let valid_token token_value =
       match Store.find_by_api_token store token_value with
