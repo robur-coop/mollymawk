@@ -39,17 +39,23 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                           ];
                         p
                           ~a:[ a_class [ "text-sm" ] ]
-                          [ txt (Ohex.encode data.digest);
-                            a ~a:[ a_href ("https://builds.robur.coop/hash?sha256=" ^ Ohex.encode data.digest);
-                                   a_class
+                          [
+                            txt (Ohex.encode data.digest);
+                            a
+                              ~a:
+                                [
+                                  a_href
+                                    ("https://builds.robur.coop/hash?sha256="
+                                   ^ Ohex.encode data.digest);
+                                  a_class
                                     [
                                       "py-2 px-2 rounded border border-1 \
                                        border-primary-400 text-primary-600 \
                                        hover:text-gray-50 focus:outline-none \
                                        hover:bg-primary-800 font-semibold";
                                     ];
-                                 ]
-                              [ txt "View on builds.robur.coop" ]
+                                ]
+                              [ txt "View on builds.robur.coop" ];
                           ];
                         p
                           ~a:[ a_class [ "text-sm" ] ]
