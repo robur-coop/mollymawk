@@ -387,7 +387,7 @@ struct
       | Ok cookie_value -> (
           match Store.find_by_cookie store cookie_value with
           | None ->
-              Error (`Cookie, "Failed to find user with cookie " ^ cookie_value)
+              Error (`Cookie, "Failed to find user with cookie")
           | Some (user, cookie) ->
               if User_model.is_valid_cookie cookie current_time then
                 match
@@ -399,7 +399,7 @@ struct
               else
                 Error
                   ( `Cookie,
-                    "Session value doesn't match user session " ^ cookie_value
+                    "Session value doesn't match user session"
                   ))
     in
     let valid_token token_value =
