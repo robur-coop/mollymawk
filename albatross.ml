@@ -586,6 +586,23 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     | Ok (vmm_name, certificates) ->
         raw_query stack t ~name:vmm_name certificates cmd (console vmm_name f)
 
+  let query_deceased stack t ~domain ~name =
+    let cmd = `Console_cmd `Console_list_inactive in
+    match certs t domain name cmd with
+    | Error str -> Lwt.return (Error str)
+    | Ok (vmm_name, certificates) ->
+        raw_query stack t ~name:vmm_name certificates cmd (fun tls_flow d ->
+            let open Lwt.Infix in
+            TLS.close tls_flow >|= fun () ->
+            match decode_reply d with
+            | Error e -> Error e
+            | Ok (_hdr, `Success (`Consoles names)) -> Ok names
+            | Ok w ->
+                Error
+                  (Fmt.str "unexpected reply to console list inactive: %a"
+                     (Vmm_commands.pp_wire ~verbose:false)
+                     w))
+
   let query_block_dump stack t ~domain ~name compression f =
     let cmd = `Block_cmd (`Block_dump compression) in
     match certs t domain name cmd with
