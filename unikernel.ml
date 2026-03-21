@@ -482,6 +482,17 @@ struct
         update_albatross_status state (`Incompatible, reply, "unikernel info");
         []
 
+  let user_deceased_by_instance stack
+      (albatross_instances : Albatross_state.a_map) user_name =
+    Lwt_list.map_p
+      (fun (_name, (instance : Albatross.t)) ->
+        Albatross_state.query_deceased stack instance ~domain:user_name
+          ~name:Albatross_state.dot_name
+        >|= function
+        | Error _msg -> (instance.configuration.name, [])
+        | Ok names -> (instance.configuration.name, names))
+      (Albatross.Albatross_map.bindings albatross_instances)
+
   let user_unikernels stack (albatross_instances : Albatross_state.a_map)
       user_name =
     Lwt_list.map_p
@@ -855,11 +866,14 @@ struct
         (* TODO use uuid in the future *)
         user_unikernels stack albatross_instances user.name
         >>= fun unikernels_by_albatross_instance ->
+        user_deceased_by_instance stack albatross_instances user.name
+        >>= fun deceased_unikernels_by_albatross_instance ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
              ~content:
                (Unikernel_index.unikernel_index_layout
-                  unikernels_by_albatross_instance now)
+                  unikernels_by_albatross_instance
+                  deceased_unikernels_by_albatross_instance now)
              ~icon:"/images/robur.png" ())
           `OK
     | Error err ->
@@ -1991,6 +2005,8 @@ struct
     match Store.find_by_uuid store uuid with
     | Some u -> (
         user_unikernels stack albatross_instances u.name >>= fun unikernels ->
+        user_deceased_by_instance stack albatross_instances u.name
+        >>= fun deceased_unikernels ->
         let now = Mirage_ptime.now () in
         generate_csrf_token store user now reqd >>= function
         | Ok csrf -> (
@@ -2013,7 +2029,8 @@ struct
             | `Unikernels ->
                 reply
                   (User_single.user_single_layout ~active_tab:Unikernels
-                     (Unikernel_index.unikernel_index_layout unikernels now)
+                     (Unikernel_index.unikernel_index_layout unikernels
+                        deceased_unikernels now)
                      u.uuid)
             | `Policy ->
                 reply
