@@ -482,24 +482,30 @@ struct
         update_albatross_status state (`Incompatible, reply, "unikernel info");
         []
 
-  let user_unikernels stack (albatross_instances : Albatross_state.a_map)
-      user_name =
+  let user_unikernels_with_albatross stack albatross_instances user_name =
     Lwt_list.map_p
       (fun (_name, (instance : Albatross.t)) ->
         Albatross_state.query stack instance ~domain:user_name
           (`Unikernel_cmd `Unikernel_info)
         >|= function
-        | Error _msg -> (instance.configuration.name, [])
         | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
         | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
         | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
             Albatross.set_online instance;
-            (instance.configuration.name, unikernels)
+            (instance, unikernels)
         | Ok reply ->
             update_albatross_status instance
               (`Incompatible, reply, "unikernel info");
-            (instance.configuration.name, []))
+            (instance, [])
+        | Error _msg -> (instance, []))
       (Albatross.Albatross_map.bindings albatross_instances)
+
+  let user_unikernels stack instances user_name =
+    user_unikernels_with_albatross stack instances user_name >|= fun results ->
+    List.map
+      (fun (instance, unikernels) ->
+        (instance.Albatross.configuration.name, unikernels))
+      results
 
   let user_unikernel stack state ~user_name ~unikernel_name =
     Albatross_state.query stack state ~domain:user_name ~name:unikernel_name
@@ -2728,6 +2734,132 @@ struct
               ~data:(`String (Fmt.str "Test failed: %s" (String.escaped err)))
               `Bad_request)
 
+  let handle_stats (stats : Vmm_core.Stats.t) ~unikernel_key ~unikernel_name =
+    let rusage, _, _, _ = stats in
+    let now = Mirage_ptime.now () in
+    match
+      Autoscaler.Cluster_manager.find_or_create_group ~name:unikernel_name
+        ~key:unikernel_key
+        (Autoscaler.create now rusage)
+    with
+    | Error err ->
+        Logs.err (fun m ->
+            m "Error finding cluster group for unikernel %s: %s" unikernel_name
+              err);
+        Ok ()
+    | Ok (group, key) -> (
+        match
+          Autoscaler.Cluster_manager.check_group_status group key now rusage
+        with
+        | Ok (Autoscaler.Normal scaler) ->
+            Logs.debug (fun m ->
+                m "[%s] Normal load: %.2f%%" unikernel_name
+                  scaler.last_cpu_usage);
+            Ok ()
+        | Ok (Autoscaler.Pending (ticks, scaler)) ->
+            Logs.info (fun m ->
+                m "[%s] High load detected (%.2f%%). Tick %d/%d" unikernel_name
+                  scaler.last_cpu_usage ticks Autoscaler.trigger_ticks);
+            Ok ()
+        | Ok (Autoscaler.Cooldown scaler) ->
+            Logs.info (fun m ->
+                m "[%s] Cooling down (Usage: %.2f%%)..." unikernel_name
+                  scaler.last_cpu_usage);
+            Ok ()
+        | Ok (Autoscaler.Overloaded scaler) -> (
+            match
+              Autoscaler.Cluster_manager.next_clone_name (unikernel_name, scaler)
+            with
+            | Error _e -> Ok ()
+            | Ok new_name -> (
+                match
+                  Autoscaler.Cluster_manager.register_clone (new_name, scaler)
+                with
+                | Error _e -> Ok ()
+                | Ok () ->
+                    (* TODO 
+                    1) Deploy new clone with name new_name
+                    2) Add new clone to load balancer pool
+                    3) Update Autoscaler.Cluster_manager.record_action
+                  *)
+                    Logs.err (fun m ->
+                        m
+                          "[%s] OVERLOAD CONFIRMED. Initiating Scale-Up! New \
+                           clone name: %s"
+                          unikernel_name new_name);
+                    Ok ()))
+        | Error err ->
+            Logs.warn (fun m ->
+                m "Error checking cluster group status for unikernel %s: %s"
+                  unikernel_name err);
+            Ok ())
+
+  let unikernel_stat stack albatross unikernel_name (user : User_model.user) =
+    let unikernel_key =
+      Fmt.str "%s-%s-%s"
+        (Configuration.name_to_str user.name)
+        (Configuration.name_to_str albatross.Albatross.configuration.name)
+        (Configuration.name_to_str unikernel_name)
+    in
+    Logs.info (fun m -> m "Checking CPU load for unikernel %s" unikernel_key);
+    Albatross_state.query_stats stack albatross ~domain:user.name
+      ~name:unikernel_name (fun s ->
+        handle_stats s ~unikernel_key
+          ~unikernel_name:(Configuration.name_to_str unikernel_name))
+    >>= function
+    | Error err ->
+        Logs.info (fun m ->
+            m "Failed to get stats for unikernel %s: %s" unikernel_key err);
+        Lwt.return_unit
+    | Ok () ->
+        Albatross.set_online albatross;
+        Lwt.return_unit
+
+  let unikernel_statistics stack albatross_instances user =
+    user_unikernels_with_albatross stack albatross_instances
+      user.User_model.name
+    >>= fun unikernels_per_instance ->
+    Lwt_list.map_p
+      (fun (instance, unikernels) ->
+        Lwt_list.filter_map_p
+          (fun (name, _unikernel) ->
+            match Vmm_core.Name.name name with
+            | Some unikernel_name ->
+                Lwt.async (fun () ->
+                    unikernel_stat stack instance unikernel_name user
+                    >>= fun _ -> Lwt.return_unit);
+                Lwt.return_none
+            | None ->
+                Logs.info (fun m ->
+                    m "Invalid unikernel name for stats: %s"
+                      (Vmm_core.Name.to_string name));
+                Lwt.return_none)
+          unikernels
+        >>= fun _ -> Lwt.return_unit)
+      unikernels_per_instance
+
+  let check_all_unikernel_cpu_loads stack albatross_instances users =
+    Lwt_list.fold_left_s
+      (fun acc user ->
+        unikernel_statistics stack albatross_instances user >>= fun _results ->
+        Lwt.return acc)
+      [] users
+
+  let start_background_cpu_usage_scheduler stack store albatross_instances_ref =
+    let rec loop () =
+      Lwt.catch
+        (fun () ->
+          Logs.info (fun m -> m "Starting CPU memory checks...");
+          check_all_unikernel_cpu_loads stack !albatross_instances_ref
+            (Store.users store))
+        (fun exn ->
+          Logs.err (fun m ->
+              m "CPU memory checks failed: %s" (Printexc.to_string exn));
+          Lwt.return [])
+      >>= fun _ -> Mirage_sleep.ns Autoscaler.poll_interval >>= loop
+    in
+    Lwt.async loop
+
   let seconds_until_next_midnight () =
     let now = Mirage_ptime.now () in
     let date, _ = Ptime.to_date_time now in
@@ -3225,5 +3357,7 @@ struct
         Lwt.pause () >>= fun () ->
         start_background_scheduler happy_eyeballs stack store
           albatross_instances http_client;
+        Lwt.pause () >>= fun () ->
+        start_background_cpu_usage_scheduler stack store albatross_instances;
         th
 end

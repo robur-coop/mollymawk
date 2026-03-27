@@ -345,6 +345,26 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     in
     continue_reading name dec d tls_flow
 
+  let stats name f tls_flow d =
+    let dec = function
+      | Error s ->
+          Logs.err (fun m ->
+              m "albatross stop reading stats %a: error %s" Vmm_core.Name.pp
+                name s);
+          Error ()
+      | Ok (_, `Data (`Stats_data t)) -> f t
+      | Ok (_, `Success (`String _)) ->
+          (* ignore the success subscribed *)
+          Ok ()
+      | Ok w ->
+          Logs.warn (fun m ->
+              m "albatross unexpected reply, need stats output, got %a"
+                (Vmm_commands.pp_wire ~verbose:false)
+                w);
+          Ok ()
+    in
+    continue_reading name dec d tls_flow
+
   let raw_query (stack : S.t) t ?(name = Vmm_core.Name.root) certificates cmd
       ?push f =
     let open Lwt.Infix in
@@ -593,6 +613,13 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     | Ok (vmm_name, certificates) ->
         raw_query stack t ~name:vmm_name certificates cmd
           (block_data vmm_name f)
+
+  let query_stats stack t ~domain ~name f =
+    let cmd = `Stats_cmd `Stats_subscribe in
+    match certs t domain name cmd with
+    | Error str -> Lwt.return (Error str)
+    | Ok (vmm_name, certificates) ->
+        raw_query stack t ~name:vmm_name certificates cmd (stats vmm_name f)
 
   let set_policy stack t ~domain policy =
     let open Lwt.Infix in
