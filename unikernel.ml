@@ -486,11 +486,17 @@ struct
       (albatross_instances : Albatross_state.a_map) user_name =
     Lwt_list.map_p
       (fun (_name, (instance : Albatross.t)) ->
-        Albatross_state.query_deceased stack instance ~domain:user_name
-          ~name:Albatross_state.dot_name
+        Albatross_state.query stack instance ~domain:user_name
+          ~name:Albatross_state.dot_name (`Console_cmd `Console_list_inactive)
         >|= function
         | Error _msg -> (instance.configuration.name, [])
-        | Ok names -> (instance.configuration.name, names))
+        | Ok (_hdr, `Success (`Consoles names)) ->
+            Albatross.set_online instance;
+            (instance.configuration.name, names)
+        | Ok reply ->
+            update_albatross_status instance
+              (`Incompatible, reply, "console list inactive");
+            (instance.configuration.name, []))
       (Albatross.Albatross_map.bindings albatross_instances)
 
   let user_unikernels stack (albatross_instances : Albatross_state.a_map)
