@@ -115,33 +115,36 @@ function getUnikernelName(url) {
 
 function filterData() {
 	const input = document.getElementById("searchQuery").value.toUpperCase();
-	const table = document.getElementById("data-table");
-	const rows = Array.from(table.querySelectorAll("tbody tr"));
-
-	rows.forEach(row => {
-		const cells = Array.from(row.getElementsByTagName("td"));
-		const match = cells.some(td => td.textContent.toUpperCase().includes(input));
-		row.style.display = match ? "" : "none";
+	const tables = document.querySelectorAll(".data-table");
+	tables.forEach(table => {
+		const rows = Array.from(table.querySelectorAll("tbody tr"));
+		rows.forEach(row => {
+			const cells = Array.from(row.getElementsByTagName("td"));
+			const match = cells.some(td => td.textContent.toUpperCase().includes(input));
+			row.style.display = match ? "" : "none";
+		});
 	});
 }
 
 function filterAlbatrossInstance(event) {
 	const searchTerm = event.target.value.toLowerCase();
-	const table = document.getElementById("data-table");
-	const rows = table.querySelectorAll("tbody tr");
-	if (searchTerm === "all") {
-		rows.forEach(row => {
-			row.style.display = "";
-		});
-	} else {
-		rows.forEach(row => {
-			const cells = row.querySelectorAll("td");
-			const match = Array.from(cells).some(cell =>
-				cell.textContent.toLowerCase().includes(searchTerm)
-			);
-			row.style.display = match ? "" : "none";
-		});
-	}
+	const tables = document.querySelectorAll(".data-table");
+	tables.forEach(table => {
+		const rows = table.querySelectorAll("tbody tr");
+		if (searchTerm === "all") {
+			rows.forEach(row => {
+				row.style.display = "";
+			});
+		} else {
+			rows.forEach(row => {
+				const cells = row.querySelectorAll("td");
+				const match = Array.from(cells).some(cell =>
+					cell.textContent.toLowerCase().includes(searchTerm)
+				);
+				row.style.display = match ? "" : "none";
+			});
+		}
+	});
 }
 
 var newConfig = false;

@@ -113,7 +113,141 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
           ])
       albatross_instance_unikernels)
 
-let unikernel_index_layout unikernels_by_albatross_instance current_time =
+let deceased_unikernels_table deceased_unikernels_by_albatross_instance =
+  Tyxml_html.(
+    table
+      ~a:
+        [
+          a_class
+            [ "data-table table-auto min-w-full divide-y divide-gray-200 mt-4" ];
+        ]
+      ~thead:
+        (thead
+           [
+             tr
+               [
+                 th
+                   ~a:
+                     [
+                       a_class
+                         [
+                           "px-6 py-3 text-start text-xs font-bold \
+                            text-primary-600 uppercase";
+                         ];
+                     ]
+                   [ txt "Instance" ];
+                 th
+                   ~a:
+                     [
+                       a_class
+                         [
+                           "px-6 py-3 text-start text-xs font-bold \
+                            text-primary-600 uppercase";
+                         ];
+                     ]
+                   [ txt "Name" ];
+                 th
+                   ~a:
+                     [
+                       a_class
+                         [
+                           "px-6 py-3 text-start text-xs font-bold \
+                            text-primary-600 uppercase";
+                         ];
+                     ]
+                   [ txt "Action" ];
+               ];
+           ])
+      (List.map
+         (fun (instance_name, names) ->
+           List.map
+             (fun name ->
+               let name_str =
+                 Option.value ~default:"no name"
+                   (Option.map Vmm_core.Name.Label.to_string
+                      (Vmm_core.Name.name name))
+               in
+               tr
+                 [
+                   td
+                     ~a:
+                       [
+                         a_class
+                           [
+                             "px-6 py-4 whitespace-nowrap text-sm text-gray-500";
+                           ];
+                       ]
+                     [ txt (Configuration.name_to_str instance_name) ];
+                   td
+                     ~a:
+                       [
+                         a_class
+                           [
+                             "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                              text-gray-800";
+                           ];
+                       ]
+                     [ txt name_str ];
+                   td
+                     ~a:
+                       [
+                         a_class
+                           [
+                             "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                              text-gray-800";
+                           ];
+                       ]
+                     [
+                       Modal_dialog.modal_dialog
+                         ~modal_title:("Logs for " ^ name_str)
+                         ~button_type:`Primary_outlined
+                         ~button_content:(span [ txt "View Logs" ])
+                         ~content:
+                           (div
+                              ~a:
+                                [
+                                  Unsafe.string_attrib "x-data"
+                                    (Fmt.str
+                                       "{ logs: 'Loading...', evt: null, \
+                                        start() { if (this.evt) return; \
+                                        this.logs = ''; this.evt = new \
+                                        EventSource('/api/unikernel/console?unikernel=%s&instance=%s'); \
+                                        this.evt.onmessage = (e) => { try { \
+                                        let p = JSON.parse(e.data); this.logs \
+                                        = ('[' + p.timestamp + '] ' + p.line + \
+                                        '\\n') + this.logs; } catch(_){} }; }, \
+                                        stop() { if (this.evt) { \
+                                        this.evt.close(); this.evt = null; } } \
+                                        }"
+                                       name_str
+                                       (Configuration.name_to_str instance_name));
+                                  Unsafe.string_attrib "x-init"
+                                    "$watch('modalIsOpen', v => { if (v) \
+                                     start(); else stop(); })";
+                                ]
+                              [
+                                pre
+                                  ~a:
+                                    [
+                                      a_class
+                                        [
+                                          "p-4 rounded overflow-auto \
+                                           max-h-[80vh] text-xs \
+                                           whitespace-pre-wrap font-mono block";
+                                        ];
+                                      Unsafe.string_attrib "x-text" "logs";
+                                    ]
+                                  [];
+                              ])
+                         ();
+                     ];
+                 ])
+             names)
+         deceased_unikernels_by_albatross_instance
+      |> List.flatten))
+
+let unikernel_index_layout unikernels_by_albatross_instance
+    deceased_unikernels_by_albatross_instance current_time =
   let online_instances_count =
     List.fold_left
       (fun count (_, unikernels) ->
@@ -125,21 +259,87 @@ let unikernel_index_layout unikernels_by_albatross_instance current_time =
       (fun acc (_, us) -> acc + List.length us)
       0 unikernels_by_albatross_instance
   in
+  let deceased_instances_count =
+    List.fold_left
+      (fun count (_, unikernels) ->
+        if List.length unikernels > 0 then count + 1 else count)
+      0 deceased_unikernels_by_albatross_instance
+  in
+  let total_deceased_count =
+    List.fold_left
+      (fun acc (_, us) -> acc + List.length us)
+      0 deceased_unikernels_by_albatross_instance
+  in
   Tyxml_html.(
     section
-      ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
+      ~a:
+        [
+          a_class [ "col-span-7 p-4 bg-gray-50 my-1" ];
+          Unsafe.string_attrib "x-data" "{ tab: 'online' }";
+        ]
       [
+        div
+          ~a:[ a_class [ "flex border-b border-gray-200 mb-4" ] ]
+          [
+            button
+              ~a:
+                [
+                  Unsafe.string_attrib "x-on:click" "tab = 'online'";
+                  Unsafe.string_attrib ":class"
+                    "tab === 'online' ? 'border-primary-500 text-primary-600' \
+                     : 'border-transparent text-gray-500 hover:text-gray-700 \
+                     hover:border-gray-300'";
+                  a_class
+                    [
+                      "py-2 px-4 border-b-2 font-medium text-sm \
+                       focus:outline-none transition-colors duration-150";
+                    ];
+                ]
+              [ txt "Online Unikernels" ];
+            button
+              ~a:
+                [
+                  Unsafe.string_attrib "x-on:click" "tab = 'deceased'";
+                  Unsafe.string_attrib ":class"
+                    "tab === 'deceased' ? 'border-primary-500 \
+                     text-primary-600' : 'border-transparent text-gray-500 \
+                     hover:text-gray-700 hover:border-gray-300'";
+                  a_class
+                    [
+                      "py-2 px-4 border-b-2 font-medium text-sm \
+                       focus:outline-none transition-colors duration-150";
+                    ];
+                ]
+              [ txt "Deceased Unikernels" ];
+          ];
         div
           ~a:[ a_class [ "px-3 flex justify-between items-center" ] ]
           [
             div
               [
                 p
-                  ~a:[ a_class [ "font-bold text-gray-700" ] ]
+                  ~a:
+                    [
+                      a_class [ "font-bold text-gray-700" ];
+                      Unsafe.string_attrib "x-show" "tab === 'online'";
+                    ]
                   [
                     txt
                       (Fmt.str "Showing %u unikernels from %u online instances"
                          total_unikernels_count online_instances_count);
+                  ];
+                p
+                  ~a:
+                    [
+                      a_class [ "font-bold text-gray-700" ];
+                      Unsafe.string_attrib "x-show" "tab === 'deceased'";
+                      Unsafe.string_attrib "style" "display: none;";
+                    ]
+                  [
+                    txt
+                      (Fmt.str
+                         "Showing %u deceased unikernels from %u instances"
+                         total_deceased_count deceased_instances_count);
                   ];
               ];
             div
@@ -148,6 +348,7 @@ let unikernel_index_layout unikernels_by_albatross_instance current_time =
                 select
                   ~a:
                     [
+                      Unsafe.string_attrib "x-show" "tab === 'online'";
                       a_onchange "filterAlbatrossInstance(event)";
                       a_id "filterAlbatrossIntances";
                       a_class
@@ -166,6 +367,29 @@ let unikernel_index_layout unikernels_by_albatross_instance current_time =
                                  (Configuration.name_to_str name)
                                  (List.length unikernels))))
                        unikernels_by_albatross_instance);
+                select
+                  ~a:
+                    [
+                      Unsafe.string_attrib "x-show" "tab === 'deceased'";
+                      Unsafe.string_attrib "style" "display: none;";
+                      a_onchange "filterAlbatrossInstance(event)";
+                      a_id "filterAlbatrossIntancesDeceased";
+                      a_class
+                        [
+                          "rounded py-2 px-3 border border-primary-200 \
+                           focus:border-primary-500 outline-0";
+                        ];
+                    ]
+                  (option ~a:[ a_value "all" ] (txt "All instances")
+                  :: List.map
+                       (fun (name, deceased_unikernels) ->
+                         option
+                           ~a:[ a_value (Configuration.name_to_str name) ]
+                           (txt
+                              (Fmt.str "%s (%u unikernels)"
+                                 (Configuration.name_to_str name)
+                                 (List.length deceased_unikernels))))
+                       deceased_unikernels_by_albatross_instance);
                 input
                   ~a:
                     [
@@ -185,181 +409,197 @@ let unikernel_index_layout unikernels_by_albatross_instance current_time =
           ];
         hr ~a:[ a_class [ "border border-primary-500 my-5" ] ] ();
         div
-          ~a:[ a_class [ "flex flex-col" ] ]
+          ~a:[ Unsafe.string_attrib "x-show" "tab === 'online'" ]
           [
             div
-              ~a:[ a_class [ "-m-1.5 overflow-x-auto" ] ]
+              ~a:[ a_class [ "flex flex-col" ] ]
               [
                 div
-                  ~a:
-                    [ a_class [ "p-1.5 min-w-full inline-block align-middle" ] ]
+                  ~a:[ a_class [ "-m-1.5 overflow-x-auto" ] ]
                   [
                     div
                       ~a:
                         [
-                          Unsafe.string_attrib "x-data" "sort_data()";
-                          a_class [ "overflow-hidden" ];
+                          a_class
+                            [ "p-1.5 min-w-full inline-block align-middle" ];
                         ]
                       [
-                        table
+                        div
                           ~a:
                             [
-                              a_id "data-table";
-                              a_class
-                                [
-                                  "table-auto min-w-full divide-y \
-                                   divide-gray-200";
-                                ];
+                              Unsafe.string_attrib "x-data" "sort_data()";
+                              a_class [ "overflow-hidden" ];
                             ]
-                          ~thead:
-                            (thead
-                               [
-                                 tr
+                          [
+                            table
+                              ~a:
+                                [
+                                  a_id "data-table";
+                                  a_class
+                                    [
+                                      "data-table table-auto min-w-full \
+                                       divide-y divide-gray-200";
+                                    ];
+                                ]
+                              ~thead:
+                                (thead
                                    [
-                                     th
-                                       ~a:
-                                         [
-                                           Unsafe.string_attrib "x-on:click"
-                                             "sortByColumn";
-                                           a_class
-                                             [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase cursor-pointer \
-                                                select-none";
-                                             ];
-                                         ]
+                                     tr
                                        [
-                                         txt "Name";
-                                         span
-                                           ~a:[ a_class [ "px-2" ] ]
-                                           [
-                                             i
-                                               ~a:
+                                         th
+                                           ~a:
+                                             [
+                                               Unsafe.string_attrib "x-on:click"
+                                                 "sortByColumn";
+                                               a_class
                                                  [
-                                                   a_class
-                                                     [ "fa-solid fa-sort" ];
-                                                 ]
-                                               [];
-                                           ];
-                                       ];
-                                     th
-                                       ~a:
-                                         [
-                                           Unsafe.string_attrib "x-on:click"
-                                             "sortByColumn";
-                                           a_class
-                                             [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase cursor-pointer \
-                                                select-none";
-                                             ];
-                                         ]
-                                       [ txt "Startup Priority" ];
-                                     th
-                                       ~a:
-                                         [
-                                           Unsafe.string_attrib "x-on:click"
-                                             "sortByColumn";
-                                           a_class
-                                             [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase cursor-pointer \
-                                                select-none";
-                                             ];
-                                         ]
-                                       [
-                                         txt "CPU";
-                                         span
-                                           ~a:[ a_class [ "px-2" ] ]
+                                                   "px-6 py-3 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase \
+                                                    cursor-pointer select-none";
+                                                 ];
+                                             ]
                                            [
-                                             i
-                                               ~a:
-                                                 [
-                                                   a_class
-                                                     [ "fa-solid fa-sort" ];
-                                                 ]
-                                               [];
+                                             txt "Name";
+                                             span
+                                               ~a:[ a_class [ "px-2" ] ]
+                                               [
+                                                 i
+                                                   ~a:
+                                                     [
+                                                       a_class
+                                                         [ "fa-solid fa-sort" ];
+                                                     ]
+                                                   [];
+                                               ];
                                            ];
-                                       ];
-                                     th
-                                       ~a:
-                                         [
-                                           Unsafe.string_attrib "x-on:click"
-                                             "sortByColumn";
-                                           a_class
+                                         th
+                                           ~a:
                                              [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase cursor-pointer \
-                                                select-none";
-                                             ];
-                                         ]
-                                       [
-                                         txt "Memory";
-                                         span
-                                           ~a:[ a_class [ "px-2" ] ]
+                                               Unsafe.string_attrib "x-on:click"
+                                                 "sortByColumn";
+                                               a_class
+                                                 [
+                                                   "px-6 py-3 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase \
+                                                    cursor-pointer select-none";
+                                                 ];
+                                             ]
+                                           [ txt "Startup Priority" ];
+                                         th
+                                           ~a:
+                                             [
+                                               Unsafe.string_attrib "x-on:click"
+                                                 "sortByColumn";
+                                               a_class
+                                                 [
+                                                   "px-6 py-3 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase \
+                                                    cursor-pointer select-none";
+                                                 ];
+                                             ]
                                            [
-                                             i
-                                               ~a:
-                                                 [
-                                                   a_class
-                                                     [ "fa-solid fa-sort" ];
-                                                 ]
-                                               [];
+                                             txt "CPU";
+                                             span
+                                               ~a:[ a_class [ "px-2" ] ]
+                                               [
+                                                 i
+                                                   ~a:
+                                                     [
+                                                       a_class
+                                                         [ "fa-solid fa-sort" ];
+                                                     ]
+                                                   [];
+                                               ];
                                            ];
-                                       ];
-                                     th
-                                       ~a:
-                                         [
-                                           Unsafe.string_attrib "x-on:click"
-                                             "sortByColumn";
-                                           a_class
+                                         th
+                                           ~a:
                                              [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase cursor-pointer \
-                                                select-none";
-                                             ];
-                                         ]
-                                       [
-                                         txt "Created";
-                                         span
-                                           ~a:[ a_class [ "px-2" ] ]
+                                               Unsafe.string_attrib "x-on:click"
+                                                 "sortByColumn";
+                                               a_class
+                                                 [
+                                                   "px-6 py-3 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase \
+                                                    cursor-pointer select-none";
+                                                 ];
+                                             ]
                                            [
-                                             i
-                                               ~a:
-                                                 [
-                                                   a_class
-                                                     [ "fa-solid fa-sort" ];
-                                                 ]
-                                               [];
+                                             txt "Memory";
+                                             span
+                                               ~a:[ a_class [ "px-2" ] ]
+                                               [
+                                                 i
+                                                   ~a:
+                                                     [
+                                                       a_class
+                                                         [ "fa-solid fa-sort" ];
+                                                     ]
+                                                   [];
+                                               ];
                                            ];
-                                       ];
-                                     th
-                                       ~a:
-                                         [
-                                           a_class
+                                         th
+                                           ~a:
                                              [
-                                               "px-6 py-3 text-start text-xs \
-                                                font-bold text-primary-600 \
-                                                uppercase cursor-pointer \
-                                                select-none";
-                                             ];
-                                         ]
-                                       [ txt "Action" ];
-                                   ];
-                               ])
-                          (List.map
-                             (fun (instance_name, unikernels) ->
-                               instance_unikernels instance_name unikernels
-                                 current_time)
-                             unikernels_by_albatross_instance
-                          |> List.flatten);
+                                               Unsafe.string_attrib "x-on:click"
+                                                 "sortByColumn";
+                                               a_class
+                                                 [
+                                                   "px-6 py-3 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase \
+                                                    cursor-pointer select-none";
+                                                 ];
+                                             ]
+                                           [
+                                             txt "Created";
+                                             span
+                                               ~a:[ a_class [ "px-2" ] ]
+                                               [
+                                                 i
+                                                   ~a:
+                                                     [
+                                                       a_class
+                                                         [ "fa-solid fa-sort" ];
+                                                     ]
+                                                   [];
+                                               ];
+                                           ];
+                                         th
+                                           ~a:
+                                             [
+                                               a_class
+                                                 [
+                                                   "px-6 py-3 text-start \
+                                                    text-xs font-bold \
+                                                    text-primary-600 uppercase \
+                                                    cursor-pointer select-none";
+                                                 ];
+                                             ]
+                                           [ txt "Action" ];
+                                       ];
+                                   ])
+                              (List.map
+                                 (fun (instance_name, unikernels) ->
+                                   instance_unikernels instance_name unikernels
+                                     current_time)
+                                 unikernels_by_albatross_instance
+                              |> List.flatten);
+                          ];
                       ];
                   ];
               ];
+          ];
+        div
+          ~a:
+            [
+              Unsafe.string_attrib "x-show" "tab === 'deceased'";
+              Unsafe.string_attrib "style" "display: none;";
+            ]
+          [
+            deceased_unikernels_table deceased_unikernels_by_albatross_instance;
           ];
       ])
