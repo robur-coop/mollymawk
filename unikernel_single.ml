@@ -51,7 +51,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                   a_class [ "text-primary-600"; "font-bold" ];
                                   a_style "text-decoration: underline;";
                                 ]
-                              [ txt "View on builds.robur.coop" ];
+                              [ txt "Search on builds.robur.coop" ];
                           ];
                         p
                           ~a:[ a_class [ "text-sm" ] ]
