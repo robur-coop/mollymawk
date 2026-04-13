@@ -739,10 +739,12 @@ function sort_data() {
 		sortBy: "",
 		sortAsc: false,
 		sortByColumn($event) {
-			if (this.sortBy === $event.target.innerText) {
+			const th = $event.target.closest('th');
+			const headerText = th.querySelector('span').textContent.trim();
+			if (this.sortBy === headerText) {
 				this.sortAsc = !this.sortAsc;
 			} else {
-				this.sortBy = $event.target.innerText;
+				this.sortBy = headerText;
 				this.sortAsc = true;
 			}
 
@@ -755,9 +757,7 @@ function sort_data() {
 			let rows = this.getTableRows()
 				.sort(
 					this.sortCallback(
-						Array.from($event.target.parentNode.children).indexOf(
-							$event.target
-						)
+						Array.from(th.parentNode.children).indexOf(th)
 					)
 				)
 				.forEach((tr) => {
