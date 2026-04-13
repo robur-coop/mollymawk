@@ -5,6 +5,15 @@ const consoleLogEndpoints = ["/unikernel/info", "/unikernel/console"];
 document.addEventListener('DOMContentLoaded', function () {
 	AOS.init();
 
+    const currentPath = window.location.pathname;
+    const sidebarItems = document.querySelectorAll('.w-full.my-6 > a');
+    sidebarItems.forEach(a => {
+        if (a.getAttribute('href') === currentPath) {
+            a.classList.add('bg-primary-100', 'text-primary-600', 'font-bold');
+            a.classList.remove('hover:bg-gray-200', 'hover:text-primary-400');
+        }
+    });
+
 	const flashMessage = getCookie('flash_msg');
 	if (flashMessage) {
 		if (flashMessage.startsWith("error:")) {
@@ -449,6 +458,7 @@ function gatherFieldsForDevices(fieldId, targetKey, formAlert) {
 
 	return { [targetKey]: result };
 }
+
 
 async function deployUnikernel(albatross_instance) {
 	const formAlert = document.getElementById("form-alert");

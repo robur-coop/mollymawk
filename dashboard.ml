@@ -194,31 +194,6 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                          a
                            ~a:
                              [
-                               a_href "/albatross/instances";
-                               a_class
-                                 [
-                                   "hover:bg-gray-200 hover:text-primary-400 \
-                                    font-semibold hover:font-bold \
-                                    cursor-pointer rounded p-2 w-full flex \
-                                    items-center space-x-1";
-                                 ];
-                             ]
-                           [
-                             i
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "fa-solid fa-diagram-project text-sm \
-                                        text-primary-500";
-                                     ];
-                                 ]
-                               [];
-                             span [ txt "Albatross instances" ];
-                           ];
-                         a
-                           ~a:
-                             [
                                a_href "/dashboard";
                                a_class
                                  [
@@ -462,7 +437,7 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                                  [
                                    a_class
                                      [
-                                       "fa-solid fa-leaf text-primary-500 \
+                                       "fa-solid fa-book text-primary-500 \
                                         text-sm";
                                      ];
                                  ]
