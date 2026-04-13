@@ -78,27 +78,21 @@ let users_index_layout (users : User_model.user list) current_time =
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
-                                                font-bold uppercase \
-                                                cursor-pointer select-none";
+                                                font-bold text-primary-600 \
+                                                uppercase cursor-pointer \
+                                                select-none";
                                              ];
                                          ]
                                        [
-                                         span [ txt "Name" ];
                                          span
-                                           ~a:
-                                             [
-                                               a_class [ "px-2" ];
-                                               Unsafe.string_attrib "x-show"
-                                                 "sortBy === 'Name'";
-                                             ]
+                                           ~a:[ a_class [ "px-2" ] ]
                                            [
+                                             txt "Name";
                                              i
                                                ~a:
                                                  [
-                                                   Unsafe.string_attrib ":class"
-                                                     "sortAsc ? 'fa-solid \
-                                                      fa-sort-up' : 'fa-solid \
-                                                      fa-sort-down'";
+                                                   a_class
+                                                     [ "fa-solid fa-sort pl-2" ];
                                                  ]
                                                [];
                                            ];
@@ -117,27 +111,21 @@ let users_index_layout (users : User_model.user list) current_time =
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
-                                                font-bold uppercase \
-                                                cursor-pointer select-none";
+                                                font-bold text-primary-600 \
+                                                uppercase cursor-pointer \
+                                                select-none";
                                              ];
                                          ]
                                        [
-                                         span [ txt "Email" ];
                                          span
-                                           ~a:
-                                             [
-                                               a_class [ "px-2" ];
-                                               Unsafe.string_attrib "x-show"
-                                                 "sortBy === 'Email'";
-                                             ]
+                                           ~a:[ a_class [ "px-2" ] ]
                                            [
+                                             txt "Email";
                                              i
                                                ~a:
                                                  [
-                                                   Unsafe.string_attrib ":class"
-                                                     "sortAsc ? 'fa-solid \
-                                                      fa-sort-up' : 'fa-solid \
-                                                      fa-sort-down'";
+                                                   a_class
+                                                     [ "fa-solid fa-sort pl-2" ];
                                                  ]
                                                [];
                                            ];
@@ -156,27 +144,21 @@ let users_index_layout (users : User_model.user list) current_time =
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
-                                                font-bold uppercase \
-                                                cursor-pointer select-none";
+                                                font-bold text-primary-600 \
+                                                uppercase cursor-pointer \
+                                                select-none";
                                              ];
                                          ]
                                        [
-                                         span [ txt "Created" ];
                                          span
-                                           ~a:
-                                             [
-                                               a_class [ "px-2" ];
-                                               Unsafe.string_attrib "x-show"
-                                                 "sortBy === 'Created'";
-                                             ]
+                                           ~a:[ a_class [ "px-2" ] ]
                                            [
+                                             txt "Created";
                                              i
                                                ~a:
                                                  [
-                                                   Unsafe.string_attrib ":class"
-                                                     "sortAsc ? 'fa-solid \
-                                                      fa-sort-up' : 'fa-solid \
-                                                      fa-sort-down'";
+                                                   a_class
+                                                     [ "fa-solid fa-sort pl-2" ];
                                                  ]
                                                [];
                                            ];
@@ -195,27 +177,21 @@ let users_index_layout (users : User_model.user list) current_time =
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
-                                                font-bold uppercase \
-                                                cursor-pointer select-none";
+                                                font-bold text-primary-600 \
+                                                uppercase cursor-pointer \
+                                                select-none";
                                              ];
                                          ]
                                        [
-                                         span [ txt "Last Modified" ];
                                          span
-                                           ~a:
-                                             [
-                                               a_class [ "px-2" ];
-                                               Unsafe.string_attrib "x-show"
-                                                 "sortBy === 'Last Modified'";
-                                             ]
+                                           ~a:[ a_class [ "px-2" ] ]
                                            [
+                                             txt "Last Modified";
                                              i
                                                ~a:
                                                  [
-                                                   Unsafe.string_attrib ":class"
-                                                     "sortAsc ? 'fa-solid \
-                                                      fa-sort-up' : 'fa-solid \
-                                                      fa-sort-down'";
+                                                   a_class
+                                                     [ "fa-solid fa-sort pl-2" ];
                                                  ]
                                                [];
                                            ];

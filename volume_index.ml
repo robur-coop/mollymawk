@@ -187,27 +187,44 @@ let volume_index_layout instance_name volumes policy =
                                                [
                                                  Unsafe.string_attrib
                                                    "x-on:click" "sortByColumn";
+                                                 Unsafe.string_attrib ":class"
+                                                   "sortBy === 'Host Device' ? \
+                                                    'border-b-2 \
+                                                    border-primary-500 \
+                                                    text-primary-800 \
+                                                    bg-primary-100' : \
+                                                    'hover:bg-primary-100 \
+                                                    text-primary-600'";
                                                  a_class
                                                    [
                                                      "px-6 py-3 text-start \
                                                       text-xs font-bold \
-                                                      text-primary-600 \
                                                       uppercase cursor-pointer \
                                                       select-none";
                                                    ];
                                                ]
                                              [
-                                               txt "Host Device";
+                                               span [ txt "Host Device" ];
                                                span
-                                                 ~a:[ a_class [ "px-2" ] ]
+                                                 ~a:
+                                                   [
+                                                     a_class [ "px-2" ];
+                                                     Unsafe.string_attrib
+                                                       "x-show"
+                                                       "sortBy === 'Host \
+                                                        Device'";
+                                                   ]
                                                  [
                                                    i
                                                      ~a:
                                                        [
-                                                         a_class
-                                                           [
-                                                             "fa-solid fa-sort";
-                                                           ];
+                                                         Unsafe.string_attrib
+                                                           ":class"
+                                                           "sortAsc ? \
+                                                            'fa-solid \
+                                                            fa-sort-up' : \
+                                                            'fa-solid \
+                                                            fa-sort-down'";
                                                        ]
                                                      [];
                                                  ];
@@ -217,27 +234,43 @@ let volume_index_layout instance_name volumes policy =
                                                [
                                                  Unsafe.string_attrib
                                                    "x-on:click" "sortByColumn";
+                                                 Unsafe.string_attrib ":class"
+                                                   "sortBy === 'Size (MB)' ? \
+                                                    'border-b-2 \
+                                                    border-primary-500 \
+                                                    text-primary-800 \
+                                                    bg-primary-100' : \
+                                                    'hover:bg-primary-100 \
+                                                    text-primary-600'";
                                                  a_class
                                                    [
                                                      "px-6 py-3 text-start \
                                                       text-xs font-bold \
-                                                      text-primary-600 \
                                                       uppercase cursor-pointer \
                                                       select-none";
                                                    ];
                                                ]
                                              [
-                                               txt "Size (MB)";
+                                               span [ txt "Size (MB)" ];
                                                span
-                                                 ~a:[ a_class [ "px-2" ] ]
+                                                 ~a:
+                                                   [
+                                                     a_class [ "px-2" ];
+                                                     Unsafe.string_attrib
+                                                       "x-show"
+                                                       "sortBy === 'Size (MB)'";
+                                                   ]
                                                  [
                                                    i
                                                      ~a:
                                                        [
-                                                         a_class
-                                                           [
-                                                             "fa-solid fa-sort";
-                                                           ];
+                                                         Unsafe.string_attrib
+                                                           ":class"
+                                                           "sortAsc ? \
+                                                            'fa-solid \
+                                                            fa-sort-up' : \
+                                                            'fa-solid \
+                                                            fa-sort-down'";
                                                        ]
                                                      [];
                                                  ];
@@ -247,27 +280,43 @@ let volume_index_layout instance_name volumes policy =
                                                [
                                                  Unsafe.string_attrib
                                                    "x-on:click" "sortByColumn";
+                                                 Unsafe.string_attrib ":class"
+                                                   "sortBy === 'Used' ? \
+                                                    'border-b-2 \
+                                                    border-primary-500 \
+                                                    text-primary-800 \
+                                                    bg-primary-100' : \
+                                                    'hover:bg-primary-100 \
+                                                    text-primary-600'";
                                                  a_class
                                                    [
                                                      "px-6 py-3 text-start \
                                                       text-xs font-bold \
-                                                      text-primary-600 \
                                                       uppercase cursor-pointer \
                                                       select-none";
                                                    ];
                                                ]
                                              [
-                                               txt "Used";
+                                               span [ txt "Used" ];
                                                span
-                                                 ~a:[ a_class [ "px-2" ] ]
+                                                 ~a:
+                                                   [
+                                                     a_class [ "px-2" ];
+                                                     Unsafe.string_attrib
+                                                       "x-show"
+                                                       "sortBy === 'Used'";
+                                                   ]
                                                  [
                                                    i
                                                      ~a:
                                                        [
-                                                         a_class
-                                                           [
-                                                             "fa-solid fa-sort";
-                                                           ];
+                                                         Unsafe.string_attrib
+                                                           ":class"
+                                                           "sortAsc ? \
+                                                            'fa-solid \
+                                                            fa-sort-up' : \
+                                                            'fa-solid \
+                                                            fa-sort-down'";
                                                        ]
                                                      [];
                                                  ];
