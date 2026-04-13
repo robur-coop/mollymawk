@@ -48,20 +48,6 @@ let footer =
                     a
                       ~a:
                         [
-                          a_href "/about";
-                          a_class [ "hover:text-primary-500 transition-colors" ];
-                        ]
-                      [ txt "About" ];
-                    a
-                      ~a:
-                        [
-                          a_href "/pricing";
-                          a_class [ "hover:text-primary-500 transition-colors" ];
-                        ]
-                      [ txt "Pricing" ];
-                    a
-                      ~a:
-                        [
                           a_href "https://robur.coop";
                           a_class [ "hover:text-primary-500 transition-colors" ];
                         ]
@@ -129,58 +115,6 @@ let footer =
                           a_class [ "hover:text-primary-500 transition-colors" ];
                         ]
                       [ txt "GitHub" ];
-                    a
-                      ~a:
-                        [
-                          a_href "/";
-                          a_class [ "hover:text-primary-500 transition-colors" ];
-                        ]
-                      [ txt "Matrix.org" ];
-                    a
-                      ~a:
-                        [
-                          a_href "/";
-                          a_class [ "hover:text-primary-500 transition-colors" ];
-                        ]
-                      [ txt "Mastodon" ];
-                  ];
-              ];
-            dl
-              [
-                dt
-                  ~a:
-                    [
-                      a_class
-                        [
-                          "font-bold uppercase tracking-wider text-xs \
-                           text-white mb-3";
-                        ];
-                    ]
-                  [ txt "Legal" ];
-                dd
-                  ~a:[ a_class [ "font-medium flex flex-col items-start" ] ]
-                  [
-                    a
-                      ~a:
-                        [
-                          a_href "/";
-                          a_class [ "hover:text-primary-500 transition-colors" ];
-                        ]
-                      [ txt "Security" ];
-                    a
-                      ~a:
-                        [
-                          a_href "/";
-                          a_class [ "hover:text-primary-500 transition-colors" ];
-                        ]
-                      [ txt "Privacy policy" ];
-                    a
-                      ~a:
-                        [
-                          a_href "/";
-                          a_class [ "hover:text-primary-500 transition-colors" ];
-                        ]
-                      [ txt "Terms of service" ];
                   ];
               ];
           ];

@@ -245,31 +245,6 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                          a
                            ~a:
                              [
-                               a_href "/billing";
-                               a_class
-                                 [
-                                   "hover:bg-gray-200 hover:text-primary-400 \
-                                    font-semibold hover:font-bold \
-                                    cursor-pointer rounded p-2 w-full flex \
-                                    items-center space-x-1";
-                                 ];
-                             ]
-                           [
-                             i
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "fa-solid fa-money-bills \
-                                        text-primary-500 text-sm";
-                                     ];
-                                 ]
-                               [];
-                             span [ txt "Billing" ];
-                           ];
-                         a
-                           ~a:
-                             [
                                a_href "/tokens";
                                a_class
                                  [
@@ -320,31 +295,6 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                          a
                            ~a:
                              [
-                               a_href "/activity";
-                               a_class
-                                 [
-                                   "hover:bg-gray-200 hover:text-primary-400 \
-                                    font-semibold hover:font-bold \
-                                    cursor-pointer rounded p-2 w-full flex \
-                                    items-center space-x-1";
-                                 ];
-                             ]
-                           [
-                             i
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "fa-solid fa-file-lines \
-                                        text-primary-500 text-sm";
-                                     ];
-                                 ]
-                               [];
-                             span [ txt "Activity" ];
-                           ];
-                         a
-                           ~a:
-                             [
                                a_href "/account";
                                a_class
                                  [
@@ -371,56 +321,6 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                          a
                            ~a:
                              [
-                               a_href "/status";
-                               a_class
-                                 [
-                                   "hover:bg-gray-200 hover:text-primary-400 \
-                                    font-semibold hover:font-bold \
-                                    cursor-pointer rounded p-2 w-full flex \
-                                    items-center space-x-1";
-                                 ];
-                             ]
-                           [
-                             i
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "fa-solid fa-record-vinyl \
-                                        text-primary-500 text-sm";
-                                     ];
-                                 ]
-                               [];
-                             span [ txt "Status" ];
-                           ];
-                         a
-                           ~a:
-                             [
-                               a_href "/metrics";
-                               a_class
-                                 [
-                                   "hover:bg-gray-200 hover:text-primary-400 \
-                                    font-semibold hover:font-bold \
-                                    cursor-pointer rounded p-2 w-full flex \
-                                    items-center space-x-1";
-                                 ];
-                             ]
-                           [
-                             i
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "fa-solid fa-chart-line \
-                                        text-primary-500 text-sm";
-                                     ];
-                                 ]
-                               [];
-                             span [ txt "Metrics" ];
-                           ];
-                         a
-                           ~a:
-                             [
                                a_href
                                  "https://robur-coop.github.io/mollymawk-handbook/index.html";
                                a_class
@@ -443,31 +343,6 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                                  ]
                                [];
                              span [ txt "Documentation" ];
-                           ];
-                         a
-                           ~a:
-                             [
-                               a_href "/shop";
-                               a_class
-                                 [
-                                   "hover:bg-gray-200 hover:text-primary-400 \
-                                    font-semibold hover:font-bold \
-                                    cursor-pointer rounded p-2 w-full flex \
-                                    items-center space-x-1";
-                                 ];
-                             ]
-                           [
-                             i
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "fa-solid fa-shop text-primary-500 \
-                                        text-sm";
-                                     ];
-                                 ]
-                               [];
-                             span [ txt "Marketplace" ];
                            ];
                          (if user.super_user then
                             div
