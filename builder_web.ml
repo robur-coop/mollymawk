@@ -67,8 +67,7 @@ let list_of_json parse_fn json =
 
 let string_of_json = function
   | `String s -> Ok s
-  | js ->
-      Error (`Msg ("invalid json for string: " ^ Utils.Json.to_string js))
+  | js -> Error (`Msg ("invalid json for string: " ^ Utils.Json.to_string js))
 
 let jobs_of_json = function
   | `Assoc xs -> (
@@ -87,8 +86,7 @@ let jobs_of_json = function
           | Error e, _ | _, Error e -> Error e)
       | _ ->
           Error
-            (`Msg
-              "invalid json for jobs: 'jobs_by_section' object not found"))
+            (`Msg "invalid json for jobs: 'jobs_by_section' object not found"))
   | js ->
       Error
         (`Msg

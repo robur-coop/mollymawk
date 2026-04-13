@@ -79,7 +79,11 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) jobs unikernels
                           ~a:
                             [
                               a_label_for "manual-upload-toggle";
-                              a_class [ "inline-flex cursor-pointer items-center gap-3" ];
+                              a_class
+                                [
+                                  "inline-flex cursor-pointer items-center \
+                                   gap-3";
+                                ];
                             ]
                           [
                             input
@@ -99,17 +103,27 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) jobs unikernels
                                   a_class
                                     [
                                       "relative h-6 w-11 after:h-5 after:w-5 \
-                                       peer-checked:after:translate-x-5 rounded-full border \
-                                       border-gray-300 bg-gray-50 after:absolute \
-                                       after:bottom-0 after:left-[0.0625rem] after:top-0 \
-                                       after:my-auto after:rounded-full after:bg-gray-600 \
+                                       peer-checked:after:translate-x-5 \
+                                       rounded-full border border-gray-300 \
+                                       bg-gray-50 after:absolute \
+                                       after:bottom-0 after:left-[0.0625rem] \
+                                       after:top-0 after:my-auto \
+                                       after:rounded-full after:bg-gray-600 \
                                        after:transition-all after:content-[''] \
-                                       peer-checked:bg-primary-500 peer-checked:after:bg-white";
+                                       peer-checked:bg-primary-500 \
+                                       peer-checked:after:bg-white";
                                     ];
                                 ]
                               [];
                             span
-                              ~a:[ a_class [ "tracking-wide text-sm font-medium text-gray-600" ] ]
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "tracking-wide text-sm font-medium \
+                                       text-gray-600";
+                                    ];
+                                ]
                               [ txt "Upload unikernel binary manually" ];
                           ];
                       ];
@@ -120,9 +134,8 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) jobs unikernels
                           Unsafe.string_attrib "x-show" "!manual";
                           a_class
                             [
-                              "ring-primary-100 mt-1.5 transition \
-                               block w-full px-3 py-3 \
-                               rounded-xl shadow-sm border \
+                              "ring-primary-100 mt-1.5 transition block w-full \
+                               px-3 py-3 rounded-xl shadow-sm border \
                                hover:border-primary-200\n\
                               \                                           \
                                focus:border-primary-300 bg-primary-50 \
@@ -133,8 +146,12 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) jobs unikernels
                                focus:ring-[1px] focus:outline-none";
                             ];
                         ]
-                      (option ~a:[ a_value "" ] (txt "Select unikernel from builds.robur.coop")
-                      :: List.map (fun j -> option ~a:[ a_value j ] (txt j)) jobs);
+                      (option
+                         ~a:[ a_value "" ]
+                         (txt "Select unikernel from builds.robur.coop")
+                      :: List.map
+                           (fun j -> option ~a:[ a_value j ] (txt j))
+                           jobs);
                     input
                       ~a:
                         [

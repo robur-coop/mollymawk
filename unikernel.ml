@@ -1152,7 +1152,8 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let deploy_form stack store albatross _ (user : User_model.user) http_client reqd =
+  let deploy_form stack store albatross _ (user : User_model.user) http_client
+      reqd =
     let now = Mirage_ptime.now () in
     Update_flow.get_jobs http_client >>= fun jobs_result ->
     let jobs =
@@ -1182,8 +1183,8 @@ struct
                   (Dashboard.dashboard_layout ~csrf user
                      ~page_title:"Deploy a Unikernel"
                      ~content:
-                       (Unikernel_create.unikernel_create_layout ~user_policy jobs
-                          unikernels_by_albatross_instance
+                       (Unikernel_create.unikernel_create_layout ~user_policy
+                          jobs unikernels_by_albatross_instance
                           blocks_by_albatross_instance
                           albatross.configuration.name)
                      ~icon:"/images/robur.png" ())
@@ -1949,12 +1950,14 @@ struct
                                     else Lwt.return_unit
                                   in
                                   let promise =
-                                    Http_mirage_client.request http_client ~follow_redirect:true url f ()
+                                    Http_mirage_client.request http_client
+                                      ~follow_redirect:true url f ()
                                     >>= fun res ->
                                     push_chunks None;
                                     Lwt.return res
                                   in
-                                  ((fun () -> Lwt_stream.get data_stream), Some promise)
+                                  ( (fun () -> Lwt_stream.get data_stream),
+                                    Some promise )
                               | _ -> ((fun () -> Lwt_stream.get contents), None)
                             in
                             Lwt.both
@@ -3209,7 +3212,9 @@ struct
             check_meth `GET (fun () ->
                 authenticate store reqd
                   (albatross_instance "/unikernel/deploy"
-                     (fun albatross tok user req -> deploy_form stack store albatross tok user http_client req)))
+                     (fun albatross tok user req ->
+                       deploy_form stack store albatross tok user http_client
+                         req)))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -3229,8 +3234,8 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (fun token_or_cookie user reqd ->
-                    unikernel_create stack !albatross_instances http_client token_or_cookie
-                      user reqd))
+                    unikernel_create stack !albatross_instances http_client
+                      token_or_cookie user reqd))
         | "/unikernel/update" ->
             check_meth `GET (fun () ->
                 authenticate store reqd

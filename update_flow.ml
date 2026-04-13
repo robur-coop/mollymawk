@@ -75,8 +75,8 @@ let error_response_params unikernel_name = function
         "Received unexpected data format from the build server." )
 
 let get_jobs http_client =
-  fetch_json http_client ~base_url:Builder_web.base_url
-    ~path:"/" Builder_web.jobs_of_json "fetching jobs"
+  fetch_json http_client ~base_url:Builder_web.base_url ~path:"/"
+    Builder_web.jobs_of_json "fetching jobs"
 
 let check_for_update name unikernel http_client =
   let base_url = Builder_web.base_url in
