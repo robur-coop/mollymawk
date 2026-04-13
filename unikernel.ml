@@ -1152,8 +1152,22 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let deploy_form stack store albatross _ (user : User_model.user) reqd =
+  let deploy_form stack store albatross _ (user : User_model.user) http_client reqd =
     let now = Mirage_ptime.now () in
+    Update_flow.get_jobs http_client >>= fun jobs_result ->
+    let jobs =
+      match jobs_result with
+      | Ok j -> j
+      | Error e ->
+          let err_str =
+            match e with
+            | Update_flow.Albatross_err err -> err
+            | Update_flow.Builder_req_err err -> err
+            | Update_flow.Builder_parse_err err -> err
+          in
+          Logs.warn (fun m -> m "Failed to fetch jobs: %s" err_str);
+          []
+    in
     user_unikernels_by_instance stack albatross user.name
     >>= fun unikernels_by_albatross_instance ->
     user_volumes_by_instance stack albatross user.name
@@ -1168,7 +1182,7 @@ struct
                   (Dashboard.dashboard_layout ~csrf user
                      ~page_title:"Deploy a Unikernel"
                      ~content:
-                       (Unikernel_create.unikernel_create_layout ~user_policy
+                       (Unikernel_create.unikernel_create_layout ~user_policy jobs
                           unikernels_by_albatross_instance
                           blocks_by_albatross_instance
                           albatross.configuration.name)
@@ -1846,7 +1860,7 @@ struct
         Middleware.http_response reqd
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_create stack albatross_instances token_or_cookie
+  let unikernel_create stack albatross_instances http_client token_or_cookie
       (user : User_model.user) reqd =
     let generate_http_error_response msg code =
       Logs.warn (fun m -> m "Unikernel_create error: %s" msg);
@@ -1863,12 +1877,17 @@ struct
         let force_ref = ref None in
         let csrf_ref = ref None in
         let albatross_instance_ref = ref None in
+        let build_job_ref = ref None in
         let process_stream () =
           Lwt_stream.iter_s
             (function
               | (Some "albatross_instance", _), _, contents ->
                   consume_part_content contents >>= fun v ->
                   albatross_instance_ref := Some v;
+                  Lwt.return_unit
+              | (Some "build_job", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  build_job_ref := Some v;
                   Lwt.return_unit
               | (Some "unikernel_name", _), _, contents ->
                   consume_part_content contents >>= fun v ->
@@ -1912,11 +1931,41 @@ struct
                                 `Unikernel_cmd (`Unikernel_force_create cfg)
                               else `Unikernel_cmd (`Unikernel_create cfg)
                             in
-                            Albatross_state.query stack albatross
-                              ~domain:user.name ~name:unikernel_name
-                              ~push:(fun () -> Lwt_stream.get contents)
-                              albatross_cmd
-                            >>= function
+                            let push, fetch_promise =
+                              match !build_job_ref with
+                              | Some job when job <> "" ->
+                                  let data_stream, push_chunks =
+                                    Lwt_stream.create ()
+                                  in
+                                  let url =
+                                    Builder_web.base_url ^ "/job/" ^ job
+                                    ^ "/build/latest/main-binary"
+                                  in
+                                  let f resp _acc chunk =
+                                    if
+                                      Http_mirage_client.Status.is_successful
+                                        resp.Http_mirage_client.status
+                                    then Lwt.return (push_chunks (Some chunk))
+                                    else Lwt.return_unit
+                                  in
+                                  let promise =
+                                    Http_mirage_client.request http_client ~follow_redirect:true url f ()
+                                    >>= fun res ->
+                                    push_chunks None;
+                                    Lwt.return res
+                                  in
+                                  ((fun () -> Lwt_stream.get data_stream), Some promise)
+                              | _ -> ((fun () -> Lwt_stream.get contents), None)
+                            in
+                            Lwt.both
+                              (match fetch_promise with
+                              | Some p -> p >>= fun _ -> Lwt.return_unit
+                              | None -> Lwt.return_unit)
+                              (Albatross_state.query stack albatross
+                                 ~domain:user.name ~name:unikernel_name ~push
+                                 albatross_cmd)
+                            >>= fun (_, query_res) ->
+                            match query_res with
                             | Error err ->
                                 generate_http_error_response
                                   ("Albatross Query Error: " ^ err)
@@ -3160,7 +3209,7 @@ struct
             check_meth `GET (fun () ->
                 authenticate store reqd
                   (albatross_instance "/unikernel/deploy"
-                     (deploy_form stack store)))
+                     (fun albatross tok user req -> deploy_form stack store albatross tok user http_client req)))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -3180,7 +3229,7 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (fun token_or_cookie user reqd ->
-                    unikernel_create stack !albatross_instances token_or_cookie
+                    unikernel_create stack !albatross_instances http_client token_or_cookie
                       user reqd))
         | "/unikernel/update" ->
             check_meth `GET (fun () ->
