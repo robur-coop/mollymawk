@@ -78,33 +78,38 @@ let tokens_index_layout tokens current_time =
                                            Unsafe.string_attrib "x-on:click"
                                              "sortByColumn";
                                            Unsafe.string_attrib ":class"
-                                             "sortBy === 'Name' ? 'border-b-2 border-primary-500 text-primary-800 bg-primary-100' : 'hover:bg-primary-100 text-primary-600'";
+                                             "sortBy === 'Name' ? 'border-b-2 \
+                                              border-primary-500 \
+                                              text-primary-800 bg-primary-100' \
+                                              : 'hover:bg-primary-100 \
+                                              text-primary-600'";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
-                                                font-bold \
-                                                uppercase cursor-pointer \
-                                                select-none";
+                                                font-bold uppercase \
+                                                cursor-pointer select-none";
                                              ];
                                          ]
                                        [
                                          span [ txt "Name" ];
-                                          span
-                                            ~a:
-                                              [
-                                                a_class [ "px-2" ];
-                                                Unsafe.string_attrib "x-show"
-                                                  "sortBy === 'Name'";
-                                              ]
-                                            [
-                                              i
-                                                ~a:
-                                                  [
-                                                    Unsafe.string_attrib ":class"
-                                                      "sortAsc ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down'";
-                                                  ]
-                                                [];
-                                            ];
+                                         span
+                                           ~a:
+                                             [
+                                               a_class [ "px-2" ];
+                                               Unsafe.string_attrib "x-show"
+                                                 "sortBy === 'Name'";
+                                             ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   Unsafe.string_attrib ":class"
+                                                     "sortAsc ? 'fa-solid \
+                                                      fa-sort-up' : 'fa-solid \
+                                                      fa-sort-down'";
+                                                 ]
+                                               [];
+                                           ];
                                        ];
                                      th
                                        ~a:
@@ -112,33 +117,38 @@ let tokens_index_layout tokens current_time =
                                            Unsafe.string_attrib "x-on:click"
                                              "sortByColumn";
                                            Unsafe.string_attrib ":class"
-                                             "sortBy === 'Key' ? 'border-b-2 border-primary-500 text-primary-800 bg-primary-100' : 'hover:bg-primary-100 text-primary-600'";
+                                             "sortBy === 'Key' ? 'border-b-2 \
+                                              border-primary-500 \
+                                              text-primary-800 bg-primary-100' \
+                                              : 'hover:bg-primary-100 \
+                                              text-primary-600'";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
-                                                font-bold \
-                                                uppercase cursor-pointer \
-                                                select-none";
+                                                font-bold uppercase \
+                                                cursor-pointer select-none";
                                              ];
                                          ]
                                        [
                                          span [ txt "Key" ];
-                                          span
-                                            ~a:
-                                              [
-                                                a_class [ "px-2" ];
-                                                Unsafe.string_attrib "x-show"
-                                                  "sortBy === 'Key'";
-                                              ]
-                                            [
-                                              i
-                                                ~a:
-                                                  [
-                                                    Unsafe.string_attrib ":class"
-                                                      "sortAsc ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down'";
-                                                  ]
-                                                [];
-                                            ];
+                                         span
+                                           ~a:
+                                             [
+                                               a_class [ "px-2" ];
+                                               Unsafe.string_attrib "x-show"
+                                                 "sortBy === 'Key'";
+                                             ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   Unsafe.string_attrib ":class"
+                                                     "sortAsc ? 'fa-solid \
+                                                      fa-sort-up' : 'fa-solid \
+                                                      fa-sort-down'";
+                                                 ]
+                                               [];
+                                           ];
                                        ];
                                      th
                                        ~a:
@@ -146,33 +156,38 @@ let tokens_index_layout tokens current_time =
                                            Unsafe.string_attrib "x-on:click"
                                              "sortByColumn";
                                            Unsafe.string_attrib ":class"
-                                             "sortBy === 'Usage' ? 'border-b-2 border-primary-500 text-primary-800 bg-primary-100' : 'hover:bg-primary-100 text-primary-600'";
+                                             "sortBy === 'Usage' ? 'border-b-2 \
+                                              border-primary-500 \
+                                              text-primary-800 bg-primary-100' \
+                                              : 'hover:bg-primary-100 \
+                                              text-primary-600'";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
-                                                font-bold \
-                                                uppercase cursor-pointer \
-                                                select-none";
+                                                font-bold uppercase \
+                                                cursor-pointer select-none";
                                              ];
                                          ]
                                        [
                                          span [ txt "Usage" ];
-                                          span
-                                            ~a:
-                                              [
-                                                a_class [ "px-2" ];
-                                                Unsafe.string_attrib "x-show"
-                                                  "sortBy === 'Usage'";
-                                              ]
-                                            [
-                                              i
-                                                ~a:
-                                                  [
-                                                    Unsafe.string_attrib ":class"
-                                                      "sortAsc ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down'";
-                                                  ]
-                                                [];
-                                            ];
+                                         span
+                                           ~a:
+                                             [
+                                               a_class [ "px-2" ];
+                                               Unsafe.string_attrib "x-show"
+                                                 "sortBy === 'Usage'";
+                                             ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   Unsafe.string_attrib ":class"
+                                                     "sortAsc ? 'fa-solid \
+                                                      fa-sort-up' : 'fa-solid \
+                                                      fa-sort-down'";
+                                                 ]
+                                               [];
+                                           ];
                                        ];
                                      th
                                        ~a:
@@ -180,33 +195,38 @@ let tokens_index_layout tokens current_time =
                                            Unsafe.string_attrib "x-on:click"
                                              "sortByColumn";
                                            Unsafe.string_attrib ":class"
-                                             "sortBy === 'Created' ? 'border-b-2 border-primary-500 text-primary-800 bg-primary-100' : 'hover:bg-primary-100 text-primary-600'";
+                                             "sortBy === 'Created' ? \
+                                              'border-b-2 border-primary-500 \
+                                              text-primary-800 bg-primary-100' \
+                                              : 'hover:bg-primary-100 \
+                                              text-primary-600'";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
-                                                font-bold \
-                                                uppercase cursor-pointer \
-                                                select-none";
+                                                font-bold uppercase \
+                                                cursor-pointer select-none";
                                              ];
                                          ]
                                        [
                                          span [ txt "Created" ];
-                                          span
-                                            ~a:
-                                              [
-                                                a_class [ "px-2" ];
-                                                Unsafe.string_attrib "x-show"
-                                                  "sortBy === 'Created'";
-                                              ]
-                                            [
-                                              i
-                                                ~a:
-                                                  [
-                                                    Unsafe.string_attrib ":class"
-                                                      "sortAsc ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down'";
-                                                  ]
-                                                [];
-                                            ];
+                                         span
+                                           ~a:
+                                             [
+                                               a_class [ "px-2" ];
+                                               Unsafe.string_attrib "x-show"
+                                                 "sortBy === 'Created'";
+                                             ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   Unsafe.string_attrib ":class"
+                                                     "sortAsc ? 'fa-solid \
+                                                      fa-sort-up' : 'fa-solid \
+                                                      fa-sort-down'";
+                                                 ]
+                                               [];
+                                           ];
                                        ];
                                      th
                                        ~a:
@@ -214,33 +234,38 @@ let tokens_index_layout tokens current_time =
                                            Unsafe.string_attrib "x-on:click"
                                              "sortByColumn";
                                            Unsafe.string_attrib ":class"
-                                             "sortBy === 'Expires' ? 'border-b-2 border-primary-500 text-primary-800 bg-primary-100' : 'hover:bg-primary-100 text-primary-600'";
+                                             "sortBy === 'Expires' ? \
+                                              'border-b-2 border-primary-500 \
+                                              text-primary-800 bg-primary-100' \
+                                              : 'hover:bg-primary-100 \
+                                              text-primary-600'";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
-                                                font-bold \
-                                                uppercase cursor-pointer \
-                                                select-none";
+                                                font-bold uppercase \
+                                                cursor-pointer select-none";
                                              ];
                                          ]
                                        [
                                          span [ txt "Expires" ];
-                                          span
-                                            ~a:
-                                              [
-                                                a_class [ "px-2" ];
-                                                Unsafe.string_attrib "x-show"
-                                                  "sortBy === 'Expires'";
-                                              ]
-                                            [
-                                              i
-                                                ~a:
-                                                  [
-                                                    Unsafe.string_attrib ":class"
-                                                      "sortAsc ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down'";
-                                                  ]
-                                                [];
-                                            ];
+                                         span
+                                           ~a:
+                                             [
+                                               a_class [ "px-2" ];
+                                               Unsafe.string_attrib "x-show"
+                                                 "sortBy === 'Expires'";
+                                             ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   Unsafe.string_attrib ":class"
+                                                     "sortAsc ? 'fa-solid \
+                                                      fa-sort-up' : 'fa-solid \
+                                                      fa-sort-down'";
+                                                 ]
+                                               [];
+                                           ];
                                        ];
                                      th
                                        ~a:
@@ -248,33 +273,38 @@ let tokens_index_layout tokens current_time =
                                            Unsafe.string_attrib "x-on:click"
                                              "sortByColumn";
                                            Unsafe.string_attrib ":class"
-                                             "sortBy === 'Last used' ? 'border-b-2 border-primary-500 text-primary-800 bg-primary-100' : 'hover:bg-primary-100 text-primary-600'";
+                                             "sortBy === 'Last used' ? \
+                                              'border-b-2 border-primary-500 \
+                                              text-primary-800 bg-primary-100' \
+                                              : 'hover:bg-primary-100 \
+                                              text-primary-600'";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
-                                                font-bold \
-                                                uppercase cursor-pointer \
-                                                select-none";
+                                                font-bold uppercase \
+                                                cursor-pointer select-none";
                                              ];
                                          ]
                                        [
                                          span [ txt "Last used" ];
-                                          span
-                                            ~a:
-                                              [
-                                                a_class [ "px-2" ];
-                                                Unsafe.string_attrib "x-show"
-                                                  "sortBy === 'Last used'";
-                                              ]
-                                            [
-                                              i
-                                                ~a:
-                                                  [
-                                                    Unsafe.string_attrib ":class"
-                                                      "sortAsc ? 'fa-solid fa-sort-up' : 'fa-solid fa-sort-down'";
-                                                  ]
-                                                [];
-                                            ];
+                                         span
+                                           ~a:
+                                             [
+                                               a_class [ "px-2" ];
+                                               Unsafe.string_attrib "x-show"
+                                                 "sortBy === 'Last used'";
+                                             ]
+                                           [
+                                             i
+                                               ~a:
+                                                 [
+                                                   Unsafe.string_attrib ":class"
+                                                     "sortAsc ? 'fa-solid \
+                                                      fa-sort-up' : 'fa-solid \
+                                                      fa-sort-down'";
+                                                 ]
+                                               [];
+                                           ];
                                        ];
                                      th
                                        ~a:

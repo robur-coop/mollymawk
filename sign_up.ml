@@ -303,11 +303,14 @@ let register_page ~csrf ~icon =
                \                        const data = await response.json();\n\
                \                        if (data.status === 200) {\n\
                \                            if (data.data && data.data.active) {\n\
-               \                                postAlert('bg-primary-300', 'Account created and activated successfully! Redirecting...')\n\
+               \                                postAlert('bg-primary-300', \
+                'Account created and activated successfully! Redirecting...')\n\
                \                            } else {\n\
-               \                                postAlert('bg-primary-300', 'Account created. Waiting for activation by an administrator.')\n\
+               \                                postAlert('bg-primary-300', \
+                'Account created. Waiting for activation by an administrator.')\n\
                \                            }\n\
-               \                          setTimeout(function () {window.location.replace('/dashboard')}, 3000);\n\
+               \                          setTimeout(function () \
+                {window.location.replace('/dashboard')}, 3000);\n\
                \                        } else {\n\
                \                            \
                 form_alert.classList.remove('hidden')\n\

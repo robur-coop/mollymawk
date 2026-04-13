@@ -145,9 +145,19 @@ let account_usage_layout instance_name policy unikernels blocks =
                 h1
                   ~a:[ a_class [ "text-xl font-bold" ] ]
                   [ txt "CPU ID usage in Unikernels" ];
-                (if List.fold_left (fun acc (_, c) -> acc + c) 0 user_policy_usage.cpu_usage_count = 0 then
-                   p ~a:[ a_class [ "text-sm text-gray-400 italic mt-1" ] ]
-                     [ txt "More data will appear here as unikernels are instantiated and assigned CPU resources." ]
+                (if
+                   List.fold_left
+                     (fun acc (_, c) -> acc + c)
+                     0 user_policy_usage.cpu_usage_count
+                   = 0
+                 then
+                   p
+                     ~a:[ a_class [ "text-sm text-gray-400 italic mt-1" ] ]
+                     [
+                       txt
+                         "More data will appear here as unikernels are \
+                          instantiated and assigned CPU resources.";
+                     ]
                  else p []);
                 div
                   ~a:
@@ -233,9 +243,19 @@ let account_usage_layout instance_name policy unikernels blocks =
                 h1
                   ~a:[ a_class [ "text-xl font-bold" ] ]
                   [ txt "Bridge usage in Unikernels" ];
-                (if List.fold_left (fun acc (_, c) -> acc + c) 0 user_policy_usage.bridge_usage_count = 0 then
-                   p ~a:[ a_class [ "text-sm text-gray-400 italic mt-1" ] ]
-                     [ txt "More data will appear here as unikernels deploy and map to network bridges." ]
+                (if
+                   List.fold_left
+                     (fun acc (_, c) -> acc + c)
+                     0 user_policy_usage.bridge_usage_count
+                   = 0
+                 then
+                   p
+                     ~a:[ a_class [ "text-sm text-gray-400 italic mt-1" ] ]
+                     [
+                       txt
+                         "More data will appear here as unikernels deploy and \
+                          map to network bridges.";
+                     ]
                  else p []);
                 div
                   ~a:

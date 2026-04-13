@@ -159,8 +159,13 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                 div
                   [
                     label ~a:[ a_class [ "block font-medium" ] ] [ txt "Name*" ];
-                    p ~a:[ a_class [ "text-xs text-gray-500 mb-1" ] ]
-                      [ txt "Must be lowercase alphanumeric, dashes are allowed (spaces are not)." ];
+                    p
+                      ~a:[ a_class [ "text-xs text-gray-500 mb-1" ] ]
+                      [
+                        txt
+                          "Must be lowercase alphanumeric, dashes are allowed \
+                           (spaces are not).";
+                      ];
                     input
                       ~a:
                         [

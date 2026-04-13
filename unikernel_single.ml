@@ -38,23 +38,50 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                               ];
                           ];
                         div
-                          ~a:[ a_class [ "text-sm my-1 flex items-center gap-2" ] ]
+                          ~a:
+                            [
+                              a_class [ "text-sm my-1 flex items-center gap-2" ];
+                            ]
                           [
-                            span ~a:[ a_class [ "text-gray-700" ] ] [ txt "Digest: " ];
+                            span
+                              ~a:[ a_class [ "text-gray-700" ] ]
+                              [ txt "Digest: " ];
                             span
                               ~a:
                                 [
-                                  Unsafe.string_attrib "x-data" "{ copied: false }";
+                                  Unsafe.string_attrib "x-data"
+                                    "{ copied: false }";
                                   Unsafe.string_attrib "x-on:click"
-                                    (Fmt.str "navigator.clipboard.writeText('%s').then(() => { copied = true; setTimeout(() => copied = false, 2000); })"
+                                    (Fmt.str
+                                       "navigator.clipboard.writeText('%s').then(() \
+                                        => { copied = true; setTimeout(() => \
+                                        copied = false, 2000); })"
                                        (Ohex.encode data.digest));
-                                  a_class [ "font-mono bg-gray-200 px-1.5 py-0.5 text-xs rounded cursor-pointer hover:bg-gray-300 transition-colors relative" ];
+                                  a_class
+                                    [
+                                      "font-mono bg-gray-200 px-1.5 py-0.5 \
+                                       text-xs rounded cursor-pointer \
+                                       hover:bg-gray-300 transition-colors \
+                                       relative";
+                                    ];
                                   a_title "Click to copy digest";
                                 ]
                               [
                                 txt (Ohex.encode data.digest);
                                 span
-                                  ~a:[ Unsafe.string_attrib "x-show" "copied"; a_class [ "absolute -top-9 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-2 rounded shadow whitespace-nowrap z-10" ]; a_style "display: none;" ]
+                                  ~a:
+                                    [
+                                      Unsafe.string_attrib "x-show" "copied";
+                                      a_class
+                                        [
+                                          "absolute -top-9 left-1/2 transform \
+                                           -translate-x-1/2 bg-gray-800 \
+                                           text-white text-xs px-2 py-2 \
+                                           rounded shadow whitespace-nowrap \
+                                           z-10";
+                                        ];
+                                      a_style "display: none;";
+                                    ]
                                   [ txt "Copied!" ];
                               ];
                           ];
