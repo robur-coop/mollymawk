@@ -65,6 +65,36 @@ let list_of_json parse_fn json =
     (Ok []) json
   |> Result.map List.rev
 
+let string_of_json = function
+  | `String s -> Ok s
+  | js ->
+      Error (`Msg ("invalid json for string: " ^ Utils.Json.to_string js))
+
+let jobs_of_json = function
+  | `Assoc xs -> (
+      match Utils.Json.get "jobs_by_section" xs with
+      | Some (`Assoc sections) -> (
+          let get_section_jobs name =
+            match Utils.Json.get name sections with
+            | Some (`List jobs_json) -> list_of_json string_of_json jobs_json
+            | _ -> Ok []
+          in
+          match
+            ( get_section_jobs "Unikernels (with metrics reported to Influx)",
+              get_section_jobs "Unikernels" )
+          with
+          | Ok metrics, Ok normal -> Ok (metrics @ normal)
+          | Error e, _ | _, Error e -> Error e)
+      | _ ->
+          Error
+            (`Msg
+              "invalid json for jobs: 'jobs_by_section' object not found"))
+  | js ->
+      Error
+        (`Msg
+           ("invalid json for jobs payload, expected a dict: "
+          ^ Utils.Json.to_string js))
+
 let duniverse_detailed_diff_of_json = function
   | `Assoc xs -> (
       match Utils.Json.(get "name" xs) with
