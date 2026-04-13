@@ -74,6 +74,10 @@ let error_response_params unikernel_name = function
       ( Printf.sprintf "Builder data error for %s: %s" unikernel_name e,
         "Received unexpected data format from the build server." )
 
+let get_jobs http_client =
+  fetch_json http_client ~base_url:Builder_web.base_url
+    ~path:"/" Builder_web.jobs_of_json "fetching jobs"
+
 let check_for_update name unikernel http_client =
   let base_url = Builder_web.base_url in
   (* Fetch current build info *)
