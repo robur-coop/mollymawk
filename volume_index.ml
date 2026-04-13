@@ -8,6 +8,29 @@ let volume_index_layout instance_name volumes policy =
         Option.value ~default:0 policy.Vmm_core.Policy.block - total_volume_used
     | None -> 0
   in
+  if List.length volumes = 0 then
+    Tyxml_html.(
+      section
+        ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1 flex flex-col items-center justify-center text-center space-y-6" ]; a_style "min-height: 60vh;" ]
+        [
+          div
+            ~a:[ a_class [ "text-gray-400 mt-12" ] ]
+            [ i ~a:[ a_class [ "fa-solid fa-hard-drive fa-4x mb-4" ] ] [] ];
+          h2 ~a:[ a_class [ "text-2xl font-bold text-gray-700" ] ] [ txt "No Volumes Found" ];
+          p ~a:[ a_class [ "text-gray-500 max-w-xl text-sm" ] ]
+            [ txt "Note: \"Volumes\" and \"Block devices\" refer to the same concept in Mollymawk — persistent storage units. You haven't provisioned any block devices yet." ];
+          div
+            ~a:[ a_class [ "mt-4" ] ]
+            [
+              Modal_dialog.modal_dialog ~modal_title:"Create a volume"
+                ~button_content:(txt "Create your first block device")
+                ~button_type:`Primary_full
+                ~content:(Volume_ui.create_volume instance_name total_free_space)
+                ();
+            ];
+        ]
+    )
+  else
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -28,6 +51,8 @@ let volume_index_layout instance_name volumes policy =
                           ^ " volumes found on instance "
                           ^ Configuration.name_to_str instance_name);
                       ];
+                    p ~a:[ a_class [ "text-sm text-gray-500 mt-1 max-w-2xl" ] ]
+                      [ txt "Note: \"Volumes\" and \"Block devices\" refer to the same concept in Mollymawk — persistent storage units. The \"Host Device\" block exposes this storage to a unikernel." ];
                   ];
                 div
                   [
