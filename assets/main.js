@@ -452,7 +452,17 @@ async function deployUnikernel(albatross_instance) {
 	const formAlert = document.getElementById("form-alert");
 	const deployButton = document.getElementById("deploy-button");
 	const name = document.getElementById("unikernel-name").value;
-	const cpuid = document.getElementById("cpuid").value;
+	let cpuid = document.getElementById("cpuid").value;
+	if (cpuid === "") {
+		const cpuSelect = document.getElementById("cpuid");
+		const validOptions = Array.from(cpuSelect.options).filter(opt => opt.value !== "");
+		if (validOptions.length > 0) {
+			const randomOpt = validOptions[Math.floor(Math.random() * validOptions.length)];
+			cpuid = randomOpt.value;
+		} else {
+			cpuid = "0";
+		}
+	}
 	const startup = document.getElementById("startup-priority").innerText;
 	const fail_behaviour = document.getElementById("restart-on-fail").checked;
 	const force_create = document.getElementById("force-create").checked;
@@ -469,6 +479,9 @@ async function deployUnikernel(albatross_instance) {
 
 	const argumentsString = document.getElementById("unikernel-arguments").value.trim();
 	const argumentsList = argumentsString ? argumentsString.split(/\s+/) : [];
+	const manualCheckbox = document.getElementById("manual-upload-toggle");
+	const isManual = manualCheckbox ? manualCheckbox.checked : false;
+	const buildJob = document.getElementById("unikernel-dropdown").value;
 	const binary = document.getElementById("unikernel-binary").files[0];
 	const molly_csrf = document.getElementById("molly-csrf").value;
 
@@ -480,7 +493,15 @@ async function deployUnikernel(albatross_instance) {
 		return;
 	}
 
-	if (!binary) {
+	if (!isManual && !buildJob) {
+		formAlert.classList.remove("hidden", "text-primary-500");
+		formAlert.classList.add("text-secondary-500");
+		formAlert.textContent = "Please select a unikernel from the dropdown";
+		buttonLoading(deployButton, false, "Deploy");
+		return;
+	}
+
+	if (isManual && !binary) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = "Please upload the unikernel image";
@@ -505,7 +526,12 @@ async function deployUnikernel(albatross_instance) {
 	formData.append("unikernel_config", JSON.stringify(unikernel_config));
 	formData.append("unikernel_force_create", force_create);
 	formData.append("molly_csrf", molly_csrf);
-	formData.append("binary", binary);
+	if (isManual) {
+		formData.append("binary", binary);
+	} else {
+		formData.append("build_job", buildJob);
+		formData.append("binary", new Blob([]), "binary");
+	}
 
 	try {
 		const response = await fetch("/api/unikernel/create", {
