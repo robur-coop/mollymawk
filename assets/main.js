@@ -465,7 +465,7 @@ async function deployUnikernel(albatross_instance) {
 	if (networkData === null || blockData === null) {
 		buttonLoading(deployButton, false, "Deploy");
 		return;
-	} 
+	}
 	if (!isValidName(name)) {
 		showError(formAlert, "Please fill in a valid name");
 		buttonLoading(deployButton, false, "Deploy");
@@ -512,7 +512,9 @@ async function deployUnikernel(albatross_instance) {
 	formData.append("molly_csrf", molly_csrf);
 	if (binary) {
 		formData.append("binary", binary);
-	}
+	} else {
+		formData.append("binary", "");
+        }
 	try {
 		const response = await fetch("/api/unikernel/create", {
 			method: 'POST',
