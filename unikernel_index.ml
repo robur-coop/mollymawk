@@ -248,27 +248,17 @@ let deceased_unikernels_table deceased_unikernels_by_albatross_instance =
 
 let unikernel_index_layout unikernels_by_albatross_instance
     deceased_unikernels_by_albatross_instance current_time =
-  let online_instances_count =
+  let online_instances_count, total_unikernels_count =
     List.fold_left
-      (fun count (_, unikernels) ->
-        if List.length unikernels > 0 then count + 1 else count)
-      0 unikernels_by_albatross_instance
+      (fun (count, total) (_, us) ->
+        if us = [] then (count, total) else (count + 1, total + List.length us))
+      (0, 0) unikernels_by_albatross_instance
   in
-  let total_unikernels_count =
+  let deceased_instances_count, total_deceased_count =
     List.fold_left
-      (fun acc (_, us) -> acc + List.length us)
-      0 unikernels_by_albatross_instance
-  in
-  let deceased_instances_count =
-    List.fold_left
-      (fun count (_, unikernels) ->
-        if List.length unikernels > 0 then count + 1 else count)
-      0 deceased_unikernels_by_albatross_instance
-  in
-  let total_deceased_count =
-    List.fold_left
-      (fun acc (_, us) -> acc + List.length us)
-      0 deceased_unikernels_by_albatross_instance
+      (fun (count, total) (_, us) ->
+        if us = [] then (count, total) else (count + 1, total + List.length us))
+      (0, 0) deceased_unikernels_by_albatross_instance
   in
   Tyxml_html.(
     section
