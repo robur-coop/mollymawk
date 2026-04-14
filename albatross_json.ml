@@ -270,6 +270,7 @@ let config_of_json str =
   let* linux_boot_partition =
     match get "linux_boot_partition" dict with
     | None -> Ok None
+    | Some `Null -> Ok None
     | Some (`String s) -> Ok (Some s)
     | Some _ -> Error (`Msg "linux_boot_partition must be a string")
   in
