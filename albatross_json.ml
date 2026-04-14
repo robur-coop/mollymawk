@@ -238,7 +238,14 @@ let config_of_json str =
   in
   let* cpuids =
     match get "cpuids" dict with
-    | None -> Error (`Msg "cpuids must be a list of integers")
+    | None ->
+        (* backward compatibility for data on disk *)
+        Option.fold
+          ~none:(Error (`Msg "cpuids must be a list of integers"))
+          ~some:(function
+            | `Int n -> Ok (Vmm_core.IS.singleton n)
+            | _ -> Error (`Msg "cpuid must be an integer"))
+          (get "cpuid" dict)
     | Some (`List l) ->
         let* ids =
           List.fold_left
