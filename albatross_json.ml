@@ -129,8 +129,9 @@ let fail_behaviour_of_json js =
       | None, _, _ -> Error (`Msg "expected a restart")
       | Some _, Some (`List codes), _ ->
           let* codes =
-            List.fold_left (fun acc i ->
-                let* acc in
+            List.fold_left
+              (fun acc i ->
+                let* acc = acc in
                 match i with
                 | `Int n -> Ok (n :: acc)
                 | _ -> Error (`Msg "fail_behaviour exit code is not an integer"))
@@ -240,8 +241,9 @@ let config_of_json str =
     | None -> Error (`Msg "cpuids must be a list of integers")
     | Some (`List l) ->
         let* ids =
-          List.fold_left (fun acc i ->
-              let* acc in
+          List.fold_left
+            (fun acc i ->
+              let* acc = acc in
               match i with
               | `Int i -> Ok (i :: acc)
               | _ -> Error (`Msg "CPUid is not an int"))
@@ -297,18 +299,19 @@ let config_of_json str =
   let* argv =
     Option.fold ~none:(Ok None)
       ~some:(function
-          | `List bs ->
+        | `List bs ->
             let* args =
-              List.fold_left (fun acc arg ->
-                  let* acc in
+              List.fold_left
+                (fun acc arg ->
+                  let* acc = acc in
                   match arg with
                   | `String n -> Ok (n :: acc)
                   | _ -> Error (`Msg "argument is not a string"))
                 (Ok []) bs
             in
             if args = [] then Ok None else Ok (Some (List.rev args))
-          | _ -> Error (`Msg "arguments must be a list of strings"))
-        (get "arguments" dict)
+        | _ -> Error (`Msg "arguments must be a list of strings"))
+      (get "arguments" dict)
   in
   let* startup =
     Option.fold ~none:(Ok None)
