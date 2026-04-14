@@ -120,5 +120,5 @@ let footer =
           ];
         p
           ~a:[ a_class [ "text-xs text-center mb-0 mt-4" ] ]
-          [ txt "Copyright © 2024 Mollymawk - Powered by Albatross" ];
+          [ txt "Copyright © 2024 - 2026 Mollymawk - Powered by Albatross" ];
       ])
