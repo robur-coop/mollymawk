@@ -513,7 +513,7 @@ let unikernel_index_layout unikernels_by_albatross_instance
                                                   font-medium hover:underline";
                                                ];
                                            ]
-                                         [ txt "Learn how unikernels work" ];
+                                         [ txt "Learn more about unikernels" ];
                                      ];
                                  ]
                              else

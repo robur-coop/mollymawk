@@ -8,7 +8,7 @@ let volume_index_layout instance_name volumes policy =
         Option.value ~default:0 policy.Vmm_core.Policy.block - total_volume_used
     | None -> 0
   in
-  if List.length volumes = 0 then
+  if volumes = [] then
     Tyxml_html.(
       section
         ~a:
