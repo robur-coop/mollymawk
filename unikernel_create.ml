@@ -124,6 +124,7 @@ let cpu_multiselect cpu_usage_count =
               ~a:
                 [
                   a_input_type `Hidden;
+                  a_id "cpuids";
                   a_name "cpuids";
                   Unsafe.string_attrib ":value" "sel.join(',') ";
                 ]
