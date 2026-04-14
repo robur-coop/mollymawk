@@ -31,8 +31,8 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
                       ("type: "
                       ^
                       match unikernel.Vmm_core.Unikernel.typ with
-                      | `Solo5 -> "solo5"
-                      | `BHyve -> "bhyve");
+                      | `Solo5 -> "Solo5"
+                      | `BHyve -> "BHyve");
                   ];
               ];
             td

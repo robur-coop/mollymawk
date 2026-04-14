@@ -98,7 +98,6 @@ let success = function
   | `Empty -> `Null
   | `String m -> `String m
   | `Policies ps -> policy_infos ps
-  | `Old_unikernel_info3 is -> unikernel_infos is
   | `Old_unikernel_info4 is -> unikernel_infos is
   | `Old_unikernel_info5 is -> unikernel_infos is
   | `Unikernel_info is -> unikernel_infos is
@@ -130,14 +129,12 @@ let fail_behaviour_of_json js =
       | None, _, _ -> Error (`Msg "expected a restart")
       | Some _, Some (`List codes), _ ->
           let* codes =
-            try
-              Ok
-                (List.map
-                   (function `Int n -> n | _ -> failwith "not an integer")
-                   codes)
-            with Failure s ->
-              Error
-                (`Msg ("expected integer values as exit codes, error: " ^ s))
+            List.fold_left (fun acc i ->
+                let* acc in
+                match i with
+                | `Int n -> Ok (n :: acc)
+                | _ -> Error (`Msg "fail_behaviour exit code is not an integer"))
+              (Ok []) codes
           in
           Ok (`Restart (Some (Vmm_core.IS.of_list codes)))
       | Some _, Some _, _ ->
@@ -243,18 +240,22 @@ let config_of_json str =
     | None -> Error (`Msg "cpuids must be a list of integers")
     | Some (`List l) ->
         let* ids =
-          try Ok (List.map (function `Int i -> i | _ -> failwith "not int") l)
-          with Failure e -> Error (`Msg ("cpuids must be int list: " ^ e))
+          List.fold_left (fun acc i ->
+              let* acc in
+              match i with
+              | `Int i -> Ok (i :: acc)
+              | _ -> Error (`Msg "CPUid is not an int"))
+            (Ok []) l
         in
-        if List.is_empty ids then Error (`Msg "cpuids cannot be an empty list")
+        if ids = [] then Error (`Msg "CPUids cannot be an empty list")
         else Ok (Vmm_core.IS.of_list ids)
-    | Some _ -> Error (`Msg "cpuids must be a list of integers")
+    | Some _ -> Error (`Msg "CPUids must be a list of integers")
   in
   let* numcpus =
     Option.fold ~none:(Ok 1) (* Default to 1 vCPU *)
       ~some:(function
         | `Int n when n > 0 -> Ok n
-        | _ -> Error (`Msg "numcpus must be an integer"))
+        | _ -> Error (`Msg "numcpus must be a positive integer greater than 0"))
       (get "numcpus" dict)
   in
   let* linux_boot_partition =
@@ -294,20 +295,20 @@ let config_of_json str =
     | Some _ -> Error (`Msg "expected a list of block devices")
   in
   let* argv =
-    try
-      Option.fold ~none:(Ok None)
-        ~some:(function
+    Option.fold ~none:(Ok None)
+      ~some:(function
           | `List bs ->
-              Ok
-                (Some
-                   (List.map
-                      (function
-                        | `String n -> n
-                        | _ -> failwith "argument is not a string")
-                      bs))
+            let* args =
+              List.fold_left (fun acc arg ->
+                  let* acc in
+                  match arg with
+                  | `String n -> Ok (n :: acc)
+                  | _ -> Error (`Msg "argument is not a string"))
+                (Ok []) bs
+            in
+            if args = [] then Ok None else Ok (Some (List.rev args))
           | _ -> Error (`Msg "arguments must be a list of strings"))
         (get "arguments" dict)
-    with Failure s -> Error (`Msg ("expected strings as argv, error: " ^ s))
   in
   let* startup =
     Option.fold ~none:(Ok None)
@@ -322,13 +323,13 @@ let config_of_json str =
   in
   let* typ =
     match get "typ" dict with
-    | None -> Error (`Msg "typ must be a string of solo5 or bhyve")
+    | None -> Error (`Msg "typ must be provided")
     | Some (`String t) -> (
         match t with
         | "solo5" -> Ok `Solo5
         | "bhyve" -> Ok `BHyve
-        | _ -> Error (`Msg "typ must be a string of solo5 or bhyve"))
-    | Some _ -> Error (`Msg "typ must be a string of solo5 or bhyve")
+        | _ -> Error (`Msg "only 'solo5' and 'bhyve' supported as typ"))
+    | Some _ -> Error (`Msg "typ must be a string")
   in
   Ok
     {

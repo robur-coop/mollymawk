@@ -473,8 +473,8 @@ struct
       (`Unikernel_cmd `Unikernel_info)
     >|= function
     | Error _msg -> []
-    | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
     | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
+    | Ok (_hdr, `Success (`Old_unikernel_info5 unikernels))
     | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
         Albatross.set_online state;
         unikernels
@@ -507,8 +507,8 @@ struct
           (`Unikernel_cmd `Unikernel_info)
         >|= function
         | Error _msg -> (instance.configuration.name, [])
-        | Ok (_hdr, `Success (`Old_unikernel_info3 unikernels))
         | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
+        | Ok (_hdr, `Success (`Old_unikernel_info5 unikernels))
         | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
             Albatross.set_online instance;
             (instance.configuration.name, unikernels)
@@ -529,13 +529,13 @@ struct
              (Configuration.name_to_str state.configuration.name)
              err)
     | Ok (_hdr, `Success (`Unikernel_info [ unikernel ]))
-    | Ok (_hdr, `Success (`Old_unikernel_info3 [ unikernel ]))
-    | Ok (_hdr, `Success (`Old_unikernel_info4 [ unikernel ])) ->
+    | Ok (_hdr, `Success (`Old_unikernel_info4 [ unikernel ]))
+    | Ok (_hdr, `Success (`Old_unikernel_info5 [ unikernel ])) ->
         Albatross.set_online state;
         Ok unikernel
     | Ok ((_hdr, `Success (`Unikernel_info unikernels)) as e)
-    | Ok ((_hdr, `Success (`Old_unikernel_info3 unikernels)) as e)
-    | Ok ((_hdr, `Success (`Old_unikernel_info4 unikernels)) as e) ->
+    | Ok ((_hdr, `Success (`Old_unikernel_info4 unikernels)) as e)
+    | Ok ((_hdr, `Success (`Old_unikernel_info5 unikernels)) as e) ->
         let message =
           Fmt.str "Expected one unikernel, but got %u" (List.length unikernels)
         in
