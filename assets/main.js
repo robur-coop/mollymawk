@@ -490,7 +490,7 @@ async function deployUnikernel(albatross_instance) {
 		specificConfig = {
 			typ: "bhyve",
 			vcpus: Number(vcpus),
-			linux_boot_partition: bootPartition
+			linux_boot_partition: bootPartition == "" ? null : bootPartition
 		};
 	}
 	buttonLoading(deployButton, true, "Deploying...");
