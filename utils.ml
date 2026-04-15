@@ -427,68 +427,140 @@ let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
       ~a:
         [
           Unsafe.string_attrib "x-data"
-            ("{ fields: [], options: " ^ alpine_options ^ ", field_id: '" ^ id
-           ^ "' }");
+            ("{ isManual: false, fields: [], options: " ^ alpine_options
+           ^ ", field_id: '" ^ id ^ "' }");
         ]
       [
         Unsafe.data "<template x-for='(field, index) in fields' :key='index'>";
         div
-          ~a:[ a_class [ "flex items-center space-x-2 my-2" ] ]
+          ~a:[ a_class [ "grid grid-cols-2 gap-4 my-2" ] ]
           [
             (* Text input with dynamic ID *)
-            input
-              ~a:
-                [
-                  a_input_type `Text;
-                  a_name "name";
-                  a_required ();
-                  a_placeholder "Name of this device in your unikernel";
-                  a_class
-                    [
-                      "ring-primary-100 mt-1.5 transition appearance-none \
-                       block w-full px-3 py-3 rounded-xl shadow-sm border";
-                      "hover:border-primary-200 focus:border-primary-300 \
-                       bg-primary-50 bg-opacity-0";
-                      "hover:bg-opacity-50 focus:bg-opacity-50 \
-                       ring-primary-200 focus:ring-primary-200";
-                      "focus:ring-[1px] focus:outline-none";
-                    ];
-                  Unsafe.string_attrib ":id" "field_id + '-input-' + index";
-                  Unsafe.string_attrib "x-model" "field.title";
-                ]
-              ();
-            (* Dropdown select with dynamic ID *)
-            select
-              ~a:
-                [
-                  a_class
-                    [
-                      "ring-primary-100 mt-1.5 transition block w-full px-3 \
-                       py-3 rounded-xl shadow-sm border";
-                      "hover:border-primary-200 focus:border-primary-300 \
-                       bg-primary-50 bg-opacity-0";
-                      "hover:bg-opacity-50 focus:bg-opacity-50 \
-                       ring-primary-200 focus:ring-primary-200";
-                      "focus:ring-[1px] focus:outline-none";
-                    ];
-                  Unsafe.string_attrib ":id" "field_id + '-select-' + index";
-                ]
+            div
+              ~a:[ a_class [ "flex space-x-2" ] ]
               [
+                (* Remove button *)
                 Unsafe.data
                   {|
-            <template x-for="option in options" :key="option.value">
-              <option :value="option.value" x-text="option.label"></option>
-            </template>
-          |};
-              ];
-            (* Remove button *)
-            Unsafe.data
-              {|
                   <button type="button" @click="fields.splice(index, 1)"
-                    class="text-secondary-500 hover:text-secondary-700 font-bold">
+                    class="text-secondary-500 text-2xl hover:text-secondary-700 font-bold">
                     &times;
                   </button>
                 |};
+                input
+                  ~a:
+                    [
+                      a_input_type `Text;
+                      a_name "name";
+                      a_required ();
+                      a_placeholder "Name of this device in your unikernel";
+                      a_class
+                        [
+                          "ring-primary-100 mt-1.5 transition appearance-none \
+                           block w-full px-3 py-3 rounded-xl shadow-sm border";
+                          "hover:border-primary-200 focus:border-primary-300 \
+                           bg-primary-50 bg-opacity-0";
+                          "hover:bg-opacity-50 focus:bg-opacity-50 \
+                           ring-primary-200 focus:ring-primary-200";
+                          "focus:ring-[1px] focus:outline-none";
+                        ];
+                      Unsafe.string_attrib ":id" "field_id + '-input-' + index";
+                      Unsafe.string_attrib "x-model" "field.title";
+                    ]
+                  ();
+              ];
+            div
+              [
+                div
+                  [
+                    label
+                      ~a:
+                        [
+                          a_class
+                            [ "inline-flex cursor-pointer items-center gap-3" ];
+                        ]
+                      [
+                        span [ txt "Type device name manually" ];
+                        input
+                          ~a:
+                            [
+                              a_id "manual-device-entry-toggle";
+                              a_input_type `Checkbox;
+                              a_class [ "accent-primary-500" ];
+                              a_role [ "switch" ];
+                              Unsafe.string_attrib "x-model" "isManual";
+                            ]
+                          ();
+                      ];
+                  ];
+                div
+                  ~a:
+                    [
+                      Unsafe.string_attrib "x-show" "isManual";
+                      Unsafe.string_attrib "x-cloak" "";
+                    ]
+                  [
+                    input
+                      ~a:
+                        [
+                          a_input_type `Text;
+                          a_name "manual-name";
+                          a_placeholder "Name of this device";
+                          a_class
+                            [
+                              "ring-primary-100 mt-1.5 transition \
+                               appearance-none block w-full px-3 py-3 \
+                               rounded-xl shadow-sm border";
+                              "hover:border-primary-200 \
+                               focus:border-primary-300 bg-primary-50 \
+                               bg-opacity-0";
+                              "hover:bg-opacity-50 focus:bg-opacity-50 \
+                               ring-primary-200 focus:ring-primary-200";
+                              "focus:ring-[1px] focus:outline-none";
+                            ];
+                          Unsafe.string_attrib ":id"
+                            "field_id + '-input-' + index";
+                          Unsafe.string_attrib ":disabled" "!isManual";
+                        ]
+                      ();
+                  ];
+                (* Dropdown select with dynamic ID *)
+                div
+                  ~a:
+                    [
+                      Unsafe.string_attrib "x-show" "!isManual";
+                      Unsafe.string_attrib "x-cloak" "";
+                    ]
+                  [
+                    select
+                      ~a:
+                        [
+                          a_class
+                            [
+                              "ring-primary-100 mt-1.5 transition block w-full \
+                               px-3 py-3 rounded-xl shadow-sm border";
+                              "hover:border-primary-200 \
+                               focus:border-primary-300 bg-primary-50 \
+                               bg-opacity-0";
+                              "hover:bg-opacity-50 focus:bg-opacity-50 \
+                               ring-primary-200 focus:ring-primary-200";
+                              "focus:ring-[1px] focus:outline-none";
+                            ];
+                          Unsafe.string_attrib ":id"
+                            "field_id + '-select-' + index";
+                          (* Disable the select when the manual input is active *)
+                          Unsafe.string_attrib ":disabled" "isManual";
+                        ]
+                      [
+                        Unsafe.data
+                          {|
+                <template x-for="option in options" :key="option.value">
+                  <option :value="option.value" x-text="option.label"></option>
+                </template>
+              |};
+                      ];
+                  ];
+              ];
           ];
         Unsafe.data "</template>";
         (* Add button *)
