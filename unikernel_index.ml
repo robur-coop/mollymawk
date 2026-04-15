@@ -31,7 +31,8 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
                       ("type: "
                       ^
                       match unikernel.Vmm_core.Unikernel.typ with
-                      | `Solo5 -> "solo5");
+                      | `Solo5 -> "Solo5"
+                      | `BHyve -> "BHyve");
                   ];
               ];
             td
@@ -57,7 +58,12 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
                        text-gray-800";
                     ];
                 ]
-              [ txt (string_of_int unikernel.cpuid) ];
+              [
+                txt
+                  (String.concat ", "
+                     (List.map string_of_int
+                        (Vmm_core.IS.elements unikernel.cpuids)));
+              ];
             td
               ~a:
                 [

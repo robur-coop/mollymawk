@@ -410,7 +410,7 @@ let switch_button ~switch_id ~switch_label ?(initial_state = false) html_content
       ])
 
 let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
-    ~(get_value : 'a -> string) ~(id : string) =
+    ~(get_value : 'a -> string) ~(id : string) ?(manual_entry = false) () =
   let alpine_options =
     "["
     ^ String.concat ", "
@@ -433,62 +433,135 @@ let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
       [
         Unsafe.data "<template x-for='(field, index) in fields' :key='index'>";
         div
-          ~a:[ a_class [ "flex items-center space-x-2 my-2" ] ]
+          ~a:[ a_class [ "grid grid-cols-2 gap-4 my-2" ] ]
           [
             (* Text input with dynamic ID *)
-            input
-              ~a:
-                [
-                  a_input_type `Text;
-                  a_name "name";
-                  a_required ();
-                  a_placeholder "Name of this device in your unikernel";
-                  a_class
-                    [
-                      "ring-primary-100 mt-1.5 transition appearance-none \
-                       block w-full px-3 py-3 rounded-xl shadow-sm border";
-                      "hover:border-primary-200 focus:border-primary-300 \
-                       bg-primary-50 bg-opacity-0";
-                      "hover:bg-opacity-50 focus:bg-opacity-50 \
-                       ring-primary-200 focus:ring-primary-200";
-                      "focus:ring-[1px] focus:outline-none";
-                    ];
-                  Unsafe.string_attrib ":id" "field_id + '-input-' + index";
-                  Unsafe.string_attrib "x-model" "field.title";
-                ]
-              ();
-            (* Dropdown select with dynamic ID *)
-            select
-              ~a:
-                [
-                  a_class
-                    [
-                      "ring-primary-100 mt-1.5 transition block w-full px-3 \
-                       py-3 rounded-xl shadow-sm border";
-                      "hover:border-primary-200 focus:border-primary-300 \
-                       bg-primary-50 bg-opacity-0";
-                      "hover:bg-opacity-50 focus:bg-opacity-50 \
-                       ring-primary-200 focus:ring-primary-200";
-                      "focus:ring-[1px] focus:outline-none";
-                    ];
-                  Unsafe.string_attrib ":id" "field_id + '-select-' + index";
-                ]
+            div
+              ~a:[ a_class [ "flex space-x-2" ] ]
               [
+                (* Remove button *)
                 Unsafe.data
                   {|
-            <template x-for="option in options" :key="option.value">
-              <option :value="option.value" x-text="option.label"></option>
-            </template>
-          |};
-              ];
-            (* Remove button *)
-            Unsafe.data
-              {|
                   <button type="button" @click="fields.splice(index, 1)"
-                    class="text-secondary-500 hover:text-secondary-700 font-bold">
+                    class="text-secondary-500 text-2xl hover:text-secondary-700 font-bold">
                     &times;
                   </button>
                 |};
+                input
+                  ~a:
+                    [
+                      a_input_type `Text;
+                      a_name "name";
+                      a_required ();
+                      a_placeholder "Name of this device in your unikernel";
+                      a_class
+                        [
+                          "ring-primary-100 mt-1.5 transition appearance-none \
+                           block w-full px-3 py-3 rounded-xl shadow-sm border";
+                          "hover:border-primary-200 focus:border-primary-300 \
+                           bg-primary-50 bg-opacity-0";
+                          "hover:bg-opacity-50 focus:bg-opacity-50 \
+                           ring-primary-200 focus:ring-primary-200";
+                          "focus:ring-[1px] focus:outline-none";
+                        ];
+                      Unsafe.string_attrib ":id" "field_id + '-input-' + index";
+                      Unsafe.string_attrib "x-model" "field.title";
+                    ]
+                  ();
+              ];
+            div
+              ~a:[ Unsafe.string_attrib "x-data" "{ isManual: false }" ]
+              [
+                (if manual_entry then
+                   div
+                     [
+                       label
+                         ~a:
+                           [
+                             a_class
+                               [
+                                 "inline-flex cursor-pointer items-center gap-3";
+                               ];
+                           ]
+                         [
+                           span [ txt "Type host device name manually" ];
+                           input
+                             ~a:
+                               [
+                                 Unsafe.string_attrib ":id"
+                                   "field_id + '-toggle-' + index";
+                                 a_input_type `Checkbox;
+                                 a_class [ "accent-primary-500" ];
+                                 a_role [ "switch" ];
+                                 Unsafe.string_attrib "x-model" "isManual";
+                               ]
+                             ();
+                         ];
+                     ]
+                 else div []);
+                template
+                  ~a:[ Unsafe.string_attrib "x-if" "isManual" ]
+                  [
+                    div
+                      [
+                        input
+                          ~a:
+                            [
+                              a_input_type `Text;
+                              a_name "manual-name";
+                              a_placeholder "Name of this device on the host";
+                              a_class
+                                [
+                                  "ring-primary-100 mt-1.5 transition \
+                                   appearance-none block w-full px-3 py-3 \
+                                   rounded-xl shadow-sm border";
+                                  "hover:border-primary-200 \
+                                   focus:border-primary-300 bg-primary-50 \
+                                   bg-opacity-0";
+                                  "hover:bg-opacity-50 focus:bg-opacity-50 \
+                                   ring-primary-200 focus:ring-primary-200";
+                                  "focus:ring-[1px] focus:outline-none";
+                                ];
+                              Unsafe.string_attrib ":id"
+                                "field_id + '-select-' + index";
+                            ]
+                          ();
+                      ];
+                  ];
+                template
+                  ~a:[ Unsafe.string_attrib "x-if" "!isManual" ]
+                  [
+                    div
+                      [
+                        select
+                          ~a:
+                            [
+                              a_class
+                                [
+                                  "ring-primary-100 mt-1.5 transition block \
+                                   w-full px-3 py-3 rounded-xl shadow-sm \
+                                   border";
+                                  "hover:border-primary-200 \
+                                   focus:border-primary-300 bg-primary-50 \
+                                   bg-opacity-0";
+                                  "hover:bg-opacity-50 focus:bg-opacity-50 \
+                                   ring-primary-200 focus:ring-primary-200";
+                                  "focus:ring-[1px] focus:outline-none";
+                                ];
+                              Unsafe.string_attrib ":id"
+                                "field_id + '-select-' + index";
+                            ]
+                          [
+                            Unsafe.data
+                              {|
+                    <template x-for="option in options" :key="option.value">
+                      <option :value="option.value" x-text="option.label"></option>
+                    </template>
+                  |};
+                          ];
+                      ];
+                  ];
+              ];
           ];
         Unsafe.data "</template>";
         (* Add button *)
@@ -527,11 +600,13 @@ let cpu_usage_count policy unikernels =
   (* count usage of each cpuid in unikernels *)
   List.iter
     (fun (_, unikernel) ->
-      let cpuid = unikernel.Vmm_core.Unikernel.cpuid in
-      let count =
-        Hashtbl.find_opt cpuid_count cpuid |> Option.value ~default:0
-      in
-      Hashtbl.replace cpuid_count cpuid (count + 1))
+      Vmm_core.IS.iter
+        (fun cpuid ->
+          let count =
+            Hashtbl.find_opt cpuid_count cpuid |> Option.value ~default:0
+          in
+          Hashtbl.replace cpuid_count cpuid (count + 1))
+        unikernel.Vmm_core.Unikernel.cpuids)
     unikernels;
   (* Prepare list of all cpuids from policy *)
   let policy_cpuids = Vmm_core.IS.elements policy.Vmm_core.Policy.cpuids in
