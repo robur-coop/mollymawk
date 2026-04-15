@@ -480,7 +480,7 @@ let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
                             [ "inline-flex cursor-pointer items-center gap-3" ];
                         ]
                       [
-                        span [ txt "Type device name manually" ];
+                        span [ txt "Type host device name manually" ];
                         input
                           ~a:
                             [
@@ -505,7 +505,7 @@ let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
                         [
                           a_input_type `Text;
                           a_name "manual-name";
-                          a_placeholder "Name of this device";
+                          a_placeholder "Name of this device on the host";
                           a_class
                             [
                               "ring-primary-100 mt-1.5 transition \
