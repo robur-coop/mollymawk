@@ -204,48 +204,24 @@ let deceased_unikernels_table deceased_unikernels_by_albatross_instance =
                            ];
                        ]
                      [
-                       Modal_dialog.modal_dialog
-                         ~modal_title:("Logs for " ^ name_str)
-                         ~button_type:`Primary_outlined
-                         ~button_content:(span [ txt "View Logs" ])
-                         ~content:
-                           (div
-                              ~a:
-                                [
-                                  Unsafe.string_attrib "x-data"
-                                    (Fmt.str
-                                       "{ logs: 'Loading...', evt: null, \
-                                        start() { if (this.evt) return; \
-                                        this.logs = ''; this.evt = new \
-                                        EventSource('/api/unikernel/console?unikernel=%s&instance=%s'); \
-                                        this.evt.onmessage = (e) => { try { \
-                                        let p = JSON.parse(e.data); this.logs \
-                                        = ('[' + p.timestamp + '] ' + p.line + \
-                                        '\\n') + this.logs; } catch(_){} }; }, \
-                                        stop() { if (this.evt) { \
-                                        this.evt.close(); this.evt = null; } } \
-                                        }"
-                                       name_str
-                                       (Configuration.name_to_str instance_name));
-                                  Unsafe.string_attrib "x-init"
-                                    "$watch('modalIsOpen', v => { if (v) \
-                                     start(); else stop(); })";
-                                ]
-                              [
-                                pre
-                                  ~a:
-                                    [
-                                      a_class
-                                        [
-                                          "p-4 rounded overflow-auto \
-                                           max-h-[80vh] text-xs \
-                                           whitespace-pre-wrap font-mono block";
-                                        ];
-                                      Unsafe.string_attrib "x-text" "logs";
-                                    ]
-                                  [];
-                              ])
-                         ();
+                       a
+                         ~a:
+                           [
+                             a_href
+                               (Fmt.str
+                                  "/api/unikernel/console?unikernel=%s&instance=%s"
+                                  name_str
+                                  (Configuration.name_to_str instance_name));
+                             a_target "_blank";
+                             a_class
+                               [
+                                 "py-2 px-2 rounded border border-1 \
+                                  border-primary-400 text-primary-600 \
+                                  hover:text-gray-50 focus:outline-none \
+                                  hover:bg-primary-800 font-semibold";
+                               ];
+                           ]
+                         [ txt "View logs" ];
                      ];
                  ])
              names)
