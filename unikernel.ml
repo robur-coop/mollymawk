@@ -2008,6 +2008,13 @@ struct
         Albatross.set_online albatross;
         Lwt.return_unit
 
+  let unikernel_console_viewer albatross unikernel_name _ _ reqd =
+    reply reqd ~content_type:"text/html"
+      (Console_viewer.console_viewer_layout
+         (Configuration.name_to_str albatross)
+         (Configuration.name_to_str unikernel_name))
+      `OK
+
   let view_user stack albatross_instances store uuid
       (page : [> `Profile | `Unikernels | `Policy ]) _ (user : User_model.user)
       reqd =
@@ -3159,6 +3166,12 @@ struct
                 authenticate store reqd
                   (albatross_instance req.H1.Request.target (fun albatross ->
                        unikernel (unikernel_info_one stack store albatross))))
+        | "/unikernel/console" ->
+            check_meth `GET (fun () ->
+                authenticate store reqd
+                  (albatross_instance req.H1.Request.target (fun albatross ->
+                       unikernel
+                         (unikernel_console_viewer albatross.configuration.name))))
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
                 authenticate store reqd
