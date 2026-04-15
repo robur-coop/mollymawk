@@ -73,14 +73,14 @@ let account_usage_layout instance_name policy unikernels blocks =
                          \                    labels: ['Free ("
                         ^ string_of_int user_policy_usage.total_free_space
                         ^ "MB)','Used ("
-                        ^ string_of_int user_policy_usage.total_volume_used
+                        ^ string_of_int user_policy_usage.total_block_used
                         ^ "MB)'],\n\
                           \                    datasets: [{\n\
                           \                      label: 'Size',\n\
                           \                      data: ["
                         ^ string_of_int user_policy_usage.total_free_space
                         ^ ", "
-                        ^ string_of_int user_policy_usage.total_volume_used
+                        ^ string_of_int user_policy_usage.total_block_used
                         ^ "],\n\
                           \                      backgroundColor: ['rgb(156, \
                            156, 156)','rgb(54, 156, 140)'],\n\

@@ -928,13 +928,13 @@ async function logout() {
 	}
 }
 
-async function deleteVolume(block_name, albatross_instance) {
+async function deleteBlock(block_name, albatross_instance) {
 	const deleteButton = document.getElementById(`delete-block-button-${block_name}`);
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	const formAlert = document.getElementById("form-alert");
 	try {
 		buttonLoading(deleteButton, true, "Deleting...")
-		const response = await fetch("/api/volume/delete", {
+		const response = await fetch("/api/block/delete", {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",
@@ -952,7 +952,7 @@ async function deleteVolume(block_name, albatross_instance) {
 			formAlert.classList.remove("hidden", "text-secondary-500");
 			formAlert.classList.add("text-primary-500");
 			formAlert.textContent = "Successfully deleted";
-			postAlert("bg-primary-300", "Volume deleted successfully");
+			postAlert("bg-primary-300", "Block device deleted successfully");
 			setTimeout(() => window.location.reload(), 1000);
 			buttonLoading(deleteButton, false, "Delete")
 		} else {
@@ -969,13 +969,13 @@ async function deleteVolume(block_name, albatross_instance) {
 	}
 }
 
-async function createVolume(albatross_instance) {
+async function createBlock(albatross_instance) {
 	const createButton = document.getElementById("create-block-button");
 	const block_name = document.getElementById("block_name").value;
 	const block_size = document.getElementById("block_size").innerText;
 	const data_toggle = document.getElementById("dataToggle").checked;
 	const molly_csrf = document.getElementById("molly-csrf").value;
-	const formAlert = document.getElementById("create-volume-form-alert");
+	const formAlert = document.getElementById("create-block-form-alert");
 	const block_compressed = document.getElementById("block_compressed").checked;
 	const block_data = document.getElementById("block_data").files[0];
 
@@ -983,21 +983,21 @@ async function createVolume(albatross_instance) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = "Please enter a name"
-		buttonLoading(createButton, false, "Create volume")
+		buttonLoading(createButton, false, "Create Block device")
 		return;
 	}
 	if (!isLengthValid(block_name)) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = "The name must have at least 1 character and must not exceed 63 characters."
-		buttonLoading(createButton, false, "Create volume")
+		buttonLoading(createButton, false, "Create Block device")
 		return;
 	}
 	if (!isStartingCharacterValid(block_name)) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = "The name cannot start with a hyphen (-)."
-		buttonLoading(createButton, false, "Create volume")
+		buttonLoading(createButton, false, "Create Block device")
 		return;
 	}
 	if (!areCharactersValid(block_name)) {
@@ -1005,21 +1005,21 @@ async function createVolume(albatross_instance) {
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = "Only letters (a-z, A-Z), digits (0-9), hyphens (-), and periods (.) are permitted.\
 		 Special characters, spaces, and symbols other than the specified ones are not allowed"
-		buttonLoading(createButton, false, "Create volume")
+		buttonLoading(createButton, false, "Create Block device")
 		return;
 	}
 	if (Number(block_size) < 1) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Volume size must be 1MB or greater."
-		buttonLoading(createButton, false, "Create volume")
+		formAlert.textContent = "Block device size must be 1MB or greater."
+		buttonLoading(createButton, false, "Create Block device")
 		return;
 	}
 	if (data_toggle && !block_data) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "You must upload a file else switch 'Dump data to this volume' off"
-		buttonLoading(createButton, false, "Create volume")
+		formAlert.textContent = "You must upload a file else switch 'Dump data to this Block device' off"
+		buttonLoading(createButton, false, "Create Block device")
 		return;
 	}
 
@@ -1036,7 +1036,7 @@ async function createVolume(albatross_instance) {
 		formData.append("albatross_instance", albatross_instance)
 		formData.append("json_data", json_data)
 		formData.append("block_data", block_data)
-		const response = await fetch("/api/volume/create", {
+		const response = await fetch("/api/block/create", {
 			method: 'POST',
 			body: formData
 		})
@@ -1045,30 +1045,30 @@ async function createVolume(albatross_instance) {
 			formAlert.classList.remove("hidden", "text-secondary-500");
 			formAlert.classList.add("text-primary-500");
 			formAlert.textContent = "Successfully created";
-			postAlert("bg-primary-300", "Volume created successfully");
+			postAlert("bg-primary-300", "Block device created successfully");
 			setTimeout(() => window.location.reload(), 1000);
-			buttonLoading(createButton, false, "Create volume")
+			buttonLoading(createButton, false, "Create Block device")
 		} else {
 			formAlert.classList.remove("hidden", "text-primary-500");
 			formAlert.classList.add("text-secondary-500");
 			formAlert.textContent = data.data
-			buttonLoading(createButton, false, "Create volume")
+			buttonLoading(createButton, false, "Create Block device")
 		}
 	} catch (error) {
 		formAlert.classList.remove("hidden", "text-primary-500");
 		formAlert.classList.add("text-secondary-500");
 		formAlert.textContent = error
-		buttonLoading(createButton, false, "Create volume")
+		buttonLoading(createButton, false, "Create Block device")
 	}
 }
 
-async function downloadVolume(block_name, albatross_instance) {
+async function downloadBlock(block_name, albatross_instance) {
 	const downloadButton = document.getElementById(`download-block-button-${block_name}`);
 	const compression_level = document.getElementById(`compression-level-${block_name}`).innerText;
 	const molly_csrf = document.getElementById("molly-csrf").value;
 	try {
 		buttonLoading(downloadButton, true, "Downloading...")
-		const response = await fetch("/api/volume/download", {
+		const response = await fetch("/api/block/download", {
 			method: 'POST',
 			headers: {
 				"Content-Type": "application/json",
@@ -1105,7 +1105,7 @@ async function downloadVolume(block_name, albatross_instance) {
 	}
 }
 
-async function uploadToVolume(block_name, albatross_instance) {
+async function uploadToBlock(block_name, albatross_instance) {
 	const uploadButton = document.getElementById(`upload-block-button-${block_name}`);
 	const block_compressed = document.getElementById(`block_compressed-${block_name}`).checked;
 	const block_data = document.getElementById(`block_data_upload-${block_name}`).files[0];
@@ -1129,7 +1129,7 @@ async function uploadToVolume(block_name, albatross_instance) {
 		formData.append("albatross_instance", albatross_instance)
 		formData.append("molly_csrf", molly_csrf)
 		formData.append("block_data", block_data)
-		const response = await fetch("/api/volume/upload", {
+		const response = await fetch("/api/block/upload", {
 			method: 'POST',
 			body: formData
 		})

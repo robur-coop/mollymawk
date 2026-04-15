@@ -1,14 +1,14 @@
-let volume_index_layout instance_name volumes policy =
-  let total_volume_used =
-    List.fold_left (fun total_size (_, size, _) -> total_size + size) 0 volumes
+let block_index_layout instance_name blocks policy =
+  let total_block_used =
+    List.fold_left (fun total_size (_, size, _) -> total_size + size) 0 blocks
   in
   let total_free_space =
     match policy with
     | Some policy ->
-        Option.value ~default:0 policy.Vmm_core.Policy.block - total_volume_used
+        Option.value ~default:0 policy.Vmm_core.Policy.block - total_block_used
     | None -> 0
   in
-  if volumes = [] then
+  if blocks = [] then
     Tyxml_html.(
       section
         ~a:
@@ -26,23 +26,21 @@ let volume_index_layout instance_name volumes policy =
             [ i ~a:[ a_class [ "fa-solid fa-hard-drive fa-4x mb-4" ] ] [] ];
           h2
             ~a:[ a_class [ "text-2xl font-bold text-gray-700" ] ]
-            [ txt "No Volumes Found" ];
+            [ txt "No Block devices Found" ];
           p
             ~a:[ a_class [ "text-gray-500 max-w-xl text-sm" ] ]
             [
               txt
-                "Note: \"Volumes\" and \"Block devices\" refer to the same \
-                 concept in Mollymawk — persistent storage units. You haven't \
-                 provisioned any block devices yet.";
+                "Note: \"Block devices\" refer to persistent storage units. \
+                 You haven't provisioned any block devices yet.";
             ];
           div
             ~a:[ a_class [ "mt-4" ] ]
             [
-              Modal_dialog.modal_dialog ~modal_title:"Create a volume"
+              Modal_dialog.modal_dialog ~modal_title:"Create a Block device"
                 ~button_content:(txt "Create your first block device")
                 ~button_type:`Primary_full
-                ~content:
-                  (Volume_ui.create_volume instance_name total_free_space)
+                ~content:(Block_ui.create_block instance_name total_free_space)
                 ();
             ];
         ])
@@ -63,8 +61,8 @@ let volume_index_layout instance_name volumes policy =
                         ~a:[ a_class [ "font-bold text-gray-700" ] ]
                         [
                           txt
-                            (string_of_int (List.length volumes)
-                            ^ " volumes found on instance "
+                            (string_of_int (List.length blocks)
+                            ^ " block devices found on instance "
                             ^ Configuration.name_to_str instance_name);
                         ];
                       p
@@ -72,19 +70,18 @@ let volume_index_layout instance_name volumes policy =
                           [ a_class [ "text-sm text-gray-500 mt-1 max-w-2xl" ] ]
                         [
                           txt
-                            "Note: \"Volumes\" and \"Block devices\" refer to \
-                             the same concept in Mollymawk — persistent \
+                            "Note: \"Block devices\" refer to persistent \
                              storage units. The \"Host Device\" block exposes \
                              this storage to a unikernel.";
                         ];
                     ];
                   div
                     [
-                      Modal_dialog.modal_dialog ~modal_title:"Create a volume"
+                      Modal_dialog.modal_dialog
+                        ~modal_title:"Create a Block device"
                         ~button_content:(txt "Create block device")
                         ~content:
-                          (Volume_ui.create_volume instance_name
-                             total_free_space)
+                          (Block_ui.create_block instance_name total_free_space)
                         ();
                     ];
                 ];
@@ -105,14 +102,14 @@ let volume_index_layout instance_name volumes policy =
                            \                    labels: ['Free storage ("
                           ^ string_of_int total_free_space
                           ^ "MB)','Used storage ("
-                          ^ string_of_int total_volume_used
+                          ^ string_of_int total_block_used
                           ^ "MB)'],\n\
                             \                    datasets: [{\n\
                             \                      label: 'Size',\n\
                             \                      data: ["
                           ^ string_of_int total_free_space
                           ^ ", "
-                          ^ string_of_int total_volume_used
+                          ^ string_of_int total_block_used
                           ^ "],\n\
                             \                      backgroundColor: ['rgb(156, \
                              156, 156)','rgb(54, 156, 140)'],\n\
@@ -403,15 +400,16 @@ let volume_index_layout instance_name volumes policy =
                                                ~button_content:(txt "Upload")
                                                ~button_type:`Primary_outlined
                                                ~content:
-                                                 (Volume_ui.upload_to_volume
+                                                 (Block_ui.upload_to_block
                                                     ~instance_name
                                                     ~block_name:name)
                                                ();
                                              Modal_dialog.modal_dialog
-                                               ~modal_title:"Download volume"
+                                               ~modal_title:
+                                                 "Download Block device"
                                                ~button_content:(txt "Download")
                                                ~content:
-                                                 (Volume_ui.download_volume
+                                                 (Block_ui.download_block
                                                     ~instance_name
                                                     ~block_name:name)
                                                ();
@@ -422,7 +420,7 @@ let volume_index_layout instance_name volumes policy =
                                                      ("delete-block-button-"
                                                     ^ name);
                                                    a_onclick
-                                                     ("deleteVolume('" ^ name
+                                                     ("deleteBlock('" ^ name
                                                     ^ "','"
                                                      ^ Configuration.name_to_str
                                                          instance_name
@@ -432,7 +430,7 @@ let volume_index_layout instance_name volumes policy =
                                                ~btn_type:`Danger_full ();
                                            ];
                                        ])
-                                   volumes);
+                                   blocks);
                             ];
                         ];
                     ];

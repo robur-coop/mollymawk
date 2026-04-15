@@ -219,7 +219,7 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                          a
                            ~a:
                              [
-                               a_href "/volumes";
+                               a_href "/blocks";
                                a_class
                                  [
                                    "hover:bg-gray-200 hover:text-primary-400 \
@@ -239,7 +239,7 @@ let dashboard_layout ~csrf (user : User_model.user) ~icon
                                      ];
                                  ]
                                [];
-                             span [ txt "Volumes" ];
+                             span [ txt "Block Devices" ];
                            ];
                          hr ~a:[ a_class [ "my-4" ] ] ();
                          a

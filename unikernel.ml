@@ -457,7 +457,7 @@ struct
     H1.Reqd.respond_with_string reqd resp data;
     Lwt.return_unit
 
-  let user_volumes_by_instance stack (state : Albatross.t) user_name =
+  let user_blocks_by_instance stack (state : Albatross.t) user_name =
     Albatross_state.query stack state ~domain:user_name (`Block_cmd `Block_info)
     >|= function
     | Error _msg -> []
@@ -1156,7 +1156,7 @@ struct
     let now = Mirage_ptime.now () in
     user_unikernels_by_instance stack albatross user.name
     >>= fun unikernels_by_albatross_instance ->
-    user_volumes_by_instance stack albatross user.name
+    user_blocks_by_instance stack albatross user.name
     >>= fun blocks_by_albatross_instance ->
     generate_csrf_token store user now reqd >>= function
     | Ok csrf -> (
@@ -2200,8 +2200,8 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let volumes stack store albatross _ (user : User_model.user) reqd =
-    user_volumes_by_instance stack albatross user.name >>= fun blocks ->
+  let blocks stack store albatross _ (user : User_model.user) reqd =
+    user_blocks_by_instance stack albatross user.name >>= fun blocks ->
     let now = Mirage_ptime.now () in
     let policy =
       Result.fold ~ok:Fun.id
@@ -2215,7 +2215,7 @@ struct
              ~page_title:
                (String.capitalize_ascii (Configuration.name_to_str user.name))
              ~content:
-               (Volume_index.volume_index_layout albatross.configuration.name
+               (Block_index.block_index_layout albatross.configuration.name
                   blocks policy)
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
@@ -2224,7 +2224,7 @@ struct
         Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
           reqd `Bad_request
 
-  let delete_volume stack albatross_instances (user : User_model.user) json_dict
+  let delete_block stack albatross_instances (user : User_model.user) json_dict
       reqd =
     match
       Utils.Json.(get "block_name" json_dict, get "albatross_instance" json_dict)
@@ -2276,7 +2276,7 @@ struct
         Middleware.http_response reqd
           ~data:(`String "Couldn't find block name in json") `Bad_request
 
-  let create_or_upload_volume stack albatross_instances c_or_u token_or_cookie
+  let create_or_upload_block stack albatross_instances c_or_u token_or_cookie
       (user : User_model.user) reqd =
     let cmd_name =
       match c_or_u with `Create -> "create" | `Upload -> "upload"
@@ -2449,10 +2449,10 @@ struct
             Logs.info (fun m -> m "Multipart parser thread error: %s" e);
             Lwt.return_unit
         | Ok _ ->
-            Logs.info (fun m -> m "Data %s to volume successfully." cmd_name);
+            Logs.info (fun m -> m "Data %s to block successfully." cmd_name);
             Lwt.return_unit)
 
-  let download_volume stack albatross_instances (user : User_model.user)
+  let download_block stack albatross_instances (user : User_model.user)
       json_dict reqd =
     match
       Utils.Json.
@@ -2534,7 +2534,7 @@ struct
     let now = Mirage_ptime.now () in
     generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
-        user_volumes_by_instance stack albatross user.name >>= fun blocks ->
+        user_blocks_by_instance stack albatross user.name >>= fun blocks ->
         user_unikernels_by_instance stack albatross user.name
         >>= fun unikernels ->
         let policy =
@@ -2997,32 +2997,32 @@ struct
             check_meth `POST (fun () ->
                 authenticate store reqd
                   (extract_json_csrf_token (close_session store)))
-        | "/volumes" ->
+        | "/blocks" ->
             check_meth `GET (fun () ->
                 authenticate store reqd
-                  (albatross_instance "/volumes" (volumes stack store)))
-        | "/api/volume/delete" ->
+                  (albatross_instance "/blocks" (blocks stack store)))
+        | "/api/block/delete" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (delete_volume stack !albatross_instances)))
-        | "/api/volume/create" ->
+                     (delete_block stack !albatross_instances)))
+        | "/api/block/create" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (fun token_or_cookie user reqd ->
-                    create_or_upload_volume stack !albatross_instances `Create
+                    create_or_upload_block stack !albatross_instances `Create
                       token_or_cookie user reqd))
-        | "/api/volume/download" ->
+        | "/api/block/download" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (download_volume stack !albatross_instances)))
+                     (download_block stack !albatross_instances)))
             >>= fun () -> Paf.TCP.close flow
-        | "/api/volume/upload" ->
+        | "/api/block/upload" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (fun token_or_cookie user reqd ->
-                    create_or_upload_volume stack !albatross_instances `Upload
+                    create_or_upload_block stack !albatross_instances `Upload
                       token_or_cookie user reqd))
         | "/tokens" ->
             check_meth `GET (fun () ->
