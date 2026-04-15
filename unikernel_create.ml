@@ -238,7 +238,7 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                   (Vmm_core.String_set.elements user_policy.bridges)
                   ~get_label:(fun bridge -> bridge)
                   ~get_value:(fun bridge -> bridge)
-                  ~id:"network";
+                  ~id:"network" ();
               ];
             hr ();
             div
@@ -257,7 +257,7 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                     Option.value ~default:""
                       (Option.map Vmm_core.Name.Label.to_string
                          (Vmm_core.Name.name name)))
-                  ~id:"block";
+                  ~id:"block" ~manual_entry:true ();
               ];
             hr ();
             (* Solo5 only *)
