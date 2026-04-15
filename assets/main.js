@@ -1,5 +1,7 @@
 let consoleLogEvent = null;
 
+const consoleLogEndpoints = ["/unikernel/info", "/unikernel/console"];
+
 document.addEventListener('DOMContentLoaded', function () {
 	AOS.init();
 
@@ -36,7 +38,7 @@ document.addEventListener('DOMContentLoaded', function () {
 		});
 	}
 
-	if (window.location.pathname.startsWith("/unikernel/info")) {
+	if (consoleLogEndpoints.includes(window.location.pathname)) {
 		startEventSource();
 	}
 });
@@ -44,7 +46,7 @@ document.addEventListener('DOMContentLoaded', function () {
 function startEventSource() {
 	if (consoleLogEvent) return;
 
-	if (!window.location.pathname.startsWith("/unikernel/info")) return;
+	if (!consoleLogEndpoints.includes(window.location.pathname)) return;
 
 	const params = new URLSearchParams(window.location.search);
 	let unikernelName = params.get("unikernel");
@@ -514,7 +516,7 @@ async function deployUnikernel(albatross_instance) {
 		formData.append("binary", binary);
 	} else {
 		formData.append("binary", "");
-        }
+	}
 	try {
 		const response = await fetch("/api/unikernel/create", {
 			method: 'POST',

@@ -209,7 +209,7 @@ let deceased_unikernels_table deceased_unikernels_by_albatross_instance =
                            [
                              a_href
                                (Fmt.str
-                                  "/api/unikernel/console?unikernel=%s&instance=%s"
+                                  "/unikernel/console?unikernel=%s&instance=%s"
                                   name_str
                                   (Configuration.name_to_str instance_name));
                              a_target "_blank";
