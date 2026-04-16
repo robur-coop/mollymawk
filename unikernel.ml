@@ -2449,7 +2449,8 @@ struct
             Logs.info (fun m -> m "Multipart parser thread error: %s" e);
             Lwt.return_unit
         | Ok _ ->
-            Logs.info (fun m -> m "Data %s to block successfully." cmd_name);
+            Logs.info (fun m ->
+                m "Data %s to block device successfully." cmd_name);
             Lwt.return_unit)
 
   let download_block stack albatross_instances (user : User_model.user)
