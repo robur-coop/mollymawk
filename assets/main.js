@@ -200,13 +200,9 @@ async function saveAlbatrossConfig() {
 	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
 	formButton.disabled = true;
 	if (nameInput === '' || ipInput === '' || portInput === '' || certificateInput === '' || pkeyInput === '') {
-		formAlert.classList.remove("hidden");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please fill all fields";
+		showError(formAlert, "Please fill all fields");
 	} else if (!isValidName(nameInput)) {
-		formAlert.classList.remove("hidden");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please use alphanumeric characters, dashes or underscores for the name";
+		showError(formAlert, "Please use alphanumeric characters, dashes or underscores for the name");
 	} else {
 		try {
 			const response = await fetch(newConfig ? "/api/admin/settings/albatross/create" : "/api/admin/settings/albatross/update", {
@@ -226,22 +222,16 @@ async function saveAlbatrossConfig() {
 			})
 			const data = await response.json();
 			if (data.status === 200) {
-				formAlert.classList.remove("hidden", "text-secondary-500");
-				formAlert.classList.add("text-primary-500");
-				formAlert.textContent = "Successfully updated";
+				showError(formAlert, "Successfully updated", true);
 				postAlert("bg-primary-300", data.data);
 				setTimeout(function () {
 					window.location.reload();
 				}, 2000);
 			} else {
-				formAlert.classList.remove("hidden", "text-primary-500");
-				formAlert.classList.add("text-secondary-500");
-				formAlert.textContent = data.data
+				showError(formAlert, data.data);
 			}
 		} catch (error) {
-			formAlert.classList.remove("hidden");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = error
+			showError(formAlert, error);
 		}
 	}
 	formButton.innerHTML = "Update"
@@ -269,22 +259,16 @@ async function deleteAlbatrossConfig(name) {
 		})
 		const data = await response.json();
 		if (data.status === 200) {
-			formAlert.classList.remove("hidden", "text-secondary-500");
-			formAlert.classList.add("text-primary-500");
-			formAlert.textContent = "Successfully deleted";
+			showError(formAlert, "Successfully deleted", true);
 			postAlert("bg-primary-300", data.data);
 			setTimeout(function () {
 				window.location.reload();
 			}, 2000);
 		} else {
-			formAlert.classList.remove("hidden", "text-primary-500");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = data.data
+			showError(formAlert, data.data);
 		}
 	} catch (error) {
-		formAlert.classList.remove("hidden");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = error
+		showError(formAlert, error);
 	}
 	formButton.disabled = false;
 	formButton.innerHTML = `<i class="fa-solid fa-trash"></i>`
@@ -303,9 +287,7 @@ async function sendRequestForEmailConfig(btnId, btnText, endpoint) {
 	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
 	formButton.disabled = true;
 	if (serverInput === '' || portInput === '' || fromInput === '') {
-		formAlert.classList.remove("hidden");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please fill all fields";
+		showError(formAlert, "Please fill all fields");
 	} else {
 		try {
 			const response = await fetch(endpoint, {
@@ -325,22 +307,16 @@ async function sendRequestForEmailConfig(btnId, btnText, endpoint) {
 			})
 			const data = await response.json();
 			if (data.status === 200) {
-				formAlert.classList.remove("hidden", "text-secondary-500");
-				formAlert.classList.add("text-primary-500");
-				formAlert.textContent = "Successfully updated";
+				showError(formAlert, "Successfully updated", true);
 				postAlert("bg-primary-300", data.data);
 				setTimeout(function () {
 					window.location.reload();
 				}, 2000);
 			} else {
-				formAlert.classList.remove("hidden", "text-primary-500");
-				formAlert.classList.add("text-secondary-500");
-				formAlert.textContent = data.data
+				showError(formAlert, data.data);
 			}
 		} catch (error) {
-			formAlert.classList.remove("hidden");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = error
+			showError(formAlert, error);
 		}
 	}
 	formButton.innerHTML = btnText;
@@ -370,23 +346,17 @@ async function retryConnectingAlbatross(name) {
 		})
 		const data = await response.json();
 		if (data.status === 200) {
-			formAlert.classList.remove("hidden", "text-secondary-500");
-			formAlert.classList.add("text-primary-500");
-			formAlert.textContent = "Connection successful";
+			showError(formAlert, "Connection successful", true);
 			postAlert("bg-primary-300", data.data);
 			setTimeout(function () {
 				window.location.reload();
 			}, 2000);
 		} else {
-			formAlert.classList.remove("hidden", "text-primary-500");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = data.data
+			showError(formAlert, data.data);
 			postAlert("bg-secondary-300", data.data);
 		}
 	} catch (error) {
-		formAlert.classList.remove("hidden");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = error
+		showError(formAlert, error);
 	}
 	formButton.disabled = false;
 	formButton.innerHTML = `Retry connecting`
@@ -395,6 +365,12 @@ async function retryConnectingAlbatross(name) {
 function closeBanner() {
 	var banner = document.getElementById("banner-message");
 	banner.style.display = "none";
+}
+
+function showError(formAlertElement, msg, isSuccess = false) {
+	formAlertElement.classList.remove("hidden", "text-primary-500", "text-secondary-500");
+	formAlertElement.classList.add(isSuccess ? "text-primary-500" : "text-secondary-500");
+	formAlertElement.textContent = msg;
 }
 
 function postAlert(bg_color, content) {
@@ -423,9 +399,7 @@ function gatherFieldsForDevices(fieldId, targetKey, formAlert) {
 
 		// Case: One of them exists but the other doesn't
 		if ((selectEl && !inputEl) || (!selectEl && inputEl)) {
-			formAlert.classList.remove("hidden", "text-primary-500");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = `Please fill in both the ${fieldId} device and its associated name.`;
+			showError(formAlert, `Please fill in both the ${fieldId} device and its associated name.`);
 			postAlert("bg-secondary-300", `Please fill in both the ${fieldId} device and its associated name.`);
 			return null;
 		}
@@ -441,9 +415,7 @@ function gatherFieldsForDevices(fieldId, targetKey, formAlert) {
 
 		// check for empty strings:
 		if (!selectValue || !inputValue) {
-			formAlert.classList.remove("hidden", "text-primary-500");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = `Please fill in both the ${fieldId} device and its associated name.`;
+			showError(formAlert, `Please fill in both the ${fieldId} device and its associated name.`);
 			postAlert("bg-secondary-300", `Please fill in both the ${fieldId} device and its associated name.`);
 			return null;
 		}
@@ -478,9 +450,7 @@ async function deployUnikernel(albatross_instance) {
 		return;
 	}
 	if (!isValidName(name)) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please provide a valid name (alphanumeric, no spaces or special symbols, must not start with a hyphen, max 64 chars).";
+		showError(formAlert, "Please provide a valid name (alphanumeric, no spaces or special symbols, must not start with a hyphen, max 64 chars).");
 		document.getElementById("unikernel-name").classList.add("border-secondary-500", "ring-secondary-500");
 		buttonLoading(deployButton, false, "Deploy");
 		return;
@@ -489,9 +459,7 @@ async function deployUnikernel(albatross_instance) {
 	const binary = document.getElementById("unikernel-binary").files[0];
 	if (type === 'solo5') {
 		if (!binary) {
-			formAlert.classList.remove("hidden", "text-primary-500");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = "Please upload the unikernel image";
+			showError(formAlert, "Please upload the unikernel image");
 			buttonLoading(deployButton, false, "Deploy");
 			return;
 		}
@@ -539,9 +507,7 @@ async function deployUnikernel(albatross_instance) {
 		const data = await response.json();
 
 		if (data.status === 200 && data.success) {
-			formAlert.classList.remove("hidden", "text-secondary-500");
-			formAlert.classList.add("text-primary-500");
-			formAlert.textContent = "Successfully updated";
+			showError(formAlert, "Successfully updated", true);
 			postAlert("bg-primary-300", `${name} has been deployed successfully.`);
 			setTimeout(function () {
 				window.location.href = "/dashboard";
@@ -556,11 +522,6 @@ async function deployUnikernel(albatross_instance) {
 		postAlert("bg-secondary-300", msg);
 		showError(formAlert, msg);
 		buttonLoading(deployButton, false, "Deploy");
-	}
-	function showError(el, msg) {
-		el.classList.remove("hidden", "text-primary-500");
-		el.classList.add("text-secondary-500");
-		el.textContent = msg;
 	}
 }
 
@@ -727,22 +688,16 @@ async function updatePolicy(instance_name) {
 		const data = await response.json();
 
 		if (data.status === 200) {
-			formAlert.classList.remove("hidden", "text-secondary-500");
-			formAlert.classList.add("text-primary-500");
-			formAlert.textContent = "Successfully updated";
+			showError(formAlert, "Successfully updated", true);
 			postAlert("bg-primary-300", "Policy updated successfully");
 			setTimeout(function () {
 				window.location.href = "/admin/user/policy?uuid=" + user_id;
 			}, 2000);
 		} else {
-			formAlert.classList.remove("hidden", "text-primary-500");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = data.data;
+			showError(formAlert, data.data);
 		}
 	} catch (error) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = error.toString();
+		showError(formAlert, error.toString());
 	} finally {
 		buttonLoading(policyButton, false, "Set Policy");
 	}
@@ -818,9 +773,7 @@ async function updatePassword() {
 		const confirm_password = document.getElementById("confirm-password").value;
 		const formAlert = document.getElementById("form-alert");
 		if (!current_password || !new_password || !confirm_password) {
-			formAlert.classList.remove("hidden", "text-primary-500");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = "Please fill in all the required passwords"
+			showError(formAlert, "Please fill in all the required passwords");
 			buttonLoading(passwordButton, false, "Deploy")
 		} else {
 			const response = await fetch('/account/password/update', {
@@ -949,22 +902,16 @@ async function deleteBlock(block_name, albatross_instance) {
 		})
 		const data = await response.json();
 		if (data.status === 200) {
-			formAlert.classList.remove("hidden", "text-secondary-500");
-			formAlert.classList.add("text-primary-500");
-			formAlert.textContent = "Successfully deleted";
+			showError(formAlert, "Successfully deleted", true);
 			postAlert("bg-primary-300", "Block device deleted successfully");
 			setTimeout(() => window.location.reload(), 1000);
 			buttonLoading(deleteButton, false, "Delete")
 		} else {
-			formAlert.classList.remove("hidden", "text-primary-500");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = data.data
+			showError(formAlert, data.data);
 			buttonLoading(deleteButton, false, "Delete")
 		}
 	} catch (error) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = error
+		showError(formAlert, error);
 		buttonLoading(deleteButton, false, "Delete")
 	}
 }
@@ -980,45 +927,33 @@ async function createBlock(albatross_instance) {
 	const block_data = document.getElementById("block_data").files[0];
 
 	if (!block_name || block_name === '') {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please enter a name"
+		showError(formAlert, "Please enter a name");
 		buttonLoading(createButton, false, "Create Block device")
 		return;
 	}
 	if (!isLengthValid(block_name)) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "The name must have at least 1 character and must not exceed 63 characters."
+		showError(formAlert, "The name must have at least 1 character and must not exceed 63 characters.");
 		buttonLoading(createButton, false, "Create Block device")
 		return;
 	}
 	if (!isStartingCharacterValid(block_name)) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "The name cannot start with a hyphen (-)."
+		showError(formAlert, "The name cannot start with a hyphen (-).");
 		buttonLoading(createButton, false, "Create Block device")
 		return;
 	}
 	if (!areCharactersValid(block_name)) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Only letters (a-z, A-Z), digits (0-9), hyphens (-), and periods (.) are permitted.\
-		 Special characters, spaces, and symbols other than the specified ones are not allowed"
+		showError(formAlert, "Only letters (a-z, A-Z), digits (0-9), hyphens (-), and periods (.) are permitted.\
+		 Special characters, spaces, and symbols other than the specified ones are not allowed");
 		buttonLoading(createButton, false, "Create Block device")
 		return;
 	}
 	if (Number(block_size) < 1) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Block device size must be 1MB or greater."
+		showError(formAlert, "Block device size must be 1MB or greater.");
 		buttonLoading(createButton, false, "Create Block device")
 		return;
 	}
 	if (data_toggle && !block_data) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "You must upload a file else switch 'Dump data to this Block device' off"
+		showError(formAlert, "You must upload a file else switch 'Dump data to this Block device' off");
 		buttonLoading(createButton, false, "Create Block device")
 		return;
 	}
@@ -1042,22 +977,16 @@ async function createBlock(albatross_instance) {
 		})
 		const data = await response.json();
 		if (data.status === 200) {
-			formAlert.classList.remove("hidden", "text-secondary-500");
-			formAlert.classList.add("text-primary-500");
-			formAlert.textContent = "Successfully created";
+			showError(formAlert, "Successfully created", true);
 			postAlert("bg-primary-300", "Block device created successfully");
 			setTimeout(() => window.location.reload(), 1000);
 			buttonLoading(createButton, false, "Create Block device")
 		} else {
-			formAlert.classList.remove("hidden", "text-primary-500");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = data.data
+			showError(formAlert, data.data);
 			buttonLoading(createButton, false, "Create Block device")
 		}
 	} catch (error) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = error
+		showError(formAlert, error);
 		buttonLoading(createButton, false, "Create Block device")
 	}
 }
@@ -1157,16 +1086,12 @@ async function createToken() {
 	const formAlert = document.getElementById("tokens-form-alert");
 
 	if (!token_name || token_name == "") {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please enter a name"
+		showError(formAlert, "Please enter a name");
 		buttonLoading(tokenButton, false, "Create Token")
 		return;
 	}
 	if (!token_expiry || token_expiry == "") {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please select a validity period"
+		showError(formAlert, "Please select a validity period");
 		buttonLoading(tokenButton, false, "Create Token")
 		return;
 	}
@@ -1240,16 +1165,12 @@ async function updateToken(value) {
 	const formAlert = document.getElementById("tokens-update-form-alert");
 
 	if (!token_name || token_name == "") {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please enter a name"
+		showError(formAlert, "Please enter a name");
 		buttonLoading(tokenButton, false, "Update Token")
 		return;
 	}
 	if (!token_expiry || token_expiry == "") {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Please select a validity period"
+		showError(formAlert, "Please select a validity period");
 		buttonLoading(tokenButton, false, "Update Token")
 		return;
 	}
@@ -1298,33 +1219,25 @@ async function updateUnikernel(job, to_be_updated_unikernel, currently_running_u
 	const http_address = document.getElementById("http-address").value.trim();
 
 	if (argumentsToggle && !unikernelArguments) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "You must give arguments for this build else switch 'Update the configuration for this build' off"
+		showError(formAlert, "You must give arguments for this build else switch 'Update the configuration for this build' off");
 		buttonLoading(updateButton, false, "Proceed to update")
 		return;
 	}
 
 	if (liveliness_toggle && !(http_toggle || dns_toggle)) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Error: If liveliness is enabled, at least one of HTTP or DNS must be activated."
+		showError(formAlert, "Error: If liveliness is enabled, at least one of HTTP or DNS must be activated.");
 		buttonLoading(updateButton, false, "Proceed to update")
 		return;
 	}
 
 	if (dns_toggle && !(dns_address && dns_name)) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Error: DNS is enabled, but DNS name and DNS address is not provided."
+		showError(formAlert, "Error: DNS is enabled, but DNS name and DNS address is not provided.");
 		buttonLoading(updateButton, false, "Proceed to update")
 		return;
 	}
 
 	if (http_toggle && !http_address) {
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = "Error: HTTP is enabled, but no HTTP address is provided."
+		showError(formAlert, "Error: HTTP is enabled, but no HTTP address is provided.");
 		buttonLoading(updateButton, false, "Proceed to update")
 		return;
 	}
@@ -1360,16 +1273,12 @@ async function updateUnikernel(job, to_be_updated_unikernel, currently_running_u
 			buttonLoading(updateButton, false, "Proceed to update")
 		} else {
 			postAlert("bg-secondary-300", data.data);
-			formAlert.classList.remove("hidden", "text-primary-500");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = data.data
+			showError(formAlert, data.data);
 			buttonLoading(updateButton, false, "Proceed to update")
 		}
 	} catch (error) {
 		postAlert("bg-secondary-300", error);
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = data.data
+		showError(formAlert, error);
 		buttonLoading(updateButton, false, "Proceed to update")
 	}
 }
@@ -1400,16 +1309,12 @@ async function rollbackUnikernel(unikernel_name, instance_name) {
 			buttonLoading(rollbackButton, false, "Rollback")
 		} else {
 			postAlert("bg-secondary-300", data.data);
-			formAlert.classList.remove("hidden", "text-primary-500");
-			formAlert.classList.add("text-secondary-500");
-			formAlert.textContent = data.data
+			showError(formAlert, data.data);
 			buttonLoading(rollbackButton, false, "Rollback")
 		}
 	} catch (error) {
 		postAlert("bg-secondary-300", error);
-		formAlert.classList.remove("hidden", "text-primary-500");
-		formAlert.classList.add("text-secondary-500");
-		formAlert.textContent = data.data
+		showError(formAlert, error);
 		buttonLoading(rollbackButton, false, "Rollback")
 	}
 }
