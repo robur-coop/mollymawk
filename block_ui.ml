@@ -1,9 +1,9 @@
-let create_volume instance_name total_free_space =
+let create_block instance_name total_free_space =
   Tyxml_html.(
     section
       ~a:[ a_id "block-create"; a_class [ "w-full mx-auto" ] ]
       [
-        p ~a:[ a_id "create-volume-form-alert"; a_class [ "my-4 hidden" ] ] [];
+        p ~a:[ a_id "create-block-form-alert"; a_class [ "my-4 hidden" ] ] [];
         div
           ~a:[ a_class [ "my-6" ] ]
           [
@@ -13,7 +13,7 @@ let create_volume instance_name total_free_space =
                   a_class [ "block text-sm font-medium" ];
                   a_label_for "block name";
                 ]
-              [ txt "Volume name" ];
+              [ txt "Block device name" ];
             input
               ~a:
                 [
@@ -41,10 +41,10 @@ let create_volume instance_name total_free_space =
           [
             Utils.increment_or_decrement_ui ~id:"block_size" ~min_value:0
               ~max_value:total_free_space ~figure_unit:"MB" ~step:32
-              ~label':"Volume size" ();
+              ~label':"Block device size" ();
           ];
         Utils.switch_button ~switch_id:"dataToggle"
-          ~switch_label:"Dump data to this volume"
+          ~switch_label:"Dump data to this Block device"
           (div
              [
                div
@@ -56,7 +56,7 @@ let create_volume instance_name total_free_space =
                          a_class [ "block text-sm font-medium" ];
                          a_label_for "data";
                        ]
-                     [ txt "Select a file to dump to the volume" ];
+                     [ txt "Select a file to dump to the Block device" ];
                    input
                      ~a:
                        [
@@ -106,16 +106,17 @@ let create_volume instance_name total_free_space =
                 [
                   a_id "create-block-button";
                   a_onclick
-                    ("createVolume('"
+                    ("createBlock('"
                     ^ Configuration.name_to_str instance_name
                     ^ "')");
                 ]
-              ~extra_css:"w-full" ~content:(txt "Create Volume")
+              ~extra_css:"w-full"
+              ~content:(txt "Create Block device")
               ~btn_type:`Primary_full ();
           ];
       ])
 
-let download_volume ~instance_name ~block_name =
+let download_block ~instance_name ~block_name =
   Tyxml_html.(
     section
       ~a:[ a_id ("block-download-" ^ block_name); a_class [ "w-full mx-auto" ] ]
@@ -144,7 +145,7 @@ let download_volume ~instance_name ~block_name =
                 [
                   a_id ("download-block-button-" ^ block_name);
                   a_onclick
-                    ("downloadVolume('" ^ block_name ^ "', '"
+                    ("downloadBlock('" ^ block_name ^ "', '"
                     ^ Configuration.name_to_str instance_name
                     ^ "')");
                 ]
@@ -154,7 +155,7 @@ let download_volume ~instance_name ~block_name =
           ];
       ])
 
-let upload_to_volume ~instance_name ~block_name =
+let upload_to_block ~instance_name ~block_name =
   Tyxml_html.(
     section
       ~a:[ a_id ("block-upload-" ^ block_name); a_class [ "w-full mx-auto" ] ]
@@ -164,7 +165,7 @@ let upload_to_volume ~instance_name ~block_name =
           [
             label
               ~a:[ a_class [ "block text-sm font-medium" ]; a_label_for "data" ]
-              [ txt "Select a file to dump to the volume" ];
+              [ txt "Select a file to dump to the Block device" ];
             input
               ~a:
                 [
@@ -210,7 +211,7 @@ let upload_to_volume ~instance_name ~block_name =
                 [
                   a_id ("upload-block-button-" ^ block_name);
                   a_onclick
-                    ("uploadToVolume('" ^ block_name ^ "', '"
+                    ("uploadToBlock('" ^ block_name ^ "', '"
                     ^ Configuration.name_to_str instance_name
                     ^ "')");
                 ]

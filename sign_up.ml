@@ -302,8 +302,13 @@ let register_page ~csrf ~icon =
                \                        })\n\
                \                        const data = await response.json();\n\
                \                        if (data.status === 200) {\n\
-               \                           postAlert('bg-primary-300', \
+               \                            if (data.data && data.data.active) {\n\
+               \                                postAlert('bg-primary-300', \
+                'Account created and activated successfully! Redirecting...')\n\
+               \                            } else {\n\
+               \                                postAlert('bg-primary-300', \
                 'Account created. Waiting for activation by an administrator.')\n\
+               \                            }\n\
                \                          setTimeout(function () \
                 {window.location.replace('/dashboard')}, 3000);\n\
                \                        } else {\n\

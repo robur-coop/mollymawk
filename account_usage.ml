@@ -73,14 +73,14 @@ let account_usage_layout instance_name policy unikernels blocks =
                          \                    labels: ['Free ("
                         ^ string_of_int user_policy_usage.total_free_space
                         ^ "MB)','Used ("
-                        ^ string_of_int user_policy_usage.total_volume_used
+                        ^ string_of_int user_policy_usage.total_block_used
                         ^ "MB)'],\n\
                           \                    datasets: [{\n\
                           \                      label: 'Size',\n\
                           \                      data: ["
                         ^ string_of_int user_policy_usage.total_free_space
                         ^ ", "
-                        ^ string_of_int user_policy_usage.total_volume_used
+                        ^ string_of_int user_policy_usage.total_block_used
                         ^ "],\n\
                           \                      backgroundColor: ['rgb(156, \
                            156, 156)','rgb(54, 156, 140)'],\n\
@@ -145,6 +145,15 @@ let account_usage_layout instance_name policy unikernels blocks =
                 h1
                   ~a:[ a_class [ "text-xl font-bold" ] ]
                   [ txt "CPU ID usage in Unikernels" ];
+                (if user_policy_usage.cpu_usage_count = [] then
+                   p
+                     ~a:[ a_class [ "text-sm text-gray-400 italic mt-1" ] ]
+                     [
+                       txt
+                         "More data will appear here as unikernels are \
+                          instantiated and assigned CPU resources.";
+                     ]
+                 else p []);
                 div
                   ~a:
                     [
@@ -229,6 +238,15 @@ let account_usage_layout instance_name policy unikernels blocks =
                 h1
                   ~a:[ a_class [ "text-xl font-bold" ] ]
                   [ txt "Bridge usage in Unikernels" ];
+                (if user_policy_usage.bridge_usage_count = [] then
+                   p
+                     ~a:[ a_class [ "text-sm text-gray-400 italic mt-1" ] ]
+                     [
+                       txt
+                         "More data will appear here as unikernels deploy and \
+                          map to network bridges.";
+                     ]
+                 else p []);
                 div
                   ~a:
                     [

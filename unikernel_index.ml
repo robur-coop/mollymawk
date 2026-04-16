@@ -85,6 +85,20 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
                 ]
               [
                 txt
+                  (Option.value ~default:"50 (default)"
+                     (Option.map string_of_int unikernel.startup));
+              ];
+            td
+              ~a:
+                [
+                  a_class
+                    [
+                      "px-6 py-4 whitespace-nowrap text-sm font-medium \
+                       text-gray-800";
+                    ];
+                ]
+              [
+                txt
                   (Utils.TimeHelper.time_ago ~current_time
                      ~check_time:unikernel.started);
               ];
@@ -413,163 +427,367 @@ let unikernel_index_layout unikernels_by_albatross_instance
                               a_class [ "overflow-hidden" ];
                             ]
                           [
-                            table
-                              ~a:
-                                [
-                                  a_id "data-table";
-                                  a_class
-                                    [
-                                      "data-table table-auto min-w-full \
-                                       divide-y divide-gray-200";
-                                    ];
-                                ]
-                              ~thead:
-                                (thead
+                            (if total_unikernels_count = 0 then
+                               div
+                                 ~a:
                                    [
-                                     tr
+                                     a_class
                                        [
-                                         th
-                                           ~a:
-                                             [
-                                               Unsafe.string_attrib "x-on:click"
-                                                 "sortByColumn";
-                                               a_class
-                                                 [
-                                                   "px-6 py-3 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase \
-                                                    cursor-pointer select-none";
-                                                 ];
-                                             ]
-                                           [
-                                             txt "Name";
-                                             span
-                                               ~a:[ a_class [ "px-2" ] ]
-                                               [
-                                                 i
-                                                   ~a:
-                                                     [
-                                                       a_class
-                                                         [ "fa-solid fa-sort" ];
-                                                     ]
-                                                   [];
-                                               ];
-                                           ];
-                                         th
-                                           ~a:
-                                             [
-                                               Unsafe.string_attrib "x-on:click"
-                                                 "sortByColumn";
-                                               a_class
-                                                 [
-                                                   "px-6 py-3 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase \
-                                                    cursor-pointer select-none";
-                                                 ];
-                                             ]
-                                           [ txt "Startup Priority" ];
-                                         th
-                                           ~a:
-                                             [
-                                               Unsafe.string_attrib "x-on:click"
-                                                 "sortByColumn";
-                                               a_class
-                                                 [
-                                                   "px-6 py-3 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase \
-                                                    cursor-pointer select-none";
-                                                 ];
-                                             ]
-                                           [
-                                             txt "CPU";
-                                             span
-                                               ~a:[ a_class [ "px-2" ] ]
-                                               [
-                                                 i
-                                                   ~a:
-                                                     [
-                                                       a_class
-                                                         [ "fa-solid fa-sort" ];
-                                                     ]
-                                                   [];
-                                               ];
-                                           ];
-                                         th
-                                           ~a:
-                                             [
-                                               Unsafe.string_attrib "x-on:click"
-                                                 "sortByColumn";
-                                               a_class
-                                                 [
-                                                   "px-6 py-3 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase \
-                                                    cursor-pointer select-none";
-                                                 ];
-                                             ]
-                                           [
-                                             txt "Memory";
-                                             span
-                                               ~a:[ a_class [ "px-2" ] ]
-                                               [
-                                                 i
-                                                   ~a:
-                                                     [
-                                                       a_class
-                                                         [ "fa-solid fa-sort" ];
-                                                     ]
-                                                   [];
-                                               ];
-                                           ];
-                                         th
-                                           ~a:
-                                             [
-                                               Unsafe.string_attrib "x-on:click"
-                                                 "sortByColumn";
-                                               a_class
-                                                 [
-                                                   "px-6 py-3 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase \
-                                                    cursor-pointer select-none";
-                                                 ];
-                                             ]
-                                           [
-                                             txt "Created";
-                                             span
-                                               ~a:[ a_class [ "px-2" ] ]
-                                               [
-                                                 i
-                                                   ~a:
-                                                     [
-                                                       a_class
-                                                         [ "fa-solid fa-sort" ];
-                                                     ]
-                                                   [];
-                                               ];
-                                           ];
-                                         th
-                                           ~a:
-                                             [
-                                               a_class
-                                                 [
-                                                   "px-6 py-3 text-start \
-                                                    text-xs font-bold \
-                                                    text-primary-600 uppercase \
-                                                    cursor-pointer select-none";
-                                                 ];
-                                             ]
-                                           [ txt "Action" ];
+                                         "text-center py-16 px-4 bg-white \
+                                          rounded-lg shadow-sm border \
+                                          border-dashed border-gray-200 mt-6 \
+                                          max-w-2xl mx-auto";
                                        ];
-                                   ])
-                              (List.map
-                                 (fun (instance_name, unikernels) ->
-                                   instance_unikernels instance_name unikernels
-                                     current_time)
-                                 unikernels_by_albatross_instance
-                              |> List.flatten);
+                                   ]
+                                 [
+                                   i
+                                     ~a:
+                                       [
+                                         a_class
+                                           [
+                                             "fa-solid fa-cube text-6xl \
+                                              text-gray-300 mb-6 block";
+                                           ];
+                                       ]
+                                     [];
+                                   h3
+                                     ~a:
+                                       [
+                                         a_class
+                                           [
+                                             "text-lg font-medium \
+                                              text-gray-900 mb-2";
+                                           ];
+                                       ]
+                                     [ txt "No unikernels yet" ];
+                                   p
+                                     ~a:
+                                       [
+                                         a_class
+                                           [
+                                             "text-gray-500 mb-8 max-w-sm \
+                                              mx-auto";
+                                           ];
+                                       ]
+                                     [
+                                       txt
+                                         "You don't have any unikernel \
+                                          instances running. Deploy your first \
+                                          workload by grabbing a verified \
+                                          image from the registry.";
+                                     ];
+                                   a
+                                     ~a:
+                                       [
+                                         a_href "/unikernel/deploy";
+                                         a_class
+                                           [
+                                             "inline-flex items-center px-4 \
+                                              py-2 bg-primary-600 text-white \
+                                              font-medium rounded shadow \
+                                              hover:bg-primary-700 transition";
+                                           ];
+                                       ]
+                                     [
+                                       i
+                                         ~a:
+                                           [
+                                             a_class
+                                               [ "fa-solid fa-rocket mr-2" ];
+                                           ]
+                                         [];
+                                       txt "Deploy your first unikernel";
+                                     ];
+                                   div
+                                     ~a:[ a_class [ "mt-6" ] ]
+                                     [
+                                       a
+                                         ~a:
+                                           [
+                                             a_href
+                                               "https://robur-coop.github.io/mollymawk-handbook/index.html";
+                                             a_class
+                                               [
+                                                 "text-sm text-primary-500 \
+                                                  hover:text-primary-600 \
+                                                  font-medium hover:underline";
+                                               ];
+                                           ]
+                                         [ txt "Learn more about unikernels" ];
+                                     ];
+                                 ]
+                             else
+                               table
+                                 ~a:
+                                   [
+                                     a_id "data-table";
+                                     a_class
+                                       [
+                                         "data-table table-auto min-w-full \
+                                          divide-y divide-gray-200";
+                                       ];
+                                   ]
+                                 ~thead:
+                                   (thead
+                                      [
+                                        tr
+                                          [
+                                            th
+                                              ~a:
+                                                [
+                                                  Unsafe.string_attrib
+                                                    "x-on:click" "sortByColumn";
+                                                  Unsafe.string_attrib ":class"
+                                                    "sortBy === 'Name' ? \
+                                                     'border-b-2 \
+                                                     border-primary-500 \
+                                                     text-primary-800 \
+                                                     bg-primary-100' : \
+                                                     'hover:bg-primary-100 \
+                                                     text-primary-600'";
+                                                  a_class
+                                                    [
+                                                      "px-6 py-3 text-start \
+                                                       text-xs font-bold \
+                                                       uppercase \
+                                                       cursor-pointer \
+                                                       select-none";
+                                                    ];
+                                                ]
+                                              [
+                                                span [ txt "Name" ];
+                                                span
+                                                  ~a:
+                                                    [
+                                                      a_class [ "px-2" ];
+                                                      Unsafe.string_attrib
+                                                        "x-show"
+                                                        "sortBy === 'Name'";
+                                                    ]
+                                                  [
+                                                    i
+                                                      ~a:
+                                                        [
+                                                          Unsafe.string_attrib
+                                                            ":class"
+                                                            "sortAsc ? \
+                                                             'fa-solid \
+                                                             fa-sort-up' : \
+                                                             'fa-solid \
+                                                             fa-sort-down'";
+                                                        ]
+                                                      [];
+                                                  ];
+                                              ];
+                                            th
+                                              ~a:
+                                                [
+                                                  Unsafe.string_attrib
+                                                    "x-on:click" "sortByColumn";
+                                                  Unsafe.string_attrib ":class"
+                                                    "sortBy === 'CPU' ? \
+                                                     'border-b-2 \
+                                                     border-primary-500 \
+                                                     text-primary-800 \
+                                                     bg-primary-100' : \
+                                                     'hover:bg-primary-100 \
+                                                     text-primary-600'";
+                                                  a_class
+                                                    [
+                                                      "px-6 py-3 text-start \
+                                                       text-xs font-bold \
+                                                       uppercase \
+                                                       cursor-pointer \
+                                                       select-none";
+                                                    ];
+                                                ]
+                                              [
+                                                span [ txt "CPU" ];
+                                                span
+                                                  ~a:
+                                                    [
+                                                      a_class [ "px-2" ];
+                                                      Unsafe.string_attrib
+                                                        "x-show"
+                                                        "sortBy === 'CPU'";
+                                                    ]
+                                                  [
+                                                    i
+                                                      ~a:
+                                                        [
+                                                          Unsafe.string_attrib
+                                                            ":class"
+                                                            "sortAsc ? \
+                                                             'fa-solid \
+                                                             fa-sort-up' : \
+                                                             'fa-solid \
+                                                             fa-sort-down'";
+                                                        ]
+                                                      [];
+                                                  ];
+                                              ];
+                                            th
+                                              ~a:
+                                                [
+                                                  Unsafe.string_attrib
+                                                    "x-on:click" "sortByColumn";
+                                                  Unsafe.string_attrib ":class"
+                                                    "sortBy === 'Memory' ? \
+                                                     'border-b-2 \
+                                                     border-primary-500 \
+                                                     text-primary-800 \
+                                                     bg-primary-100' : \
+                                                     'hover:bg-primary-100 \
+                                                     text-primary-600'";
+                                                  a_class
+                                                    [
+                                                      "px-6 py-3 text-start \
+                                                       text-xs font-bold \
+                                                       uppercase \
+                                                       cursor-pointer \
+                                                       select-none";
+                                                    ];
+                                                ]
+                                              [
+                                                span [ txt "Memory" ];
+                                                span
+                                                  ~a:
+                                                    [
+                                                      a_class [ "px-2" ];
+                                                      Unsafe.string_attrib
+                                                        "x-show"
+                                                        "sortBy === 'Memory'";
+                                                    ]
+                                                  [
+                                                    i
+                                                      ~a:
+                                                        [
+                                                          Unsafe.string_attrib
+                                                            ":class"
+                                                            "sortAsc ? \
+                                                             'fa-solid \
+                                                             fa-sort-up' : \
+                                                             'fa-solid \
+                                                             fa-sort-down'";
+                                                        ]
+                                                      [];
+                                                  ];
+                                              ];
+                                            th
+                                              ~a:
+                                                [
+                                                  Unsafe.string_attrib
+                                                    "x-on:click" "sortByColumn";
+                                                  Unsafe.string_attrib ":class"
+                                                    "sortBy === 'Startup \
+                                                     Priority' ? 'border-b-2 \
+                                                     border-primary-500 \
+                                                     text-primary-800 \
+                                                     bg-primary-100' : \
+                                                     'hover:bg-primary-100 \
+                                                     text-primary-600'";
+                                                  a_class
+                                                    [
+                                                      "px-6 py-3 text-start \
+                                                       text-xs font-bold \
+                                                       uppercase \
+                                                       cursor-pointer \
+                                                       select-none";
+                                                    ];
+                                                ]
+                                              [
+                                                span [ txt "Startup Priority" ];
+                                                span
+                                                  ~a:
+                                                    [
+                                                      a_class [ "px-2" ];
+                                                      Unsafe.string_attrib
+                                                        "x-show"
+                                                        "sortBy === 'Startup \
+                                                         Priority'";
+                                                    ]
+                                                  [
+                                                    i
+                                                      ~a:
+                                                        [
+                                                          Unsafe.string_attrib
+                                                            ":class"
+                                                            "sortAsc ? \
+                                                             'fa-solid \
+                                                             fa-sort-up' : \
+                                                             'fa-solid \
+                                                             fa-sort-down'";
+                                                        ]
+                                                      [];
+                                                  ];
+                                              ];
+                                            th
+                                              ~a:
+                                                [
+                                                  Unsafe.string_attrib
+                                                    "x-on:click" "sortByColumn";
+                                                  Unsafe.string_attrib ":class"
+                                                    "sortBy === 'Created' ? \
+                                                     'border-b-2 \
+                                                     border-primary-500 \
+                                                     text-primary-800 \
+                                                     bg-primary-100' : \
+                                                     'hover:bg-primary-100 \
+                                                     text-primary-600'";
+                                                  a_class
+                                                    [
+                                                      "px-6 py-3 text-start \
+                                                       text-xs font-bold \
+                                                       uppercase \
+                                                       cursor-pointer \
+                                                       select-none";
+                                                    ];
+                                                ]
+                                              [
+                                                span [ txt "Created" ];
+                                                span
+                                                  ~a:
+                                                    [
+                                                      a_class [ "px-2" ];
+                                                      Unsafe.string_attrib
+                                                        "x-show"
+                                                        "sortBy === 'Created'";
+                                                    ]
+                                                  [
+                                                    i
+                                                      ~a:
+                                                        [
+                                                          Unsafe.string_attrib
+                                                            ":class"
+                                                            "sortAsc ? \
+                                                             'fa-solid \
+                                                             fa-sort-up' : \
+                                                             'fa-solid \
+                                                             fa-sort-down'";
+                                                        ]
+                                                      [];
+                                                  ];
+                                              ];
+                                            th
+                                              ~a:
+                                                [
+                                                  a_class
+                                                    [
+                                                      "px-6 py-3 text-start \
+                                                       text-xs font-bold \
+                                                       text-primary-600 \
+                                                       uppercase select-none";
+                                                    ];
+                                                ]
+                                              [ txt "Action" ];
+                                          ];
+                                      ])
+                                 (List.map
+                                    (fun (instance_name, unikernels) ->
+                                      instance_unikernels instance_name
+                                        unikernels current_time)
+                                    unikernels_by_albatross_instance
+                                 |> List.flatten));
                           ];
                       ];
                   ];

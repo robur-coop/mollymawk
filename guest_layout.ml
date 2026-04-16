@@ -118,29 +118,6 @@ let guest_layout ?(page_title = "Dashboard | Mollymawk") ~icon ~content () =
                                      ]
                                    [ span [ txt "Robur" ] ];
                                ];
-                             div
-                               ~a:
-                                 [
-                                   a_class
-                                     [
-                                       "flex space-x-5 font-semibold \
-                                        text-gray-200";
-                                     ];
-                                 ]
-                               [
-                                 a
-                                   ~a:
-                                     [
-                                       a_href "/pricing";
-                                       a_class
-                                         [
-                                           "flex space-x-1 items-center \
-                                            cursor-pointer \
-                                            hover:text-primary-500";
-                                         ];
-                                     ]
-                                   [ span [ txt "Pricing" ] ];
-                               ];
                            ];
                          div
                            ~a:

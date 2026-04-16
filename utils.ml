@@ -586,7 +586,7 @@ let cpuid_to_array_string lst =
 
 type user_policy_usage = {
   deployed_unikernels : int;
-  total_volume_used : int;
+  total_block_used : int;
   total_free_space : int;
   total_memory_used : int;
   cpu_usage_count : (int * int) list;
@@ -619,11 +619,11 @@ let cpu_usage_count policy unikernels =
       (cpuid, count))
     policy_cpuids
 
-let total_volume_used blocks =
+let total_block_used blocks =
   List.fold_left (fun total_size (_, size, _) -> total_size + size) 0 blocks
 
-let total_free_space policy total_volume_used =
-  Option.value ~default:0 policy.Vmm_core.Policy.block - total_volume_used
+let total_free_space policy total_block_used =
+  Option.value ~default:0 policy.Vmm_core.Policy.block - total_block_used
 
 let total_memory_used unikernels =
   List.fold_left
@@ -666,14 +666,14 @@ let bridge_usage_count policy unikernels =
 
 let user_policy_usage policy unikernels blocks : user_policy_usage =
   let deployed_unikernels = deployed_unikernels unikernels in
-  let total_volume_used = total_volume_used blocks in
-  let total_free_space = total_free_space policy total_volume_used in
+  let total_block_used = total_block_used blocks in
+  let total_free_space = total_free_space policy total_block_used in
   let total_memory_used = total_memory_used unikernels in
   let cpu_usage_count = cpu_usage_count policy unikernels in
   let bridge_usage_count = bridge_usage_count policy unikernels in
   {
     deployed_unikernels;
-    total_volume_used;
+    total_block_used;
     total_free_space;
     total_memory_used;
     cpu_usage_count;

@@ -69,6 +69,12 @@ let users_index_layout (users : User_model.user list) current_time =
                                          [
                                            Unsafe.string_attrib "x-on:click"
                                              "sortByColumn";
+                                           Unsafe.string_attrib ":class"
+                                             "sortBy === 'Name' ? 'border-b-2 \
+                                              border-primary-500 \
+                                              text-primary-800 bg-primary-100' \
+                                              : 'hover:bg-primary-100 \
+                                              text-primary-600'";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
@@ -78,15 +84,15 @@ let users_index_layout (users : User_model.user list) current_time =
                                              ];
                                          ]
                                        [
-                                         txt "Name";
                                          span
                                            ~a:[ a_class [ "px-2" ] ]
                                            [
+                                             txt "Name";
                                              i
                                                ~a:
                                                  [
                                                    a_class
-                                                     [ "fa-solid fa-sort" ];
+                                                     [ "fa-solid fa-sort pl-2" ];
                                                  ]
                                                [];
                                            ];
@@ -96,6 +102,12 @@ let users_index_layout (users : User_model.user list) current_time =
                                          [
                                            Unsafe.string_attrib "x-on:click"
                                              "sortByColumn";
+                                           Unsafe.string_attrib ":class"
+                                             "sortBy === 'Email' ? 'border-b-2 \
+                                              border-primary-500 \
+                                              text-primary-800 bg-primary-100' \
+                                              : 'hover:bg-primary-100 \
+                                              text-primary-600'";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
@@ -105,15 +117,15 @@ let users_index_layout (users : User_model.user list) current_time =
                                              ];
                                          ]
                                        [
-                                         txt "Email";
                                          span
                                            ~a:[ a_class [ "px-2" ] ]
                                            [
+                                             txt "Email";
                                              i
                                                ~a:
                                                  [
                                                    a_class
-                                                     [ "fa-solid fa-sort" ];
+                                                     [ "fa-solid fa-sort pl-2" ];
                                                  ]
                                                [];
                                            ];
@@ -123,6 +135,12 @@ let users_index_layout (users : User_model.user list) current_time =
                                          [
                                            Unsafe.string_attrib "x-on:click"
                                              "sortByColumn";
+                                           Unsafe.string_attrib ":class"
+                                             "sortBy === 'Created' ? \
+                                              'border-b-2 border-primary-500 \
+                                              text-primary-800 bg-primary-100' \
+                                              : 'hover:bg-primary-100 \
+                                              text-primary-600'";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
@@ -132,15 +150,15 @@ let users_index_layout (users : User_model.user list) current_time =
                                              ];
                                          ]
                                        [
-                                         txt "Created";
                                          span
                                            ~a:[ a_class [ "px-2" ] ]
                                            [
+                                             txt "Created";
                                              i
                                                ~a:
                                                  [
                                                    a_class
-                                                     [ "fa-solid fa-sort" ];
+                                                     [ "fa-solid fa-sort pl-2" ];
                                                  ]
                                                [];
                                            ];
@@ -150,6 +168,12 @@ let users_index_layout (users : User_model.user list) current_time =
                                          [
                                            Unsafe.string_attrib "x-on:click"
                                              "sortByColumn";
+                                           Unsafe.string_attrib ":class"
+                                             "sortBy === 'Last Modified' ? \
+                                              'border-b-2 border-primary-500 \
+                                              text-primary-800 bg-primary-100' \
+                                              : 'hover:bg-primary-100 \
+                                              text-primary-600'";
                                            a_class
                                              [
                                                "px-6 py-3 text-start text-xs \
@@ -159,15 +183,15 @@ let users_index_layout (users : User_model.user list) current_time =
                                              ];
                                          ]
                                        [
-                                         txt "Last Modified";
                                          span
                                            ~a:[ a_class [ "px-2" ] ]
                                            [
+                                             txt "Last Modified";
                                              i
                                                ~a:
                                                  [
                                                    a_class
-                                                     [ "fa-solid fa-sort" ];
+                                                     [ "fa-solid fa-sort pl-2" ];
                                                  ]
                                                [];
                                            ];
