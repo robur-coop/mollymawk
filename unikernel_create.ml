@@ -5,9 +5,14 @@ let input_classes =
    ring-primary-200 focus:ring-primary-200 focus:ring-[1px] focus:outline-none"
 
 let cpu_multiselect cpu_usage_count =
+  let sorted_cpus =
+    cpu_usage_count |> List.sort (fun (_, c1) (_, c2) -> Int.compare c1 c2)
+  in
+  let default_cpu =
+    match sorted_cpus with (id, _) :: _ -> string_of_int id | [] -> ""
+  in
   let options =
-    cpu_usage_count
-    |> List.sort (fun (_, c1) (_, c2) -> Int.compare c1 c2)
+    sorted_cpus
     |> List.map (fun (id, cnt) ->
         Printf.sprintf "{id:%d, txt:'CPU %d (%d)'}" id id cnt)
     |> String.concat "," |> Printf.sprintf "[%s]"
@@ -25,10 +30,10 @@ let cpu_multiselect cpu_usage_count =
               Unsafe.string_attrib "x-on:click.outside" "open = false";
               Unsafe.string_attrib "x-data"
                 (Printf.sprintf
-                   "{ open: false, sel: [], opts: %s, toggle(id) { \
+                   "{ open: false, sel: [%s], opts: %s, toggle(id) { \
                     this.sel.includes(id) ? this.sel = this.sel.filter(x => \
                     x!==id) : this.sel.push(id) } }"
-                   options);
+                   default_cpu options);
             ]
           [
             div
