@@ -302,3 +302,119 @@ let compare_of_json = function
         (`Msg
            ("invalid json for builder_web diff, expected a dict: "
           ^ Utils.Json.to_string js))
+
+type device = { name : string; type_ : string }
+type device_manifest = { uuid : string; devices : device list }
+
+let device_of_json = function
+  | `Assoc xs -> (
+      match (Utils.Json.get "name" xs, Utils.Json.get "type" xs) with
+      | Some (`String name), Some (`String type_) -> Ok { name; type_ }
+      | _ -> Error (`Msg "Invalid device JSON"))
+  | _ -> Error (`Msg "Invalid device JSON format")
+
+let manifest_of_json body =
+  match Utils.Json.from_string body with
+  | Ok (`Assoc xs) -> (
+      match (Utils.Json.get "uuid" xs, Utils.Json.get "solo5_manifest" xs) with
+      | Some (`String uuid), Some (`Assoc manifest) -> (
+          match Utils.Json.get "devices" manifest with
+          | Some (`List devices) ->
+              let req_devices =
+                List.filter_map
+                  (fun d -> Result.to_option (device_of_json d))
+                  devices
+              in
+              Ok { uuid; devices = req_devices }
+          | Some _ -> Error (`Msg "solo5_manifest.devices is not a list")
+          | None -> Ok { uuid; devices = [] } (* No devices required *))
+      | Some (`String uuid), None -> Ok { uuid; devices = [] }
+      | _ -> Error (`Msg "Missing uuid or solo5_manifest"))
+  | _ -> Error (`Msg "Invalid manifest JSON format")
+
+let jobs_of_json = function
+  | `Assoc xs -> (
+      match Utils.Json.get "jobs_by_section" xs with
+      | Some (`Assoc sections) ->
+          let u1 =
+            match Utils.Json.get "Unikernels" sections with
+            | Some (`List l) -> l
+            | _ -> []
+          in
+          let u2 =
+            match
+              Utils.Json.get "Unikernels (with metrics reported to Influx)"
+                sections
+            with
+            | Some (`List l) -> l
+            | _ -> []
+          in
+          let combine = u1 @ u2 in
+          let jobs =
+            List.filter_map (function `String s -> Some s | _ -> None) combine
+          in
+          Ok jobs
+      | _ -> Error (`Msg "No jobs_by_section"))
+  | _ -> Error (`Msg "Invalid JSON root")
+
+let fetch_unikernel_jobs http_client =
+  let open Lwt.Syntax in
+  let* res = Utils.Http.send_http_request ~base_url http_client in
+  match res with
+  | Ok body -> (
+      match Utils.Json.from_string body with
+      | Ok json -> (
+          match jobs_of_json json with
+          | Ok jobs -> Lwt.return jobs
+          | Error (`Msg e) ->
+              Logs.err (fun m ->
+                  m "Failed to fetch builder jobs in deploy_form: %s" e);
+              Lwt.return [])
+      | Error (`Msg e) ->
+          Logs.err (fun m ->
+              m "Failed to fetch builder jobs in deploy_form: %s" e);
+          Lwt.return [])
+  | Error (`Msg msg) ->
+      Logs.err (fun m ->
+          m "Failed to fetch builder jobs in deploy_form: %s" msg);
+      Lwt.return []
+
+let fetch_latest_build_manifest http_client job_name =
+  let open Lwt.Syntax in
+  let* res =
+    Utils.Http.send_http_request
+      ~path:("/job/" ^ job_name ^ "/build/latest/")
+      ~base_url http_client
+  in
+  match res with
+  | Ok body -> Lwt.return (manifest_of_json body)
+  | Error (`Msg e) -> Lwt.return (Error (`Msg e))
+
+let fetch_unikernel_binary_image http_client ~job ~version push_chunks =
+  let open Lwt.Infix in
+  let url = base_url ^ "/job/" ^ job ^ "/build/" ^ version ^ "/main-binary" in
+  let f resp _acc chunk =
+    if Http_mirage_client.Status.is_successful resp.Http_mirage_client.status
+    then Lwt.return (push_chunks (Some chunk))
+    else Lwt.return_unit
+  in
+  Lwt.both
+    ( Http_mirage_client.request http_client ~follow_redirect:true url f ()
+    >>= fun e ->
+      push_chunks None;
+      match e with
+      | Error (`Msg err) -> Lwt.return (Error (`Msg err))
+      | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
+      | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
+      | Ok (resp, ()) ->
+          if
+            Http_mirage_client.Status.is_successful
+              resp.Http_mirage_client.status
+          then Lwt.return (Ok ())
+          else
+            Lwt.return
+              (Error
+                 (`Msg
+                    ("accessing " ^ url ^ " resulted in an error: "
+                    ^ Http_mirage_client.Status.to_string resp.status
+                    ^ " " ^ resp.reason))) )
