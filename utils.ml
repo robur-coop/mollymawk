@@ -455,6 +455,9 @@ let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
           Unsafe.string_attrib "x-data"
             ("{ fields: [], options: " ^ alpine_options ^ ", field_id: '" ^ id
            ^ "' }");
+          Unsafe.string_attrib "@populate-manifest.window"
+            "if ($event.detail[field_id]) fields = \
+             $event.detail[field_id].map(n => ({ title: n, selected: '' }))";
         ]
       [
         Unsafe.data "<template x-for='(field, index) in fields' :key='index'>";

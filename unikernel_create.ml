@@ -137,6 +137,29 @@ let cpu_multiselect cpu_usage_count =
           ];
       ])
 
+let builder_manifest_components (manifest : Builder_web.device_manifest) =
+  let extract_names target_type =
+    List.filter_map
+      (fun d ->
+        if d.Builder_web.type_ = target_type then
+          Some (`String d.Builder_web.name)
+        else None)
+      manifest.devices
+  in
+  let networks_json =
+    `List (extract_names "NET_BASIC") |> Yojson.Basic.to_string
+  in
+  let blocks_json =
+    `List (extract_names "BLOCK_BASIC") |> Yojson.Basic.to_string
+  in
+  Tyxml_html.(
+    script
+      (Unsafe.data
+         (Printf.sprintf
+            "window.dispatchEvent(new CustomEvent('populate-manifest', \
+             {detail: {network: %s, block: %s}}));"
+            networks_json blocks_json)))
+
 let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
     (blocks : (Vmm_core.Name.t * int * bool) list) albatross_instance =
   let total_memory_used = Utils.total_memory_used unikernels in

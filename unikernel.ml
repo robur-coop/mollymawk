@@ -1152,7 +1152,20 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let deploy_form stack store albatross _ (user : User_model.user) reqd =
+  let deploy_manifest stack store http_client job albatross _
+      (user : User_model.user) reqd =
+    Builder_web.fetch_latest_build_manifest http_client job >>= function
+    | Ok manifest ->
+        user_blocks_by_instance stack albatross user.name >>= fun blocks ->
+        let html_str =
+          Format.asprintf "%a" (Tyxml.Html.pp_elt ())
+            (Unikernel_create.builder_manifest_components manifest)
+        in
+        reply reqd ~content_type:"text/html" html_str `OK
+    | Error (`Msg err) -> reply reqd ~content_type:"text/html" err `Bad_request
+
+  let deploy_form stack store http_client albatross _ (user : User_model.user)
+      reqd =
     let now = Mirage_ptime.now () in
     user_unikernels_by_instance stack albatross user.name
     >>= fun unikernels_by_albatross_instance ->
@@ -3177,7 +3190,17 @@ struct
             check_meth `GET (fun () ->
                 authenticate store reqd
                   (albatross_instance "/unikernel/deploy"
-                     (deploy_form stack store)))
+                     (deploy_form stack store http_client)))
+        | "/api/deploy/manifest" ->
+            check_meth `GET (fun () ->
+                match get_query_parameter "job" with
+                | Ok job ->
+                    authenticate store reqd
+                      (albatross_instance req.H1.Request.target
+                         (deploy_manifest stack store http_client job))
+                | Error err ->
+                    Middleware.http_response ~api_meth:false ~data:(`String err)
+                      reqd `Bad_request)
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
