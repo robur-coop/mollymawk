@@ -1167,6 +1167,7 @@ struct
   let deploy_form stack store http_client albatross _ (user : User_model.user)
       reqd =
     let now = Mirage_ptime.now () in
+    Builder_web.fetch_unikernel_jobs http_client >>= fun builder_jobs ->
     user_unikernels_by_instance stack albatross user.name
     >>= fun unikernels_by_albatross_instance ->
     user_blocks_by_instance stack albatross user.name
@@ -1184,7 +1185,7 @@ struct
                        (Unikernel_create.unikernel_create_layout ~user_policy
                           unikernels_by_albatross_instance
                           blocks_by_albatross_instance
-                          albatross.configuration.name)
+                          albatross.configuration.name builder_jobs)
                      ~icon:"/images/robur.png" ())
                   ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                   `OK
