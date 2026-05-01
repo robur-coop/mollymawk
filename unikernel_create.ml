@@ -161,7 +161,8 @@ let builder_manifest_components (manifest : Builder_web.device_manifest) =
             networks_json blocks_json)))
 
 let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
-    (blocks : (Vmm_core.Name.t * int * bool) list) albatross_instance =
+    (blocks : (Vmm_core.Name.t * int * bool) list) albatross_instance
+    builder_jobs =
   let total_memory_used = Utils.total_memory_used unikernels in
   let cpu_usage_count = Utils.cpu_usage_count user_policy unikernels in
   let memory_left = user_policy.memory - total_memory_used in
@@ -169,8 +170,11 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
     section
       ~a:
         [
+          a_id "unikernel-create-form";
           a_class [ "col-span-7 p-4 bg-gray-50 my-1" ];
-          Unsafe.string_attrib "x-data" "{ advanced: false }";
+          Unsafe.string_attrib "x-data"
+            "{ advanced: false, deploy_mode: 'builder', solo5_options: true }";
+          Unsafe.string_attrib "@populate-manifest.window" "advanced = true;";
         ]
       [
         div
@@ -185,6 +189,74 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
           ~a:[ a_class [ "space-y-6 mt-8 p-6 max-w-5xl mx-auto" ] ]
           [
             p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
+            div
+              ~a:[ a_class [ "grid grid-cols-2 gap-4 mb-6" ] ]
+              [
+                label
+                  ~a:
+                    [
+                      a_class
+                        [
+                          "flex flex-col items-center justify-center p-6 \
+                           border-2 rounded-lg cursor-pointer \
+                           transition-colors duration-200";
+                        ];
+                      Unsafe.string_attrib ":class"
+                        "deploy_mode === 'builder' ? 'border-primary-500 \
+                         bg-primary-100 text-primary-700' : 'border-gray-200 \
+                         hover:bg-gray-50 bg-white'";
+                    ]
+                  [
+                    input
+                      ~a:
+                        [
+                          a_class [ "sr-only" ];
+                          a_input_type `Radio;
+                          a_name "deploy_mode";
+                          a_value "builder";
+                          Unsafe.string_attrib "x-model" "deploy_mode";
+                        ]
+                      ();
+                    span
+                      ~a:[ a_class [ "font-bold text-lg mb-2" ] ]
+                      [ txt "Robur Builder" ];
+                    span
+                      ~a:[ a_class [ "text-sm text-center opacity-80" ] ]
+                      [ txt "Deploy directly from builds.robur.coop" ];
+                  ];
+                label
+                  ~a:
+                    [
+                      a_class
+                        [
+                          "flex flex-col items-center justify-center p-6 \
+                           border-2 rounded-lg cursor-pointer \
+                           transition-colors duration-200";
+                        ];
+                      Unsafe.string_attrib ":class"
+                        "deploy_mode === 'manual' ? 'border-primary-500 \
+                         bg-primary-100 text-primary-700' : 'border-gray-200 \
+                         hover:bg-gray-50 bg-white'";
+                    ]
+                  [
+                    input
+                      ~a:
+                        [
+                          a_class [ "sr-only" ];
+                          a_input_type `Radio;
+                          a_name "deploy_mode";
+                          a_value "manual";
+                          Unsafe.string_attrib "x-model" "deploy_mode";
+                        ]
+                      ();
+                    span
+                      ~a:[ a_class [ "font-bold text-lg mb-2" ] ]
+                      [ txt "Manual Upload" ];
+                    span
+                      ~a:[ a_class [ "text-sm text-center opacity-80" ] ]
+                      [ txt "Upload a local unikernel binary image." ];
+                  ];
+              ];
             div
               ~a:[ a_class [ "grid grid-cols-2 gap-3" ] ]
               [
@@ -213,13 +285,23 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                 div
                   [
                     label ~a:[ a_class [ "block font-medium" ] ] [ txt "Type" ];
+                    p
+                      ~a:[ a_class [ "text-xs text-gray-500 mb-1" ] ]
+                      [
+                        txt
+                          "The type of unikernel to create (e.g. solo5 or \
+                           bhyve).";
+                      ];
                     select
                       ~a:
                         [
                           a_id "unikernel-type";
                           a_name "typ";
                           a_class [ input_classes ];
-                          a_onchange "toggleType()";
+                          Unsafe.string_attrib ":disabled"
+                            "deploy_mode === 'builder'";
+                          Unsafe.string_attrib "x-on:change"
+                            "solo5_options = ($event.target.value === 'solo5')";
                         ]
                       [
                         option
@@ -229,32 +311,92 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                       ];
                   ];
               ];
-            (* Solo5 options moved to basic view *)
             div
-              ~a:[ a_id "solo5-options"; a_class [ "space-y-4 pt-4" ] ]
+              ~a:[ Unsafe.string_attrib "x-show" "solo5_options" ]
+              [
+                label ~a:[ a_class [ "block font-medium" ] ] [ txt "Arguments" ];
+                p
+                  ~a:[ a_class [ "text-sm text-gray-500 mb-1" ] ]
+                  [
+                    txt "Write arguments seperated by a whitespace e.g ";
+                    code [ txt "--ip=127.0.0.1 --port=8180" ];
+                  ];
+                textarea
+                  ~a:
+                    [
+                      a_rows 2;
+                      a_name "arguments";
+                      a_id "unikernel-arguments";
+                      a_class [ input_classes ];
+                    ]
+                  (txt "");
+              ];
+            (* Builder Integration Container *)
+            div
+              ~a:
+                [
+                  a_id "builder-options";
+                  a_class [ "space-y-4 pt-4" ];
+                  Unsafe.string_attrib "x-show" "deploy_mode === 'builder'";
+                ]
               [
                 div
+                  ~a:
+                    [
+                      a_id "builder-web-container";
+                      a_class [ "mt-4 p-4 border rounded bg-white" ];
+                    ]
                   [
                     label
                       ~a:[ a_class [ "block font-medium" ] ]
-                      [ txt "Arguments" ];
-                    p
-                      ~a:[ a_class [ "text-sm text-gray-500 mb-1" ] ]
-                      [
-                        txt "Write arguments seperated by a whitespace e.g ";
-                        code [ txt "--ip=127.0.0.1 --port=8180" ];
-                      ];
-                    textarea
+                      [ txt "Select a reproducible build" ];
+                    select
                       ~a:
                         [
-                          a_rows 2;
-                          a_required ();
-                          a_name "arguments";
-                          a_id "unikernel-arguments";
+                          a_id "builder-job-select";
+                          a_name "job";
                           a_class [ input_classes ];
+                          Unsafe.string_attrib "hx-get"
+                            ("/api/deploy/manifest?instance="
+                            ^ Configuration.name_to_str albatross_instance);
+                          Unsafe.string_attrib "hx-indicator" "#manifest-loader";
+                          Unsafe.string_attrib "hx-swap" "afterend";
                         ]
-                      (txt "");
+                      (option ~a:[ a_value "" ] (txt "Select a build")
+                      :: List.map
+                           (fun job -> option ~a:[ a_value job ] (txt job))
+                           builder_jobs);
                   ];
+                div
+                  ~a:
+                    [
+                      a_id "manifest-loader";
+                      a_class
+                        [ "htmx-indicator inline-block font-semibold mt-2" ];
+                    ]
+                  [
+                    txt "Fetching...";
+                    i
+                      ~a:
+                        [
+                          a_class
+                            [
+                              "fa-solid fa-spinner animate-spin \
+                               text-primary-800";
+                            ];
+                        ]
+                      [];
+                  ];
+              ];
+            (* Solo5 options moved to basic view *)
+            div
+              ~a:
+                [
+                  a_id "solo5-options";
+                  a_class [ "space-y-4 pt-4" ];
+                  Unsafe.string_attrib "x-show" "deploy_mode === 'manual'";
+                ]
+              [
                 div
                   [
                     label
@@ -265,9 +407,10 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                         [
                           a_input_type `File;
                           a_name "binary";
-                          a_required ();
                           a_id "unikernel-binary";
                           a_class [ input_classes; "bg-white" ];
+                          Unsafe.string_attrib ":required"
+                            "deploy_mode === 'manual'";
                         ]
                       ();
                   ];
@@ -351,7 +494,8 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                   ~a:
                     [
                       a_id "bhyve-options";
-                      a_class [ "hidden grid grid-cols-2 gap-3" ];
+                      a_class [ "grid grid-cols-2 gap-3" ];
+                      Unsafe.string_attrib "x-show" "solo5_options === false";
                     ]
                   [
                     Utils.increment_or_decrement_ui ~id:"numcpus" ~max_value:16
@@ -477,21 +621,4 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                   ~content:(txt "Deploy") ~btn_type:`Primary_full ();
               ];
           ];
-        script
-          (txt
-             "function toggleType() { \n\
-             \  var type = document.getElementById('unikernel-type').value; \n\
-             \  var bhyveOpts = document.getElementById('bhyve-options'); \n\
-             \  var solo5Opts = document.getElementById('solo5-options'); \n\
-             \  var binInput = document.getElementById('unikernel-binary'); \n\n\
-             \  if (type === 'bhyve') { \n\
-             \    bhyveOpts.classList.remove('hidden'); \n\
-             \    solo5Opts.classList.add('hidden'); \n\
-             \    binInput.removeAttribute('required'); \n\
-             \  } else { \n\
-             \    bhyveOpts.classList.add('hidden'); \n\
-             \    solo5Opts.classList.remove('hidden'); \n\
-             \    binInput.setAttribute('required', ''); \n\
-             \  } \n\
-              }");
       ])
