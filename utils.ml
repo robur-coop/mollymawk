@@ -19,6 +19,32 @@ module Json = struct
         Error (`Msg ("invalid json for " ^ field ^ ": " ^ to_string json))
 end
 
+module Http = struct
+  let send_http_request ?(path = "") ~base_url http_client =
+    let open Lwt.Infix in
+    let url = base_url ^ path in
+    let body = "" in
+    let body_f _ acc chunk = Lwt.return (acc ^ chunk) in
+    Http_mirage_client.request http_client ~follow_redirect:true
+      ~headers:[ ("Accept", "application/json") ]
+      url body_f body
+    >>= function
+    | Error (`Msg err) -> Lwt.return (Error (`Msg err))
+    | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
+    | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
+    | Ok (resp, body) ->
+        if
+          Http_mirage_client.Status.is_successful resp.Http_mirage_client.status
+        then Lwt.return (Ok body)
+        else
+          Lwt.return
+            (Error
+               (`Msg
+                  ("accessing " ^ url ^ " resulted in an error: "
+                  ^ Http_mirage_client.Status.to_string resp.status
+                  ^ " " ^ resp.reason)))
+end
+
 module TimeHelper = struct
   let ptime_of_string (t_str : string) : (Ptime.t, [> `Msg of string ]) result =
     match Ptime.of_rfc3339 t_str with
