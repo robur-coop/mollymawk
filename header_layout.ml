@@ -14,6 +14,14 @@ let header ?(page_title = "Mollymawk") ~icon () =
             ]
           ();
         script ~a:[ a_src "/main.js" ] (txt "");
+        (* add htmx for seamless backend querying and updating of html DOM without page reload*)
+        script
+          ~a:
+            [
+              a_src
+                "https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js";
+            ]
+          (txt "");
         link ~rel:[ `Stylesheet ]
           ~href:"https://unpkg.com/aos@2.3.1/dist/aos.css" ();
         link ~rel:[ `Stylesheet ] ~href:"/style.css" ();
