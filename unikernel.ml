@@ -1409,38 +1409,8 @@ struct
     | Ok () -> (
         let data_stream, push_chunks = Lwt_stream.create () in
         let push () = Lwt_stream.get data_stream in
-        let url =
-          Builder_web.base_url ^ "/job/" ^ job ^ "/build/"
-          ^ to_be_updated_unikernel ^ "/main-binary"
-        in
-        let f resp _acc chunk =
-          if
-            Http_mirage_client.Status.is_successful
-              resp.Http_mirage_client.status
-          then Lwt.return (push_chunks (Some chunk))
-          else Lwt.return_unit
-        in
-
-        Lwt.both
-          ( Http_mirage_client.request http_client ~follow_redirect:true url f ()
-          >>= fun e ->
-            push_chunks None;
-            match e with
-            | Error (`Msg err) -> Lwt.return (Error (`Msg err))
-            | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
-            | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
-            | Ok (resp, ()) ->
-                if
-                  Http_mirage_client.Status.is_successful
-                    resp.Http_mirage_client.status
-                then Lwt.return (Ok ())
-                else
-                  Lwt.return
-                    (Error
-                       (`Msg
-                          ("accessing " ^ url ^ " resulted in an error: "
-                          ^ Http_mirage_client.Status.to_string resp.status
-                          ^ " " ^ resp.reason))) )
+        Builder_web.fetch_unikernel_binary_image http_client ~job
+          ~version:to_be_updated_unikernel push_chunks
           (force_create_unikernel stack albatross ~unikernel_name ~push
              unikernel_cfg user)
         >>= function
