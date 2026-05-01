@@ -383,6 +383,7 @@ let switch_button ~switch_id ~switch_label ?(initial_state = false) html_content
               ~a:
                 [
                   a_id switch_id;
+                  a_name switch_id;
                   a_input_type `Checkbox;
                   a_class [ "peer sr-only" ];
                   a_role [ "switch" ];
