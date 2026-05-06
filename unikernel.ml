@@ -2854,8 +2854,14 @@ struct
       Lwt.catch
         (fun () ->
           Logs.info (fun m -> m "Starting background update...");
-          run_background_update_check happy_eyeballs (Store.users store) stack
-            (Store.email store) !albatross_instances_ref http_client)
+          Lwt.choose
+            [
+              run_background_update_check happy_eyeballs (Store.users store)
+                stack (Store.email store) !albatross_instances_ref http_client;
+              ( Mirage_sleep.ns (Duration.of_hour 1) >|= fun () ->
+                Logs.warn (fun m ->
+                    m "Background update timed out after 1 hour") );
+            ])
         (fun exn ->
           Logs.err (fun m ->
               m "Background update failed: %s" (Printexc.to_string exn));
