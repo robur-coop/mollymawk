@@ -29,13 +29,7 @@ struct
   module Mailer = Sendmail_mirage.Make (S.TCP) (HE)
   module Dns = Dns_client_mirage.Make (S) (HE)
 
-  let recipient email =
-    match Colombe_emile.to_path email with
-    | Ok path -> [ Colombe.Forward_path.Forward_path path ]
-    | Error (`Msg e) ->
-        Logs.err (fun m ->
-            m "Type conversion failed for %s: %s" (Emile.to_string email) e);
-        []
+  let recipient email = Colombe_emile.to_path email
 
   let getaddrinfo dns : HE.getaddrinfo =
    fun record_type destination ->
@@ -69,18 +63,15 @@ struct
     let addr =
       match Ipaddr.to_v4 ip with Some addr -> addr | None -> Ipaddr.V4.any
     in
-    let sender =
-      match Colombe_emile.to_path email_config.from_email with
-      | Ok path -> Some path
-      | Error _ -> None
-    in
     let streamer =
       let s = Mrmime.Mt.to_stream email in
       fun () -> Lwt.return (s ())
     in
     let domain = Colombe.Domain.IPv4 addr in
     Mailer.sendmail ~domain ~destination:(`Ipaddrs [ ip ])
-      ~port:email_config.port happy_eyeballs sender (recipient user_email)
+      ~port:email_config.port happy_eyeballs
+      (Some (Colombe_emile.to_path email_config.from_email))
+      [ Colombe.Forward_path.Forward_path (recipient user_email) ]
       (fun () -> streamer ())
     >>= fun email ->
     match email with
