@@ -349,9 +349,18 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                     Utils.increment_or_decrement_ui ~id:"unikernel-memory"
                       ~max_value:memory_left ~min_value:0 ~default_value:32
                       ~figure_unit:"MB" ~step:32 ~label':"Memory" ();
-                    Utils.increment_or_decrement_ui ~id:"startup-priority"
-                      ~max_value:100 ~min_value:0 ~default_value:50
-                      ~label':"Startup Priority" ();
+                    div
+                      [
+                        Utils.increment_or_decrement_ui ~id:"startup-priority"
+                          ~max_value:100 ~min_value:0 ~default_value:50
+                          ~label':"Startup Priority" ();
+                        small
+                          [
+                            txt
+                              "The order to start unkernels. Smallest number \
+                               is started first.";
+                          ];
+                      ];
                   ];
                 (* BHyve Specific Options *)
                 div
