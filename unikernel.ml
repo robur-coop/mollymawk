@@ -31,8 +31,8 @@ struct
 
   let recipient email =
     match Colombe_emile.to_path email with
-    | Ok path -> [ Colombe.Forward_path.Forward_path path ]
-    | Error (`Msg e) ->
+    | path -> [ Colombe.Forward_path.Forward_path path ]
+    | exception Invalid_argument e ->
         Logs.err (fun m ->
             m "Type conversion failed for %s: %s" (Emile.to_string email) e);
         []
@@ -71,8 +71,8 @@ struct
     in
     let sender =
       match Colombe_emile.to_path email_config.from_email with
-      | Ok path -> Some path
-      | Error _ -> None
+      | path -> Some path
+      | exception Invalid_argument _ -> None
     in
     let streamer =
       let s = Mrmime.Mt.to_stream email in
@@ -2854,8 +2854,14 @@ struct
       Lwt.catch
         (fun () ->
           Logs.info (fun m -> m "Starting background update...");
-          run_background_update_check happy_eyeballs (Store.users store) stack
-            (Store.email store) !albatross_instances_ref http_client)
+          Lwt.choose
+            [
+              run_background_update_check happy_eyeballs (Store.users store)
+                stack (Store.email store) !albatross_instances_ref http_client;
+              ( Mirage_sleep.ns (Duration.of_hour 1) >|= fun () ->
+                Logs.warn (fun m ->
+                    m "Background update timed out after 1 hour") );
+            ])
         (fun exn ->
           Logs.err (fun m ->
               m "Background update failed: %s" (Printexc.to_string exn));
