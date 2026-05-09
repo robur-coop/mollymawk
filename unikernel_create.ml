@@ -206,6 +206,36 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                       ];
                   ];
               ];
+            hr ();
+            div
+              [
+                label
+                  ~a:[ a_class [ "block font-medium" ] ]
+                  [ txt "Network Interfaces" ];
+                Utils.dynamic_dropdown_form
+                  (Vmm_core.String_set.elements user_policy.bridges)
+                  ~get_label:Fun.id ~get_value:Fun.id ~id:"network" ();
+              ];
+            hr ();
+            div
+              [
+                label
+                  ~a:[ a_class [ "block font-medium" ] ]
+                  [ txt "Block devices" ];
+                Utils.dynamic_dropdown_form blocks
+                  ~get_label:(fun (name, size, used) ->
+                    Option.value ~default:""
+                      (Option.map Vmm_core.Name.Label.to_string
+                         (Vmm_core.Name.name name))
+                    ^ " - " ^ Int.to_string size ^ "MB (used: "
+                    ^ Bool.to_string used ^ ")")
+                  ~get_value:(fun (name, _, _) ->
+                    Option.value ~default:""
+                      (Option.map Vmm_core.Name.Label.to_string
+                         (Vmm_core.Name.name name)))
+                  ~id:"block" ~manual_entry:true ();
+              ];
+            hr ();
             (* Solo5 options moved to basic view *)
             div
               ~a:[ a_id "solo5-options"; a_class [ "space-y-4 pt-4" ] ]
@@ -349,35 +379,6 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                             ]
                           ();
                       ];
-                  ];
-                hr ();
-                div
-                  [
-                    label
-                      ~a:[ a_class [ "block font-medium" ] ]
-                      [ txt "Network Interfaces" ];
-                    Utils.dynamic_dropdown_form
-                      (Vmm_core.String_set.elements user_policy.bridges)
-                      ~get_label:Fun.id ~get_value:Fun.id ~id:"network" ();
-                  ];
-                hr ();
-                div
-                  [
-                    label
-                      ~a:[ a_class [ "block font-medium" ] ]
-                      [ txt "Block devices" ];
-                    Utils.dynamic_dropdown_form blocks
-                      ~get_label:(fun (name, size, used) ->
-                        Option.value ~default:""
-                          (Option.map Vmm_core.Name.Label.to_string
-                             (Vmm_core.Name.name name))
-                        ^ " - " ^ Int.to_string size ^ "MB (used: "
-                        ^ Bool.to_string used ^ ")")
-                      ~get_value:(fun (name, _, _) ->
-                        Option.value ~default:""
-                          (Option.map Vmm_core.Name.Label.to_string
-                             (Vmm_core.Name.name name)))
-                      ~id:"block" ~manual_entry:true ();
                   ];
                 hr ();
                 div
