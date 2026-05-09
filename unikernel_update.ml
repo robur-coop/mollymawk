@@ -387,7 +387,7 @@ let opam_version_table (packages : Builder_web.package_version_diff list) =
                             text-primary-600 uppercase";
                          ];
                      ]
-                   [ txt "Current Build" ];
+                   [ txt "Deployed Unikernel" ];
                  th
                    ~a:
                      [
@@ -555,7 +555,7 @@ let unikernel_update_layout ~unikernel_name ~instance_name unikernel
                           [
                             p
                               ~a:[ a_class [ "text-xl font-semibold mt-4" ] ]
-                              [ txt "Current Build" ];
+                              [ txt "Deployed Unikernel" ];
                             build_table build_comparison.left;
                             hr ();
                             p
