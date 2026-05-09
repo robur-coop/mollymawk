@@ -358,8 +358,8 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                       [ txt "Network Interfaces" ];
                     Utils.dynamic_dropdown_form
                       (Vmm_core.String_set.elements user_policy.bridges)
-                      ~get_label:(fun bridge -> bridge)
-                      ~get_value:(fun bridge -> bridge)
+                      ~get_label:Fun.id
+                      ~get_value:Fun.id
                       ~id:"network" ();
                   ];
                 hr ();
