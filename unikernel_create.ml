@@ -174,7 +174,6 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
           a_class [ "col-span-7 p-4 bg-gray-50 my-1" ];
           Unsafe.string_attrib "x-data"
             "{ advanced: false, deploy_mode: 'builder', solo5_options: true }";
-          Unsafe.string_attrib "@populate-manifest.window" "advanced = true;";
         ]
       [
         div
@@ -311,26 +310,6 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                       ];
                   ];
               ];
-            div
-              ~a:[ Unsafe.string_attrib "x-show" "solo5_options" ]
-              [
-                label ~a:[ a_class [ "block font-medium" ] ] [ txt "Arguments" ];
-                p
-                  ~a:[ a_class [ "text-sm text-gray-500 mb-1" ] ]
-                  [
-                    txt "Write arguments seperated by a whitespace e.g ";
-                    code [ txt "--ip=127.0.0.1 --port=8180" ];
-                  ];
-                textarea
-                  ~a:
-                    [
-                      a_rows 2;
-                      a_name "arguments";
-                      a_id "unikernel-arguments";
-                      a_class [ input_classes ];
-                    ]
-                  (txt "");
-              ];
             (* Builder Integration Container *)
             div
               ~a:
@@ -388,14 +367,27 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                       [];
                   ];
               ];
-            (* Solo5 options moved to basic view *)
             div
-              ~a:
-                [
-                  a_id "solo5-options";
-                  a_class [ "space-y-4 pt-4" ];
-                  Unsafe.string_attrib "x-show" "deploy_mode === 'manual'";
-                ]
+              ~a:[ Unsafe.string_attrib "x-show" "solo5_options" ]
+              [
+                label ~a:[ a_class [ "block font-medium" ] ] [ txt "Arguments" ];
+                p
+                  ~a:[ a_class [ "text-sm text-gray-500 mb-1" ] ]
+                  [
+                    txt "Write arguments seperated by a whitespace e.g ";
+                    code [ txt "--ip=127.0.0.1 --port=8180" ];
+                  ];
+                textarea
+                  ~a:
+                    [
+                      a_rows 2;
+                      a_name "arguments";
+                      a_id "unikernel-arguments";
+                      a_class [ input_classes ];
+                    ]
+                  (txt "");
+              ];
+            (* Solo5 options moved to basic view *)
             hr ();
             div
               [
@@ -428,7 +420,12 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
             hr ();
             (* Solo5 options moved to basic view *)
             div
-              ~a:[ a_id "solo5-options"; a_class [ "space-y-4 pt-4" ] ]
+              ~a:
+                [
+                  a_id "solo5-options";
+                  a_class [ "space-y-4 pt-4" ];
+                  Unsafe.string_attrib "x-show" "deploy_mode === 'manual'";
+                ]
               [
                 div
                   [
@@ -444,6 +441,10 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                           a_class [ input_classes; "bg-white" ];
                           Unsafe.string_attrib ":required"
                             "deploy_mode === 'manual'";
+                        ]
+                      ();
+                    label
+                      ~a:[ a_class [ "block font-medium" ] ]
                       [ txt "Arguments" ];
                     p
                       ~a:[ a_class [ "text-sm text-gray-500 mb-1" ] ]
@@ -460,7 +461,7 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                           a_id "unikernel-arguments";
                           a_class [ input_classes ];
                         ]
-                      ();
+                      (txt "");
                   ];
               ];
             div
