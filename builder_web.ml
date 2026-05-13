@@ -313,53 +313,74 @@ let device_of_json = function
       | _ -> Error (`Msg "Invalid device JSON"))
   | _ -> Error (`Msg "Invalid device JSON format")
 
-let manifest_of_json body =
-  match Utils.Json.from_string body with
-  | Ok (`Assoc xs) -> (
-      match (Utils.Json.get "uuid" xs, Utils.Json.get "solo5_manifest" xs) with
-      | Some (`String uuid), Some (`Assoc manifest) -> (
-          match Utils.Json.get "devices" manifest with
-          | Some (`List devices) ->
-              let req_devices =
-                List.filter_map
-                  (fun d -> Result.to_option (device_of_json d))
-                  devices
-              in
-              Ok { uuid; devices = req_devices }
-          | Some _ -> Error (`Msg "solo5_manifest.devices is not a list")
-          | None -> Ok { uuid; devices = [] } (* No devices required *))
-      | Some (`String uuid), None -> Ok { uuid; devices = [] }
-      | _ -> Error (`Msg "Missing uuid or solo5_manifest"))
-  | _ -> Error (`Msg "Invalid manifest JSON format")
+let manifest_of_json (`Assoc xs) =
+  match (Utils.Json.get "uuid" xs, Utils.Json.get "solo5_manifest" xs) with
+  | Some (`String uuid), Some (`Assoc manifest) -> (
+      match Utils.Json.get "devices" manifest with
+      | Some (`List devices) ->
+          let req_devices =
+            List.fold_left
+              (fun acc d ->
+                match (acc, device_of_json d) with
+                | Ok acc, Ok d -> Ok (d :: acc)
+                | Error e, _ -> Error e
+                | _, Error e -> Error e)
+              (Ok []) devices
+            |> Result.map List.rev
+          in
+          Result.map (fun devices -> { uuid; devices }) req_devices
+      | Some _ -> Error (`Msg "solo5_manifest.devices is not a list")
+      | None -> Ok { uuid; devices = [] } (* No devices required *))
+  | Some (`String uuid), None -> Ok { uuid; devices = [] }
+  | _ -> Error (`Msg "Missing uuid or solo5_manifest")
+
+type job = { name : string; synopsis : string; manifest : device_manifest }
+
+let job_of_json = function
+  | `Assoc xs -> (
+      let name =
+        match Utils.Json.get "name" xs with Some (`String s) -> s | _ -> ""
+      in
+      let synopsis =
+        match Utils.Json.get "synopsis" xs with
+        | Some (`String s) -> s
+        | _ -> ""
+      in
+      match Utils.Json.get "latest" xs with
+      | Some (`Assoc latest) -> (
+          match Utils.Json.get "solo5_abi" latest with
+          | Some (`Assoc abi) -> (
+              match Utils.Json.get "target" abi with
+              | Some (`String "hvt") -> (
+                  match manifest_of_json (`Assoc latest) with
+                  | Ok manifest -> Ok (Some { name; synopsis; manifest })
+                  | Error e -> Error e)
+              | _ -> Ok None)
+          | _ -> Ok None)
+      | _ -> Ok None)
+  | _ -> Error (`Msg "Invalid job JSON")
 
 let jobs_of_json = function
   | `Assoc xs -> (
-      match Utils.Json.get "jobs_by_section" xs with
-      | Some (`Assoc sections) ->
-          let u1 =
-            match Utils.Json.get "Unikernels" sections with
-            | Some (`List l) -> l
-            | _ -> []
-          in
-          let u2 =
-            match
-              Utils.Json.get "Unikernels (with metrics reported to Influx)"
-                sections
-            with
-            | Some (`List l) -> l
-            | _ -> []
-          in
-          let combine = u1 @ u2 in
-          let jobs =
-            List.filter_map (function `String s -> Some s | _ -> None) combine
-          in
-          Ok jobs
-      | _ -> Error (`Msg "No jobs_by_section"))
+      match Utils.Json.get "jobs" xs with
+      | Some (`List jobs_json) ->
+          List.fold_left
+            (fun acc j ->
+              match (acc, job_of_json j) with
+              | Ok acc, Ok (Some job) -> Ok (job :: acc)
+              | Ok acc, Ok None -> Ok acc
+              | Error e, _ -> Error e
+              | _, Error e -> Error e)
+            (Ok []) jobs_json
+          |> Result.map List.rev
+      | _ -> Error (`Msg "No jobs array found"))
   | _ -> Error (`Msg "Invalid JSON root")
 
 let fetch_unikernel_jobs http_client =
   let open Lwt.Syntax in
-  let* res = Utils.Http.send_http_request ~base_url http_client in
+  let* res =
+    Utils.Http.send_http_request ~path:"/all-builds" ~base_url http_client
+  in
   match res with
   | Ok body -> (
       match Utils.Json.from_string body with
@@ -367,28 +388,14 @@ let fetch_unikernel_jobs http_client =
           match jobs_of_json json with
           | Ok jobs -> Lwt.return jobs
           | Error (`Msg e) ->
-              Logs.err (fun m ->
-                  m "Failed to fetch builder jobs in deploy_form: %s" e);
+              Logs.err (fun m -> m "Failed to fetch jobs: %s" e);
               Lwt.return [])
       | Error (`Msg e) ->
-          Logs.err (fun m ->
-              m "Failed to fetch builder jobs in deploy_form: %s" e);
+          Logs.err (fun m -> m "Failed to fetch jobs: %s" e);
           Lwt.return [])
   | Error (`Msg msg) ->
-      Logs.err (fun m ->
-          m "Failed to fetch builder jobs in deploy_form: %s" msg);
+      Logs.err (fun m -> m "Failed to fetch jobs: %s" msg);
       Lwt.return []
-
-let fetch_latest_build_manifest http_client job_name =
-  let open Lwt.Syntax in
-  let* res =
-    Utils.Http.send_http_request
-      ~path:("/job/" ^ job_name ^ "/build/latest/")
-      ~base_url http_client
-  in
-  match res with
-  | Ok body -> Lwt.return (manifest_of_json body)
-  | Error (`Msg e) -> Lwt.return (Error (`Msg e))
 
 let fetch_unikernel_binary_image http_client ~job ~version push_chunks =
   let open Lwt.Infix in
