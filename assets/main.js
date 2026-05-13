@@ -1362,3 +1362,38 @@ function areCharactersValid(s) {
 	}
 	return true;
 }
+
+window.mapFields = function (field_id, detail, options) {
+	if (!detail || !detail[field_id]) return [];
+	let reqs = detail[field_id];
+	if (field_id === 'network') {
+		let unassigned = [...options];
+		let fields = reqs.map(n => {
+			let idx = unassigned.findIndex(o => o.value === n || o.label === n);
+			if (idx !== -1) {
+				let match = unassigned.splice(idx, 1)[0];
+				return { title: n, selected: match.value };
+			}
+			return { title: n, selected: '' };
+		});
+		if (reqs.length === 1 && options.length === 1 && fields[0].selected === '') {
+			fields[0].selected = options[0].value;
+		} else if (reqs.length === options.length && unassigned.length === 1) {
+			let unmatched = fields.find(f => f.selected === '');
+			if (unmatched) unmatched.selected = unassigned[0].value;
+		}
+		return fields;
+	} else if (field_id === 'block') {
+		let job_name = detail.job_name;
+		return reqs.map(n => {
+			let exact = options.find(o => o.value === n);
+			if (exact) return { title: n, selected: exact.value };
+			if (job_name) {
+				let job_match = options.find(o => o.value === job_name || o.value === job_name + '-data');
+				if (job_match) return { title: n, selected: job_match.value };
+			}
+			return { title: n, selected: '' };
+		});
+	}
+	return reqs.map(n => ({ title: n, selected: '' }));
+};
