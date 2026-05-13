@@ -463,31 +463,27 @@ async function deployUnikernel(albatross_instance) {
 		if (!networkData || !blockData) {
 			return;
 		}
-		if (deploy_mode !== 'builder') {
-			if (typ === 'solo5' && !binary) {
-				showError(formAlert, "Please upload the unikernel image");
-				return;
-			}
+		if (deploy_mode === 'manual' && !binary) {
+			showError(formAlert, "Please upload the unikernel image");
+			return;
 		}
 
 		buttonLoading(deployButton, true, "Deploying...");
 
 		let specificConfig = {};
 
-		if (deploy_mode !== 'builder') {
-			if (typ === 'solo5') {
-				const argumentsString = document.getElementById("unikernel-arguments").value.trim();
-				specificConfig = {
-					arguments: argumentsString ? argumentsString.split(/\s+/) : []
-				};
-			} else if (typ === 'bhyve') {
-				const vcpus = document.getElementById("numcpus").innerText;
-				const bootPartition = document.getElementById("linux-boot-partition").value;
-				specificConfig = {
-					vcpus: Number(vcpus),
-					linux_boot_partition: bootPartition === "" ? null : bootPartition
-				};
-			}
+		if (typ === 'solo5') {
+			const argumentsString = document.getElementById("unikernel-arguments").value.trim();
+			specificConfig = {
+				arguments: argumentsString ? argumentsString.split(/\s+/) : []
+			};
+		} else if (typ === 'bhyve') {
+			const vcpus = document.getElementById("numcpus").innerText;
+			const bootPartition = document.getElementById("linux-boot-partition").value;
+			specificConfig = {
+				vcpus: Number(vcpus),
+				linux_boot_partition: bootPartition === "" ? null : bootPartition
+			};
 		}
 
 		const unikernel_config = {
