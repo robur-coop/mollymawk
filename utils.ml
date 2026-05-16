@@ -457,9 +457,9 @@ let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
             ("{ fields: [], options: " ^ alpine_options ^ ", field_id: '" ^ id
            ^ "' }");
           Unsafe.string_attrib "@populate-manifest.window"
-            "if (window.mapFields && $event.detail[field_id]) fields = \
-             window.mapFields(field_id, $event.detail, options); else if \
-             (!$event.detail[field_id]) fields = [];";
+            ("if (window.mapFields && $event.detail[field_id]) fields = \
+              window.mapFields(field_id, $event.detail, " ^ alpine_options
+           ^ "); else if (!$event.detail[field_id]) fields = [];");
         ]
       [
         Unsafe.data "<template x-for='(field, index) in fields' :key='index'>";
@@ -581,13 +581,12 @@ let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
                                 ];
                               Unsafe.string_attrib ":id"
                                 "field_id + '-select-' + index";
-                              Unsafe.string_attrib "x-model" "field.selected";
                             ]
                           [
                             Unsafe.data
                               {|
                     <template x-for="option in options" :key="option.value">
-                      <option :value="option.value" x-text="option.label"></option>
+                      <option :value="option.value" x-text="option.label" :selected="option.value === field.selected"></option>
                     </template>
                   |};
                           ];
