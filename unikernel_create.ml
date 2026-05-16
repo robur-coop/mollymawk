@@ -214,12 +214,14 @@ let builder_source_section builder_jobs available_networks free_space
                 a_class [ input_classes ];
                 Unsafe.string_attrib "@change"
                   "let job = window.builderJobs[$event.target.value]; if(job) \
-                   { selectedSynopsis = job.synopsis; let d = { network: \
-                   job.network, block: job.block, job_name: \
-                   $event.target.value }; window.dispatchEvent(new \
-                   CustomEvent('populate-manifest', {detail: d})); } else { \
-                   selectedSynopsis = ''; window.dispatchEvent(new \
-                   CustomEvent('populate-manifest', {detail: {}})); }";
+                   { selectedSynopsis = \
+                   job.synopsis;document.getElementById('unikernel-name').value \
+                   = $event.target.value;let d = { network: job.network, \
+                   block: job.block, job_name: $event.target.value }; \
+                   window.dispatchEvent(new CustomEvent('populate-manifest', \
+                   {detail: d})); } else { selectedSynopsis = ''; \
+                   window.dispatchEvent(new CustomEvent('populate-manifest', \
+                   {detail: {}})); }";
               ]
             (option ~a:[ a_value "" ] (txt "Select a build")
             :: List.map
