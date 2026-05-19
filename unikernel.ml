@@ -1899,10 +1899,6 @@ struct
                                 `Unikernel_cmd (`Unikernel_force_create cfg)
                               else `Unikernel_cmd (`Unikernel_create cfg)
                             in
-                            let is_builder =
-                              Option.value ~default:"manual" !deploy_mode_ref
-                              = "builder"
-                            in
                             let execute_albatross_cmd push =
                               Albatross_state.query stack albatross
                                 ~domain:user.name ~name:unikernel_name ~push
@@ -1927,7 +1923,7 @@ struct
                                         ("Albatross JSON Error: " ^ err_msg)
                                         `Internal_server_error)
                             in
-                            if is_builder then
+                            if String.equal "builder" deploy_mode then
                               match !builder_job_ref with
                               | Some job ->
                                   let data_stream, push_chunks =
