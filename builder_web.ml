@@ -342,7 +342,7 @@ let job_of_json = function
       let* name =
         match Utils.Json.get "name" xs with
         | Some (`String s) -> Ok s
-        | _ -> Error (`Msg "No name in the json or name is not a string")
+        | _ -> Error (`Msg "No name in the job json or name is not a string")
       in
       let* synopsis =
         match Utils.Json.get "synopsis" xs with
