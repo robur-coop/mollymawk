@@ -1365,7 +1365,7 @@ window.mapFields = function (field_id, detail, options) {
 	if (field_id === 'network') {
 		let unassigned = [...options];
 		let fields = reqs.map(n => {
-			let idx = unassigned.findIndex(o => o.value === n || o.label === n);
+			let idx = unassigned.findIndex(o => o.value === n);
 			if (idx !== -1) {
 				let match = unassigned.splice(idx, 1)[0];
 				return { title: n, selected: match.value };
