@@ -339,13 +339,16 @@ type job = { name : string; synopsis : string; manifest : device_manifest }
 
 let job_of_json = function
   | `Assoc xs -> (
-      let name =
-        match Utils.Json.get "name" xs with Some (`String s) -> s | _ -> ""
+      let* name =
+        match Utils.Json.get "name" xs with
+        | Some (`String s) -> Ok s
+        | _ -> Error (`Msg "No name in the json or name is not a string")
       in
-      let synopsis =
+      let* synopsis =
         match Utils.Json.get "synopsis" xs with
-        | Some (`String s) -> s
-        | _ -> ""
+        | Some (`String s) -> Ok s
+        | _ ->
+            Error (`Msg "no synopsis in the json or synopsis is not a string")
       in
       match Utils.Json.get "latest" xs with
       | Some (`Assoc latest) -> (
@@ -356,9 +359,22 @@ let job_of_json = function
                   match manifest_of_json (`Assoc latest) with
                   | Ok manifest -> Ok (Some { name; synopsis; manifest })
                   | Error e -> Error e)
-              | _ -> Ok None)
-          | _ -> Ok None)
-      | _ -> Ok None)
+              | _ ->
+                  Logs.info (fun i ->
+                      i
+                        "builder_web.jobs_of_json: no valid target type. \
+                         requires hvt unikernels.");
+                  Ok None)
+          | _ ->
+              Logs.info (fun i ->
+                  i
+                    "builder_web.jobs_of_json: no solo5_abi section in the \
+                     json.");
+              Ok None)
+      | _ ->
+          Logs.info (fun i ->
+              i "builder_web.jobs_of_json: no latest section in the json.");
+          Ok None)
   | _ -> Error (`Msg "Invalid job JSON")
 
 let jobs_of_json = function
@@ -389,13 +405,15 @@ let fetch_unikernel_jobs http_client =
           match jobs_of_json json with
           | Ok jobs -> Lwt.return jobs
           | Error (`Msg e) ->
-              Logs.err (fun m -> m "Failed to fetch jobs: %s" e);
+              Logs.err (fun m -> m "jobs_of_json: Failed to fetch jobs: %s" e);
               Lwt.return [])
       | Error (`Msg e) ->
-          Logs.err (fun m -> m "Failed to fetch jobs: %s" e);
+          Logs.err (fun m ->
+              m "utils.json.from_string: Failed to fetch jobs: %s" e);
           Lwt.return [])
   | Error (`Msg msg) ->
-      Logs.err (fun m -> m "Failed to fetch jobs: %s" msg);
+      Logs.err (fun m ->
+          m "utils.http.send_http_request: Failed to fetch jobs: %s" msg);
       Lwt.return []
 
 let fetch_unikernel_binary_image http_client ~job ~version push_chunks =
