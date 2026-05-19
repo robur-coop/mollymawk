@@ -361,19 +361,19 @@ let job_of_json = function
                   | Ok manifest -> Ok (Some { name; synopsis; manifest })
                   | Error e -> Error e)
               | _ ->
-                  Logs.info (fun i ->
+                  Logs.debug (fun i ->
                       i
                         "builder_web.jobs_of_json: no valid target type. \
-                         requires hvt unikernels.");
+                         requires hvt or spt unikernels.");
                   Ok None)
           | _ ->
-              Logs.info (fun i ->
+              Logs.debug (fun i ->
                   i
                     "builder_web.jobs_of_json: no solo5_abi section in the \
                      json.");
               Ok None)
       | _ ->
-          Logs.info (fun i ->
+          Logs.debug (fun i ->
               i "builder_web.jobs_of_json: no latest section in the json.");
           Ok None)
   | _ -> Error (`Msg "Invalid job JSON")
@@ -406,14 +406,14 @@ let fetch_unikernel_jobs http_client =
           match jobs_of_json json with
           | Ok jobs -> Lwt.return jobs
           | Error (`Msg e) ->
-              Logs.err (fun m -> m "jobs_of_json: Failed to fetch jobs: %s" e);
+              Logs.info (fun m -> m "jobs_of_json: Failed to fetch jobs: %s" e);
               Lwt.return [])
       | Error (`Msg e) ->
-          Logs.err (fun m ->
+          Logs.info (fun m ->
               m "utils.json.from_string: Failed to fetch jobs: %s" e);
           Lwt.return [])
   | Error (`Msg msg) ->
-      Logs.err (fun m ->
+      Logs.info (fun m ->
           m "utils.http.send_http_request: Failed to fetch jobs: %s" msg);
       Lwt.return []
 
