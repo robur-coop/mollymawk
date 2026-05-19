@@ -258,7 +258,10 @@ let builder_source_section builder_jobs available_networks free_space
                        ]
                      else []
                    in
-                   option ~a:(a_value j.name :: disabled_attr) (txt j.name))
+                   option
+                     ~a:(a_value j.name :: disabled_attr)
+                     (txt
+                        (Fmt.str "%s (%s.%d)" j.name j.abi_target j.abi_version)))
                  builder_jobs);
         ];
       div

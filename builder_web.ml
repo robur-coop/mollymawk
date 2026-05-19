@@ -335,7 +335,13 @@ let manifest_of_json (`Assoc xs) =
   | Some (`String uuid), None -> Ok { uuid; devices = [] }
   | _ -> Error (`Msg "Missing uuid or solo5_manifest")
 
-type job = { name : string; synopsis : string; manifest : device_manifest }
+type job = {
+  name : string;
+  synopsis : string;
+  manifest : device_manifest;
+  abi_target : string;
+  abi_version : int;
+}
 
 let job_of_json = function
   | `Assoc xs -> (
@@ -355,10 +361,15 @@ let job_of_json = function
       | Some (`Assoc latest) -> (
           match Utils.Json.get "solo5_abi" latest with
           | Some (`Assoc abi) -> (
-              match Utils.Json.get "target" abi with
-              | Some (`String ("hvt" | "spt")) -> (
+              match Utils.Json.(get "target" abi, get "version" abi) with
+              | Some (`String abi_target), Some (`Int abi_version)
+                when String.equal abi_target "hvt"
+                     || String.equal abi_target "spt" -> (
                   match manifest_of_json (`Assoc latest) with
-                  | Ok manifest -> Ok (Some { name; synopsis; manifest })
+                  | Ok manifest ->
+                      Ok
+                        (Some
+                           { name; synopsis; manifest; abi_target; abi_version })
                   | Error e -> Error e)
               | _ ->
                   Logs.debug (fun i ->
