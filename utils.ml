@@ -19,6 +19,32 @@ module Json = struct
         Error (`Msg ("invalid json for " ^ field ^ ": " ^ to_string json))
 end
 
+module Http = struct
+  let send_http_request ?(path = "") ~base_url http_client =
+    let open Lwt.Infix in
+    let url = base_url ^ path in
+    let body = "" in
+    let body_f _ acc chunk = Lwt.return (acc ^ chunk) in
+    Http_mirage_client.request http_client ~follow_redirect:true
+      ~headers:[ ("Accept", "application/json") ]
+      url body_f body
+    >>= function
+    | Error (`Msg err) -> Lwt.return (Error (`Msg err))
+    | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
+    | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
+    | Ok (resp, body) ->
+        if
+          Http_mirage_client.Status.is_successful resp.Http_mirage_client.status
+        then Lwt.return (Ok body)
+        else
+          Lwt.return
+            (Error
+               (`Msg
+                  ("accessing " ^ url ^ " resulted in an error: "
+                  ^ Http_mirage_client.Status.to_string resp.status
+                  ^ " " ^ resp.reason)))
+end
+
 module TimeHelper = struct
   let ptime_of_string (t_str : string) : (Ptime.t, [> `Msg of string ]) result =
     match Ptime.of_rfc3339 t_str with
@@ -357,6 +383,7 @@ let switch_button ~switch_id ~switch_label ?(initial_state = false) html_content
               ~a:
                 [
                   a_id switch_id;
+                  a_name switch_id;
                   a_input_type `Checkbox;
                   a_class [ "peer sr-only" ];
                   a_role [ "switch" ];
@@ -429,6 +456,10 @@ let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
           Unsafe.string_attrib "x-data"
             ("{ fields: [], options: " ^ alpine_options ^ ", field_id: '" ^ id
            ^ "' }");
+          Unsafe.string_attrib "@populate-manifest.window"
+            ("if (window.mapFields && $event.detail[field_id]) fields = \
+              window.mapFields(field_id, $event.detail, " ^ alpine_options
+           ^ "); else if (!$event.detail[field_id]) fields = [];");
         ]
       [
         Unsafe.data "<template x-for='(field, index) in fields' :key='index'>";
@@ -555,7 +586,7 @@ let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
                             Unsafe.data
                               {|
                     <template x-for="option in options" :key="option.value">
-                      <option :value="option.value" x-text="option.label"></option>
+                      <option :value="option.value" x-text="option.label" :selected="option.value === field.selected"></option>
                     </template>
                   |};
                           ];

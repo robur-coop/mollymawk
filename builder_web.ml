@@ -302,3 +302,156 @@ let compare_of_json = function
         (`Msg
            ("invalid json for builder_web diff, expected a dict: "
           ^ Utils.Json.to_string js))
+
+type device = Network of string | Block of string
+type device_manifest = { uuid : string; devices : device list }
+
+let device_of_json = function
+  | `Assoc xs -> (
+      match (Utils.Json.get "name" xs, Utils.Json.get "type" xs) with
+      | Some (`String name), Some (`String "NET_BASIC") -> Ok (Network name)
+      | Some (`String name), Some (`String "BLOCK_BASIC") -> Ok (Block name)
+      | _ -> Error (`Msg "Invalid device JSON"))
+  | _ -> Error (`Msg "Invalid device JSON format")
+
+let manifest_of_json (`Assoc xs) =
+  match (Utils.Json.get "uuid" xs, Utils.Json.get "solo5_manifest" xs) with
+  | Some (`String uuid), Some (`Assoc manifest) -> (
+      match Utils.Json.get "devices" manifest with
+      | Some (`List devices) ->
+          let req_devices =
+            List.fold_left
+              (fun acc d ->
+                match (acc, device_of_json d) with
+                | Ok acc, Ok d -> Ok (d :: acc)
+                | Error e, _ -> Error e
+                | _, Error e -> Error e)
+              (Ok []) devices
+            |> Result.map List.rev
+          in
+          Result.map (fun devices -> { uuid; devices }) req_devices
+      | Some _ -> Error (`Msg "solo5_manifest.devices is not a list")
+      | None -> Ok { uuid; devices = [] } (* No devices required *))
+  | Some (`String uuid), None -> Ok { uuid; devices = [] }
+  | _ -> Error (`Msg "Missing uuid or solo5_manifest")
+
+type job = {
+  name : string;
+  synopsis : string;
+  manifest : device_manifest;
+  abi_target : string;
+  abi_version : int;
+}
+
+let job_of_json = function
+  | `Assoc xs -> (
+      let* name =
+        match Utils.Json.get "name" xs with
+        | Some (`String s) -> Ok s
+        | _ -> Error (`Msg "No name in the job json or name is not a string")
+      in
+      let* synopsis =
+        match Utils.Json.get "synopsis" xs with
+        | Some (`String s) -> Ok s
+        | _ ->
+            Error
+              (`Msg "no synopsis in the job json or synopsis is not a string")
+      in
+      match Utils.Json.get "latest" xs with
+      | Some (`Assoc latest) -> (
+          match Utils.Json.get "solo5_abi" latest with
+          | Some (`Assoc abi) -> (
+              match Utils.Json.(get "target" abi, get "version" abi) with
+              | ( Some (`String (("hvt" | "spt") as abi_target)),
+                  Some (`Int abi_version) ) -> (
+                  match manifest_of_json (`Assoc latest) with
+                  | Ok manifest ->
+                      Ok
+                        (Some
+                           { name; synopsis; manifest; abi_target; abi_version })
+                  | Error e -> Error e)
+              | _ ->
+                  Logs.debug (fun i ->
+                      i
+                        "builder_web.jobs_of_json: no valid target type. \
+                         requires hvt or spt unikernels.");
+                  Ok None)
+          | _ ->
+              Logs.debug (fun i ->
+                  i
+                    "builder_web.jobs_of_json: no solo5_abi section in the \
+                     json.");
+              Ok None)
+      | _ ->
+          Logs.debug (fun i ->
+              i "builder_web.jobs_of_json: no latest section in the json.");
+          Ok None)
+  | _ -> Error (`Msg "Invalid job JSON")
+
+let jobs_of_json = function
+  | `Assoc xs -> (
+      match Utils.Json.get "jobs" xs with
+      | Some (`List jobs_json) ->
+          List.fold_left
+            (fun acc j ->
+              match (acc, job_of_json j) with
+              | Ok acc, Ok (Some job) -> Ok (job :: acc)
+              | Ok acc, Ok None -> Ok acc
+              | Error e, _ -> Error e
+              | _, Error e -> Error e)
+            (Ok []) jobs_json
+          |> Result.map List.rev
+      | _ -> Error (`Msg "No jobs array found"))
+  | _ -> Error (`Msg "Invalid JSON root")
+
+let fetch_unikernel_jobs http_client =
+  let open Lwt.Syntax in
+  let* res =
+    Utils.Http.send_http_request ~path:"/all-builds" ~base_url http_client
+  in
+  match res with
+  | Ok body -> (
+      match Utils.Json.from_string body with
+      | Ok json -> (
+          match jobs_of_json json with
+          | Ok jobs -> Lwt.return jobs
+          | Error (`Msg e) ->
+              Logs.info (fun m -> m "jobs_of_json: Failed to fetch jobs: %s" e);
+              Lwt.return [])
+      | Error (`Msg e) ->
+          Logs.info (fun m ->
+              m "utils.json.from_string: Failed to fetch jobs: %s" e);
+          Lwt.return [])
+  | Error (`Msg msg) ->
+      Logs.info (fun m ->
+          m "utils.http.send_http_request: Failed to fetch jobs: %s" msg);
+      Lwt.return []
+
+let fetch_unikernel_binary_image http_client ~job ~version push_chunks =
+  let open Lwt.Infix in
+  let url = base_url ^ "/job/" ^ job ^ "/build/" ^ version ^ "/main-binary" in
+  let f resp _acc chunk =
+    if Http_mirage_client.Status.is_successful resp.Http_mirage_client.status
+    then Lwt.return (push_chunks (Some chunk))
+    else Lwt.return_unit
+  in
+  Lwt.both
+    ( Http_mirage_client.request http_client ~follow_redirect:true url f ()
+    >>= fun e ->
+      push_chunks None;
+      match e with
+      | Error (`Msg err) -> Lwt.return (Error (`Msg err))
+      | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
+      | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
+      | Ok (resp, ()) ->
+          if
+            Http_mirage_client.Status.is_successful
+              resp.Http_mirage_client.status
+          then Lwt.return (Ok ())
+          else
+            Lwt.return
+              (Error
+                 (`Msg
+                    ("accessing " ^ url ^ " resulted in an error: "
+                    ^ Http_mirage_client.Status.to_string resp.status
+                    ^ " " ^ resp.reason))) )

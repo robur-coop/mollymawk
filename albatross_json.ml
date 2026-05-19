@@ -264,8 +264,8 @@ let config_of_json str =
     Option.fold ~none:(Ok 1) (* Default to 1 vCPU *)
       ~some:(function
         | `Int n when n > 0 -> Ok n
-        | _ -> Error (`Msg "numcpus must be a positive integer greater than 0"))
-      (get "numcpus" dict)
+        | _ -> Error (`Msg "vcpus must be a positive integer greater than 0"))
+      (get "vcpus" dict)
   in
   let* linux_boot_partition =
     match get "linux_boot_partition" dict with

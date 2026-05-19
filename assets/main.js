@@ -434,72 +434,85 @@ function gatherFieldsForDevices(fieldId, targetKey, formAlert) {
 async function deployUnikernel(albatross_instance) {
 	const formAlert = document.getElementById("form-alert");
 	const deployButton = document.getElementById("deploy-button");
-	const name = document.getElementById("unikernel-name").value;
-	const type = document.getElementById("unikernel-type").value;
-	const startup = document.getElementById("startup-priority").innerText;
-	const fail_behaviour = document.getElementById("restart-on-fail").checked;
-	const force_create = document.getElementById("force-create").checked;
-	const memory = document.getElementById("unikernel-memory").innerText;
-	const molly_csrf = document.getElementById("molly-csrf").value;
-	const cpuidsStr = document.getElementById("cpuids").value;
-	const cpuids = cpuidsStr ? cpuidsStr.split(',').map(Number) : [];
-	const networkData = gatherFieldsForDevices("network", "network_interfaces", formAlert);
-	const blockData = gatherFieldsForDevices("block", "block_devices", formAlert);
-	if (networkData === null || blockData === null) {
+	const handleFailure = (msg) => {
+		postAlert("bg-secondary-300", msg);
+		showError(formAlert, msg);
 		buttonLoading(deployButton, false, "Deploy");
-		return;
-	}
-	if (!isValidName(name)) {
-		showError(formAlert, "Please provide a valid name (alphanumeric, no spaces or special symbols, must not start with a hyphen, max 64 chars).");
-		document.getElementById("unikernel-name").classList.add("border-secondary-500", "ring-secondary-500");
-		buttonLoading(deployButton, false, "Deploy");
-		return;
-	}
-	let specificConfig = {};
-	const binary = document.getElementById("unikernel-binary").files[0];
-	if (type === 'solo5') {
-		if (!binary) {
-			showError(formAlert, "Please upload the unikernel image");
-			buttonLoading(deployButton, false, "Deploy");
+	};
+	try {
+		const name = document.getElementById("unikernel-name").value;
+		const typ = document.getElementById("unikernel-type").value;
+		const startup = document.getElementById("startup-priority").innerText;
+		const fail_behaviour = document.getElementById("restart-on-fail").checked;
+		const force_create = document.getElementById("force-create").checked;
+		const memory = document.getElementById("unikernel-memory").innerText;
+		const molly_csrf = document.getElementById("molly-csrf").value;
+		const cpuidsStr = document.getElementById("cpuids").value;
+		const deployModeNode = document.querySelector('input[name="deploy_mode"]:checked');
+		const deploy_mode = deployModeNode ? deployModeNode.value : 'manual';
+		const binaryInput = document.getElementById("unikernel-binary");
+		const binary = (binaryInput && binaryInput.files) ? binaryInput.files[0] : null;
+		if (!isValidName(name)) {
+			document.getElementById("unikernel-name").classList.add("border-secondary-500", "ring-secondary-500");
+			showError(formAlert, "Please provide a valid name (alphanumeric, no spaces or special symbols, must not start with a hyphen, max 64 chars).");
 			return;
 		}
-		const argumentsString = document.getElementById("unikernel-arguments").value.trim();
-		specificConfig = {
-			typ: "solo5",
-			arguments: argumentsString ? argumentsString.split(/\s+/) : []
+
+		const networkData = gatherFieldsForDevices("network", "network_interfaces", formAlert);
+		const blockData = gatherFieldsForDevices("block", "block_devices", formAlert);
+		if (!networkData || !blockData) {
+			return;
+		}
+		if (deploy_mode === 'manual' && !binary) {
+			showError(formAlert, "Please upload the unikernel image");
+			return;
+		}
+
+		buttonLoading(deployButton, true, "Deploying...");
+
+		let specificConfig = {};
+
+		if (typ === 'solo5') {
+			const argumentsString = document.getElementById("unikernel-arguments").value.trim();
+			specificConfig = {
+				arguments: argumentsString ? argumentsString.split(/\s+/) : []
+			};
+		} else if (typ === 'bhyve') {
+			const vcpus = document.getElementById("numcpus").innerText;
+			const bootPartition = document.getElementById("linux-boot-partition").value;
+			specificConfig = {
+				vcpus: Number(vcpus),
+				linux_boot_partition: bootPartition === "" ? null : bootPartition
+			};
+		}
+
+		const unikernel_config = {
+			typ: typ,
+			cpuids: cpuidsStr ? cpuidsStr.split(',').map(Number) : [],
+			startup: Number(startup),
+			fail_behaviour: fail_behaviour ? { "restart": fail_behaviour } : "quit",
+			memory: Number(memory),
+			...networkData,
+			...blockData,
+			...specificConfig
 		};
-	} else if (type === 'bhyve') {
-		const vcpus = document.getElementById("numcpus").innerText;
-		const bootPartition = document.getElementById("linux-boot-partition").value;
-		specificConfig = {
-			typ: "bhyve",
-			vcpus: Number(vcpus),
-			linux_boot_partition: bootPartition == "" ? null : bootPartition
-		};
-	}
-	buttonLoading(deployButton, true, "Deploying...");
-	let formData = new FormData();
-	const unikernel_config = {
-		cpuids: cpuids,
-		startup: Number(startup),
-		fail_behaviour: fail_behaviour ? { "restart": fail_behaviour } : "quit",
-		memory: Number(memory),
-		...networkData,
-		...blockData,
-		...specificConfig
-	};
-	formData.append("albatross_instance", albatross_instance);
-	formData.append("unikernel_name", name);
-	formData.append("typ", type);
-	formData.append("unikernel_config", JSON.stringify(unikernel_config));
-	formData.append("unikernel_force_create", force_create);
-	formData.append("molly_csrf", molly_csrf);
-	if (binary) {
-		formData.append("binary", binary);
-	} else {
-		formData.append("binary", "");
-	}
-	try {
+
+		const formData = new FormData();
+		formData.append("albatross_instance", albatross_instance);
+		formData.append("unikernel_name", name);
+		formData.append("unikernel_config", JSON.stringify(unikernel_config));
+		formData.append("unikernel_force_create", force_create);
+		formData.append("molly_csrf", molly_csrf);
+		formData.append("deploy_mode", deploy_mode);
+
+		if (deploy_mode === 'builder') {
+			const builderJobSelect = document.getElementById("builder-job-select");
+			if (builderJobSelect) formData.append("builder_job", builderJobSelect.value);
+			formData.append("binary", "");
+		} else {
+			formData.append("binary", binary);
+		}
+
 		const response = await fetch("/api/unikernel/create", {
 			method: 'POST',
 			body: formData
@@ -509,19 +522,14 @@ async function deployUnikernel(albatross_instance) {
 		if (data.status === 200 && data.success) {
 			showError(formAlert, "Successfully updated", true);
 			postAlert("bg-primary-300", `${name} has been deployed successfully.`);
-			setTimeout(function () {
+			setTimeout(() => {
 				window.location.href = "/dashboard";
 			}, 2000);
 		} else {
-			handleFailure(data.data);
+			handleFailure(data.data || "An error occurred during deployment.");
 		}
 	} catch (error) {
-		handleFailure(error);
-	}
-	function handleFailure(msg) {
-		postAlert("bg-secondary-300", msg);
-		showError(formAlert, msg);
-		buttonLoading(deployButton, false, "Deploy");
+		handleFailure(error.message || "A network error occurred.");
 	}
 }
 
@@ -1350,3 +1358,38 @@ function areCharactersValid(s) {
 	}
 	return true;
 }
+
+window.mapFields = function (field_id, detail, options) {
+	if (!detail || !detail[field_id]) return [];
+	let reqs = detail[field_id];
+	if (field_id === 'network') {
+		let unassigned = [...options];
+		let fields = reqs.map(n => {
+			let idx = unassigned.findIndex(o => o.value === n);
+			if (idx !== -1) {
+				let match = unassigned.splice(idx, 1)[0];
+				return { title: n, selected: match.value };
+			}
+			return { title: n, selected: '' };
+		});
+		if (reqs.length === 1 && options.length === 1 && fields[0].selected === '') {
+			fields[0].selected = options[0].value;
+		} else if (reqs.length === options.length && unassigned.length === 1) {
+			let unmatched = fields.find(f => f.selected === '');
+			if (unmatched) unmatched.selected = unassigned[0].value;
+		}
+		return fields;
+	} else if (field_id === 'block') {
+		let job_name = detail.job_name;
+		return reqs.map(n => {
+			let exact = options.find(o => o.value === n);
+			if (exact) return { title: n, selected: exact.value };
+			if (job_name) {
+				let job_match = options.find(o => o.value === job_name || o.value === job_name + '-data');
+				if (job_match) return { title: n, selected: job_match.value };
+			}
+			return { title: n, selected: '' };
+		});
+	}
+	return reqs.map(n => ({ title: n, selected: '' }));
+};

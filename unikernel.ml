@@ -1152,8 +1152,10 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let deploy_form stack store albatross _ (user : User_model.user) reqd =
+  let deploy_form stack store http_client albatross _ (user : User_model.user)
+      reqd =
     let now = Mirage_ptime.now () in
+    Builder_web.fetch_unikernel_jobs http_client >>= fun builder_jobs ->
     user_unikernels_by_instance stack albatross user.name
     >>= fun unikernels_by_albatross_instance ->
     user_blocks_by_instance stack albatross user.name
@@ -1171,7 +1173,7 @@ struct
                        (Unikernel_create.unikernel_create_layout ~user_policy
                           unikernels_by_albatross_instance
                           blocks_by_albatross_instance
-                          albatross.configuration.name)
+                          albatross.configuration.name builder_jobs)
                      ~icon:"/images/robur.png" ())
                   ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
                   `OK
@@ -1395,38 +1397,8 @@ struct
     | Ok () -> (
         let data_stream, push_chunks = Lwt_stream.create () in
         let push () = Lwt_stream.get data_stream in
-        let url =
-          Builder_web.base_url ^ "/job/" ^ job ^ "/build/"
-          ^ to_be_updated_unikernel ^ "/main-binary"
-        in
-        let f resp _acc chunk =
-          if
-            Http_mirage_client.Status.is_successful
-              resp.Http_mirage_client.status
-          then Lwt.return (push_chunks (Some chunk))
-          else Lwt.return_unit
-        in
-
-        Lwt.both
-          ( Http_mirage_client.request http_client ~follow_redirect:true url f ()
-          >>= fun e ->
-            push_chunks None;
-            match e with
-            | Error (`Msg err) -> Lwt.return (Error (`Msg err))
-            | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
-            | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
-            | Ok (resp, ()) ->
-                if
-                  Http_mirage_client.Status.is_successful
-                    resp.Http_mirage_client.status
-                then Lwt.return (Ok ())
-                else
-                  Lwt.return
-                    (Error
-                       (`Msg
-                          ("accessing " ^ url ^ " resulted in an error: "
-                          ^ Http_mirage_client.Status.to_string resp.status
-                          ^ " " ^ resp.reason))) )
+        Builder_web.fetch_unikernel_binary_image http_client ~job
+          ~version:to_be_updated_unikernel push_chunks
           (force_create_unikernel stack albatross ~unikernel_name ~push
              unikernel_cfg user)
         >>= function
@@ -1849,7 +1821,7 @@ struct
         Middleware.http_response reqd
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_create stack albatross_instances token_or_cookie
+  let unikernel_create stack albatross_instances http_client token_or_cookie
       (user : User_model.user) reqd =
     let generate_http_error_response msg code =
       Logs.warn (fun m -> m "Unikernel_create error: %s" msg);
@@ -1866,6 +1838,8 @@ struct
         let force_ref = ref None in
         let csrf_ref = ref None in
         let albatross_instance_ref = ref None in
+        let deploy_mode_ref = ref None in
+        let builder_job_ref = ref None in
         let process_stream () =
           Lwt_stream.iter_s
             (function
@@ -1889,19 +1863,29 @@ struct
                   consume_part_content contents >>= fun v ->
                   csrf_ref := Some v;
                   Lwt.return_unit
+              | (Some "deploy_mode", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  deploy_mode_ref := Some v;
+                  Lwt.return_unit
+              | (Some "builder_job", _), _, contents ->
+                  consume_part_content contents >>= fun v ->
+                  builder_job_ref := Some v;
+                  Lwt.return_unit
               | (Some "binary", _), _, contents -> (
                   match
                     ( !albatross_instance_ref,
                       !name_ref,
                       !cfg_ref,
                       !force_ref,
-                      !csrf_ref )
+                      !csrf_ref,
+                      !deploy_mode_ref )
                   with
                   | ( Some instance_name,
                       Some unikernel_name,
                       Some cfg,
                       Some force_create,
-                      Some csrf ) -> (
+                      Some csrf,
+                      Some deploy_mode ) -> (
                       let process_unikernel_create albatross unikernel_name
                           _reqd =
                         match Albatross_json.config_of_json cfg with
@@ -1915,29 +1899,53 @@ struct
                                 `Unikernel_cmd (`Unikernel_force_create cfg)
                               else `Unikernel_cmd (`Unikernel_create cfg)
                             in
-                            Albatross_state.query stack albatross
-                              ~domain:user.name ~name:unikernel_name
-                              ~push:(fun () -> Lwt_stream.get contents)
-                              albatross_cmd
-                            >>= function
-                            | Error err ->
+                            let execute_albatross_cmd push =
+                              Albatross_state.query stack albatross
+                                ~domain:user.name ~name:unikernel_name ~push
+                                albatross_cmd
+                              >>= function
+                              | Error err ->
+                                  generate_http_error_response
+                                    ("Albatross Query Error: " ^ err)
+                                    `Internal_server_error
+                              | Ok (_hdr, res) -> (
+                                  Albatross.set_online albatross;
+                                  match Albatross_json.res res with
+                                  | Ok res_json ->
+                                      Middleware.http_response reqd
+                                        ~data:res_json `OK
+                                  | Error (`String err_str) ->
+                                      generate_http_error_response
+                                        ("Albatross Response Error: " ^ err_str)
+                                        `Internal_server_error
+                                  | Error (`Msg err_msg) ->
+                                      generate_http_error_response
+                                        ("Albatross JSON Error: " ^ err_msg)
+                                        `Internal_server_error)
+                            in
+                            match deploy_mode with
+                            | "builder" -> (
+                                match !builder_job_ref with
+                                | Some job ->
+                                    let data_stream, push_chunks =
+                                      Lwt_stream.create ()
+                                    in
+                                    let push () = Lwt_stream.get data_stream in
+                                    Builder_web.fetch_unikernel_binary_image
+                                      http_client ~job ~version:"latest"
+                                      push_chunks
+                                      (execute_albatross_cmd push)
+                                    >>= fun (_, res) -> Lwt.return res
+                                | _ ->
+                                    generate_http_error_response
+                                      "Missing builder job or uuid" `Bad_request
+                                )
+                            | "manual" ->
+                                execute_albatross_cmd (fun () ->
+                                    Lwt_stream.get contents)
+                            | _ ->
                                 generate_http_error_response
-                                  ("Albatross Query Error: " ^ err)
-                                  `Internal_server_error
-                            | Ok (_hdr, res) -> (
-                                Albatross.set_online albatross;
-                                match Albatross_json.res res with
-                                | Ok res_json ->
-                                    Middleware.http_response reqd ~data:res_json
-                                      `OK
-                                | Error (`String err_str) ->
-                                    generate_http_error_response
-                                      ("Albatross Response Error: " ^ err_str)
-                                      `Internal_server_error
-                                | Error (`Msg err_msg) ->
-                                    generate_http_error_response
-                                      ("Albatross JSON Error: " ^ err_msg)
-                                      `Internal_server_error))
+                                  "Invalid deploy mode" `Bad_request)
                       in
                       match
                         ( Configuration.name_of_str instance_name,
@@ -1988,8 +1996,7 @@ struct
             Logs.info (fun m -> m "Multipart parser thread error: %s" e);
             Lwt.return_unit
         | Ok _ ->
-            Logs.info (fun m ->
-                m "Multipart streamed correctly and unikernel created.");
+            Logs.info (fun m -> m "Multipart streamed correctly.");
             Lwt.return_unit)
 
   let unikernel_console stack albatross unikernel_name _
@@ -3183,7 +3190,7 @@ struct
             check_meth `GET (fun () ->
                 authenticate store reqd
                   (albatross_instance "/unikernel/deploy"
-                     (deploy_form stack store)))
+                     (deploy_form stack store http_client)))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -3203,8 +3210,8 @@ struct
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (fun token_or_cookie user reqd ->
-                    unikernel_create stack !albatross_instances token_or_cookie
-                      user reqd))
+                    unikernel_create stack !albatross_instances http_client
+                      token_or_cookie user reqd))
         | "/unikernel/update" ->
             check_meth `GET (fun () ->
                 authenticate store reqd

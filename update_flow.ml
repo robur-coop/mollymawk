@@ -20,31 +20,9 @@ type success =
       (Vmm_core.Name.t * Vmm_core.Unikernel.info * Builder_web.compare)
   | No_update_needed of (Vmm_core.Name.t * string)
 
-let send_http_request ?(path = "") ~base_url http_client =
-  let url = base_url ^ path in
-  let body = "" in
-  let body_f _ acc chunk = Lwt.return (acc ^ chunk) in
-  Http_mirage_client.request http_client ~follow_redirect:true
-    ~headers:[ ("Accept", "application/json") ]
-    url body_f body
-  >>= function
-  | Error (`Msg err) -> Lwt.return (Error (`Msg err))
-  | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
-  | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
-  | Ok (resp, body) ->
-      if Http_mirage_client.Status.is_successful resp.Http_mirage_client.status
-      then Lwt.return (Ok body)
-      else
-        Lwt.return
-          (Error
-             (`Msg
-                ("accessing " ^ url ^ " resulted in an error: "
-                ^ Http_mirage_client.Status.to_string resp.status
-                ^ " " ^ resp.reason)))
-
 let fetch_json http_client ~base_url ~path parser ctx_msg =
   let* body =
-    send_http_request ~path ~base_url http_client
+    Utils.Http.send_http_request ~path ~base_url http_client
     |> Lwt_result.map_error (fun (`Msg e) ->
         Builder_req_err (Printf.sprintf "Network error during %s: %s" ctx_msg e))
   in
