@@ -362,9 +362,7 @@ let job_of_json = function
           match Utils.Json.get "solo5_abi" latest with
           | Some (`Assoc abi) -> (
               match Utils.Json.(get "target" abi, get "version" abi) with
-              | Some (`String abi_target), Some (`Int abi_version)
-                when String.equal abi_target "hvt"
-                     || String.equal abi_target "spt" -> (
+              | Some (`String ("hvt" | "spt" as abi_target)), Some (`Int abi_version) -> (
                   match manifest_of_json (`Assoc latest) with
                   | Ok manifest ->
                       Ok
