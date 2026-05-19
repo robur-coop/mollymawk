@@ -348,7 +348,8 @@ let job_of_json = function
         match Utils.Json.get "synopsis" xs with
         | Some (`String s) -> Ok s
         | _ ->
-            Error (`Msg "no synopsis in the job json or synopsis is not a string")
+            Error
+              (`Msg "no synopsis in the job json or synopsis is not a string")
       in
       match Utils.Json.get "latest" xs with
       | Some (`Assoc latest) -> (
