@@ -1893,7 +1893,7 @@ struct
                             generate_http_error_response
                               ("Invalid unikernel arguments: " ^ err)
                               `Bad_request
-                        | Ok cfg ->
+                        | Ok cfg -> (
                             let albatross_cmd =
                               if bool_of_string force_create then
                                 `Unikernel_cmd (`Unikernel_force_create cfg)
@@ -1923,24 +1923,29 @@ struct
                                         ("Albatross JSON Error: " ^ err_msg)
                                         `Internal_server_error)
                             in
-                            if String.equal "builder" deploy_mode then
-                              match !builder_job_ref with
-                              | Some job ->
-                                  let data_stream, push_chunks =
-                                    Lwt_stream.create ()
-                                  in
-                                  let push () = Lwt_stream.get data_stream in
-                                  Builder_web.fetch_unikernel_binary_image
-                                    http_client ~job ~version:"latest"
-                                    push_chunks
-                                    (execute_albatross_cmd push)
-                                  >>= fun (_, res) -> Lwt.return res
-                              | _ ->
-                                  generate_http_error_response
-                                    "Missing builder job or uuid" `Bad_request
-                            else
-                              execute_albatross_cmd (fun () ->
-                                  Lwt_stream.get contents)
+                            match deploy_mode with
+                            | "builder" -> (
+                                match !builder_job_ref with
+                                | Some job ->
+                                    let data_stream, push_chunks =
+                                      Lwt_stream.create ()
+                                    in
+                                    let push () = Lwt_stream.get data_stream in
+                                    Builder_web.fetch_unikernel_binary_image
+                                      http_client ~job ~version:"latest"
+                                      push_chunks
+                                      (execute_albatross_cmd push)
+                                    >>= fun (_, res) -> Lwt.return res
+                                | _ ->
+                                    generate_http_error_response
+                                      "Missing builder job or uuid" `Bad_request
+                                )
+                            | "manual" ->
+                                execute_albatross_cmd (fun () ->
+                                    Lwt_stream.get contents)
+                            | _ ->
+                                generate_http_error_response
+                                  "Invalid deploy mode" `Bad_request)
                       in
                       match
                         ( Configuration.name_of_str instance_name,
