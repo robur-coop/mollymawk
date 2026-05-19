@@ -303,13 +303,14 @@ let compare_of_json = function
            ("invalid json for builder_web diff, expected a dict: "
           ^ Utils.Json.to_string js))
 
-type device = { name : string; type_ : string }
+type device = Network of string | Block of string
 type device_manifest = { uuid : string; devices : device list }
 
 let device_of_json = function
   | `Assoc xs -> (
       match (Utils.Json.get "name" xs, Utils.Json.get "type" xs) with
-      | Some (`String name), Some (`String type_) -> Ok { name; type_ }
+      | Some (`String name), Some (`String "NET_BASIC") -> Ok (Network name)
+      | Some (`String name), Some (`String "BLOCK_BASIC") -> Ok (Block name)
       | _ -> Error (`Msg "Invalid device JSON"))
   | _ -> Error (`Msg "Invalid device JSON format")
 

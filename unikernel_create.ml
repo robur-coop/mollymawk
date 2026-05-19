@@ -229,13 +229,13 @@ let builder_source_section builder_jobs available_networks free_space
                    let req_nets =
                      List.fold_left
                        (fun acc (d : Builder_web.device) ->
-                         if d.type_ = "NET_BASIC" then acc + 1 else acc)
+                         match d with Network _ -> acc + 1 | _ -> acc)
                        0 j.manifest.devices
                    in
                    let req_blocks =
                      List.fold_left
                        (fun acc (d : Builder_web.device) ->
-                         if d.type_ = "BLOCK_BASIC" then acc + 1 else acc)
+                         match d with Block _ -> acc + 1 | _ -> acc)
                        0 j.manifest.devices
                    in
                    let net_disabled = req_nets > available_networks in
@@ -576,19 +576,23 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
   in
   let available_networks = Vmm_core.String_set.cardinal user_policy.bridges in
   let builder_jobs_json =
-    let extract_names target_type devices =
+    let extract_networks devices =
       List.filter_map
         (fun (d : Builder_web.device) ->
-          if d.Builder_web.type_ = target_type then
-            Some (`String d.Builder_web.name)
-          else None)
+          match d with Network n -> Some (`String n) | _ -> None)
+        devices
+    in
+    let extract_blocks devices =
+      List.filter_map
+        (fun (d : Builder_web.device) ->
+          match d with Block b -> Some (`String b) | _ -> None)
         devices
     in
     let jobs =
       List.map
         (fun (j : Builder_web.job) ->
-          let networks = extract_names "NET_BASIC" j.manifest.devices in
-          let blocks = extract_names "BLOCK_BASIC" j.manifest.devices in
+          let networks = extract_networks j.manifest.devices in
+          let blocks = extract_blocks j.manifest.devices in
           ( j.name,
             `Assoc
               [
