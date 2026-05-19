@@ -356,7 +356,7 @@ let job_of_json = function
           match Utils.Json.get "solo5_abi" latest with
           | Some (`Assoc abi) -> (
               match Utils.Json.get "target" abi with
-              | Some (`String "hvt") -> (
+              | Some (`String ("hvt" | "spt")) -> (
                   match manifest_of_json (`Assoc latest) with
                   | Ok manifest -> Ok (Some { name; synopsis; manifest })
                   | Error e -> Error e)
