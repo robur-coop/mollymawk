@@ -1269,6 +1269,101 @@ struct
     Middleware.http_response reqd ~title:"Unikernel Information"
       ~data:response_data `OK
 
+  let unikernel_monitoring_status happy_eyeballs management_hostname
+      unikernel_name _token_or_cookie _user reqd =
+    let open Lwt.Infix in
+    let target_r =
+      match
+        Domain_name.of_string
+          (Configuration.name_to_str unikernel_name ^ "." ^ management_hostname)
+      with
+      | Ok dn -> Ok (Domain_name.to_string dn)
+      | Error e -> Error e
+    in
+    match target_r with
+    | Error (`Msg err) ->
+        Middleware.http_response ~api_meth:true reqd ~title:"Monitoring Error"
+          ~data:(`String ("Invalid domain name or IP: " ^ err))
+          `Bad_request
+    | Ok target_str ->
+        let query cmd =
+          Management_HE.connect happy_eyeballs target_str [ 2323 ] >>= function
+          | Error (`Msg err) -> Lwt.return_error err
+          | Ok ((_ip, _port), flow) -> (
+              Management_S.TCP.write flow (Cstruct.of_string cmd) >>= function
+              | Error _ ->
+                  Management_S.TCP.close flow >>= fun () ->
+                  Lwt.return_error "Failed to write"
+              | Ok () -> (
+                  Management_S.TCP.read flow >>= function
+                  | Error _ ->
+                      Management_S.TCP.close flow >>= fun () ->
+                      Lwt.return_error "Failed to read"
+                  | Ok `Eof ->
+                      Management_S.TCP.close flow >>= fun () ->
+                      Lwt.return_error "EOF"
+                  | Ok (`Data cstruct) ->
+                      Management_S.TCP.close flow >>= fun () ->
+                      Lwt.return_ok (Cstruct.to_string cstruct)))
+        in
+        query "l*" >>= fun logs ->
+        query "m*" >>= fun metrics ->
+        let html =
+          Monitoring.monitoring_status_html
+            ~name:(Configuration.name_to_str unikernel_name)
+            ~logs ~metrics
+        in
+        let body = Format.asprintf "%a" (Tyxml_html.pp_elt ()) html in
+        reply reqd body `OK
+
+  let unikernel_monitoring_update happy_eyeballs management_hostname _user
+      multipart_body reqd =
+    match
+      ( Map.find_opt "command" multipart_body,
+        Map.find_opt "unikernel_name" multipart_body )
+    with
+    | Some (_, command), Some (_, unikernel_name) -> (
+        let open Lwt.Infix in
+        let target_r =
+          match
+            Domain_name.of_string (unikernel_name ^ "." ^ management_hostname)
+          with
+          | Ok dn -> Ok (Domain_name.to_string dn)
+          | Error e -> Error e
+        in
+        match target_r with
+        | Error (`Msg err) ->
+            Middleware.http_response ~api_meth:false reqd
+              ~title:"Monitoring Error"
+              ~data:(`String ("Invalid domain name or IP: " ^ err))
+              `Bad_request
+        | Ok target_str -> (
+            Management_HE.connect happy_eyeballs target_str [ 2323 ]
+            >>= function
+            | Error (`Msg err) ->
+                Middleware.http_response ~api_meth:false reqd
+                  ~title:"Monitoring Unavailable" ~data:(`String err)
+                  `Bad_request
+            | Ok ((_ip, _port), flow) -> (
+                Logs.info (fun m -> m "Passing the command %s" command);
+                Management_S.TCP.write flow (Cstruct.of_string command)
+                >>= function
+                | Error e ->
+                    Management_S.TCP.close flow >>= fun () ->
+                    Middleware.http_response ~api_meth:false reqd
+                      ~title:"Monitoring Error"
+                      ~data:(`String "Failed to write to monitoring port")
+                      `Internal_server_error
+                | Ok () ->
+                    Management_S.TCP.close flow >>= fun () ->
+                    Middleware.http_response ~api_meth:false reqd
+                      ~title:"Monitoring Success"
+                      ~data:(`String "Updated successfully") `OK)))
+    | _ ->
+        Middleware.http_response ~api_meth:false reqd ~title:"Monitoring Error"
+          ~data:(`String "Missing unikernel name or command in request.")
+          `Bad_request
+
   let unikernel_info_one stack store albatross unikernel_name _
       (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
@@ -3231,6 +3326,18 @@ struct
                 authenticate store reqd
                   (albatross_instance "/unikernel/deploy"
                      (deploy_form stack store http_client)))
+        | "/api/unikernel/monitoring/status" ->
+            check_meth `GET (fun () ->
+                authenticate store reqd ~check_token:true ~api_meth:true
+                  (unikernel
+                     (unikernel_monitoring_status management_happy_eyeballs
+                        management_hostname)))
+        | "/api/unikernel/monitoring/update" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_token:true ~api_meth:true store reqd
+                  (extract_multipart_csrf_token
+                     (unikernel_monitoring_update management_happy_eyeballs
+                        management_hostname)))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
