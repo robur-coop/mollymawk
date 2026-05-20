@@ -31,7 +31,7 @@ let mollymawk =
     ]
   in
   main ~packages "Unikernel.Main"
-    (stackv4v6 @-> kv_ro @-> block @-> http_client @-> job)
+    (stackv4v6 @-> stackv4v6 @-> kv_ro @-> block @-> http_client @-> job)
 
 let block = block_of_file "data"
 
@@ -45,6 +45,10 @@ let http_client =
     (tcpv4v6 @-> mimic @-> Mirage.http_client)
 
 let stack = generic_stackv4v6 default_network
+
+let management_stack =
+  generic_stackv4v6 ~group:"management" (netif "management")
+
 let eyeballs = generic_happy_eyeballs stack
 let dns = generic_dns_client stack eyeballs
 let tcp = tcpv4v6_of_stackv4v6 stack
@@ -54,4 +58,5 @@ let http_client =
   http_client $ tcp $ happy_eyeballs
 
 let () =
-  register "mollymawk" [ mollymawk $ stack $ assets $ block $ http_client ]
+  register "mollymawk"
+    [ mollymawk $ stack $ management_stack $ assets $ block $ http_client ]

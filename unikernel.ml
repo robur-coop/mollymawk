@@ -14,10 +14,25 @@ module K = struct
   let port =
     let doc = Arg.info ~doc:"HTTP listen port." [ "port" ] in
     Mirage_runtime.register_arg Arg.(value & opt int 8080 doc)
+
+  let management_dns_server =
+    let doc =
+      Arg.info ~doc:"DNS server for the management network"
+        [ "management-dns-server" ]
+    in
+    Mirage_runtime.register_arg Arg.(required & opt (some string) None doc)
+
+  let management_host_name =
+    let doc =
+      Arg.info ~doc:"Host name for the management network"
+        [ "management-hostname" ]
+    in
+    Mirage_runtime.register_arg Arg.(required & opt (some string) None doc)
 end
 
 module Main
     (S : Tcpip.Stack.V4V6)
+    (Management_S : Tcpip.Stack.V4V6)
     (KV_ASSETS : Mirage_kv.RO)
     (BLOCK : Mirage_block.S)
     (Http_client : Http_mirage_client.S) =
@@ -28,6 +43,8 @@ struct
   module HE = Happy_eyeballs_mirage.Make (S)
   module Mailer = Sendmail_mirage.Make (S.TCP) (HE)
   module Dns = Dns_client_mirage.Make (S) (HE)
+  module Management_HE = Happy_eyeballs_mirage.Make (Management_S)
+  module Management_Dns = Dns_client_mirage.Make (Management_S) (Management_HE)
 
   let recipient email =
     match Colombe_emile.to_path email with
@@ -54,6 +71,28 @@ struct
         | Ok addr ->
             Logs.info (fun m ->
                 m "Resolved `AAAA record for %s to %a"
+                  (Domain_name.to_string destination)
+                  Ipaddr.V6.pp addr);
+            Ipaddr.Set.of_list [ Ipaddr.V6 addr ] |> Lwt.return_ok
+        | Error e -> Lwt.return_error e)
+
+  let getaddrinfo_management dns : Management_HE.getaddrinfo =
+   fun record_type destination ->
+    match record_type with
+    | `A -> (
+        Management_Dns.gethostbyname dns destination >>= function
+        | Ok addr ->
+            Logs.info (fun m ->
+                m "[Management] Resolved `A record for %s to %a"
+                  (Domain_name.to_string destination)
+                  Ipaddr.V4.pp addr);
+            Ipaddr.Set.of_list [ Ipaddr.V4 addr ] |> Lwt.return_ok
+        | Error e -> Lwt.return_error e)
+    | `AAAA -> (
+        Management_Dns.gethostbyname6 dns destination >>= function
+        | Ok addr ->
+            Logs.info (fun m ->
+                m "[Management] Resolved `AAAA record for %s to %a"
                   (Domain_name.to_string destination)
                   Ipaddr.V6.pp addr);
             Ipaddr.Set.of_list [ Ipaddr.V6 addr ] |> Lwt.return_ok
@@ -2877,8 +2916,9 @@ struct
     in
     Lwt.async loop
 
-  let request_handler stack albatross_instances js_file css_file imgs store
-      http_client happy_eyeballs flow (_ipaddr, _port) reqd =
+  let request_handler stack management_happy_eyeballs management_hostname
+      albatross_instances js_file css_file imgs store http_client happy_eyeballs
+      flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
           Middleware.http_response reqd
@@ -3252,7 +3292,7 @@ struct
           Fmt.(option ~none:(any "unknown") H1.Request.pp_hum)
           request)
 
-  let start stack assets storage http_client =
+  let start stack management_stack assets storage http_client =
     js_contents assets >>= fun js_file ->
     css_contents assets >>= fun css_file ->
     images assets >>= fun imgs ->
@@ -3261,6 +3301,19 @@ struct
     | Ok store ->
         let dns = Dns.create (stack, HE.create stack) in
         let happy_eyeballs = HE.create ~getaddrinfo:(getaddrinfo dns) stack in
+        let management_dns =
+          let nameserver =
+            `Plaintext (Ipaddr.of_string_exn (K.management_dns_server ()), 53)
+          in
+          Management_Dns.create ~nameservers:(`Udp, [ nameserver ])
+            (management_stack, Management_HE.create management_stack)
+        in
+        let management_happy_eyeballs =
+          Management_HE.create
+            ~getaddrinfo:(getaddrinfo_management management_dns)
+            management_stack
+        in
+        let management_hostname = K.management_host_name () in
         Albatross_state.init_all stack (Store.configurations store)
         >>= fun albatross_instances ->
         let albatross_instances = ref albatross_instances in
@@ -3268,8 +3321,9 @@ struct
         Logs.info (fun m ->
             m "Initialise an HTTP server (no HTTPS) on port %u" port);
         let request_handler =
-          request_handler stack albatross_instances js_file css_file imgs store
-            http_client happy_eyeballs
+          request_handler stack management_happy_eyeballs management_hostname
+            albatross_instances js_file css_file imgs store http_client
+            happy_eyeballs
         in
         Paf.init ~port (S.tcp stack) >>= fun service ->
         Lwt.pause () >>= fun () ->
