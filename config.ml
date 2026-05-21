@@ -31,7 +31,8 @@ let mollymawk =
     ]
   in
   main ~packages "Unikernel.Main"
-    (stackv4v6 @-> stackv4v6 @-> kv_ro @-> block @-> http_client @-> job)
+    (stackv4v6 @-> stackv4v6 @-> dns_client @-> kv_ro @-> block @-> http_client
+   @-> job @-> job)
 
 let block = block_of_file "data"
 
@@ -45,13 +46,37 @@ let http_client =
     (tcpv4v6 @-> mimic @-> Mirage.http_client)
 
 let stack = generic_stackv4v6 default_network
-
-let management_stack =
-  generic_stackv4v6 ~group:"management" (netif "management")
-
 let eyeballs = generic_happy_eyeballs stack
 let dns = generic_dns_client stack eyeballs
 let tcp = tcpv4v6_of_stackv4v6 stack
+let dhcp_requests = make_dhcp_requests ()
+
+let management_stack, lease =
+  generic_stackv4v6_with_lease ~group:"management" ~dhcp_requests
+    (netif "management")
+
+let management_eyeballs = generic_happy_eyeballs management_stack
+
+let management_dns =
+  generic_dns_client ~group:"management" management_stack management_eyeballs
+
+let management_domain (dhcp_requests, lease) =
+  let () =
+    add_dhcp_request dhcp_requests 15
+    (* DOMAIN_NAME *)
+  in
+  let connect _ _ = function
+    | [ lease ] ->
+        (* TODO: sane default instead of None?! *)
+        code ~pos:__POS__
+          "Lwt.return @@@@@ match %s with None -> None@ | Some lease -> \
+           Dhcp_wire.find_domain_name lease"
+          lease
+    | _ -> assert false
+  in
+  impl ~connect ~extra_deps:[ dep lease ] "Dhcp_wire" job
+
+let management_domain_name = management_domain (dhcp_requests, lease)
 
 let http_client =
   let happy_eyeballs = mimic_happy_eyeballs stack eyeballs dns in
@@ -59,4 +84,7 @@ let http_client =
 
 let () =
   register "mollymawk"
-    [ mollymawk $ stack $ management_stack $ assets $ block $ http_client ]
+    [
+      mollymawk $ stack $ management_stack $ management_dns $ assets $ block
+      $ http_client $ management_domain_name;
+    ]

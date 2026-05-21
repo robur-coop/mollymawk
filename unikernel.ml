@@ -14,28 +14,16 @@ module K = struct
   let port =
     let doc = Arg.info ~doc:"HTTP listen port." [ "port" ] in
     Mirage_runtime.register_arg Arg.(value & opt int 8080 doc)
-
-  let management_dns_server =
-    let doc =
-      Arg.info ~doc:"DNS server for the management network"
-        [ "management-dns-server" ]
-    in
-    Mirage_runtime.register_arg Arg.(required & opt (some string) None doc)
-
-  let management_host_name =
-    let doc =
-      Arg.info ~doc:"Host name for the management network"
-        [ "management-hostname" ]
-    in
-    Mirage_runtime.register_arg Arg.(required & opt (some string) None doc)
 end
 
 module Main
     (S : Tcpip.Stack.V4V6)
     (Management_S : Tcpip.Stack.V4V6)
+    (Management_Dns : Dns_client_mirage.S)
     (KV_ASSETS : Mirage_kv.RO)
     (BLOCK : Mirage_block.S)
-    (Http_client : Http_mirage_client.S) =
+    (Http_client : Http_mirage_client.S)
+    (Management_Domain : sig end) =
 struct
   module Paf = Paf_mirage.Make (S.TCP)
   module Liveliness = Liveliness_checks.Make (S)
@@ -44,7 +32,6 @@ struct
   module Mailer = Sendmail_mirage.Make (S.TCP) (HE)
   module Dns = Dns_client_mirage.Make (S) (HE)
   module Management_HE = Happy_eyeballs_mirage.Make (Management_S)
-  module Management_Dns = Dns_client_mirage.Make (Management_S) (Management_HE)
 
   let recipient email =
     match Colombe_emile.to_path email with
@@ -3399,7 +3386,8 @@ struct
           Fmt.(option ~none:(any "unknown") H1.Request.pp_hum)
           request)
 
-  let start stack management_stack assets storage http_client =
+  let start stack management_stack management_dns assets storage http_client
+      management_domain_name =
     js_contents assets >>= fun js_file ->
     css_contents assets >>= fun css_file ->
     images assets >>= fun imgs ->
@@ -3408,19 +3396,17 @@ struct
     | Ok store ->
         let dns = Dns.create (stack, HE.create stack) in
         let happy_eyeballs = HE.create ~getaddrinfo:(getaddrinfo dns) stack in
-        let management_dns =
-          let nameserver =
-            `Plaintext (Ipaddr.of_string_exn (K.management_dns_server ()), 53)
-          in
-          Management_Dns.create ~nameservers:(`Udp, [ nameserver ])
-            (management_stack, Management_HE.create management_stack)
-        in
         let management_happy_eyeballs =
           Management_HE.create
             ~getaddrinfo:(getaddrinfo_management management_dns)
             management_stack
         in
-        let management_hostname = K.management_host_name () in
+        Logs.info (fun m ->
+            m "Domain from DHCP lease: %s"
+              (Option.value management_domain_name ~default:"none given"));
+        let management_hostname =
+          Option.value management_domain_name ~default:"management"
+        in
         Albatross_state.init_all stack (Store.configurations store)
         >>= fun albatross_instances ->
         let albatross_instances = ref albatross_instances in
