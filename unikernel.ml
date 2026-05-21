@@ -47,7 +47,7 @@ struct
     | `A -> (
         Dns.gethostbyname dns destination >>= function
         | Ok addr ->
-            Logs.info (fun m ->
+            Logs.debug (fun m ->
                 m "Resolved `A record for %s to %a"
                   (Domain_name.to_string destination)
                   Ipaddr.V4.pp addr);
@@ -56,7 +56,7 @@ struct
     | `AAAA -> (
         Dns.gethostbyname6 dns destination >>= function
         | Ok addr ->
-            Logs.info (fun m ->
+            Logs.debug (fun m ->
                 m "Resolved `AAAA record for %s to %a"
                   (Domain_name.to_string destination)
                   Ipaddr.V6.pp addr);
@@ -69,7 +69,7 @@ struct
     | `A -> (
         Management_Dns.gethostbyname dns destination >>= function
         | Ok addr ->
-            Logs.info (fun m ->
+            Logs.debug (fun m ->
                 m "[Management] Resolved `A record for %s to %a"
                   (Domain_name.to_string destination)
                   Ipaddr.V4.pp addr);
@@ -78,7 +78,7 @@ struct
     | `AAAA -> (
         Management_Dns.gethostbyname6 dns destination >>= function
         | Ok addr ->
-            Logs.info (fun m ->
+            Logs.debug (fun m ->
                 m "[Management] Resolved `AAAA record for %s to %a"
                   (Domain_name.to_string destination)
                   Ipaddr.V6.pp addr);
@@ -1332,7 +1332,7 @@ struct
                   ~title:"Monitoring Unavailable" ~data:(`String err)
                   `Bad_request
             | Ok ((_ip, _port), flow) -> (
-                Logs.info (fun m -> m "Passing the command %s" command);
+                Logs.debug (fun m -> m "Passing the command %s" command);
                 Management_S.TCP.write flow (Cstruct.of_string command)
                 >>= function
                 | Error e ->
