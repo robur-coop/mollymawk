@@ -22,8 +22,7 @@ module Main
     (Management_Dns : Dns_client_mirage.S)
     (KV_ASSETS : Mirage_kv.RO)
     (BLOCK : Mirage_block.S)
-    (Http_client : Http_mirage_client.S)
-    (Management_Domain : sig end) =
+    (Http_client : Http_mirage_client.S) =
 struct
   module Paf = Paf_mirage.Make (S.TCP)
   module Liveliness = Liveliness_checks.Make (S)
