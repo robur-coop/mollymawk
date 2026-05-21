@@ -308,8 +308,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                    Unsafe.string_attrib "hx-get"
                                      ("/api/unikernel/monitoring/status?unikernel="
                                     ^ unikernel_name_str);
-                                   Unsafe.string_attrib "hx-trigger"
-                                     "intersect once";
+                                   Unsafe.string_attrib "hx-trigger" "intersect";
                                    Unsafe.string_attrib "hx-swap" "innerHTML";
                                  ]
                                [
