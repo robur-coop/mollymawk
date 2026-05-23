@@ -8,7 +8,8 @@ let management_stack, lease =
   generic_stackv4v6_with_lease ~group:"management" ~dhcp_requests
     (netif "management")
 
-let management_eyeballs = generic_happy_eyeballs ~group:"management" management_stack
+let management_eyeballs =
+  generic_happy_eyeballs ~group:"management" management_stack
 
 let management_dns =
   generic_dns_client ~group:"management" management_stack management_eyeballs
