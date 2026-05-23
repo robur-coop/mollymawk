@@ -1,5 +1,61 @@
 open Tyxml_html
 
+let check_command command =
+  let command = String.trim command in
+  if String.length command < 2 then Error "Command is too short"
+  else
+    let kind = String.sub command 0 1 in
+    let rest = String.sub command 1 (String.length command - 1) in
+    let segments = String.split_on_char ',' rest in
+    let is_valid_level s =
+      match String.trim s with
+      | "debug" | "info" | "warning" | "error" | "app" | "quiet" -> true
+      | _ -> false
+    in
+
+    let is_valid_metric s =
+      match String.trim s with "enable" | "disable" -> true | _ -> false
+    in
+    let is_valid_source name =
+      let name = String.trim name in
+      String.length name > 0
+      &&
+      let rec loop i =
+        if i >= String.length name then true
+        else
+          match name.[i] with
+          | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '-' | '.' | '*' ->
+              loop (i + 1)
+          | _ -> false
+      in
+      loop 0
+    in
+    let validate_segment is_valid_val segment =
+      let segment = String.trim segment in
+      if String.length segment = 0 then false
+      else if segment.[0] = '*' then
+        let value = String.sub segment 2 (String.length segment - 2) in
+        is_valid_val value
+      else
+        match String.split_on_char ':' segment with
+        | [ name; val_ ] -> is_valid_source name && is_valid_val val_
+        | _ -> false
+    in
+    match kind with
+    | "L" ->
+        if segments = [] || segments = [ "" ] then
+          Error "Empty logs command body"
+        else if List.for_all (validate_segment is_valid_level) segments then
+          Ok command
+        else Error "Invalid logs configuration formatting"
+    | "M" ->
+        if segments = [] || segments = [ "" ] then
+          Error "Empty metrics command body"
+        else if List.for_all (validate_segment is_valid_metric) segments then
+          Ok command
+        else Error "Invalid metrics configuration formatting"
+    | _ -> Error "Invalid command prefix (must be L or M)"
+
 let check_monitoring_response_format str =
   let str = String.trim str in
   if String.length str > 4 && String.sub str 0 4 = "ok: " then

@@ -1347,23 +1347,35 @@ struct
     with
     | Some (_, command), Some (_, unikernel_name) -> (
         let open Lwt.Infix in
-        send_monitoring_tcp_command happy_eyeballs ~command
-          ~target:unikernel_name management_domain
-        >>= function
+        match Monitoring.check_command command with
+        | Ok command -> (
+            send_monitoring_tcp_command happy_eyeballs ~command
+              ~target:unikernel_name management_domain
+            >>= function
+            | Error err ->
+                reply reqd
+                  (Fmt.str
+                     "<p class=\"text-secondary-500\">An error occured: %s</p>"
+                     err)
+                  `Bad_request
+            | Ok response ->
+                reply reqd
+                  (Fmt.str
+                     "<p class=\"text-primary-500\">Updated successfully: \
+                      %s</p>"
+                     response)
+                  `OK)
         | Error err ->
+            Logs.info (fun m ->
+                m "Command is malformated. Command: %s, Received error: %s"
+                  command err);
             reply reqd
-              (Fmt.str
-                 "<p class=\"text-secondary-500\">An error occured: %s</p>" err)
-              `Bad_request
-        | Ok response ->
-            reply reqd
-              (Fmt.str
-                 "<p class=\"text-primary-500\">Updated successfully: %s</p>"
-                 response)
-              `OK)
+              (Fmt.str "<p class=\"text-secondary-500\">%s</p>" err)
+              `Bad_request)
     | _ ->
-        Middleware.http_response ~api_meth:false reqd ~title:"Monitoring Error"
-          ~data:(`String "Missing unikernel name or command in request.")
+        reply reqd
+          "<p class=\"text-secondary-500\">Missing unikernel name or command \
+           in request.</p>"
           `Bad_request
 
   let unikernel_info_one stack store albatross unikernel_name _
