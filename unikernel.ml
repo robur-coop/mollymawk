@@ -1261,51 +1261,45 @@ struct
     let target = target ^ "." ^ Domain_name.to_string management_domain in
     Management_HE.connect happy_eyeballs target [ port ] >>= function
     | Error (`Msg err) ->
-        Logs.info (fun m ->
-            m "Failed to connect to %s on port %d with error: %s" target port
-              err);
-        Lwt.return_error
-          (Fmt.str "Failed to connect to %s on port %d with error: %s" target
-             port err)
+        let msg =
+          Fmt.str "[monitoring] Failed to connect to %s:%d, error %s" target
+            port err
+        in
+        Logs.info (fun m -> m "%s" msg);
+        Lwt.return_error msg
     | Ok ((_ip, _port), flow) -> (
         Management_S.TCP.write flow (Cstruct.of_string command) >>= function
         | Error err ->
             Management_S.TCP.close flow >>= fun () ->
-            Logs.info (fun m ->
-                m
-                  "Failed to write to %s on port %d (command: %s) with error: \
-                   %a"
-                  target port command Management_S.TCP.pp_write_error err);
-            Lwt.return_error
-              (Fmt.str
-                 "Failed to write to %s on port %d (command: %s) with error: %a"
-                 target port command Management_S.TCP.pp_write_error err)
+            let msg =
+              Fmt.str
+                "[monitoring] Failed to write to %s:%d (command: %s), error %a"
+                target port command Management_S.TCP.pp_write_error err
+            in
+            Logs.info (fun m -> m "%s" msg);
+            Lwt.return_error msg
         | Ok () -> (
             Management_S.TCP.read flow >>= function
             | Error err ->
                 Management_S.TCP.close flow >>= fun () ->
-                Logs.info (fun m ->
-                    m
-                      "Failed to read from %s on port %d (command: %s) with \
-                       error: %a"
-                      target port command Management_S.TCP.pp_error err);
-                Lwt.return_error
-                  (Fmt.str
-                     "Failed to read from %s on port %d (command: %s) with \
-                      error: %a"
-                     target port command Management_S.TCP.pp_error err)
+                let msg =
+                  Fmt.str
+                    "[monitoring] Failed to read from %s:%d (command: %s), \
+                     error %a"
+                    target port command Management_S.TCP.pp_error err
+                in
+                Logs.info (fun m -> m "%s" msg);
+                Lwt.return_error msg
             | Ok `Eof ->
                 Management_S.TCP.close flow >>= fun () ->
-                Logs.info (fun m ->
-                    m
-                      "Received eof while reading from %s on port %d (command: \
-                       %s)"
-                      target port command);
-                Lwt.return_error
-                  (Fmt.str
-                     "Received eof while reading from %s on port %d (command: \
-                      %s)"
-                     target port command)
+                let msg =
+                  Fmt.str
+                    "[monitoring] Received eof while reading from %s:%d \
+                     (command: %s)"
+                    target port command
+                in
+                Logs.info (fun m -> m "%s" msg);
+                Lwt.return_error msg
             | Ok (`Data cstruct) ->
                 Management_S.TCP.close flow >>= fun () ->
                 Lwt.return_ok (Cstruct.to_string cstruct)))
