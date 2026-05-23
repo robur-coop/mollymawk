@@ -1351,11 +1351,15 @@ struct
           ~target:unikernel_name management_domain
         >>= function
         | Error err ->
-            Middleware.http_response ~api_meth:false reqd
-              ~title:"Monitoring Error" ~data:(`String err) `Bad_request
+            reply reqd
+              (Fmt.str
+                 "<p class=\"text-secondary-500\">An error occured: %s</p>" err)
+              `Bad_request
         | Ok response ->
-            Middleware.http_response ~api_meth:false reqd
-              ~title:"Monitoring Success" ~data:(`String "Updated successfully")
+            reply reqd
+              (Fmt.str
+                 "<p class=\"text-primary-500\">Updated successfully: %s</p>"
+                 response)
               `OK)
     | _ ->
         Middleware.http_response ~api_meth:false reqd ~title:"Monitoring Error"
