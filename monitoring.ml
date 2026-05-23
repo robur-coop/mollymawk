@@ -104,12 +104,8 @@ let render_metric_picker ~source ~value index =
     ]
 
 let monitoring_status_html ~name ~logs ~metrics =
-  let log_entries =
-    match logs with Error _ -> [] | Ok s -> parse_monitoring_response s
-  in
-  let metric_entries =
-    match metrics with Error _ -> [] | Ok s -> parse_monitoring_response s
-  in
+  let log_entries = parse_monitoring_response logs in
+  let metric_entries = parse_monitoring_response metrics in
   let default_log_level =
     match List.assoc_opt "*" log_entries with Some l -> l | None -> "info"
   in
