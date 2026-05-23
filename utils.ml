@@ -232,7 +232,7 @@ let csrf_form_input csrf =
         [
           a_input_type `Hidden;
           a_id "molly-csrf";
-          a_name "molly-csrf-input";
+          a_name "molly_csrf";
           a_value csrf;
         ]
       ())
