@@ -1,17 +1,38 @@
 open Tyxml_html
 
-let parse_monitoring_response str =
+let check_monitoring_response_format str =
   let str = String.trim str in
-  let str =
-    if String.length str > 4 && String.sub str 0 4 = "ok: " then
-      String.sub str 4 (String.length str - 4)
-    else str
-  in
+  if String.length str > 4 && String.sub str 0 4 = "ok: " then
+    Ok (String.sub str 4 (String.length str - 4))
+  else
+    Error
+      (Fmt.str
+         "Response from monitoring does not start with \"ok: \". Received: %s"
+         str)
+
+let split_key_value_sources str =
   String.split_on_char ',' str
-  |> List.filter_map (fun s ->
-      match String.split_on_char ':' (String.trim s) with
-      | [ name; value ] -> Some (String.trim name, String.trim value)
-      | _ -> None)
+  |> List.fold_left
+       (fun acc s ->
+         match acc with
+         | Error err -> Error err
+         | Ok lst -> (
+             match String.split_on_char ':' (String.trim s) with
+             | [ name; value ] ->
+                 Ok ((String.trim name, String.trim value) :: lst)
+             | _ -> Error "Invalid key-value source format"))
+       (Ok [])
+  |> function
+  | Ok parsed_list -> Ok (List.rev parsed_list)
+  | Error err -> Error err
+
+let parse_monitoring_response str =
+  match check_monitoring_response_format str with
+  | Ok str -> (
+      match split_key_value_sources str with
+      | Ok lst -> Ok lst
+      | Error err -> Error err)
+  | Error err -> Error err
 
 let log_levels = [ "debug"; "info"; "warning"; "error"; "app"; "quiet" ]
 
@@ -103,28 +124,19 @@ let render_metric_picker ~source ~value index =
         [ txt "disabled" ];
     ]
 
-let monitoring_status_html ~name ~logs ~metrics =
-  let log_entries = parse_monitoring_response logs in
-  let metric_entries = parse_monitoring_response metrics in
+let render_log_sources log_entries unikernel_name =
   let default_log_level =
     match List.assoc_opt "*" log_entries with Some l -> l | None -> "info"
   in
-  let other_logs = List.filter (fun (s, _) -> s <> "*") log_entries in
-  let other_metrics = List.filter (fun (s, _) -> s <> "*") metric_entries in
+  let other_logs =
+    List.filter (fun (s, _) -> not (String.equal s "*")) log_entries
+  in
   let logs_dict =
     String.concat ", "
       (List.map
          (fun (s, l) ->
            Printf.sprintf "'%s': '%s'" (String.escaped s) (String.escaped l))
          other_logs)
-  in
-  let metrics_dict =
-    String.concat ", "
-      (List.map
-         (fun (s, l) ->
-           let is_en = if String.equal l "enabled" then "true" else "false" in
-           Printf.sprintf "'%s': %s" (String.escaped s) is_en)
-         other_metrics)
   in
   let log_data =
     Printf.sprintf
@@ -138,6 +150,146 @@ let monitoring_status_html ~name ~logs ~metrics =
        cmd; } }"
       default_log_level logs_dict
   in
+  match log_entries with
+  | [] -> div [ txt "No log sources available for this unikernel." ]
+  | _ ->
+      div
+        ~a:[ a_class [ "space-y-3" ]; Unsafe.string_attrib "x-data" log_data ]
+        [
+          div
+            ~a:[ a_class [ "flex items-center gap-2 mb-2" ] ]
+            [
+              i
+                ~a:
+                  [
+                    a_class
+                      [ "fa-solid fa-list-check text-primary-400 text-sm px-2" ];
+                  ]
+                [];
+              p
+                ~a:[ a_class [ "text-xl font-semibold text-primary-400" ] ]
+                [ txt "Log Sources" ];
+              span
+                ~a:
+                  [
+                    a_class
+                      [
+                        "ml-auto text-xs font-semibold px-2 py-0.5 rounded-full";
+                      ];
+                  ]
+                [ txt (Fmt.str "%d sources" (List.length log_entries)) ];
+            ];
+          form
+            ~a:
+              [
+                a_enctype "multipart/form-data";
+                Unsafe.string_attrib "hx-post"
+                  "/api/unikernel/monitoring/update";
+                Unsafe.string_attrib "hx-swap" "innerHTML";
+                Unsafe.string_attrib "hx-include" "#molly-csrf";
+                Unsafe.string_attrib "hx-target" "#monitoring-container";
+              ]
+            [
+              input
+                ~a:
+                  [
+                    a_input_type `Hidden;
+                    a_name "unikernel_name";
+                    a_value unikernel_name;
+                  ]
+                ();
+              input
+                ~a:
+                  [
+                    a_input_type `Hidden;
+                    a_name "command";
+                    Unsafe.string_attrib ":value" "getCommand()";
+                  ]
+                ();
+              div
+                ~a:
+                  [
+                    a_class
+                      [
+                        "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 \
+                         max-h-72 overflow-y-auto pr-1 scrollbar-thin";
+                      ];
+                  ]
+                [
+                  render_log_picker ~source:"*" ~default_level:default_log_level
+                    ~value:"defaultLevel";
+                ];
+              (if other_logs <> [] then
+                 div
+                   [
+                     div
+                       ~a:[ a_class [ "mt-4 mb-2" ] ]
+                       [
+                         button
+                           ~a:
+                             [
+                               a_button_type `Button;
+                               a_class
+                                 [
+                                   "font-semibold text-primary-400 \
+                                    hover:text-primary-300";
+                                 ];
+                               a_style
+                                 "cursor: pointer; text-decoration: underline;";
+                               Unsafe.string_attrib "@click"
+                                 "advancedLogs = !advancedLogs";
+                             ]
+                           [
+                             span
+                               ~a:
+                                 [
+                                   Unsafe.string_attrib "x-text"
+                                     "advancedLogs ? 'Less logging options' : \
+                                      'More logging options'";
+                                 ]
+                               [];
+                           ];
+                       ];
+                     div
+                       ~a:
+                         [
+                           Unsafe.string_attrib "x-show" "advancedLogs";
+                           a_class
+                             [
+                               "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 \
+                                gap-2 max-h-72 overflow-y-auto pr-1 \
+                                scrollbar-thin";
+                             ];
+                         ]
+                       (List.map
+                          (fun (s, l) ->
+                            render_log_picker ~source:s ~default_level:l
+                              ~value:(Printf.sprintf "logs['%s']" s))
+                          other_logs);
+                   ]
+               else div []);
+              div
+                ~a:[ a_class [ "mt-4" ] ]
+                [
+                  Utils.button_component ~extra_css:"font-bold"
+                    ~btn_type:`Primary_full ~attribs:[]
+                    ~content:(txt "Update Logging") ();
+                ];
+            ];
+        ]
+
+let render_metric_sources metric_entries unikernel_name =
+  let other_metrics =
+    List.filter (fun (s, _) -> not (String.equal s "*")) metric_entries
+  in
+  let metrics_dict =
+    String.concat ", "
+      (List.map
+         (fun (s, l) ->
+           let is_en = if String.equal l "enabled" then "true" else "false" in
+           Printf.sprintf "'%s': %s" (String.escaped s) is_en)
+         other_metrics)
+  in
   let metric_data =
     Printf.sprintf
       "{ metrics: { %s }, get allMetrics() { return \
@@ -150,256 +302,128 @@ let monitoring_status_html ~name ~logs ~metrics =
        } } return cmd; } }"
       metrics_dict
   in
+  match metric_entries with
+  | [] -> div [ txt "No metric sources available for this unikernel." ]
+  | _ ->
+      div
+        ~a:
+          [ a_class [ "space-y-3" ]; Unsafe.string_attrib "x-data" metric_data ]
+        [
+          div
+            ~a:[ a_class [ "flex items-center gap-2 mb-2" ] ]
+            [
+              i
+                ~a:
+                  [
+                    a_class
+                      [ "fa-solid fa-chart-line text-primary-400 text-sm px-2" ];
+                  ]
+                [];
+              p
+                ~a:[ a_class [ "text-xl font-semibold text-primary-400" ] ]
+                [ txt "Metrics Sources" ];
+              span
+                ~a:
+                  [
+                    a_class
+                      [
+                        "ml-auto text-xs font-semibold px-2 py-0.5 rounded-full";
+                      ];
+                  ]
+                [
+                  txt
+                    (Fmt.str "%d/%d enabled"
+                       (List.length
+                          (List.filter
+                             (fun (_, s) -> String.equal s "enabled")
+                             metric_entries))
+                       (List.length metric_entries));
+                ];
+            ];
+          form
+            ~a:
+              [
+                a_enctype "multipart/form-data";
+                Unsafe.string_attrib "hx-post"
+                  "/api/unikernel/monitoring/update";
+                Unsafe.string_attrib "hx-swap" "innerHTML";
+                Unsafe.string_attrib "hx-include" "#molly-csrf";
+                Unsafe.string_attrib "hx-target" "#monitoring-container";
+              ]
+            [
+              input
+                ~a:
+                  [
+                    a_input_type `Hidden;
+                    a_name "unikernel_name";
+                    a_value unikernel_name;
+                  ]
+                ();
+              input
+                ~a:
+                  [
+                    a_input_type `Hidden;
+                    a_name "command";
+                    Unsafe.string_attrib ":value" "getCommand()";
+                  ]
+                ();
+              div
+                ~a:
+                  [
+                    a_class
+                      [
+                        "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 \
+                         max-h-72 overflow-y-auto pr-1 scrollbar-thin";
+                      ];
+                  ]
+                (render_metric_picker ~source:"All metrics" ~value:"allMetrics"
+                   (-1)
+                :: List.mapi
+                     (fun i (s, l) ->
+                       render_metric_picker ~source:s
+                         ~value:(Printf.sprintf "metrics['%s']" s)
+                         i)
+                     other_metrics);
+              div
+                ~a:[ a_class [ "mt-4" ] ]
+                [
+                  Utils.button_component ~extra_css:"font-bold"
+                    ~btn_type:`Primary_full ~attribs:[]
+                    ~content:(txt "Update Metrics") ();
+                ];
+            ];
+        ]
+
+let monitoring_status_html ~name ~logs ~metrics =
+  let log_entries = parse_monitoring_response logs in
+  let metric_entries = parse_monitoring_response metrics in
   div
     ~a:[ a_id "monitoring-container"; a_class [ "space-y-6 py-4" ] ]
     [
-      (if log_entries = [] && metric_entries = [] then
-         div
-           ~a:[ a_class [ "text-center py-8" ] ]
-           [
-             i
-               ~a:
-                 [
-                   a_class
-                     [
-                       "fa-solid fa-circle-exclamation text-gray-500 text-2xl \
-                        mb-2";
-                     ];
-                 ]
-               [];
-             p
-               ~a:[ a_class [ "text-gray-400 mt-2" ] ]
-               [ txt "Monitoring unavailable for this unikernel." ];
-           ]
-       else div []);
-      (if log_entries <> [] then
-         div
-           ~a:
-             [ a_class [ "space-y-3" ]; Unsafe.string_attrib "x-data" log_data ]
-           [
-             div
-               ~a:[ a_class [ "flex items-center gap-2 mb-2" ] ]
-               [
-                 i
-                   ~a:
-                     [
-                       a_class
-                         [
-                           "fa-solid fa-list-check text-primary-400 text-sm \
-                            px-2";
-                         ];
-                     ]
-                   [];
-                 p
-                   ~a:[ a_class [ "text-xl font-semibold text-primary-400" ] ]
-                   [ txt "Log Sources" ];
-                 span
-                   ~a:
-                     [
-                       a_class
-                         [
-                           "ml-auto text-xs font-semibold px-2 py-0.5 \
-                            rounded-full";
-                         ];
-                     ]
-                   [ txt (Fmt.str "%d sources" (List.length log_entries)) ];
-               ];
-             form
-               ~a:
-                 [
-                   a_enctype "multipart/form-data";
-                   Unsafe.string_attrib "hx-post"
-                     "/api/unikernel/monitoring/update";
-                   Unsafe.string_attrib "hx-swap" "innerHTML";
-                   Unsafe.string_attrib "hx-include" "#molly-csrf";
-                   Unsafe.string_attrib "hx-target" "#monitoring-container";
-                 ]
-               [
-                 input
-                   ~a:
-                     [
-                       a_input_type `Hidden;
-                       a_name "unikernel_name";
-                       a_value name;
-                     ]
-                   ();
-                 input
-                   ~a:
-                     [
-                       a_input_type `Hidden;
-                       a_name "command";
-                       Unsafe.string_attrib ":value" "getCommand()";
-                     ]
-                   ();
-                 div
-                   ~a:
-                     [
-                       a_class
-                         [
-                           "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 \
-                            gap-2 max-h-72 overflow-y-auto pr-1 scrollbar-thin";
-                         ];
-                     ]
-                   [
-                     render_log_picker ~source:"*"
-                       ~default_level:default_log_level ~value:"defaultLevel";
-                   ];
-                 (if other_logs <> [] then
-                    div
+      (match (log_entries, metric_entries) with
+      | Error err, _ | _, Error err ->
+          div
+            ~a:[ a_class [ "text-center py-8" ] ]
+            [
+              i
+                ~a:
+                  [
+                    a_class
                       [
-                        div
-                          ~a:[ a_class [ "mt-4 mb-2" ] ]
-                          [
-                            button
-                              ~a:
-                                [
-                                  a_button_type `Button;
-                                  a_class
-                                    [
-                                      "font-semibold text-primary-400 \
-                                       hover:text-primary-300";
-                                    ];
-                                  a_style
-                                    "cursor: pointer; text-decoration: \
-                                     underline;";
-                                  Unsafe.string_attrib "@click"
-                                    "advancedLogs = !advancedLogs";
-                                ]
-                              [
-                                span
-                                  ~a:
-                                    [
-                                      Unsafe.string_attrib "x-text"
-                                        "advancedLogs ? 'Less logging options' \
-                                         : 'More logging options'";
-                                    ]
-                                  [];
-                              ];
-                          ];
-                        div
-                          ~a:
-                            [
-                              Unsafe.string_attrib "x-show" "advancedLogs";
-                              a_class
-                                [
-                                  "grid grid-cols-1 md:grid-cols-2 \
-                                   lg:grid-cols-3 gap-2 max-h-72 \
-                                   overflow-y-auto pr-1 scrollbar-thin";
-                                ];
-                            ]
-                          (List.map
-                             (fun (s, l) ->
-                               render_log_picker ~source:s ~default_level:l
-                                 ~value:(Printf.sprintf "logs['%s']" s))
-                             other_logs);
-                      ]
-                  else div []);
-                 div
-                   ~a:[ a_class [ "mt-4" ] ]
-                   [
-                     Utils.button_component ~extra_css:"font-bold"
-                       ~btn_type:`Primary_full ~attribs:[]
-                       ~content:(txt "Update Logging") ();
-                   ];
-               ];
-           ]
-       else div []);
-      hr ();
-      (if metric_entries <> [] then
-         div
-           ~a:
-             [
-               a_class [ "space-y-3" ];
-               Unsafe.string_attrib "x-data" metric_data;
-             ]
-           [
-             div
-               ~a:[ a_class [ "flex items-center gap-2 mb-2" ] ]
-               [
-                 i
-                   ~a:
-                     [
-                       a_class
-                         [
-                           "fa-solid fa-chart-line text-primary-400 text-sm \
-                            px-2";
-                         ];
-                     ]
-                   [];
-                 p
-                   ~a:[ a_class [ "text-xl font-semibold text-primary-400" ] ]
-                   [ txt "Metrics Sources" ];
-                 span
-                   ~a:
-                     [
-                       a_class
-                         [
-                           "ml-auto text-xs font-semibold px-2 py-0.5 \
-                            rounded-full";
-                         ];
-                     ]
-                   [
-                     txt
-                       (Fmt.str "%d/%d enabled"
-                          (List.length
-                             (List.filter
-                                (fun (_, s) -> String.equal s "enabled")
-                                metric_entries))
-                          (List.length metric_entries));
-                   ];
-               ];
-             form
-               ~a:
-                 [
-                   a_enctype "multipart/form-data";
-                   Unsafe.string_attrib "hx-post"
-                     "/api/unikernel/monitoring/update";
-                   Unsafe.string_attrib "hx-swap" "innerHTML";
-                   Unsafe.string_attrib "hx-include" "#molly-csrf";
-                   Unsafe.string_attrib "hx-target" "#monitoring-container";
-                 ]
-               [
-                 input
-                   ~a:
-                     [
-                       a_input_type `Hidden;
-                       a_name "unikernel_name";
-                       a_value name;
-                     ]
-                   ();
-                 input
-                   ~a:
-                     [
-                       a_input_type `Hidden;
-                       a_name "command";
-                       Unsafe.string_attrib ":value" "getCommand()";
-                     ]
-                   ();
-                 div
-                   ~a:
-                     [
-                       a_class
-                         [
-                           "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 \
-                            gap-2 max-h-72 overflow-y-auto pr-1 scrollbar-thin";
-                         ];
-                     ]
-                   (render_metric_picker ~source:"All metrics"
-                      ~value:"allMetrics" (-1)
-                   :: List.mapi
-                        (fun i (s, l) ->
-                          render_metric_picker ~source:s
-                            ~value:(Printf.sprintf "metrics['%s']" s)
-                            i)
-                        other_metrics);
-                 div
-                   ~a:[ a_class [ "mt-4" ] ]
-                   [
-                     Utils.button_component ~extra_css:"font-bold"
-                       ~btn_type:`Primary_full ~attribs:[]
-                       ~content:(txt "Update Metrics") ();
-                   ];
-               ];
-           ]
-       else div []);
+                        "fa-solid fa-circle-exclamation text-gray-500 text-2xl \
+                         mb-2";
+                      ];
+                  ]
+                [];
+              p
+                ~a:[ a_class [ "text-secondary-500 mt-2" ] ]
+                [ txt (Fmt.str "Monitoring parse error: %s" err) ];
+            ]
+      | Ok log_entries, Ok metric_entries ->
+          div
+            [
+              render_log_sources log_entries name;
+              hr ();
+              render_metric_sources metric_entries name;
+            ]);
     ]
