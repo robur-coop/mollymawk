@@ -1261,30 +1261,51 @@ struct
     let target = target ^ "." ^ Domain_name.to_string management_domain in
     Management_HE.connect happy_eyeballs target [ port ] >>= function
     | Error (`Msg err) ->
-        Logs.info (fun m -> m "Failed to connect to %s:%d" target port);
-        Lwt.return_error err
+        Logs.info (fun m ->
+            m "Failed to connect to %s on port %d with error: %s" target port
+              err);
+        Lwt.return_error
+          (Fmt.str "Failed to connect to %s on port %d with error: %s" target
+             port err)
     | Ok ((_ip, _port), flow) -> (
         Management_S.TCP.write flow (Cstruct.of_string command) >>= function
-        | Error _ ->
+        | Error err ->
             Management_S.TCP.close flow >>= fun () ->
             Logs.info (fun m ->
-                m "Failed to write to %s:%d -> %s" target port command);
+                m
+                  "Failed to write to %s on port %d (command: %s) with error: \
+                   %a"
+                  target port command Management_S.TCP.pp_write_error err);
             Lwt.return_error
-              (Fmt.str "Failed to write to %s:%d -> %s" target port command)
+              (Fmt.str
+                 "Failed to write to %s on port %d (command: %s) with error: %a"
+                 target port command Management_S.TCP.pp_write_error err)
         | Ok () -> (
             Management_S.TCP.read flow >>= function
-            | Error _ ->
+            | Error err ->
                 Management_S.TCP.close flow >>= fun () ->
                 Logs.info (fun m ->
-                    m "Failed to read from %s:%d -> %s" target port command);
+                    m
+                      "Failed to read from %s on port %d (command: %s) with \
+                       error: %a"
+                      target port command Management_S.TCP.pp_error err);
                 Lwt.return_error
-                  (Fmt.str "Failed to read from %s:%d -> %s" target port command)
+                  (Fmt.str
+                     "Failed to read from %s on port %d (command: %s) with \
+                      error: %a"
+                     target port command Management_S.TCP.pp_error err)
             | Ok `Eof ->
                 Management_S.TCP.close flow >>= fun () ->
                 Logs.info (fun m ->
-                    m "Received eof while reading from %s:%d -> %s" target port
-                      command);
-                Lwt.return_error "EOF"
+                    m
+                      "Received eof while reading from %s on port %d (command: \
+                       %s)"
+                      target port command);
+                Lwt.return_error
+                  (Fmt.str
+                     "Received eof while reading from %s on port %d (command: \
+                      %s)"
+                     target port command)
             | Ok (`Data cstruct) ->
                 Management_S.TCP.close flow >>= fun () ->
                 Lwt.return_ok (Cstruct.to_string cstruct)))
@@ -1300,13 +1321,23 @@ struct
       ~target:(Configuration.name_to_str unikernel_name)
       management_domain
     >>= fun metrics ->
-    let html =
-      Monitoring.monitoring_status_html
-        ~name:(Configuration.name_to_str unikernel_name)
-        ~logs ~metrics
-    in
-    let body = Format.asprintf "%a" (Tyxml_html.pp_elt ()) html in
-    reply reqd body `OK
+    match (logs, metrics) with
+    | Ok logs_data, Ok metrics_data ->
+        let html =
+          Monitoring.monitoring_status_html
+            ~name:(Configuration.name_to_str unikernel_name)
+            ~logs:logs_data ~metrics:metrics_data
+        in
+        let body = Format.asprintf "%a" (Tyxml_html.pp_elt ()) html in
+        reply reqd body `OK
+    | Error err, _ ->
+        reply reqd
+          (Fmt.str "<p class=\"text-secondary-500\">%s</p>" err)
+          `Bad_request
+    | _, Error err ->
+        reply reqd
+          (Fmt.str "<p class=\"text-secondary-500\">%s</p>" err)
+          `Bad_request
 
   let unikernel_monitoring_update happy_eyeballs management_domain _user
       multipart_body reqd =
