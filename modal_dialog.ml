@@ -25,6 +25,7 @@ let modal_dialog ~modal_title ~button_content ?(button_type = `Primary_full)
                       "fixed inset-0 z-30 flex items-end justify-center \
                        bg-black/20 p-4 backdrop-blur-md sm:items-center";
                     ];
+                  a_style "overflow-y: auto;";
                   a_role [ "dialog" ];
                   a_aria "modal" [ "true" ];
                 ]
@@ -42,9 +43,10 @@ let modal_dialog ~modal_title ~button_content ?(button_type = `Primary_full)
                         "opacity-100 scale-100";
                       a_class
                         [
-                          "flex max-w-xl flex-col gap-4 overflow-hidden \
-                           rounded-md border border-neutral-300 bg-gray-50";
+                          "flex max-w-fit flex-col gap-4 rounded-md border \
+                           border-neutral-300 bg-gray-50";
                         ];
+                      a_style "max-height: 85vh; overflow: hidden;";
                     ]
                   [
                     div
@@ -52,6 +54,7 @@ let modal_dialog ~modal_title ~button_content ?(button_type = `Primary_full)
                         [
                           a_class
                             [ "flex items-center justify-between border-b p-4" ];
+                          a_style "flex-shrink: 0;";
                         ]
                       [
                         h3
@@ -66,7 +69,13 @@ let modal_dialog ~modal_title ~button_content ?(button_type = `Primary_full)
                             ]
                           [];
                       ];
-                    div ~a:[ a_class [ "px-4" ] ] [ content ];
+                    div
+                      ~a:
+                        [
+                          a_class [ "px-4 pb-4" ];
+                          a_style "overflow-y: auto; flex: 1 1 0%;";
+                        ]
+                      [ content ];
                   ];
               ];
           ];
