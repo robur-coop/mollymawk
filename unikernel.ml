@@ -1255,8 +1255,10 @@ struct
     Middleware.http_response reqd ~title:"Unikernel Information"
       ~data:response_data `OK
 
-  let send_management_tcp_command happy_eyeballs ~command ~target =
+  let send_monitoring_tcp_command happy_eyeballs ~command ~target
+      management_domain =
     let port = 2323 in
+    let target = target ^ "." ^ Domain_name.to_string management_domain in
     Management_HE.connect happy_eyeballs target [ port ] >>= function
     | Error (`Msg err) ->
         Logs.info (fun m -> m "Failed to connect to %s:%d" target port);
@@ -1287,15 +1289,16 @@ struct
                 Management_S.TCP.close flow >>= fun () ->
                 Lwt.return_ok (Cstruct.to_string cstruct)))
 
-  let unikernel_monitoring_status happy_eyeballs management_hostname
+  let unikernel_monitoring_status happy_eyeballs management_domain
       unikernel_name _token_or_cookie _user reqd =
     let open Lwt.Infix in
-    let target =
-      Configuration.name_to_str unikernel_name ^ "." ^ management_hostname
-    in
-    send_management_tcp_command happy_eyeballs ~command:"l*" ~target
+    send_monitoring_tcp_command happy_eyeballs ~command:"l*"
+      ~target:(Configuration.name_to_str unikernel_name)
+      management_domain
     >>= fun logs ->
-    send_management_tcp_command happy_eyeballs ~command:"m*" ~target
+    send_monitoring_tcp_command happy_eyeballs ~command:"m*"
+      ~target:(Configuration.name_to_str unikernel_name)
+      management_domain
     >>= fun metrics ->
     let html =
       Monitoring.monitoring_status_html
@@ -1305,7 +1308,7 @@ struct
     let body = Format.asprintf "%a" (Tyxml_html.pp_elt ()) html in
     reply reqd body `OK
 
-  let unikernel_monitoring_update happy_eyeballs management_hostname _user
+  let unikernel_monitoring_update happy_eyeballs management_domain _user
       multipart_body reqd =
     match
       ( Map.find_opt "command" multipart_body,
@@ -1313,8 +1316,9 @@ struct
     with
     | Some (_, command), Some (_, unikernel_name) -> (
         let open Lwt.Infix in
-        let target = unikernel_name ^ "." ^ management_hostname in
-        send_management_tcp_command happy_eyeballs ~command ~target >>= function
+        send_monitoring_tcp_command happy_eyeballs ~command
+          ~target:unikernel_name management_domain
+        >>= function
         | Error err ->
             Middleware.http_response ~api_meth:false reqd
               ~title:"Monitoring Error" ~data:(`String err) `Bad_request
@@ -2974,7 +2978,7 @@ struct
     in
     Lwt.async loop
 
-  let request_handler stack management_happy_eyeballs management_hostname
+  let request_handler stack management_happy_eyeballs management_domain
       albatross_instances js_file css_file imgs store http_client happy_eyeballs
       flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
@@ -3294,13 +3298,13 @@ struct
                 authenticate store reqd ~check_token:true ~api_meth:true
                   (unikernel
                      (unikernel_monitoring_status management_happy_eyeballs
-                        management_hostname)))
+                        management_domain)))
         | "/api/unikernel/monitoring/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_multipart_csrf_token
                      (unikernel_monitoring_update management_happy_eyeballs
-                        management_hostname)))
+                        management_domain)))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -3377,11 +3381,12 @@ struct
             ~getaddrinfo:(getaddrinfo_management management_dns)
             management_stack
         in
-        Logs.info (fun m ->
-            m "Domain from DHCP lease: %s"
-              (Option.value management_domain_name ~default:"none given"));
-        let management_hostname =
-          Option.value management_domain_name ~default:"management"
+        let management_domain =
+          match management_domain_name with
+          | None -> failwith "No domain name from DHCP lease"
+          | Some domain_name ->
+              Logs.info (fun m -> m "Domain from DHCP lease: %s" domain_name);
+              Domain_name.of_string_exn domain_name
         in
         Albatross_state.init_all stack (Store.configurations store)
         >>= fun albatross_instances ->
@@ -3390,7 +3395,7 @@ struct
         Logs.info (fun m ->
             m "Initialise an HTTP server (no HTTPS) on port %u" port);
         let request_handler =
-          request_handler stack management_happy_eyeballs management_hostname
+          request_handler stack management_happy_eyeballs management_domain
             albatross_instances js_file css_file imgs store http_client
             happy_eyeballs
         in
