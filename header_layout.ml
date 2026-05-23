@@ -19,9 +19,24 @@ let header ?(page_title = "Mollymawk") ~icon () =
           ~a:
             [
               a_src
-                "https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js";
+                "https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js";
+              a_integrity
+                "sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V";
+              a_crossorigin `Anonymous;
             ]
           (txt "");
+        (* by default htmx doesn't swap on error responses. 
+        this allows it to swap for any error code. 
+        we need this to display errors to the user
+        see: https://htmx.org/quirks/#by-default-4xx-5xx-responses-do-not-swap *)
+        meta
+          ~a:
+            [
+              a_name "htmx-config";
+              a_content
+                "{\"responseHandling\": [{\"code\":\"...\", \"swap\": true}]}";
+            ]
+          ();
         link ~rel:[ `Stylesheet ]
           ~href:"https://unpkg.com/aos@2.3.1/dist/aos.css" ();
         link ~rel:[ `Stylesheet ] ~href:"/style.css" ();
