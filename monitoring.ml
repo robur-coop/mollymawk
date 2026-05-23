@@ -12,7 +12,6 @@ let check_command command =
       | "debug" | "info" | "warning" | "error" | "app" | "quiet" -> true
       | _ -> false
     in
-
     let is_valid_metric s =
       match String.trim s with "enable" | "disable" -> true | _ -> false
     in
