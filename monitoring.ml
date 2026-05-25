@@ -84,9 +84,7 @@ let split_key_value_sources str =
                    (Fmt.str "Invalid key-value source format. got %s"
                       (escape_string s))))
        (Ok [])
-  |> function
-  | Ok parsed_list -> Ok (List.rev parsed_list)
-  | Error err -> Error err
+  |> Result.map List.rev
 
 let parse_monitoring_response str =
   match check_monitoring_response_format str with
