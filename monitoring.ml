@@ -1,5 +1,17 @@
 open Tyxml_html
 
+let log_levels =
+  [
+    Some Logs.Debug;
+    Some Logs.Info;
+    Some Logs.Warning;
+    Some Logs.Error;
+    Some Logs.App;
+  ]
+
+let log_level_of_string s =
+  match Logs.level_of_string s with Ok v -> Ok v | Error err -> Error err
+
 let check_command command =
   let command = String.trim command in
   if String.length command < 2 then Error "Command is too short"
@@ -7,11 +19,7 @@ let check_command command =
     let kind = String.sub command 0 1 in
     let rest = String.sub command 1 (String.length command - 1) in
     let segments = String.split_on_char ',' rest in
-    let is_valid_level s =
-      match String.trim s with
-      | "debug" | "info" | "warning" | "error" | "app" | "quiet" -> true
-      | _ -> false
-    in
+    let is_valid_level s = Result.is_ok (Logs.level_of_string s) in
     let is_valid_metric s =
       match String.trim s with "enable" | "disable" -> true | _ -> false
     in
@@ -89,8 +97,6 @@ let parse_monitoring_response str =
       | Error err -> Error err)
   | Error err -> Error err
 
-let log_levels = [ "debug"; "info"; "warning"; "error"; "app"; "quiet" ]
-
 let render_log_picker ~source ~default_level ~value =
   div
     ~a:
@@ -130,9 +136,9 @@ let render_log_picker ~source ~default_level ~value =
            (fun l ->
              option
                ~a:
-                 ([ a_value l ]
+                 ([ a_value (Logs.level_to_string l) ]
                  @ if l = default_level then [ a_selected () ] else [])
-               (txt l))
+               (txt (Logs.level_to_string l)))
            log_levels);
     ]
 
@@ -180,17 +186,31 @@ let render_metric_picker ~source ~value index =
     ]
 
 let render_log_sources log_entries unikernel_name =
+  let parsed_log_entries =
+    List.map
+      (fun (s, l) ->
+        let parsed_level =
+          match Logs.level_of_string l with
+          | Ok level -> level
+          | Error _ -> Some Logs.Info
+        in
+        (s, parsed_level))
+      log_entries
+  in
   let default_log_level =
-    match List.assoc_opt "*" log_entries with Some l -> l | None -> "info"
+    match List.assoc_opt "*" parsed_log_entries with
+    | Some l -> l
+    | None -> Some Logs.Info
   in
   let other_logs =
-    List.filter (fun (s, _) -> not (String.equal s "*")) log_entries
+    List.filter (fun (s, _) -> not (String.equal s "*")) parsed_log_entries
   in
   let logs_dict =
     String.concat ", "
       (List.map
          (fun (s, l) ->
-           Printf.sprintf "'%s': '%s'" (String.escaped s) (String.escaped l))
+           Printf.sprintf "'%s': '%s'" (String.escaped s)
+             (Logs.level_to_string l))
          other_logs)
   in
   let log_data =
