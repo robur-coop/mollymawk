@@ -466,6 +466,7 @@ struct
               `Internal_server_error
         | Ok () -> f `Cookie user reqd)
 
+  (* reply can send html. useMiddleware.http_response when you want to return json *)
   let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status
       =
     let h =
