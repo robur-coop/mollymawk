@@ -9,10 +9,18 @@ let log_levels =
     Some Logs.App;
   ]
 
+let escape_string s =
+  String.escaped
+    (String.concat "&amp;"
+       (String.split_on_char '&'
+          (String.concat "&gt;"
+             (String.split_on_char '>'
+                (String.concat "&lt;" (String.split_on_char '<' s))))))
+
 let check_command command =
   let command = String.trim command in
   if String.length command < 2 then
-    Error (Fmt.str "Command is too short. got %s" command)
+    Error (Fmt.str "Command is too short. got %s" (escape_string command))
   else
     let kind = String.sub command 0 1 in
     let rest = String.sub command 1 (String.length command - 1) in
@@ -38,19 +46,19 @@ let check_command command =
     match kind with
     | "L" ->
         if segments = [ "" ] then
-          Error (Fmt.str "Empty logs command body. got %s" command)
+          Error (Fmt.str "Empty logs command body. got %s" (escape_string command))
         else if List.for_all (validate_segment is_valid_level) segments then
           Ok command
-        else Error (Fmt.str "Invalid logs configuration. got %s" command)
+        else Error (Fmt.str "Invalid logs configuration. got %s" (escape_string command))
     | "M" ->
         if segments = [ "" ] then
-          Error (Fmt.str "Empty metrics command body. got %s" command)
+          Error (Fmt.str "Empty metrics command body. got %s" (escape_string command))
         else if List.for_all (validate_segment is_valid_metric) segments then
           Ok command
-        else Error (Fmt.str "Invalid metrics configuration. got %s" command)
+        else Error (Fmt.str "Invalid metrics configuration. got %s" (escape_string command))
     | _ ->
         Error
-          (Fmt.str "Invalid command prefix (must be L or M). got %s" command)
+          (Fmt.str "Invalid command prefix (must be L or M). got %s" (escape_string command))
 
 let check_monitoring_response_format str =
   let str = String.trim str in
@@ -59,8 +67,8 @@ let check_monitoring_response_format str =
   else
     Error
       (Fmt.str
-         "Response from monitoring does not start with \"ok: \". Received: %S"
-         str)
+         "Response from monitoring does not start with \"ok: \". Received: %s"
+         (escape_string str))
 
 let split_key_value_sources str =
   String.split_on_char ',' str
@@ -74,7 +82,7 @@ let split_key_value_sources str =
              | _ ->
                  Error
                    (Fmt.str "Invalid key-value source format. got %s"
-                      (String.escaped s))))
+                      (escape_string s))))
        (Ok [])
   |> function
   | Ok parsed_list -> Ok (List.rev parsed_list)
@@ -200,7 +208,7 @@ let render_log_sources log_entries unikernel_name =
     String.concat ", "
       (List.map
          (fun (s, l) ->
-           Printf.sprintf "'%s': '%s'" (String.escaped s)
+           Printf.sprintf "'%s': '%s'" (escape_string s)
              (Logs.level_to_string l))
          other_logs)
   in
@@ -354,7 +362,7 @@ let render_metric_sources metric_entries unikernel_name =
       (List.map
          (fun (s, l) ->
            let is_en = if String.equal l "enabled" then "true" else "false" in
-           Printf.sprintf "'%s': %s" (String.escaped s) is_en)
+           Printf.sprintf "'%s': %s" (escape_string s) is_en)
          other_metrics)
   in
   let metric_data =
