@@ -29,8 +29,10 @@ let check_command command =
     let validate_segment is_valid_val segment =
       if String.length segment = 0 then false
       else if segment.[0] = '*' then
-        let value = String.sub segment 2 (String.length segment - 2) in
-        is_valid_val value
+        if String.length segment >= 3 && segment.[1] = ':' then
+          let value = String.sub segment 2 (String.length segment - 2) in
+          is_valid_val value
+        else false
       else
         match String.split_on_char ':' segment with
         | [ name; val_ ] -> is_valid_source name && is_valid_val val_
