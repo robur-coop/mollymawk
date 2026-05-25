@@ -46,19 +46,29 @@ let check_command command =
     match kind with
     | "L" ->
         if segments = [ "" ] then
-          Error (Fmt.str "Empty logs command body. got %s" (escape_string command))
+          Error
+            (Fmt.str "Empty logs command body. got %s" (escape_string command))
         else if List.for_all (validate_segment is_valid_level) segments then
           Ok command
-        else Error (Fmt.str "Invalid logs configuration. got %s" (escape_string command))
+        else
+          Error
+            (Fmt.str "Invalid logs configuration. got %s"
+               (escape_string command))
     | "M" ->
         if segments = [ "" ] then
-          Error (Fmt.str "Empty metrics command body. got %s" (escape_string command))
+          Error
+            (Fmt.str "Empty metrics command body. got %s"
+               (escape_string command))
         else if List.for_all (validate_segment is_valid_metric) segments then
           Ok command
-        else Error (Fmt.str "Invalid metrics configuration. got %s" (escape_string command))
+        else
+          Error
+            (Fmt.str "Invalid metrics configuration. got %s"
+               (escape_string command))
     | _ ->
         Error
-          (Fmt.str "Invalid command prefix (must be L or M). got %s" (escape_string command))
+          (Fmt.str "Invalid command prefix (must be L or M). got %s"
+             (escape_string command))
 
 let check_monitoring_response_format str =
   let str = String.trim str in
@@ -186,9 +196,10 @@ let render_log_sources log_entries unikernel_name =
   let default, other =
     List.partition (fun (l, _) -> String.equal l "*") log_entries
   in
-  let default_log_level = match default with
+  let default_log_level =
+    match default with
     | [] -> Some Logs.Info
-    | [ _, l ] -> l
+    | [ (_, l) ] -> l
     | _ -> (* ?? *) Some Logs.Info
   in
   let logs_dict =
@@ -347,8 +358,7 @@ let render_metric_sources metric_entries unikernel_name =
   let metrics_dict =
     String.concat ", "
       (List.map
-         (fun (s, m) ->
-           Printf.sprintf "'%s': %B" (escape_string s) m)
+         (fun (s, m) -> Printf.sprintf "'%s': %B" (escape_string s) m)
          other_metrics)
   in
   let metric_data =
@@ -395,9 +405,7 @@ let render_metric_sources metric_entries unikernel_name =
                   txt
                     (Fmt.str "%d/%d enabled"
                        (List.length
-                          (List.filter
-                             (fun (_, m) -> m)
-                             other_metrics))
+                          (List.filter (fun (_, m) -> m) other_metrics))
                        (List.length other_metrics));
                 ];
             ];
@@ -458,25 +466,27 @@ let render_metric_sources metric_entries unikernel_name =
 let parse_log_entries entries =
   List.fold_left
     (fun acc (s, l) ->
-       match acc with
-       | Error _ as e -> e
-       | Ok acc ->
-         match Logs.level_of_string l with
-         | Ok level -> Ok ((s, level) :: acc)
-         | Error `Msg e -> Error e)
-    (Ok [])
-    entries
-
-let parse_metrics_entries entries =
-  List.fold_left (fun acc (s, m) ->
       match acc with
       | Error _ as e -> e
-      | Ok acc ->
-        match m with
-        | "enabled" -> Ok ((s, true) :: acc)
-        | "disabled" -> Ok ((s, false) :: acc)
-        | x -> Error (Fmt.str "expected either enabled or disabled, got %s"
-                        (escape_string x)))
+      | Ok acc -> (
+          match Logs.level_of_string l with
+          | Ok level -> Ok ((s, level) :: acc)
+          | Error (`Msg e) -> Error e))
+    (Ok []) entries
+
+let parse_metrics_entries entries =
+  List.fold_left
+    (fun acc (s, m) ->
+      match acc with
+      | Error _ as e -> e
+      | Ok acc -> (
+          match m with
+          | "enabled" -> Ok ((s, true) :: acc)
+          | "disabled" -> Ok ((s, false) :: acc)
+          | x ->
+              Error
+                (Fmt.str "expected either enabled or disabled, got %s"
+                   (escape_string x))))
     (Ok []) entries
 
 let monitoring_status_html ~name ~logs ~metrics =
