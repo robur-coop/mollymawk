@@ -214,9 +214,9 @@ let render_log_sources log_entries unikernel_name =
        '#854d0e', 'error': '#7f1d1d'}; return colors[level] || '#27272a'; }, \
        getTextColor(level) { const colors = {'info': '#bbf7d0', 'warning': \
        '#fef08a', 'error': '#fecaca'}; return colors[level] || '#a1a1aa'; }, \
-       getCommand() { let cmd = 'L*:' + this.defaultLevel.trim(); for (const [k, v] \
-       of Object.entries(this.logs)) { cmd += ',' + k.trim() + ':' + v.trim(); }  return \
-       cmd.trim(); } }"
+       getCommand() { let cmd = 'L*:' + this.defaultLevel.trim(); for (const \
+       [k, v] of Object.entries(this.logs)) { cmd += ',' + k.trim() + ':' + \
+       v.trim(); }  return cmd.trim(); } }"
       (Logs.level_to_string default_log_level)
       logs_dict
   in
@@ -368,8 +368,8 @@ let render_metric_sources metric_entries unikernel_name =
        getCommand() { const values = Object.values(this.metrics); if \
        (values.every(v => v)) { return 'M*:enable'; } if (values.every(v => \
        !v)) { return 'M*:disable'; } let cmd = 'M*:disable'; for (const [k, v] \
-       of Object.entries(this.metrics)) { if (v) { cmd += ',' + k.trim() + ':enable'; \
-       } } return cmd.trim(); } }"
+       of Object.entries(this.metrics)) { if (v) { cmd += ',' + k.trim() + \
+       ':enable'; } } return cmd.trim(); } }"
       metrics_dict
   in
   match metric_entries with
