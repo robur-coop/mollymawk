@@ -14,7 +14,8 @@ let log_level_of_string s =
 
 let check_command command =
   let command = String.trim command in
-  if String.length command < 2 then Error "Command is too short"
+  if String.length command < 2 then
+    Error (Fmt.str "Command is too short. got %s" command)
   else
     let kind = String.sub command 0 1 in
     let rest = String.sub command 1 (String.length command - 1) in
@@ -50,18 +51,20 @@ let check_command command =
     in
     match kind with
     | "L" ->
-        if segments = [] || segments = [ "" ] then
-          Error "Empty logs command body"
+        if segments = [ "" ] then
+          Error (Fmt.str "Empty logs command body. got %s" command)
         else if List.for_all (validate_segment is_valid_level) segments then
           Ok command
-        else Error "Invalid logs configuration formatting"
+        else Error (Fmt.str "Invalid logs configuration. got %s" command)
     | "M" ->
-        if segments = [] || segments = [ "" ] then
-          Error "Empty metrics command body"
+        if segments = [ "" ] then
+          Error (Fmt.str "Empty metrics command body. got %s" command)
         else if List.for_all (validate_segment is_valid_metric) segments then
           Ok command
-        else Error "Invalid metrics configuration formatting"
-    | _ -> Error "Invalid command prefix (must be L or M)"
+        else Error (Fmt.str "Invalid metrics configuration. got %s" command)
+    | _ ->
+        Error
+          (Fmt.str "Invalid command prefix (must be L or M). got %s" command)
 
 let check_monitoring_response_format str =
   let str = String.trim str in
@@ -70,7 +73,7 @@ let check_monitoring_response_format str =
   else
     Error
       (Fmt.str
-         "Response from monitoring does not start with \"ok: \". Received: %s"
+         "Response from monitoring does not start with \"ok: \". Received: %S"
          str)
 
 let split_key_value_sources str =
@@ -80,10 +83,12 @@ let split_key_value_sources str =
          match acc with
          | Error err -> Error err
          | Ok lst -> (
-             match String.split_on_char ':' (String.trim s) with
-             | [ name; value ] ->
-                 Ok ((String.trim name, String.trim value) :: lst)
-             | _ -> Error "Invalid key-value source format"))
+             match String.split_on_char ':' s with
+             | [ name; value ] -> Ok ((name, value) :: lst)
+             | _ ->
+                 Error
+                   (Fmt.str "Invalid key-value source format. got %s"
+                      (String.escaped s))))
        (Ok [])
   |> function
   | Ok parsed_list -> Ok (List.rev parsed_list)
