@@ -18,6 +18,8 @@ end
 
 module Main
     (S : Tcpip.Stack.V4V6)
+    (Management_S : Tcpip.Stack.V4V6)
+    (Management_Dns : Dns_client_mirage.S)
     (KV_ASSETS : Mirage_kv.RO)
     (BLOCK : Mirage_block.S)
     (Http_client : Http_mirage_client.S) =
@@ -28,6 +30,7 @@ struct
   module HE = Happy_eyeballs_mirage.Make (S)
   module Mailer = Sendmail_mirage.Make (S.TCP) (HE)
   module Dns = Dns_client_mirage.Make (S) (HE)
+  module Management_HE = Happy_eyeballs_mirage.Make (Management_S)
 
   let recipient email =
     match Colombe_emile.to_path email with
@@ -43,7 +46,7 @@ struct
     | `A -> (
         Dns.gethostbyname dns destination >>= function
         | Ok addr ->
-            Logs.info (fun m ->
+            Logs.debug (fun m ->
                 m "Resolved `A record for %s to %a"
                   (Domain_name.to_string destination)
                   Ipaddr.V4.pp addr);
@@ -52,8 +55,30 @@ struct
     | `AAAA -> (
         Dns.gethostbyname6 dns destination >>= function
         | Ok addr ->
-            Logs.info (fun m ->
+            Logs.debug (fun m ->
                 m "Resolved `AAAA record for %s to %a"
+                  (Domain_name.to_string destination)
+                  Ipaddr.V6.pp addr);
+            Ipaddr.Set.of_list [ Ipaddr.V6 addr ] |> Lwt.return_ok
+        | Error e -> Lwt.return_error e)
+
+  let getaddrinfo_management dns : Management_HE.getaddrinfo =
+   fun record_type destination ->
+    match record_type with
+    | `A -> (
+        Management_Dns.gethostbyname dns destination >>= function
+        | Ok addr ->
+            Logs.debug (fun m ->
+                m "[Management] Resolved `A record for %s to %a"
+                  (Domain_name.to_string destination)
+                  Ipaddr.V4.pp addr);
+            Ipaddr.Set.of_list [ Ipaddr.V4 addr ] |> Lwt.return_ok
+        | Error e -> Lwt.return_error e)
+    | `AAAA -> (
+        Management_Dns.gethostbyname6 dns destination >>= function
+        | Ok addr ->
+            Logs.debug (fun m ->
+                m "[Management] Resolved `AAAA record for %s to %a"
                   (Domain_name.to_string destination)
                   Ipaddr.V6.pp addr);
             Ipaddr.Set.of_list [ Ipaddr.V6 addr ] |> Lwt.return_ok
@@ -441,6 +466,7 @@ struct
               `Internal_server_error
         | Ok () -> f `Cookie user reqd)
 
+  (* reply can send html. useMiddleware.http_response when you want to return json *)
   let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status
       =
     let h =
@@ -1229,6 +1255,114 @@ struct
     in
     Middleware.http_response reqd ~title:"Unikernel Information"
       ~data:response_data `OK
+
+  let send_monitoring_tcp_command happy_eyeballs ~command ~target
+      management_domain =
+    let port = 2323 in
+    let target = target ^ "." ^ Domain_name.to_string management_domain in
+    Management_HE.connect happy_eyeballs target [ port ] >>= function
+    | Error (`Msg err) ->
+        let msg =
+          Fmt.str "[monitoring] Failed to connect to %s:%d, error %s" target
+            port err
+        in
+        Logs.info (fun m -> m "%s" msg);
+        Lwt.return_error msg
+    | Ok ((_ip, _port), flow) -> (
+        Management_S.TCP.write flow (Cstruct.of_string command) >>= function
+        | Error err ->
+            Management_S.TCP.close flow >>= fun () ->
+            let msg =
+              Fmt.str
+                "[monitoring] Failed to write to %s:%d (command: %s), error %a"
+                target port command Management_S.TCP.pp_write_error err
+            in
+            Logs.info (fun m -> m "%s" msg);
+            Lwt.return_error msg
+        | Ok () -> (
+            Management_S.TCP.read flow >>= function
+            | Error err ->
+                Management_S.TCP.close flow >>= fun () ->
+                let msg =
+                  Fmt.str
+                    "[monitoring] Failed to read from %s:%d (command: %s), \
+                     error %a"
+                    target port command Management_S.TCP.pp_error err
+                in
+                Logs.info (fun m -> m "%s" msg);
+                Lwt.return_error msg
+            | Ok `Eof ->
+                Management_S.TCP.close flow >>= fun () ->
+                let msg =
+                  Fmt.str
+                    "[monitoring] Received eof while reading from %s:%d \
+                     (command: %s)"
+                    target port command
+                in
+                Logs.info (fun m -> m "%s" msg);
+                Lwt.return_error msg
+            | Ok (`Data cstruct) ->
+                Management_S.TCP.close flow >>= fun () ->
+                Lwt.return_ok (Cstruct.to_string cstruct)))
+
+  let unikernel_monitoring_status happy_eyeballs management_domain
+      unikernel_name _token_or_cookie _user reqd =
+    let open Lwt.Infix in
+    send_monitoring_tcp_command happy_eyeballs ~command:"l*"
+      ~target:(Configuration.name_to_str unikernel_name)
+      management_domain
+    >>= fun logs ->
+    send_monitoring_tcp_command happy_eyeballs ~command:"m*"
+      ~target:(Configuration.name_to_str unikernel_name)
+      management_domain
+    >>= fun metrics ->
+    match (logs, metrics) with
+    | Ok logs_data, Ok metrics_data ->
+        let html =
+          Monitoring.monitoring_status_html
+            ~name:(Configuration.name_to_str unikernel_name)
+            ~logs:logs_data ~metrics:metrics_data
+        in
+        let body = Format.asprintf "%a" (Tyxml_html.pp_elt ()) html in
+        reply reqd body `OK
+    | Error err, _ -> reply reqd (Utils.display_alert err `Error) `Bad_request
+    | _, Error err -> reply reqd (Utils.display_alert err `Error) `Bad_request
+
+  let unikernel_monitoring_update happy_eyeballs management_domain _user
+      multipart_body reqd =
+    match
+      ( Map.find_opt "command" multipart_body,
+        Map.find_opt "unikernel_name" multipart_body )
+    with
+    | Some (_, command), Some (_, unikernel_name) -> (
+        let open Lwt.Infix in
+        match Monitoring.check_command command with
+        | Ok command -> (
+            send_monitoring_tcp_command happy_eyeballs ~command
+              ~target:unikernel_name management_domain
+            >>= function
+            | Error err ->
+                reply reqd
+                  (Utils.display_alert ("An error occured: " ^ err) `Error)
+                  `Bad_request
+            | Ok response ->
+                reply reqd
+                  (Utils.display_alert
+                     ("Updated succesfully: " ^ response)
+                     `Success)
+                  `OK)
+        | Error err ->
+            let msg =
+              Fmt.str "Command is malformated. Command: %s, Received error: %s"
+                command err
+            in
+            Logs.info (fun m -> m "%s" msg);
+            reply reqd (Utils.display_alert msg `Error) `Bad_request)
+    | _ ->
+        reply reqd
+          (Utils.display_alert "Missing unikernel name or command in request."
+             `Error)
+          `Bad_request
 
   let unikernel_info_one stack store albatross unikernel_name _
       (user : User_model.user) reqd =
@@ -2877,8 +3011,9 @@ struct
     in
     Lwt.async loop
 
-  let request_handler stack albatross_instances js_file css_file imgs store
-      http_client happy_eyeballs flow (_ipaddr, _port) reqd =
+  let request_handler stack management_happy_eyeballs management_domain
+      albatross_instances js_file css_file imgs store http_client happy_eyeballs
+      flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
           Middleware.http_response reqd
@@ -3191,6 +3326,18 @@ struct
                 authenticate store reqd
                   (albatross_instance "/unikernel/deploy"
                      (deploy_form stack store http_client)))
+        | "/api/unikernel/monitoring/status" ->
+            check_meth `GET (fun () ->
+                authenticate store reqd ~check_token:true ~api_meth:true
+                  (unikernel
+                     (unikernel_monitoring_status management_happy_eyeballs
+                        management_domain)))
+        | "/api/unikernel/monitoring/update" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_token:true ~api_meth:true store reqd
+                  (extract_multipart_csrf_token
+                     (unikernel_monitoring_update management_happy_eyeballs
+                        management_domain)))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -3252,7 +3399,8 @@ struct
           Fmt.(option ~none:(any "unknown") H1.Request.pp_hum)
           request)
 
-  let start stack assets storage http_client =
+  let start stack management_stack management_dns assets storage http_client
+      management_domain_name =
     js_contents assets >>= fun js_file ->
     css_contents assets >>= fun css_file ->
     images assets >>= fun imgs ->
@@ -3261,6 +3409,18 @@ struct
     | Ok store ->
         let dns = Dns.create (stack, HE.create stack) in
         let happy_eyeballs = HE.create ~getaddrinfo:(getaddrinfo dns) stack in
+        let management_happy_eyeballs =
+          Management_HE.create
+            ~getaddrinfo:(getaddrinfo_management management_dns)
+            management_stack
+        in
+        let management_domain =
+          match management_domain_name with
+          | None -> failwith "No domain name from DHCP lease"
+          | Some domain_name ->
+              Logs.info (fun m -> m "Domain from DHCP lease: %s" domain_name);
+              Domain_name.of_string_exn domain_name
+        in
         Albatross_state.init_all stack (Store.configurations store)
         >>= fun albatross_instances ->
         let albatross_instances = ref albatross_instances in
@@ -3268,8 +3428,9 @@ struct
         Logs.info (fun m ->
             m "Initialise an HTTP server (no HTTPS) on port %u" port);
         let request_handler =
-          request_handler stack albatross_instances js_file css_file imgs store
-            http_client happy_eyeballs
+          request_handler stack management_happy_eyeballs management_domain
+            albatross_instances js_file css_file imgs store http_client
+            happy_eyeballs
         in
         Paf.init ~port (S.tcp stack) >>= fun service ->
         Lwt.pause () >>= fun () ->

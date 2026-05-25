@@ -2,6 +2,35 @@
 open Mirage
 
 let assets = crunch "assets"
+let dhcp_requests = make_dhcp_requests ()
+
+let management_stack, lease =
+  generic_stackv4v6_with_lease ~group:"management" ~dhcp_requests
+    (netif "management")
+
+let management_eyeballs =
+  generic_happy_eyeballs ~group:"management" management_stack
+
+let management_dns =
+  generic_dns_client ~group:"management" management_stack management_eyeballs
+
+let management_domain (dhcp_requests, lease) =
+  let () =
+    add_dhcp_request dhcp_requests 15
+    (* DOMAIN_NAME *)
+  in
+  let connect _ _ = function
+    | [ lease ] ->
+        (* TODO: sane default instead of None?! *)
+        code ~pos:__POS__
+          "Lwt.return @@@@@ match %s with None -> None@ | Some lease -> \
+           Dhcp_wire.find_domain_name lease"
+          lease
+    | _ -> assert false
+  in
+  impl ~connect ~extra_deps:[ dep lease ] "Dhcp_wire" job
+
+let management_domain_name = management_domain (dhcp_requests, lease)
 
 let mollymawk =
   let packages =
@@ -31,7 +60,9 @@ let mollymawk =
     ]
   in
   main ~packages "Unikernel.Main"
-    (stackv4v6 @-> kv_ro @-> block @-> http_client @-> job)
+    ~deps:[ dep management_domain_name ]
+    (stackv4v6 @-> stackv4v6 @-> dns_client @-> kv_ro @-> block @-> http_client
+   @-> job)
 
 let block = block_of_file "data"
 
@@ -54,4 +85,8 @@ let http_client =
   http_client $ tcp $ happy_eyeballs
 
 let () =
-  register "mollymawk" [ mollymawk $ stack $ assets $ block $ http_client ]
+  register "mollymawk"
+    [
+      mollymawk $ stack $ management_stack $ management_dns $ assets $ block
+      $ http_client;
+    ]

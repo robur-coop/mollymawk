@@ -272,6 +272,73 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                       ];
                   ];
                 div
+                  ~a:
+                    [
+                      a_class
+                        [
+                          "rounded my-4 text-white p-4 border \
+                           border-primary-700 bg-gray-800";
+                        ];
+                    ]
+                  [
+                    div
+                      ~a:
+                        [ a_class [ "flex justify-between items-center mb-4" ] ]
+                      [
+                        p
+                          ~a:[ a_class [ "text-xl font-semibold" ] ]
+                          [ txt "Monitoring & Diagnostics" ];
+                        Modal_dialog.modal_dialog
+                          ~modal_title:"Configure Monitoring"
+                          ~button_content:
+                            (span
+                               ~a:[ a_class [ "flex items-center gap-2" ] ]
+                               [
+                                 i
+                                   ~a:[ a_class [ "fa-solid fa-sliders px-2" ] ]
+                                   [];
+                                 txt "Configure Monitoring";
+                               ])
+                          ~button_type:`Primary_outlined
+                          ~content:
+                            (div
+                               ~a:
+                                 [
+                                   a_class [ "w-full min-w-96" ];
+                                   Unsafe.string_attrib "hx-get"
+                                     ("/api/unikernel/monitoring/status?unikernel="
+                                    ^ unikernel_name_str);
+                                   Unsafe.string_attrib "hx-trigger" "intersect";
+                                   Unsafe.string_attrib "hx-swap" "innerHTML";
+                                 ]
+                               [
+                                 div
+                                   ~a:
+                                     [
+                                       a_class
+                                         [
+                                           "flex items-center gap-2 \
+                                            text-gray-400 text-sm py-4";
+                                         ];
+                                     ]
+                                   [
+                                     i
+                                       ~a:
+                                         [
+                                           a_class
+                                             [
+                                               "fa-solid fa-circle-notch \
+                                                fa-spin";
+                                             ];
+                                         ]
+                                       [];
+                                     txt "Loading monitoring status...";
+                                   ];
+                               ])
+                          ();
+                      ];
+                  ];
+                div
                   ~a:[ a_class [ "grid grid-cols-2" ] ]
                   [
                     div
