@@ -22,12 +22,11 @@ let check_command command =
     let segments = String.split_on_char ',' rest in
     let is_valid_level s = Result.is_ok (Logs.level_of_string s) in
     let is_valid_metric s =
-      match String.trim s with "enable" | "disable" -> true | _ -> false
+      match s with "enable" | "disable" -> true | _ -> false
     in
     (* currently source names can contain any characters: see https://github.com/dbuenzli/logs/issues/63*)
     let is_valid_source name = String.length name > 0 in
     let validate_segment is_valid_val segment =
-      let segment = String.trim segment in
       if String.length segment = 0 then false
       else if segment.[0] = '*' then
         let value = String.sub segment 2 (String.length segment - 2) in
@@ -213,10 +212,11 @@ let render_log_sources log_entries unikernel_name =
        '#854d0e', 'error': '#7f1d1d'}; return colors[level] || '#27272a'; }, \
        getTextColor(level) { const colors = {'info': '#bbf7d0', 'warning': \
        '#fef08a', 'error': '#fecaca'}; return colors[level] || '#a1a1aa'; }, \
-       getCommand() { let cmd = 'L*:' + this.defaultLevel; for (const [k, v] \
-       of Object.entries(this.logs)) { cmd += ',' + k + ':' + v; }  return \
-       cmd; } }"
-      default_log_level logs_dict
+       getCommand() { let cmd = 'L*:' + this.defaultLevel.trim(); for (const [k, v] \
+       of Object.entries(this.logs)) { cmd += ',' + k.trim() + ':' + v.trim(); }  return \
+       cmd.trim(); } }"
+      (Logs.level_to_string default_log_level)
+      logs_dict
   in
   match log_entries with
   | [] -> div [ txt "No log sources available for this unikernel." ]
@@ -366,8 +366,8 @@ let render_metric_sources metric_entries unikernel_name =
        getCommand() { const values = Object.values(this.metrics); if \
        (values.every(v => v)) { return 'M*:enable'; } if (values.every(v => \
        !v)) { return 'M*:disable'; } let cmd = 'M*:disable'; for (const [k, v] \
-       of Object.entries(this.metrics)) { if (v) { cmd += ',' + k + ':enable'; \
-       } } return cmd; } }"
+       of Object.entries(this.metrics)) { if (v) { cmd += ',' + k.trim() + ':enable'; \
+       } } return cmd.trim(); } }"
       metrics_dict
   in
   match metric_entries with
