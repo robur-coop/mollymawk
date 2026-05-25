@@ -1325,14 +1325,8 @@ struct
         in
         let body = Format.asprintf "%a" (Tyxml_html.pp_elt ()) html in
         reply reqd body `OK
-    | Error err, _ ->
-        reply reqd
-          (Fmt.str "<p class=\"text-secondary-500\">%s</p>" err)
-          `Bad_request
-    | _, Error err ->
-        reply reqd
-          (Fmt.str "<p class=\"text-secondary-500\">%s</p>" err)
-          `Bad_request
+    | Error err, _ -> reply reqd (Utils.display_alert err `Error) `Bad_request
+    | _, Error err -> reply reqd (Utils.display_alert err `Error) `Bad_request
 
   let unikernel_monitoring_update happy_eyeballs management_domain _user
       multipart_body reqd =
@@ -1349,28 +1343,25 @@ struct
             >>= function
             | Error err ->
                 reply reqd
-                  (Fmt.str
-                     "<p class=\"text-secondary-500\">An error occured: %s</p>"
-                     err)
+                  (Utils.display_alert ("An error occured: " ^ err) `Error)
                   `Bad_request
             | Ok response ->
                 reply reqd
-                  (Fmt.str
-                     "<p class=\"text-primary-500\">Updated successfully: \
-                      %s</p>"
-                     response)
+                  (Utils.display_alert
+                     ("Updated succesfully: " ^ response)
+                     `Success)
                   `OK)
         | Error err ->
-            Logs.info (fun m ->
-                m "Command is malformated. Command: %s, Received error: %s"
-                  command err);
-            reply reqd
-              (Fmt.str "<p class=\"text-secondary-500\">%s</p>" err)
-              `Bad_request)
+            let msg =
+              Fmt.str "Command is malformated. Command: %s, Received error: %s"
+                command err
+            in
+            Logs.info (fun m -> m "%s" msg);
+            reply reqd (Utils.display_alert msg `Error) `Bad_request)
     | _ ->
         reply reqd
-          "<p class=\"text-secondary-500\">Missing unikernel name or command \
-           in request.</p>"
+          (Utils.display_alert "Missing unikernel name or command in request."
+             `Error)
           `Bad_request
 
   let unikernel_info_one stack store albatross unikernel_name _
