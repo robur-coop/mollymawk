@@ -183,24 +183,13 @@ let render_metric_picker ~source ~value index =
     ]
 
 let render_log_sources log_entries unikernel_name =
-  let parsed_log_entries =
-    List.map
-      (fun (s, l) ->
-        let parsed_level =
-          match Logs.level_of_string l with
-          | Ok level -> level
-          | Error _ -> Some Logs.Info
-        in
-        (s, parsed_level))
-      log_entries
+  let default, other =
+    List.partition (fun (l, _) -> String.equal l "*") log_entries
   in
-  let default_log_level =
-    match List.assoc_opt "*" parsed_log_entries with
-    | Some l -> l
-    | None -> Some Logs.Info
-  in
-  let other_logs =
-    List.filter (fun (s, _) -> not (String.equal s "*")) parsed_log_entries
+  let default_log_level = match default with
+    | [] -> Some Logs.Info
+    | [ _, l ] -> l
+    | _ -> (* ?? *) Some Logs.Info
   in
   let logs_dict =
     String.concat ", "
@@ -208,7 +197,7 @@ let render_log_sources log_entries unikernel_name =
          (fun (s, l) ->
            Printf.sprintf "'%s': '%s'" (escape_string s)
              (Logs.level_to_string l))
-         other_logs)
+         other)
   in
   let log_data =
     Printf.sprintf
@@ -292,7 +281,7 @@ let render_log_sources log_entries unikernel_name =
                   render_log_picker ~source:"*" ~default_level:default_log_level
                     ~value:"defaultLevel";
                 ];
-              (if other_logs <> [] then
+              (if other <> [] then
                  div
                    [
                      div
@@ -338,7 +327,7 @@ let render_log_sources log_entries unikernel_name =
                           (fun (s, l) ->
                             render_log_picker ~source:s ~default_level:l
                               ~value:(Printf.sprintf "logs['%s']" s))
-                          other_logs);
+                          other);
                    ]
                else div []);
               div
@@ -358,9 +347,8 @@ let render_metric_sources metric_entries unikernel_name =
   let metrics_dict =
     String.concat ", "
       (List.map
-         (fun (s, l) ->
-           let is_en = if String.equal l "enabled" then "true" else "false" in
-           Printf.sprintf "'%s': %s" (escape_string s) is_en)
+         (fun (s, m) ->
+           Printf.sprintf "'%s': %B" (escape_string s) m)
          other_metrics)
   in
   let metric_data =
@@ -408,9 +396,9 @@ let render_metric_sources metric_entries unikernel_name =
                     (Fmt.str "%d/%d enabled"
                        (List.length
                           (List.filter
-                             (fun (_, s) -> String.equal s "enabled")
-                             metric_entries))
-                       (List.length metric_entries));
+                             (fun (_, m) -> m)
+                             other_metrics))
+                       (List.length other_metrics));
                 ];
             ];
           form
@@ -467,9 +455,37 @@ let render_metric_sources metric_entries unikernel_name =
             ];
         ]
 
+let parse_log_entries entries =
+  List.fold_left
+    (fun acc (s, l) ->
+       match acc with
+       | Error _ as e -> e
+       | Ok acc ->
+         match Logs.level_of_string l with
+         | Ok level -> Ok ((s, level) :: acc)
+         | Error `Msg e -> Error e)
+    (Ok [])
+    entries
+
+let parse_metrics_entries entries =
+  List.fold_left (fun acc (s, m) ->
+      match acc with
+      | Error _ as e -> e
+      | Ok acc ->
+        match m with
+        | "enabled" -> Ok ((s, true) :: acc)
+        | "disabled" -> Ok ((s, false) :: acc)
+        | x -> Error (Fmt.str "expected either enabled or disabled, got %s"
+                        (escape_string x)))
+    (Ok []) entries
+
 let monitoring_status_html ~name ~logs ~metrics =
-  let log_entries = parse_monitoring_response logs in
-  let metric_entries = parse_monitoring_response metrics in
+  let log_entries =
+    Result.bind (parse_monitoring_response logs) parse_log_entries
+  in
+  let metric_entries =
+    Result.bind (parse_monitoring_response metrics) parse_metrics_entries
+  in
   div
     ~a:[ a_id "monitoring-container"; a_class [ "space-y-6 py-4" ] ]
     [
