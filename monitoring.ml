@@ -24,20 +24,8 @@ let check_command command =
     let is_valid_metric s =
       match String.trim s with "enable" | "disable" -> true | _ -> false
     in
-    let is_valid_source name =
-      let name = String.trim name in
-      String.length name > 0
-      &&
-      let rec loop i =
-        if i >= String.length name then true
-        else
-          match name.[i] with
-          | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '-' | '.' | '*' ->
-              loop (i + 1)
-          | _ -> false
-      in
-      loop 0
-    in
+    (* currently source names can contain any characters: see https://github.com/dbuenzli/logs/issues/63*)
+    let is_valid_source name = String.length name > 0 in
     let validate_segment is_valid_val segment =
       let segment = String.trim segment in
       if String.length segment = 0 then false
