@@ -9,9 +9,6 @@ let log_levels =
     Some Logs.App;
   ]
 
-let log_level_of_string s =
-  match Logs.level_of_string s with Ok v -> Ok v | Error err -> Error err
-
 let check_command command =
   let command = String.trim command in
   if String.length command < 2 then
