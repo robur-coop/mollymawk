@@ -9,13 +9,7 @@ let log_levels =
     Some Logs.App;
   ]
 
-let escape_string s =
-  String.escaped
-    (String.concat "&amp;"
-       (String.split_on_char '&'
-          (String.concat "&gt;"
-             (String.split_on_char '>'
-                (String.concat "&lt;" (String.split_on_char '<' s))))))
+let escape_string = String.escaped
 
 let check_command command =
   let command = String.trim command in
