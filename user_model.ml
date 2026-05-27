@@ -1085,7 +1085,7 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
 
 let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
     ?updated_at ?email_verification_uuid ?active ?super_user ?unikernel_updates
-    () =
+    ?scaling_policies () =
   {
     user with
     name = Option.value ~default:user.name name;
@@ -1101,6 +1101,8 @@ let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
     super_user = Option.value ~default:user.super_user super_user;
     unikernel_updates =
       Option.value ~default:user.unikernel_updates unikernel_updates;
+    scaling_policies =
+      Option.value ~default:user.scaling_policies scaling_policies;
   }
 
 let is_valid_cookie (cookie : cookie) now =
