@@ -51,6 +51,7 @@ type user = {
   active : bool;
   super_user : bool;
   unikernel_updates : unikernel_update list;
+  scaling_policies : unikernel_scaling_policy list;
 }
 
 let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
@@ -388,6 +389,8 @@ let user_to_json (u : user) =
       ("super_user", `Bool u.super_user);
       ( "unikernel_updates",
         `List (List.map unikernel_update_to_json u.unikernel_updates) );
+      ( "scaling_policies",
+        `List (List.map scaling_policy_to_json u.scaling_policies) );
     ]
 
 let user_v1_of_json = function
@@ -476,6 +479,7 @@ let user_v1_of_json = function
               active = true;
               super_user = true;
               unikernel_updates = [];
+              scaling_policies = [];
             }
       | _ ->
           Error
@@ -574,6 +578,7 @@ let user_v2_of_json = function
               active;
               super_user = true;
               unikernel_updates = [];
+              scaling_policies = [];
             }
       | _ ->
           Error
@@ -674,6 +679,7 @@ let user_v3_of_json cookie_fn = function
               active;
               super_user;
               unikernel_updates = [];
+              scaling_policies = [];
             }
       | _ ->
           Error
@@ -774,6 +780,7 @@ let user_v4_of_json cookie_fn = function
               active;
               super_user;
               unikernel_updates = [];
+              scaling_policies = [];
             }
       | _ ->
           Error
@@ -784,7 +791,7 @@ let user_v4_of_json cookie_fn = function
         (`Msg
            ("invalid json for user, expected a dict: " ^ Utils.Json.to_string js))
 
-let user_of_json cookie_fn = function
+let user_v5_of_json cookie_fn = function
   | `Assoc xs -> (
       match
         Utils.Json.
@@ -884,6 +891,128 @@ let user_of_json cookie_fn = function
               active;
               super_user;
               unikernel_updates;
+              scaling_policies = [];
+            }
+      | _ ->
+          Error
+            (`Msg ("invalid json for user: " ^ Utils.Json.to_string (`Assoc xs)))
+      )
+  | js ->
+      Error
+        (`Msg
+           ("invalid json for user, expected a dict: " ^ Utils.Json.to_string js))
+
+let user_of_json cookie_fn = function
+  | `Assoc xs -> (
+      match
+        Utils.Json.
+          ( get "name" xs,
+            get "email" xs,
+            get "email_verified" xs,
+            get "password" xs,
+            get "uuid" xs,
+            get "tokens" xs,
+            get "cookies" xs,
+            get "created_at" xs,
+            get "updated_at" xs,
+            get "email_verification_uuid" xs,
+            get "active" xs,
+            get "super_user" xs,
+            get "unikernel_updates" xs,
+            get "scaling_policies" xs )
+      with
+      | ( Some (`String name),
+          Some (`String email),
+          Some email_verified,
+          Some (`String password),
+          Some (`String uuid),
+          Some (`List tokens),
+          Some (`List cookies),
+          Some (`String updated_at_str),
+          Some (`String created_at_str),
+          Some email_verification_uuid,
+          Some (`Bool active),
+          Some (`Bool super_user),
+          Some (`List unikernel_updates),
+          Some (`List scaling_policies) ) ->
+          let created_at =
+            match Utils.TimeHelper.ptime_of_string created_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let updated_at =
+            match Utils.TimeHelper.ptime_of_string updated_at_str with
+            | Ok ptime -> Some ptime
+            | Error _ -> None
+          in
+          let* email_verified = Utils.TimeHelper.ptime_of_json email_verified in
+          let* tokens =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* token = token_of_json js in
+                Ok (token :: acc))
+              (Ok []) tokens
+          in
+          let* cookies =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* cookie = cookie_fn js in
+                Ok (cookie :: acc))
+              (Ok []) cookies
+          in
+          let* email_verification_uuid =
+            match email_verification_uuid with
+            | `Null -> Ok None
+            | `String s ->
+                let* uuid =
+                  Option.to_result
+                    ~none:
+                      (`Msg ("invalid UUID for email verification UUID: " ^ s))
+                    (Uuidm.of_string s)
+                in
+                Ok (Some uuid)
+            | js ->
+                Error
+                  (`Msg
+                     ("invalid json data for email verification UUID, expected \
+                       a string: " ^ Utils.Json.to_string js))
+          in
+          let* unikernel_updates =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* unikernel_update = unikernel_update_of_json js in
+                Ok (unikernel_update :: acc))
+              (Ok []) unikernel_updates
+          in
+          let* name = Configuration.name_of_str name in
+          let* email = Mrmime.Mailbox.of_string email in
+          let* scaling_policies =
+            List.fold_left
+              (fun acc js ->
+                let* acc = acc in
+                let* scaling_policy = scaling_policy_of_json js in
+                Ok (scaling_policy :: acc))
+              (Ok []) scaling_policies
+          in
+          Ok
+            {
+              name;
+              email;
+              email_verified;
+              password;
+              uuid;
+              tokens;
+              cookies;
+              created_at = Option.get created_at;
+              updated_at = Option.get updated_at;
+              email_verification_uuid;
+              active;
+              super_user;
+              unikernel_updates;
+              scaling_policies;
             }
       | _ ->
           Error
@@ -951,6 +1080,7 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
       active;
       super_user;
       unikernel_updates = [];
+      scaling_policies = [];
     },
     session )
 
