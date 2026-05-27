@@ -1498,12 +1498,23 @@ struct
               | Some unikernel_update -> Some unikernel_update.timestamp
               | None -> None
             in
+            let scaling_policy =
+              List.find_opt
+                (fun (scaling_policy : User_model.unikernel_scaling_policy) ->
+                  Vmm_core.Name.Label.equal scaling_policy.name unikernel_name
+                  && Vmm_core.Name.Label.equal albatross.configuration.name
+                       scaling_policy.primary_albatross_instance)
+                user.scaling_policies
+            in
+            user_max_allowed_unikernel_instances stack albatross user.name
+            >>= fun max_allowed ->
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
                  ~content:
                    (Unikernel_single.unikernel_single_layout ~unikernel_name
-                      ~instance_name:albatross.configuration.name unikernel
-                      ~last_update_time ~current_time:now)
+                      ~instance_name:albatross.configuration.name ~max_allowed
+                      unikernel ~last_update_time ~current_time:now
+                      scaling_policy)
                  ~icon:"/images/robur.png" ())
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
