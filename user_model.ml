@@ -29,6 +29,14 @@ type unikernel_update = {
   timestamp : Ptime.t;
 }
 
+type unikernel_scaling_policy = {
+  name : Vmm_core.Name.Label.t;
+  instance : Vmm_core.Name.Label.t;
+  max_instances : int;
+  min_instances : int;
+  scale : bool;
+}
+
 type user = {
   name : Vmm_core.Name.Label.t;
   email : Mrmime.Mailbox.t;
