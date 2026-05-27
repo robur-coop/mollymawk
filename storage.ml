@@ -1,6 +1,6 @@
 open Utils.Json
 
-let current_version = 9
+let current_version = 10
 (* version history:
    1 was initial (fields until email_verification_uuid)
    2 added active
@@ -11,6 +11,7 @@ let current_version = 9
    7 added unikernel_updates to keep track of when unikernels are updated
    8 we now store a list of configurations, and each has a name field. also, no more version field in configuration
    9 email configuration is now stored
+   10 we now have scaling policies for unikernels, default is no policy for existing unikernels
 *)
 
 let t_to_json users configurations email =
@@ -35,6 +36,7 @@ let t_of_json json =
       | Some (`Int v), Some (`List users), Some configuration, email ->
           let* () =
             if v = current_version then Ok ()
+            else if v = 9 then Ok ()
             else if v = 8 then Ok ()
             else if v = 7 then Ok ()
             else if v = 6 then Ok ()
@@ -60,7 +62,8 @@ let t_of_json json =
                     User_model.(user_v3_of_json cookie_v1_of_json) js
                   else if v = 6 then
                     User_model.(user_v4_of_json cookie_v1_of_json) js
-                  else if v = 7 then User_model.(user_of_json cookie_of_json) js
+                  else if v = 7 || v = 8 || v = 9 then
+                    User_model.(user_v5_of_json cookie_of_json) js
                   else User_model.(user_of_json cookie_of_json) js
                 in
                 Ok (user :: acc))
