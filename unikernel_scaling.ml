@@ -22,12 +22,6 @@ let display_policy ~instance_name ~unikernel_name ~max_allowed scaling_policy =
               ];
           ])
   | Ok max_allowed ->
-      let default_max_instances, should_scale =
-        match scaling_policy with
-        | Some policy when policy.User_model.should_scale ->
-            (policy.max_instances, true)
-        | _ -> (1, false)
-      in
       Tyxml_html.(
         section
           ~a:[ a_id "scaling-policy-container"; a_class [ "w-full mx-auto" ] ]
@@ -49,7 +43,11 @@ let display_policy ~instance_name ~unikernel_name ~max_allowed scaling_policy =
                   Unsafe.string_attrib "hx-target" "#scaling-policy-container";
                 ]
               [
-                Utils.switch_button ~initial_state:should_scale
+                Utils.switch_button
+                  ~initial_state:
+                    (Option.fold ~none:false
+                       ~some:(fun p -> true)
+                       scaling_policy)
                   ~switch_id:"should_scale" ~switch_label:"Scale this unikernel"
                   (div
                      [
@@ -57,8 +55,11 @@ let display_policy ~instance_name ~unikernel_name ~max_allowed scaling_policy =
                          ~a:[ a_class [ "py-3" ] ]
                          [
                            Utils.increment_or_decrement_ui ~id:"max-instances"
-                             ~default_value:default_max_instances ~min_value:1
-                             ~max_value:max_allowed
+                             ~default_value:
+                               (Option.fold ~none:1
+                                  ~some:(fun p -> p.User_model.max_instances)
+                                  scaling_policy)
+                             ~min_value:1 ~max_value:max_allowed
                              ~label':"Maximum number of clones to spawn" ();
                          ];
                      ]);
