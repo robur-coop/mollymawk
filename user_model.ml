@@ -67,7 +67,47 @@ let unikernel_update_to_json (u : unikernel_update) : Yojson.Basic.t =
       ("timestamp", `String (Utils.TimeHelper.string_of_ptime u.timestamp));
     ]
 
+let scaling_policy_to_json (p : unikernel_scaling_policy) : Yojson.Basic.t =
+  `Assoc
+    [
+      ("name", `String (Configuration.name_to_str p.name));
+      ("instance", `String (Configuration.name_to_str p.instance));
+      ("max_instances", `Int p.max_instances);
+      ("min_instances", `Int p.min_instances);
+      ("scale", `Bool p.scale);
+    ]
+
 let ( let* ) = Result.bind
+
+let scaling_policy_of_json = function
+  | `Assoc xs -> (
+      match
+        Utils.Json.
+          ( get "name" xs,
+            get "instance" xs,
+            get "max_instances" xs,
+            get "min_instances" xs,
+            get "scale" xs )
+      with
+      | ( Some (`String name),
+          Some (`String instance),
+          Some (`Int max_instances),
+          Some (`Int min_instances),
+          Some (`Bool scale) ) ->
+          let* name = Configuration.name_of_str name in
+          let* instance = Configuration.name_of_str instance in
+          Ok { name; instance; max_instances; min_instances; scale }
+      | _ ->
+          Error
+            (`Msg
+               ("Invalid JSON for scaling policy: requires name, instance, \
+                 max_instances, min_instances and scale but got: "
+               ^ Utils.Json.to_string (`Assoc xs))))
+  | js ->
+      Error
+        (`Msg
+           ("Invalid JSON for scaling policy: expected a dictionary, got: "
+          ^ Utils.Json.to_string js))
 
 let unikernel_update_of_json = function
   | `Assoc xs -> (
