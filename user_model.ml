@@ -31,7 +31,7 @@ type unikernel_update = {
 
 type unikernel_scaling_policy = {
   name : Vmm_core.Name.Label.t;
-  instance : Vmm_core.Name.Label.t;
+  primary_albatross_instance : Vmm_core.Name.Label.t;
   max_instances : int;
   min_instances : int;
   scale : bool;
@@ -72,7 +72,8 @@ let scaling_policy_to_json (p : unikernel_scaling_policy) : Yojson.Basic.t =
   `Assoc
     [
       ("name", `String (Configuration.name_to_str p.name));
-      ("instance", `String (Configuration.name_to_str p.instance));
+      ( "primary_albatross_instance",
+        `String (Configuration.name_to_str p.primary_albatross_instance) );
       ("max_instances", `Int p.max_instances);
       ("min_instances", `Int p.min_instances);
       ("scale", `Bool p.scale);
@@ -85,19 +86,28 @@ let scaling_policy_of_json = function
       match
         Utils.Json.
           ( get "name" xs,
-            get "instance" xs,
+            get "primary_albatross_instance" xs,
             get "max_instances" xs,
             get "min_instances" xs,
             get "scale" xs )
       with
       | ( Some (`String name),
-          Some (`String instance),
+          Some (`String primary_albatross_instance),
           Some (`Int max_instances),
           Some (`Int min_instances),
           Some (`Bool scale) ) ->
           let* name = Configuration.name_of_str name in
-          let* instance = Configuration.name_of_str instance in
-          Ok { name; instance; max_instances; min_instances; scale }
+          let* primary_albatross_instance =
+            Configuration.name_of_str primary_albatross_instance
+          in
+          Ok
+            {
+              name;
+              primary_albatross_instance;
+              max_instances;
+              min_instances;
+              scale;
+            }
       | _ ->
           Error
             (`Msg
