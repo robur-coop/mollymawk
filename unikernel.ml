@@ -1385,7 +1385,9 @@ struct
     let current_scaling_policy =
       List.find_opt
         (fun (scaling_policy : User_model.unikernel_scaling_policy) ->
-          Vmm_core.Name.Label.equal unikernel_name scaling_policy.name)
+          Vmm_core.Name.Label.equal unikernel_name scaling_policy.name
+          && Vmm_core.Name.Label.equal albatross.Albatross.configuration.name
+               scaling_policy.primary_albatross_instance)
         user.scaling_policies
     in
     let update_unikernel_scaling scaling_policies =
@@ -1406,7 +1408,10 @@ struct
     let remove_scaling_policy () =
       List.filter
         (fun (p : User_model.unikernel_scaling_policy) ->
-          not (Vmm_core.Name.Label.equal unikernel_name p.name))
+          not
+            (Vmm_core.Name.Label.equal unikernel_name p.name
+            && Vmm_core.Name.Label.equal albatross.Albatross.configuration.name
+                 p.primary_albatross_instance))
         user.scaling_policies
     in
     match
