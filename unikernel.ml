@@ -1414,11 +1414,8 @@ struct
                  p.primary_albatross_instance))
         user.scaling_policies
     in
-    match
-      ( Map.find_opt "should_scale" multipart_body,
-        Map.find_opt "max_instances" multipart_body )
-    with
-    | Some _, Some (_, max_instances_str) -> (
+    match Map.find_opt "max_instances" multipart_body with
+    | Some (_, max_instances_str) -> (
         let max_instances =
           match int_of_string_opt max_instances_str with
           | Some n -> n
@@ -1447,30 +1444,17 @@ struct
               else
                 let new_policy =
                   match current_scaling_policy with
-                  | Some p -> { p with max_instances; should_scale = true }
+                  | Some p -> { p with max_instances }
                   | None ->
                       {
                         User_model.name = unikernel_name;
                         primary_albatross_instance =
                           albatross.Albatross.configuration.name;
                         max_instances;
-                        should_scale = true;
                       }
                 in
                 let scaling_policies = new_policy :: remove_scaling_policy () in
                 update_unikernel_scaling scaling_policies)
-    | None, _ -> (
-        match current_scaling_policy with
-        | None ->
-            reply reqd
-              (Utils.display_alert
-                 "No scaling policy exist for this unikernel. Nothing to do \
-                  here."
-                 `Success)
-              `OK
-        | Some _ ->
-            let scaling_policies = remove_scaling_policy () in
-            update_unikernel_scaling scaling_policies)
     | _ ->
         reply reqd
           (Utils.display_alert "Missing max number of clones to spawn." `Error)
