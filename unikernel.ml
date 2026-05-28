@@ -3165,6 +3165,22 @@ struct
     in
     Lwt.async loop
 
+  let start_background_scaler_scheduler stack store albatross_instances_ref =
+    let rec loop () =
+      Lwt.catch
+        (fun () ->
+          Logs.info (fun m -> m "Starting CPU memory checks...");
+          all_unikernels_stats stack !albatross_instances_ref
+            (Store.users store))
+        (fun exn ->
+          Logs.err (fun m ->
+              m "CPU memory checks failed: %s" (Printexc.to_string exn));
+          Lwt.return [])
+      (* TODO: change 5 minutes here to a value from a dedicated scaler module later*)
+      >>= fun _ -> Mirage_sleep.ns (Duration.of_min 5) >>= loop
+    in
+    Lwt.async loop
+
   let request_handler stack management_happy_eyeballs management_domain
       albatross_instances js_file css_file imgs store http_client happy_eyeballs
       flow (_ipaddr, _port) reqd =
@@ -3601,5 +3617,7 @@ struct
         Lwt.pause () >>= fun () ->
         start_background_scheduler happy_eyeballs stack store
           albatross_instances http_client;
+        Lwt.pause () >>= fun () ->
+        start_background_scaler_scheduler stack store albatross_instances;
         th
 end
