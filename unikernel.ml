@@ -592,6 +592,35 @@ struct
         update_albatross_status state (`Incompatible, reply, "unikernel info");
         Error message
 
+  let unikernels_stats stack state user_name =
+    (* TODO: change this callback to the scaling callback later *)
+    let cb name st =
+      Logs.info (fun m ->
+          m "Got stats for VM %s (user %s): %a"
+            (Vmm_core.Name.to_string name)
+            (Configuration.name_to_str user_name)
+            Vmm_core.Stats.pp st);
+      Ok ()
+    in
+    Albatross_state.query_stats stack state ~domain:user_name cb >|= function
+    | Error err ->
+        Error
+          (Fmt.str
+             "Error fetching stats for user %s, with albatross instance %s: %s"
+             (Configuration.name_to_str user_name)
+             (Configuration.name_to_str state.configuration.name)
+             err)
+    | Ok () -> Ok ()
+
+  let all_unikernels_stats stack albatross_instances users =
+    Lwt_list.map_p
+      (fun (_instance_name, (instance : Albatross.t)) ->
+        Lwt.all
+          (List.map
+             (fun user -> unikernels_stats stack instance user.User_model.name)
+             users))
+      (Albatross.Albatross_map.bindings albatross_instances)
+
   let sign_up reqd =
     let now = Mirage_ptime.now () in
     let csrf = Middleware.generate_csrf_cookie now reqd in
