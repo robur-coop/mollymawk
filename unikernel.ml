@@ -544,8 +544,7 @@ struct
             (instance.configuration.name, []))
       (Albatross.Albatross_map.bindings albatross_instances)
 
-  let user_max_allowed_unikernel_instances stack albatross user_name =
-    user_unikernels_by_instance stack albatross user_name >>= fun unikernels ->
+  let user_max_allowed_unikernel_instances _stack albatross user_name =
     let res =
       match Albatross_state.policy albatross ~domain:user_name with
       | Error err -> Error err
@@ -553,7 +552,7 @@ struct
           let max_allowed =
             Option.fold ~none:0
               ~some:(fun (user_policy : Vmm_core.Policy.t) ->
-                user_policy.unikernels - List.length unikernels)
+                user_policy.unikernels)
               user_albatross_policy
           in
           Ok max_allowed
