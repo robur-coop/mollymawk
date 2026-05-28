@@ -1416,45 +1416,49 @@ struct
     in
     match Map.find_opt "max_instances" multipart_body with
     | Some (_, max_instances_str) -> (
-        let max_instances =
-          match int_of_string_opt max_instances_str with
-          | Some n -> n
-          | None -> 1
-        in
-        if max_instances = 1 then
-          let scaling_policies = remove_scaling_policy () in
-          update_unikernel_scaling scaling_policies
-        else
-          user_max_allowed_unikernel_instances stack albatross user.name
-          >>= function
-          | Error err ->
-              reply reqd
-                (Utils.display_alert
-                   (Fmt.str "An error occurred: %s" err)
-                   `Error)
-                `Bad_request
-          | Ok max_allowed ->
-              if max_instances > max_allowed then
-                reply reqd
-                  (Utils.display_alert
-                     (Fmt.str "Error: you can spawn a maximum of %d clones."
-                        max_allowed)
-                     `Error)
-                  `Bad_request
-              else
-                let new_policy =
-                  match current_scaling_policy with
-                  | Some p -> { p with max_instances }
-                  | None ->
-                      {
-                        User_model.name = unikernel_name;
-                        primary_albatross_instance =
-                          albatross.Albatross.configuration.name;
-                        max_instances;
-                      }
-                in
-                let scaling_policies = new_policy :: remove_scaling_policy () in
-                update_unikernel_scaling scaling_policies)
+        match int_of_string_opt max_instances_str with
+        | Some max_instances when max_instances >= 1 -> (
+            if max_instances = 1 then
+              let scaling_policies = remove_scaling_policy () in
+              update_unikernel_scaling scaling_policies
+            else
+              user_max_allowed_unikernel_instances stack albatross user.name
+              >>= function
+              | Error err ->
+                  reply reqd
+                    (Utils.display_alert
+                       (Fmt.str "An error occurred: %s" err)
+                       `Error)
+                    `Bad_request
+              | Ok max_allowed ->
+                  if max_instances > max_allowed then
+                    reply reqd
+                      (Utils.display_alert
+                         (Fmt.str "Error: you can spawn a maximum of %d clones."
+                            max_allowed)
+                         `Error)
+                      `Bad_request
+                  else
+                    let new_policy =
+                      match current_scaling_policy with
+                      | Some p -> { p with max_instances }
+                      | None ->
+                          {
+                            User_model.name = unikernel_name;
+                            primary_albatross_instance =
+                              albatross.Albatross.configuration.name;
+                            max_instances;
+                          }
+                    in
+                    let scaling_policies =
+                      new_policy :: remove_scaling_policy ()
+                    in
+                    update_unikernel_scaling scaling_policies)
+        | None | Some _ ->
+            reply reqd
+              (Utils.display_alert "Max instances must be greater than 1."
+                 `Error)
+              `Bad_request)
     | _ ->
         reply reqd
           (Utils.display_alert "Missing max number of clones to spawn." `Error)
