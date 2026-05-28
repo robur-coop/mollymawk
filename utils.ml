@@ -270,7 +270,8 @@ let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
                      text-secondary-600 hover:text-gray-50 focus:outline-none \
                      hover:bg-secondary-800 font-semibold " ^ extra_css;
                   ]);
-          ])
+          ]
+        @ [ a_button_type `Button ])
       [ content ])
 
 (** A UI with two buttons, one for decrementing a value and the other for
