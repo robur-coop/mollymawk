@@ -614,15 +614,6 @@ struct
              err)
     | Ok () -> Ok ()
 
-  let all_unikernels_stats stack albatross_instances users =
-    Lwt_list.map_p
-      (fun (_instance_name, (instance : Albatross.t)) ->
-        Lwt.all
-          (List.map
-             (fun user -> unikernels_stats stack instance user.User_model.name)
-             users))
-      (Albatross.Albatross_map.bindings albatross_instances)
-
   let sign_up reqd =
     let now = Mirage_ptime.now () in
     let csrf = Middleware.generate_csrf_cookie now reqd in
