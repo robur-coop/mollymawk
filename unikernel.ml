@@ -3187,6 +3187,7 @@ struct
                       (Configuration.name_to_str user_name)
                       (Configuration.name_to_str instance_name)
                       (Printexc.to_string exn));
+                Hashtbl.remove active_streams (user_name, instance_name);
                 Lwt.return_unit)
       in
       stream_loop ()
