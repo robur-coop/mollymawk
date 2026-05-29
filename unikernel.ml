@@ -3162,7 +3162,6 @@ struct
     let active_streams = Hashtbl.create 5 in
     let spawn_stats_stream user_name instance_name instance =
       let rec stream_loop () =
-        let open Lwt.Infix in
         Lwt.catch
           (fun () ->
             unikernels_stats stack instance user_name >>= function
@@ -3196,8 +3195,7 @@ struct
       Lwt.pause () >>= fun () ->
       let current_users = Store.users store in
       let current_instances = !albatross_instances_ref in
-      let valid_keys = Hashtbl.create 7 in
-      let open Lwt.Infix in
+      let valid_keys = Hashtbl.create 5 in
       List.iter
         (fun user ->
           Albatross.Albatross_map.iter
