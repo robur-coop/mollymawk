@@ -1,5 +1,6 @@
 let unikernel_single_layout ~unikernel_name ~instance_name
-    ?(last_update_time = None) ~current_time unikernel =
+    ?(last_update_time = None) ~current_time ~max_allowed unikernel
+    scaling_policy =
   let u_name, data = unikernel in
   let unikernel_name_str = Configuration.name_to_str unikernel_name in
   Tyxml_html.(
@@ -269,6 +270,63 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                               | `Solo5 -> "Solo5"
                               | `BHyve -> "BHyve");
                           ];
+                      ];
+                  ];
+                div
+                  ~a:
+                    [
+                      a_class
+                        [
+                          "rounded my-4 text-white p-4 border \
+                           border-primary-700 bg-gray-800";
+                        ];
+                    ]
+                  [
+                    div
+                      ~a:
+                        [ a_class [ "flex justify-between items-center mb-4" ] ]
+                      [
+                        div
+                          [
+                            p
+                              ~a:[ a_class [ "text-xl font-semibold" ] ]
+                              [ txt "Autoscaling" ];
+                            Option.fold
+                              ~none:(small [ txt "Scaling is disabled" ])
+                              ~some:(fun scale ->
+                                small
+                                  [
+                                    txt
+                                      (Fmt.str
+                                         "Scaling is enabled and scale up to \
+                                          %d instances."
+                                         scale.User_model.max_instances);
+                                  ])
+                              scaling_policy;
+                          ];
+                        Modal_dialog.modal_dialog
+                          ~modal_title:"Configure Scaling policy"
+                          ~button_content:
+                            (span
+                               ~a:[ a_class [ "flex items-center gap-2" ] ]
+                               [
+                                 i
+                                   ~a:[ a_class [ "fa-solid fa-sliders px-2" ] ]
+                                   [];
+                                 txt "Configure Scaling";
+                               ])
+                          ~button_type:`Primary_outlined
+                          ~content:
+                            (div
+                               ~a:[ a_class [ "w-full min-w-96 flex" ] ]
+                               [
+                                 Unikernel_scaling.display_policy
+                                   ~instance_name:
+                                     (Configuration.name_to_str instance_name)
+                                   ~unikernel_name:unikernel_name_str
+                                   ~max_allowed scaling_policy;
+                               ])
+                          ();
                       ];
                   ];
                 div

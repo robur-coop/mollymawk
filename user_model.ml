@@ -33,7 +33,6 @@ type unikernel_scaling_policy = {
   name : Vmm_core.Name.Label.t;
   primary_albatross_instance : Vmm_core.Name.Label.t;
   max_instances : int;
-  should_scale : bool;
 }
 
 type user = {
@@ -74,7 +73,6 @@ let scaling_policy_to_json (p : unikernel_scaling_policy) : Yojson.Basic.t =
       ( "primary_albatross_instance",
         `String (Configuration.name_to_str p.primary_albatross_instance) );
       ("max_instances", `Int p.max_instances);
-      ("should_scale", `Bool p.should_scale);
     ]
 
 let ( let* ) = Result.bind
@@ -85,23 +83,21 @@ let scaling_policy_of_json = function
         Utils.Json.
           ( get "name" xs,
             get "primary_albatross_instance" xs,
-            get "max_instances" xs,
-            get "should_scale" xs )
+            get "max_instances" xs )
       with
       | ( Some (`String name),
           Some (`String primary_albatross_instance),
-          Some (`Int max_instances),
-          Some (`Bool should_scale) ) ->
+          Some (`Int max_instances) ) ->
           let* name = Configuration.name_of_str name in
           let* primary_albatross_instance =
             Configuration.name_of_str primary_albatross_instance
           in
-          Ok { name; primary_albatross_instance; max_instances; should_scale }
+          Ok { name; primary_albatross_instance; max_instances }
       | _ ->
           Error
             (`Msg
                ("Invalid JSON for scaling policy: requires name, primary \
-                 albatross instance, max_instances and should_scale but got: "
+                 albatross instance, max_instances but got: "
                ^ Utils.Json.to_string (`Assoc xs))))
   | js ->
       Error

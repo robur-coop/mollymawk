@@ -544,6 +544,21 @@ struct
             (instance.configuration.name, []))
       (Albatross.Albatross_map.bindings albatross_instances)
 
+  let user_max_allowed_unikernel_instances _stack albatross user_name =
+    let res =
+      match Albatross_state.policy albatross ~domain:user_name with
+      | Error err -> Error err
+      | Ok user_albatross_policy ->
+          let max_allowed =
+            Option.fold ~none:0
+              ~some:(fun (user_policy : Vmm_core.Policy.t) ->
+                user_policy.unikernels)
+              user_albatross_policy
+          in
+          Ok max_allowed
+    in
+    Lwt.return res
+
   let user_unikernel stack state ~user_name ~unikernel_name =
     Albatross_state.query stack state ~domain:user_name ~name:unikernel_name
       (`Unikernel_cmd `Unikernel_info)
@@ -1364,6 +1379,105 @@ struct
              `Error)
           `Bad_request
 
+  let unikernel_scaling_policy_update stack store albatross unikernel_name
+      (user : User_model.user) multipart_body reqd =
+    let current_scaling_policy =
+      List.find_opt
+        (fun (scaling_policy : User_model.unikernel_scaling_policy) ->
+          Vmm_core.Name.Label.equal unikernel_name scaling_policy.name
+          && Vmm_core.Name.Label.equal albatross.Albatross.configuration.name
+               scaling_policy.primary_albatross_instance)
+        user.scaling_policies
+    in
+    let update_unikernel_scaling scaling_policies =
+      let user = User_model.update_user user ~scaling_policies () in
+      Store.update_user store user >>= function
+      | Ok () ->
+          reply reqd
+            (Utils.display_alert
+               "Unikernel scaling policy updated successfully." `Success)
+            `OK
+      | Error (`Msg err) ->
+          reply reqd
+            (Utils.display_alert
+               (Fmt.str "Failed to save scaling policy: %s" err)
+               `Error)
+            `Internal_server_error
+    in
+    let remove_scaling_policy () =
+      List.filter
+        (fun (p : User_model.unikernel_scaling_policy) ->
+          not
+            (Vmm_core.Name.Label.equal unikernel_name p.name
+            && Vmm_core.Name.Label.equal albatross.Albatross.configuration.name
+                 p.primary_albatross_instance))
+        user.scaling_policies
+    in
+    match
+      ( Map.find_opt "should_scale" multipart_body,
+        Map.find_opt "max_instances" multipart_body )
+    with
+    | Some _, Some (_, max_instances_str) -> (
+        match int_of_string_opt max_instances_str with
+        | Some max_instances when max_instances >= 1 -> (
+            if max_instances = 1 then
+              let scaling_policies = remove_scaling_policy () in
+              update_unikernel_scaling scaling_policies
+            else
+              user_max_allowed_unikernel_instances stack albatross user.name
+              >>= function
+              | Error err ->
+                  reply reqd
+                    (Utils.display_alert
+                       (Fmt.str "An error occurred: %s" err)
+                       `Error)
+                    `Bad_request
+              | Ok max_allowed ->
+                  if max_instances > max_allowed then
+                    reply reqd
+                      (Utils.display_alert
+                         (Fmt.str "Error: you can spawn a maximum of %d clones."
+                            max_allowed)
+                         `Error)
+                      `Bad_request
+                  else
+                    let new_policy =
+                      match current_scaling_policy with
+                      | Some p -> { p with max_instances }
+                      | None ->
+                          {
+                            User_model.name = unikernel_name;
+                            primary_albatross_instance =
+                              albatross.Albatross.configuration.name;
+                            max_instances;
+                          }
+                    in
+                    let scaling_policies =
+                      new_policy :: remove_scaling_policy ()
+                    in
+                    update_unikernel_scaling scaling_policies)
+        | None | Some _ ->
+            reply reqd
+              (Utils.display_alert "Max instances must be greater than 1."
+                 `Error)
+              `Bad_request)
+    | None, _ -> (
+        match current_scaling_policy with
+        | None ->
+            reply reqd
+              (Utils.display_alert
+                 "No scaling policy exist for this unikernel. Nothing to do \
+                  here."
+                 `Success)
+              `OK
+        | Some _ ->
+            let scaling_policies = remove_scaling_policy () in
+            update_unikernel_scaling scaling_policies)
+    | _ ->
+        reply reqd
+          (Utils.display_alert "Missing max number of clones to spawn." `Error)
+          `Bad_request
+
   let unikernel_info_one stack store albatross unikernel_name _
       (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
@@ -1391,12 +1505,23 @@ struct
               | Some unikernel_update -> Some unikernel_update.timestamp
               | None -> None
             in
+            let scaling_policy =
+              List.find_opt
+                (fun (scaling_policy : User_model.unikernel_scaling_policy) ->
+                  Vmm_core.Name.Label.equal scaling_policy.name unikernel_name
+                  && Vmm_core.Name.Label.equal albatross.configuration.name
+                       scaling_policy.primary_albatross_instance)
+                user.scaling_policies
+            in
+            user_max_allowed_unikernel_instances stack albatross user.name
+            >>= fun max_allowed ->
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
                  ~content:
                    (Unikernel_single.unikernel_single_layout ~unikernel_name
-                      ~instance_name:albatross.configuration.name unikernel
-                      ~last_update_time ~current_time:now)
+                      ~instance_name:albatross.configuration.name ~max_allowed
+                      unikernel ~last_update_time ~current_time:now
+                      scaling_policy)
                  ~icon:"/images/robur.png" ())
               ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
               `OK
@@ -3338,6 +3463,14 @@ struct
                   (extract_multipart_csrf_token
                      (unikernel_monitoring_update management_happy_eyeballs
                         management_domain)))
+        | "/api/unikernel/scaling/update" ->
+            check_meth `POST (fun () ->
+                authenticate ~check_token:true ~api_meth:true store reqd
+                  (albatross_instance req.H1.Request.target (fun albatross ->
+                       unikernel (fun unikernel_name ->
+                           extract_multipart_csrf_token
+                             (unikernel_scaling_policy_update stack store
+                                albatross unikernel_name)))))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
