@@ -3619,7 +3619,6 @@ struct
         Lwt.pause () >>= fun () ->
         start_background_scheduler happy_eyeballs stack store
           albatross_instances http_client;
-        Lwt.pause () >>= fun () ->
         start_background_scaler_scheduler stack store albatross_instances;
         th
 end
