@@ -3166,8 +3166,7 @@ struct
         Lwt.catch
           (fun () ->
             unikernels_stats stack instance user_name >>= function
-            | Ok () ->
-                Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop
+            | Ok () -> Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop
             | Error err ->
                 Logs.debug ~src:stats_src (fun m ->
                     m "Stats stream for %s on %s failed: %s"
