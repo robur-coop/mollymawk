@@ -58,36 +58,7 @@ let instance_unikernels instance_name albatross_instance_unikernels current_time
                        text-gray-800";
                     ];
                 ]
-              [
-                txt
-                  (String.concat ", "
-                     (List.map string_of_int
-                        (Vmm_core.IS.elements unikernel.cpuids)));
-              ];
-            td
-              ~a:
-                [
-                  a_class
-                    [
-                      "px-6 py-4 whitespace-nowrap text-sm font-medium \
-                       text-gray-800";
-                    ];
-                ]
               [ txt (string_of_int unikernel.memory ^ " MB") ];
-            td
-              ~a:
-                [
-                  a_class
-                    [
-                      "px-6 py-4 whitespace-nowrap text-sm font-medium \
-                       text-gray-800";
-                    ];
-                ]
-              [
-                txt
-                  (Option.value ~default:"50 (default)"
-                     (Option.map string_of_int unikernel.startup));
-              ];
             td
               ~a:
                 [
@@ -585,8 +556,8 @@ let unikernel_index_layout unikernels_by_albatross_instance
                                                   Unsafe.string_attrib
                                                     "x-on:click" "sortByColumn";
                                                   Unsafe.string_attrib ":class"
-                                                    "sortBy === 'CPU' ? \
-                                                     'border-b-2 \
+                                                    "sortBy === 'Startup \
+                                                     Priority' ? 'border-b-2 \
                                                      border-primary-500 \
                                                      text-primary-800 \
                                                      bg-primary-100' : \
@@ -602,14 +573,15 @@ let unikernel_index_layout unikernels_by_albatross_instance
                                                     ];
                                                 ]
                                               [
-                                                span [ txt "CPU" ];
+                                                span [ txt "Startup Priority" ];
                                                 span
                                                   ~a:
                                                     [
                                                       a_class [ "px-2" ];
                                                       Unsafe.string_attrib
                                                         "x-show"
-                                                        "sortBy === 'CPU'";
+                                                        "sortBy === 'Startup \
+                                                         Priority'";
                                                     ]
                                                   [
                                                     i
@@ -657,54 +629,6 @@ let unikernel_index_layout unikernels_by_albatross_instance
                                                       Unsafe.string_attrib
                                                         "x-show"
                                                         "sortBy === 'Memory'";
-                                                    ]
-                                                  [
-                                                    i
-                                                      ~a:
-                                                        [
-                                                          Unsafe.string_attrib
-                                                            ":class"
-                                                            "sortAsc ? \
-                                                             'fa-solid \
-                                                             fa-sort-up' : \
-                                                             'fa-solid \
-                                                             fa-sort-down'";
-                                                        ]
-                                                      [];
-                                                  ];
-                                              ];
-                                            th
-                                              ~a:
-                                                [
-                                                  Unsafe.string_attrib
-                                                    "x-on:click" "sortByColumn";
-                                                  Unsafe.string_attrib ":class"
-                                                    "sortBy === 'Startup \
-                                                     Priority' ? 'border-b-2 \
-                                                     border-primary-500 \
-                                                     text-primary-800 \
-                                                     bg-primary-100' : \
-                                                     'hover:bg-primary-100 \
-                                                     text-primary-600'";
-                                                  a_class
-                                                    [
-                                                      "px-6 py-3 text-start \
-                                                       text-xs font-bold \
-                                                       uppercase \
-                                                       cursor-pointer \
-                                                       select-none";
-                                                    ];
-                                                ]
-                                              [
-                                                span [ txt "Startup Priority" ];
-                                                span
-                                                  ~a:
-                                                    [
-                                                      a_class [ "px-2" ];
-                                                      Unsafe.string_attrib
-                                                        "x-show"
-                                                        "sortBy === 'Startup \
-                                                         Priority'";
                                                     ]
                                                   [
                                                     i

@@ -84,13 +84,14 @@ let cpu_multiselect cpu_usage_count =
               ~a:
                 [
                   Unsafe.string_attrib "x-show" "open";
-                  a_style "background-color: white;";
+                  a_style
+                    "display: none; background-color: white; position: \
+                     absolute; z-index: 50; width: 100%;";
                   a_class
                     [
-                      "absolute z-10 w-full border rounded shadow-lg max-h-48 \
-                       overflow-auto mt-1";
+                      "w-full border rounded shadow-lg max-h-48 overflow-auto \
+                       mt-1";
                     ];
-                  a_style "display: none";
                 ]
               [
                 template
