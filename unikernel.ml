@@ -3203,7 +3203,7 @@ struct
           Albatross.Albatross_map.iter
             (fun instance_name instance ->
               let key = (user.User_model.name, instance_name) in
-              Hashtbl.add valid_keys key ();
+              Hashtbl.replace valid_keys key ();
               if not (Hashtbl.mem active_streams key) then begin
                 Logs.debug ~src:stats_src (fun m ->
                     m "Spawning new stats stream for %s on %s"
@@ -3212,7 +3212,7 @@ struct
                 let p =
                   spawn_stats_stream user.User_model.name instance_name instance
                 in
-                Hashtbl.add active_streams key p
+                Hashtbl.replace active_streams key p
               end)
             current_instances)
         current_users;
