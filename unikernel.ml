@@ -3187,7 +3187,7 @@ struct
                       (Configuration.name_to_str user_name)
                       (Configuration.name_to_str instance_name)
                       (Printexc.to_string exn));
-                Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop)
+                Lwt.return_unit)
       in
       stream_loop ()
     in
