@@ -3159,18 +3159,75 @@ struct
     Lwt.async loop
 
   let start_background_scaler_scheduler stack store albatross_instances_ref =
+    let active_streams = Hashtbl.create 5 in
+    let spawn_stats_stream user_name instance_name instance =
+      let rec stream_loop () =
+        let open Lwt.Infix in
+        Lwt.catch
+          (fun () ->
+            unikernels_stats stack instance user_name >>= function
+            | Ok () -> Lwt.return_unit
+            | Error err ->
+                Logs.debug ~src:stats_src (fun m ->
+                    m "Stats stream for %s on %s failed: %s"
+                      (Configuration.name_to_str user_name)
+                      (Configuration.name_to_str instance_name)
+                      err);
+                Lwt.return_unit)
+          (function
+            | Lwt.Canceled ->
+                Logs.debug ~src:stats_src (fun m ->
+                    m "Stats stream for %s on %s cancelled (user deleted)."
+                      (Configuration.name_to_str user_name)
+                      (Configuration.name_to_str instance_name));
+                Lwt.return_unit
+            | exn ->
+                Logs.info ~src:stats_src (fun m ->
+                    m "Exception in stats stream for %s on %s: %s"
+                      (Configuration.name_to_str user_name)
+                      (Configuration.name_to_str instance_name)
+                      (Printexc.to_string exn));
+                Lwt.return_unit)
+        >>= fun () -> Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop
+      in
+      stream_loop ()
+    in
     let rec loop () =
-      Lwt.catch
-        (fun () ->
-          Logs.info (fun m -> m "Starting CPU memory checks...");
-          all_unikernels_stats stack !albatross_instances_ref
-            (Store.users store))
-        (fun exn ->
-          Logs.err (fun m ->
-              m "CPU memory checks failed: %s" (Printexc.to_string exn));
-          Lwt.return [])
-      (* TODO: change 5 minutes here to a value from a dedicated scaler module later*)
-      >>= fun _ -> Mirage_sleep.ns (Duration.of_min 5) >>= loop
+      Lwt.pause () >>= fun () ->
+      let current_users = Store.users store in
+      let current_instances = !albatross_instances_ref in
+      let valid_keys = Hashtbl.create 7 in
+      let open Lwt.Infix in
+      List.iter
+        (fun user ->
+          Albatross.Albatross_map.iter
+            (fun instance_name instance ->
+              let key = (user.User_model.name, instance_name) in
+              Hashtbl.add valid_keys key ();
+              if not (Hashtbl.mem active_streams key) then begin
+                Logs.debug ~src:stats_src (fun m ->
+                    m "Spawning new stats stream for %s on %s"
+                      (Configuration.name_to_str user.User_model.name)
+                      (Configuration.name_to_str instance_name));
+                let p =
+                  spawn_stats_stream user.User_model.name instance_name instance
+                in
+                Hashtbl.add active_streams key p
+              end)
+            current_instances)
+        current_users;
+      let to_remove =
+        Hashtbl.fold
+          (fun key p acc ->
+            if not (Hashtbl.mem valid_keys key) then begin
+              Lwt.cancel p;
+              key :: acc
+            end
+            else acc)
+          active_streams []
+      in
+      List.iter (fun key -> Hashtbl.remove active_streams key) to_remove;
+      Mirage_sleep.ns (Duration.of_sec 30) >>= loop
     in
     Lwt.async loop
 
