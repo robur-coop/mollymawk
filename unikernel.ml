@@ -591,11 +591,11 @@ struct
         in
         update_albatross_status state (`Incompatible, reply, "unikernel info");
         Error message
-
+  let stats_src = Logs.Src.create "albatross-stats"
   let unikernels_stats stack state user_name =
     (* TODO: change this callback to the scaling callback later *)
     let cb name st =
-      Logs.info (fun m ->
+      Logs.debug ~src:stats_src (fun m ->
           m "Got stats for VM %s (user %s): %a"
             (Vmm_core.Name.to_string name)
             (Configuration.name_to_str user_name)
