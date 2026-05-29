@@ -592,6 +592,28 @@ struct
         update_albatross_status state (`Incompatible, reply, "unikernel info");
         Error message
 
+  let stats_src = Logs.Src.create "albatross-stats"
+
+  let unikernels_stats stack state user_name =
+    (* TODO: change this callback to the scaling callback later *)
+    let cb name st =
+      Logs.debug ~src:stats_src (fun m ->
+          m "Got stats for VM %s (user %s): %a"
+            (Vmm_core.Name.to_string name)
+            (Configuration.name_to_str user_name)
+            Vmm_core.Stats.pp st);
+      Ok ()
+    in
+    Albatross_state.query_stats stack state ~domain:user_name cb >|= function
+    | Error err ->
+        Error
+          (Fmt.str
+             "Error fetching stats for user %s, with albatross instance %s: %s"
+             (Configuration.name_to_str user_name)
+             (Configuration.name_to_str state.configuration.name)
+             err)
+    | Ok () -> Ok ()
+
   let sign_up reqd =
     let now = Mirage_ptime.now () in
     let csrf = Middleware.generate_csrf_cookie now reqd in
@@ -3136,6 +3158,77 @@ struct
     in
     Lwt.async loop
 
+  let start_background_scaler_scheduler stack store albatross_instances_ref =
+    let active_streams = Hashtbl.create 5 in
+    let spawn_stats_stream user_name instance_name instance =
+      let rec stream_loop () =
+        Lwt.catch
+          (fun () ->
+            unikernels_stats stack instance user_name >>= function
+            | Ok () -> Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop
+            | Error err ->
+                Logs.debug ~src:stats_src (fun m ->
+                    m "Stats stream for %s on %s failed: %s"
+                      (Configuration.name_to_str user_name)
+                      (Configuration.name_to_str instance_name)
+                      err);
+                Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop)
+          (function
+            | Lwt.Canceled ->
+                Logs.debug ~src:stats_src (fun m ->
+                    m "Stats stream for %s on %s cancelled (user deleted)."
+                      (Configuration.name_to_str user_name)
+                      (Configuration.name_to_str instance_name));
+                Lwt.return_unit
+            | exn ->
+                Logs.info ~src:stats_src (fun m ->
+                    m "Exception in stats stream for %s on %s: %s"
+                      (Configuration.name_to_str user_name)
+                      (Configuration.name_to_str instance_name)
+                      (Printexc.to_string exn));
+                Hashtbl.remove active_streams (user_name, instance_name);
+                Lwt.return_unit)
+      in
+      stream_loop ()
+    in
+    let rec loop () =
+      Lwt.pause () >>= fun () ->
+      let current_users = Store.users store in
+      let current_instances = !albatross_instances_ref in
+      let valid_keys = Hashtbl.create 5 in
+      List.iter
+        (fun user ->
+          Albatross.Albatross_map.iter
+            (fun instance_name instance ->
+              let key = (user.User_model.name, instance_name) in
+              Hashtbl.replace valid_keys key ();
+              if not (Hashtbl.mem active_streams key) then begin
+                Logs.debug ~src:stats_src (fun m ->
+                    m "Spawning new stats stream for %s on %s"
+                      (Configuration.name_to_str user.User_model.name)
+                      (Configuration.name_to_str instance_name));
+                let p =
+                  spawn_stats_stream user.User_model.name instance_name instance
+                in
+                Hashtbl.replace active_streams key p
+              end)
+            current_instances)
+        current_users;
+      let to_remove =
+        Hashtbl.fold
+          (fun key p acc ->
+            if not (Hashtbl.mem valid_keys key) then begin
+              Lwt.cancel p;
+              key :: acc
+            end
+            else acc)
+          active_streams []
+      in
+      List.iter (fun key -> Hashtbl.remove active_streams key) to_remove;
+      Mirage_sleep.ns (Duration.of_sec 30) >>= loop
+    in
+    Lwt.async loop
+
   let request_handler stack management_happy_eyeballs management_domain
       albatross_instances js_file css_file imgs store http_client happy_eyeballs
       flow (_ipaddr, _port) reqd =
@@ -3572,5 +3665,6 @@ struct
         Lwt.pause () >>= fun () ->
         start_background_scheduler happy_eyeballs stack store
           albatross_instances http_client;
+        start_background_scaler_scheduler stack store albatross_instances;
         th
 end
