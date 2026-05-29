@@ -3166,14 +3166,15 @@ struct
         Lwt.catch
           (fun () ->
             unikernels_stats stack instance user_name >>= function
-            | Ok () -> Lwt.return_unit
+            | Ok () ->
+                Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop
             | Error err ->
                 Logs.debug ~src:stats_src (fun m ->
                     m "Stats stream for %s on %s failed: %s"
                       (Configuration.name_to_str user_name)
                       (Configuration.name_to_str instance_name)
                       err);
-                Lwt.return_unit)
+                Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop)
           (function
             | Lwt.Canceled ->
                 Logs.debug ~src:stats_src (fun m ->
@@ -3187,8 +3188,7 @@ struct
                       (Configuration.name_to_str user_name)
                       (Configuration.name_to_str instance_name)
                       (Printexc.to_string exn));
-                Lwt.return_unit)
-        >>= fun () -> Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop
+                Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop)
       in
       stream_loop ()
     in
