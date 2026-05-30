@@ -644,32 +644,23 @@ struct
               Lwt.return_ok ()
           | Ok (Autoscaler.Overloaded scaler) -> (
               match
-                Autoscaler.Cluster_manager.next_clone_name user_name
+                Autoscaler.Cluster_manager.register_clone user_name
                   (unikernel_name, scaler)
               with
               | Error e ->
                   Lwt.return_error
-                    (Fmt.str "Error generating next clone name for %s: %s"
-                       unikernel_name e)
-              | Ok new_name -> (
-                  match
-                    Autoscaler.Cluster_manager.register_clone ~user_name
-                      (new_name, scaler)
-                  with
-                  | Error e ->
-                      Lwt.return_error
-                        (Fmt.str "Error registering clone %s: %s" new_name e)
-                  | Ok () ->
-                      (* TODO 
+                    (Fmt.str "Error registering clone %s: %s" unikernel_name e)
+              | Ok new_name ->
+                  (* TODO 
                          1) Deploy new clone with name new_name
                          2) Add new clone to load balancer pool
                       *)
-                      Logs.info ~src:stats_src (fun m ->
-                          m
-                            "[%s] Cluster: OVERLOAD CONFIRMED (Scale-Up!) | \
-                             New clone: %s | VM Usage: %.2f%%"
-                            unikernel_name new_name scaler.last_cpu_usage);
-                      Lwt.return_ok ()))
+                  Logs.info ~src:stats_src (fun m ->
+                      m
+                        "[%s] Cluster: OVERLOAD CONFIRMED (Scale-Up!) | New \
+                         clone: %s | VM Usage: %.2f%%"
+                        unikernel_name new_name scaler.last_cpu_usage);
+                  Lwt.return_ok ())
           | Ok (Autoscaler.Pending (`Prune, ticks, scaler)) ->
               Logs.debug ~src:stats_src (fun m ->
                   m "[%s] Cluster: LOW LOAD (Tick %d/%d) | VM Usage: %.2f%%"
