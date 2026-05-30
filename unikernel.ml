@@ -3229,6 +3229,26 @@ struct
     in
     Lwt.async loop
 
+  let run_prune_dead_clusters () =
+    let rec loop () =
+      Logs.info ~src:Autoscaler.a_logs (fun m ->
+          m "Pruning dead clusters in %.0f seconds" Autoscaler.death_timeout);
+      Mirage_sleep.ns (Duration.of_f Autoscaler.death_timeout) >>= fun () ->
+      Lwt.catch
+        (fun () ->
+          Logs.info ~src:Autoscaler.a_logs (fun m ->
+              m "Starting background pruning...");
+          Lwt.return
+            (Autoscaler.Cluster_manager.prune_dead_clusters
+               (Mirage_ptime.now ())))
+        (fun exn ->
+          Logs.info ~src:Autoscaler.a_logs (fun m ->
+              m "Background pruning failed: %s" (Printexc.to_string exn));
+          Lwt.return_unit)
+      >>= fun () -> loop ()
+    in
+    Lwt.async loop
+
   let request_handler stack management_happy_eyeballs management_domain
       albatross_instances js_file css_file imgs store http_client happy_eyeballs
       flow (_ipaddr, _port) reqd =
@@ -3666,5 +3686,6 @@ struct
         start_background_scheduler happy_eyeballs stack store
           albatross_instances http_client;
         start_background_scaler_scheduler stack store albatross_instances;
+        run_prune_dead_clusters ();
         th
 end
