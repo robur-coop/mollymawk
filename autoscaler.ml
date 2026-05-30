@@ -142,17 +142,22 @@ module Cluster_manager = struct
       g.next_id <- max g.next_id (clone_id + 1)
     end
 
-  let register_clone ~user_name clone =
+  let register_clone user_name clone =
     match extract_name_and_clone_id (fst clone) with
-    | None -> Error (Fmt.str "Invalid clone name '%s'." (fst clone))
-    | Some (primary_name, clone_id) -> (
+    | Some (primary_name, _) -> (
         match find_group_by_name ~user_name ~unikernel_name:primary_name with
         | Some g ->
-            add_clone_to_group g clone clone_id;
+            g.next_id <- g.next_id + 1;
+            let new_name = Fmt.str "%s-clone-%d" primary_name g.next_id in
+            add_clone_to_group g (new_name, snd clone) g.next_id;
             g.last_scale_action <- Some (Mirage_ptime.now ());
-            Ok ()
+            Ok new_name
         | None ->
             Error (Fmt.str "No primary group found for '%s'." primary_name))
+    | None ->
+        let g = get_or_create ~user_name clone in
+        g.next_id <- g.next_id + 1;
+        Ok (fst clone)
 
   let find_or_create_group ~user_name ~unikernel_name t =
     match extract_name_and_clone_id unikernel_name with
@@ -172,26 +177,6 @@ module Cluster_manager = struct
         | None ->
             let g = get_or_create ~user_name (unikernel_name, t) in
             Ok g)
-
-  let next_clone_name user_name vm =
-    match extract_name_and_clone_id (fst vm) with
-    | Some (primary_name, _) -> (
-        match find_group_by_name ~user_name ~unikernel_name:primary_name with
-        | Some g ->
-            let id = g.next_id in
-            g.next_id <- g.next_id + 1;
-            Ok (Fmt.str "%s-clone-%d" primary_name id)
-        | None ->
-            Error
-              (Fmt.str
-                 "No primary group found for primary '%s' (derived from clone \
-                  '%s')."
-                 primary_name (fst vm)))
-    | None ->
-        let g = get_or_create ~user_name vm in
-        let id = g.next_id in
-        g.next_id <- g.next_id + 1;
-        Ok (Fmt.str "%s-clone-%d" (fst g.primary) id)
 
   let remove_clone ~user_name clone =
     match extract_name_and_clone_id (fst clone) with
