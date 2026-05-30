@@ -156,8 +156,9 @@ module Cluster_manager = struct
             Error (Fmt.str "No primary group found for '%s'." primary_name))
     | None ->
         let g = get_or_create ~user_name clone in
-        g.next_id <- g.next_id + 1;
-        Ok (fst clone)
+        let new_name = Fmt.str "%s-clone-%d" (fst clone) g.next_id in
+        add_clone_to_group g (new_name, snd clone) g.next_id;
+        Ok new_name
 
   let find_or_create_group ~user_name ~unikernel_name t =
     match extract_name_and_clone_id unikernel_name with
