@@ -3051,8 +3051,6 @@ struct
             Albatross.set_online albatross;
             match Albatross_json.res res with
             | Ok res ->
-                Autoscaler.Cluster_manager.prune_dead_clusters
-                  (Mirage_ptime.now ());
                 Logs.debug ~src:Autoscaler.a_logs (fun m ->
                     m "Succesfully pruned %s"
                       (Configuration.name_to_str unikernel));
