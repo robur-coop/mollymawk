@@ -3231,17 +3231,18 @@ struct
 
   let run_prune_dead_clusters () =
     let rec loop () =
-      Logs.info (fun m ->
+      Logs.info ~src:Autoscaler.a_logs (fun m ->
           m "Pruning dead clusters in %.0f seconds" Autoscaler.death_timeout);
       Mirage_sleep.ns (Duration.of_f Autoscaler.death_timeout) >>= fun () ->
       Lwt.catch
         (fun () ->
-          Logs.info (fun m -> m "Starting background pruning...");
+          Logs.info ~src:Autoscaler.a_logs (fun m ->
+              m "Starting background pruning...");
           Lwt.return
             (Autoscaler.Cluster_manager.prune_dead_clusters
                (Mirage_ptime.now ())))
         (fun exn ->
-          Logs.err (fun m ->
+          Logs.info ~src:Autoscaler.a_logs (fun m ->
               m "Background pruning failed: %s" (Printexc.to_string exn));
           Lwt.return_unit)
       >>= fun () -> loop ()
