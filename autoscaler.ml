@@ -57,11 +57,11 @@ type t = {
   mutable last_stats_received : Ptime.t;
 }
 
-type scale_type = [ `Up | `Down ]
+type scale_action = [ `Spawn | `Prune ]
 
 type status =
   | Overloaded of t
-  | Pending of scale_type * int * t
+  | Pending of scale_action * int * t
   | Underloaded of string * t
   | Cooldown of t
   | Normal of t
@@ -273,9 +273,9 @@ module Cluster_manager = struct
           let clone_to_kill = fst (List.hd group.clones) in
           trigger (Underloaded (clone_to_kill, current_vm_state))
         else if is_high then
-          Ok (Pending (`Up, group.consecutive_high_ticks, current_vm_state))
+          Ok (Pending (`Spawn, group.consecutive_high_ticks, current_vm_state))
         else if is_low then
-          Ok (Pending (`Down, group.consecutive_low_ticks, current_vm_state))
+          Ok (Pending (`Prune, group.consecutive_low_ticks, current_vm_state))
         else Ok (Normal current_vm_state)
 
   let is_dead now (vm : t) =
