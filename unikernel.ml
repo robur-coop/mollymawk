@@ -687,15 +687,19 @@ struct
                    unikernel_name err))
     else Lwt.return (Ok ())
 
-  let unikernels_stats stack state instance_name (user : User_model.user) =
+  let unikernels_stats stack instance (user : User_model.user) =
     let user_name = user.User_model.name in
     let cb name st =
-      let unikernel_name = Vmm_core.Name.to_string name in
+      let unikernel_name =
+        match Vmm_core.Name.name name with
+        | Some label -> Vmm_core.Name.Label.to_string label
+        | None -> Vmm_core.Name.to_string name
+      in
       Logs.debug ~src:stats_src (fun m ->
           m "[Stats] Received stats for %s as %a" unikernel_name
             Vmm_core.Stats.pp st);
       Lwt.async (fun () ->
-          handle_stats stack state st ~unikernel_name user >>= function
+          handle_stats stack instance st ~unikernel_name user >>= function
           | Ok () -> Lwt.return_unit
           | Error err ->
               Logs.info ~src:stats_src (fun m ->
@@ -703,13 +707,13 @@ struct
               Lwt.return_unit);
       Ok ()
     in
-    Albatross_state.query_stats stack state ~domain:user_name cb >|= function
+    Albatross_state.query_stats stack instance ~domain:user_name cb >|= function
     | Error err ->
         Error
           (Fmt.str
              "Error fetching stats for user %s, with albatross instance %s: %s"
              (Configuration.name_to_str user_name)
-             (Configuration.name_to_str state.configuration.name)
+             (Configuration.name_to_str instance.configuration.name)
              err)
     | Ok () -> Ok ()
 
@@ -3264,7 +3268,7 @@ struct
       let rec stream_loop () =
         Lwt.catch
           (fun () ->
-            unikernels_stats stack instance instance_name user >>= function
+            unikernels_stats stack instance user >>= function
             | Ok () -> Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop
             | Error err ->
                 Logs.debug ~src:stats_src (fun m ->
