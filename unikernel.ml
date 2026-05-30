@@ -3030,6 +3030,40 @@ struct
 
   let stats_src = Logs.Src.create "albatross-stats"
 
+  let prune_clone stack albatross unikernel (user : User_model.user) =
+    match Configuration.name_of_str unikernel with
+    | Error (`Msg err) ->
+        Logs.info ~src:Autoscaler.a_logs (fun m ->
+            m "Error pruning unikernel %s: %s, invalid unikernel name" unikernel
+              err);
+        Lwt.return_error "Invalid unikernel name when pruning"
+    | Ok unikernel -> (
+        Albatross_state.query stack albatross ~domain:user.name ~name:unikernel
+          (`Unikernel_cmd `Unikernel_destroy)
+        >>= function
+        | Error err ->
+            Logs.info ~src:Autoscaler.a_logs (fun m ->
+                m "Error pruning unikernel %s: %s"
+                  (Configuration.name_to_str unikernel)
+                  err);
+            Lwt.return_error err
+        | Ok (_hdr, res) -> (
+            Albatross.set_online albatross;
+            match Albatross_json.res res with
+            | Ok res ->
+                Autoscaler.Cluster_manager.prune_dead_clusters
+                  (Mirage_ptime.now ());
+                Logs.debug ~src:Autoscaler.a_logs (fun m ->
+                    m "Succesfully pruned %s"
+                      (Configuration.name_to_str unikernel));
+                Lwt.return_ok ()
+            | Error (`String err) ->
+                Logs.info ~src:Autoscaler.a_logs (fun m ->
+                    m "Error pruning unikernel %s: %s"
+                      (Configuration.name_to_str unikernel)
+                      err);
+                Lwt.return_error err))
+
   let handle_stats stack state ((rusage, _, _, _) : Vmm_core.Stats.t)
       ~unikernel_name (user : User_model.user) =
     let user_name = Configuration.name_to_str user.name in
@@ -3109,13 +3143,7 @@ struct
                     "[%s] Cluster: UNDERLOAD CONFIRMED (Scale-Down!) | \
                      Killing: %s | VM Usage: %.2f%%"
                     unikernel_name clone_to_kill scaler.last_cpu_usage);
-
-              (* TODO 
-                1) Remove clone from load balancer pool
-                2) Remove clone from group
-                3) Destroy clone
-              *)
-              Lwt.return_ok ()
+              prune_clone stack state clone_to_kill user
           | Error err ->
               Lwt.return_error
                 (Fmt.str
