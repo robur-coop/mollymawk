@@ -3030,6 +3030,38 @@ struct
         (Label_map.add unikernel_key group unikernel_map)
         !scaling_groups
 
+  let prune_clone stack albatross unikernel (user : User_model.user) =
+    match Configuration.name_of_str unikernel with
+    | Error (`Msg err) ->
+        Logs.info ~src:Autoscaler.a_logs (fun m ->
+            m "Error pruning unikernel %s: %s, invalid unikernel name" unikernel
+              err);
+        Lwt.return_error "Invalid unikernel name when pruning"
+    | Ok unikernel -> (
+        Albatross_state.query stack albatross ~domain:user.name ~name:unikernel
+          (`Unikernel_cmd `Unikernel_destroy)
+        >>= function
+        | Error err ->
+            Logs.info ~src:Autoscaler.a_logs (fun m ->
+                m "Error pruning unikernel %s: %s"
+                  (Configuration.name_to_str unikernel)
+                  err);
+            Lwt.return_error err
+        | Ok (_hdr, res) -> (
+            Albatross.set_online albatross;
+            match Albatross_json.res res with
+            | Ok res ->
+                Logs.debug ~src:Autoscaler.a_logs (fun m ->
+                    m "Succesfully pruned %s"
+                      (Configuration.name_to_str unikernel));
+                Lwt.return_ok ()
+            | Error (`String err) ->
+                Logs.info ~src:Autoscaler.a_logs (fun m ->
+                    m "Error pruning unikernel %s: %s"
+                      (Configuration.name_to_str unikernel)
+                      err);
+                Lwt.return_error err))
+
   let evaluate_scaling group now user_name unikernel_key =
     match Autoscaler.Cluster_manager.evaluate_scaling group now with
     | Error err ->
@@ -3107,14 +3139,10 @@ struct
                       e)
             | Ok post_prune_group ->
                 put_group user_name unikernel_key post_prune_group);
-            (* TODO
-               1) Remove clone from load balancer pool
-               2) Remove clone from group
-               3) Destroy clone
-            *)
-            Lwt.return_ok ())
+            prune_clone stack albatross clone_to_kill user)
 
-  let handle_stats state ((rusage, _, _, _) : Vmm_core.Stats.t) name store =
+  let handle_stats stack state ((rusage, _, _, _) : Vmm_core.Stats.t) name store
+      =
     match Vmm_core.Name.name name with
     | None -> Lwt.return_error "VM name has no unikernel label"
     | Some label -> (
@@ -3211,7 +3239,7 @@ struct
   let unikernels_stats stack instance store =
     let cb name st =
       Lwt.async (fun () ->
-          handle_stats instance st name store >>= function
+          handle_stats stack instance st name store >>= function
           | Ok () -> Lwt.return_unit
           | Error err ->
               Log.err (fun m ->
