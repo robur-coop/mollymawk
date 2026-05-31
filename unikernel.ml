@@ -3028,6 +3028,19 @@ struct
               ~data:(`String (Fmt.str "Test failed: %s" (String.escaped err)))
               `Bad_request)
 
+  let least_used_cpuid stack albatross user_name =
+    user_unikernels_by_instance stack albatross user_name >|= fun unikernels ->
+    match Albatross_state.policy ~domain:user_name albatross with
+    | Error err -> Error err
+    | Ok None -> Error "No policy found for user"
+    | Ok (Some p) ->
+        Ok
+          (let cpu_usage_count = Utils.cpu_usage_count p unikernels in
+           let sorted_cpus =
+             cpu_usage_count
+             |> List.sort (fun (_, c1) (_, c2) -> Int.compare c1 c2)
+           in
+           match sorted_cpus with (id, _) :: _ -> id | [] -> 0)
   let stats_src = Logs.Src.create "albatross-stats"
 
   let handle_stats stack state ((rusage, _, _, _) : Vmm_core.Stats.t)
