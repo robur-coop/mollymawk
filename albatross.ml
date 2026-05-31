@@ -622,6 +622,43 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         raw_query stack t ~name:vmm_name certificates cmd
           (stats_data vmm_name f)
 
+  let unikernel_get_data name f tls_flow d =
+    let open Lwt.Infix in
+    let rec read_loop acc =
+      if String.length acc >= 4 then
+        let len = Int32.to_int (String.get_int32_be acc 0) in
+        if String.length acc >= 4 + len then (
+          match decode_reply acc with
+          | Error msg -> Lwt.return_error msg
+          | Ok (_, `Success (`Unikernel_image (compressed, binary))) ->
+              f (compressed, binary)
+          | Ok w ->
+              Logs.warn (fun m ->
+                  m "albatross unexpected reply %a"
+                    (Vmm_commands.pp_wire ~verbose:false)
+                    w);
+              Lwt.return_error "Unexpected reply for Unikernel_get")
+        else
+          TLS.read tls_flow >>= function
+          | Ok (`Data d) -> read_loop (acc ^ Cstruct.to_string d)
+          | Ok `Eof -> Lwt.return_error "EOF while reading unikernel image"
+          | Error _ -> Lwt.return_error "TLS error"
+      else
+        TLS.read tls_flow >>= function
+        | Ok (`Data d) -> read_loop (acc ^ Cstruct.to_string d)
+        | Ok `Eof -> Lwt.return_error "EOF while reading unikernel image header"
+        | Error _ -> Lwt.return_error "TLS error"
+    in
+    read_loop d
+
+  let query_unikernel_get stack t ~domain ~name f =
+    let cmd = `Unikernel_cmd (`Unikernel_get 0) in
+    match certs t domain name cmd with
+    | Error str -> Lwt.return (Error str)
+    | Ok (vmm_name, certificates) ->
+        raw_query stack t ~name:vmm_name certificates cmd
+          (unikernel_get_data vmm_name f)
+
   let set_policy stack t ~domain policy =
     let open Lwt.Infix in
     let old_policies = t.policies in

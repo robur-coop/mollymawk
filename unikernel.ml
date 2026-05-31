@@ -3030,6 +3030,102 @@ struct
 
   let stats_src = Logs.Src.create "albatross-stats"
 
+  let least_used_cpuid stack albatross user_name =
+    user_unikernels_by_instance stack albatross user_name >|= fun unikernels ->
+    match Albatross_state.policy ~domain:user_name albatross with
+    | Error err -> Error err
+    | Ok None -> Error "No policy found for user"
+    | Ok (Some p) ->
+        Ok
+          (let cpu_usage_count = Utils.cpu_usage_count p unikernels in
+           let sorted_cpus =
+             cpu_usage_count
+             |> List.sort (fun (_, c1) (_, c2) -> Int.compare c1 c2)
+           in
+           match sorted_cpus with (id, _) :: _ -> id | [] -> 0)
+
+  let spawn_clone stack albatross (primary_name : string) (clone_name : string)
+      (user : User_model.user) =
+    match Configuration.(name_of_str primary_name, name_of_str clone_name) with
+    | Error (`Msg err), _ ->
+        Lwt.return_error (Fmt.str "Invalid primary name. got %s" err)
+    | _, Error (`Msg err) ->
+        Lwt.return_error (Fmt.str "Invalid clone name. got %s" err)
+    | Ok primary_vmm_name, Ok clone_vmm_name -> (
+        user_unikernel stack albatross ~user_name:user.name
+          ~unikernel_name:primary_vmm_name
+        >>= function
+        | Error err ->
+            Lwt.return_error
+              (Fmt.str "An error occured trying to fetch %s from albatross: %s"
+                 primary_name err)
+        | Ok (name, unikernel) -> (
+            if unikernel.block_devices <> [] then begin
+              Logs.warn ~src:Autoscaler.a_logs (fun m ->
+                  m
+                    "spawn_clone: Aborting clone of %s because it has block \
+                     devices."
+                    primary_name);
+              Lwt.return_error
+                "Unikernels with block devices cannot be safely cloned"
+            end
+            else
+              let bridges =
+                List.map
+                  (fun { Vmm_core.Unikernel.unikernel_device; host_device; _ }
+                     -> (unikernel_device, Some host_device, None))
+                  unikernel.bridges
+              in
+              let argv =
+                match unikernel.argv with
+                | None -> None
+                | Some args ->
+                    Logs.info ~src:Autoscaler.a_logs (fun m ->
+                        m "Cloning %s: original argv: %s" primary_name
+                          (String.concat "," args));
+                    Some (Utils.filter_ip_args args)
+              in
+              least_used_cpuid stack albatross user.name >>= function
+              | Error err -> Lwt.return_error err
+              | Ok cpuid -> (
+                  let config : Vmm_core.Unikernel.config =
+                    {
+                      typ = unikernel.typ;
+                      fail_behaviour = unikernel.fail_behaviour;
+                      startup = unikernel.startup;
+                      memory = unikernel.memory;
+                      block_devices = [];
+                      add_name = false;
+                      bridges;
+                      argv;
+                      numcpus = unikernel.numcpus;
+                      linux_boot_partition = unikernel.linux_boot_partition;
+                      compressed = false;
+                      image = "";
+                      cpuids = Vmm_core.IS.singleton cpuid;
+                    }
+                  in
+                  Albatross_state.query_unikernel_get stack albatross
+                    ~domain:user.name ~name:primary_vmm_name
+                    (fun (compressed, binary_string) ->
+                      let config = { config with compressed } in
+                      let data_stream, push_chunks = Lwt_stream.create () in
+                      let push () = Lwt_stream.get data_stream in
+                      push_chunks (Some binary_string);
+                      push_chunks None;
+                      force_create_unikernel stack albatross
+                        ~unikernel_name:clone_vmm_name ~push config user
+                      >>= function
+                      | Error (`Msg err, _status) -> Lwt.return_error err
+                      | Ok () -> Lwt.return_ok ())
+                  >>= function
+                  | Error err ->
+                      Logs.err ~src:Autoscaler.a_logs (fun m ->
+                          m "spawn_clone: Error getting binary for %s: %s"
+                            primary_name err);
+                      Lwt.return_error err
+                  | Ok () -> Lwt.return_ok ())))
+
   let handle_stats stack state ((rusage, _, _, _) : Vmm_core.Stats.t)
       ~unikernel_name (user : User_model.user) =
     let user_name = Configuration.name_to_str user.name in
@@ -3087,16 +3183,12 @@ struct
                   Lwt.return_error
                     (Fmt.str "Error registering clone %s: %s" unikernel_name e)
               | Ok new_name ->
-                  (* TODO 
-                         1) Deploy new clone with name new_name
-                         2) Add new clone to load balancer pool
-                      *)
                   Logs.info ~src:stats_src (fun m ->
                       m
                         "[%s] Cluster: OVERLOAD CONFIRMED (Scale-Up!) | New \
                          clone: %s | VM Usage: %.2f%%"
                         unikernel_name new_name scaler.last_cpu_usage);
-                  Lwt.return_ok ())
+                  spawn_clone stack state primary_name new_name user)
           | Ok (Autoscaler.Pending (`Prune, ticks, scaler)) ->
               Logs.debug ~src:stats_src (fun m ->
                   m "[%s] Cluster: LOW LOAD (Tick %d/%d) | VM Usage: %.2f%%"
