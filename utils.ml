@@ -723,3 +723,39 @@ let display_alert text alert_type =
     (div
        [ p [ txt text ] ]
        ~a:[ a_class [ "my-4 p-4 border rounded-lg " ^ class_ ] ])
+
+let contains_substring s sub =
+  let len_s = String.length s in
+  let len_sub = String.length sub in
+  if len_sub = 0 then true
+  else if len_sub > len_s then false
+  else
+    let rec check i =
+      if i > len_s - len_sub then false
+      else if String.sub s i len_sub = sub then true
+      else check (succ i)
+    in
+    check 0
+
+let filter_ip_args argv =
+  let rec loop acc = function
+    | [] -> List.rev acc
+    | arg :: rest ->
+        if
+          String.length arg >= 2
+          && String.sub arg 0 2 = "--"
+          && (contains_substring arg "ipv4"
+             || contains_substring arg "ipv6"
+             || contains_substring arg "ip=")
+        then
+          if String.contains arg '=' then loop acc rest
+          else
+            match rest with
+            | next :: rest'
+              when not (String.length next >= 2 && String.sub next 0 2 = "--")
+              ->
+                loop acc rest'
+            | _ -> loop acc rest
+        else loop (arg :: acc) rest
+  in
+  loop [] argv
