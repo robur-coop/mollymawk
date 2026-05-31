@@ -3030,6 +3030,82 @@ struct
         (Label_map.add unikernel_name group unikernel_map)
         !scaling_groups
 
+  let spawn_clone stack albatross ~unikernel_name ~clone_name ~user_name =
+    user_unikernel stack albatross ~user_name ~unikernel_name >>= function
+    | Error err ->
+        Lwt.return_error
+          (Fmt.str "An error occured trying to fetch %s from albatross: %s"
+             (Configuration.name_to_str unikernel_name)
+             err)
+    | Ok (_, unikernel) -> (
+        if unikernel.block_devices <> [] then begin
+          Log.info (fun m ->
+              m
+                "spawn_clone: Aborting clone of %s because it has block \
+                 devices."
+                (Configuration.name_to_str unikernel_name));
+          Lwt.return_error
+            "Unikernels with block devices cannot be safely cloned"
+        end
+        else
+          let bridges =
+            List.map
+              (fun { Vmm_core.Unikernel.unikernel_device; host_device; _ } ->
+                (unikernel_device, Some host_device, None))
+              unikernel.bridges
+          in
+          let argv =
+            match unikernel.argv with
+            | None -> None
+            | Some args ->
+                Log.info (fun m ->
+                    m "Cloning %s: original argv: %s"
+                      (Configuration.name_to_str unikernel_name)
+                      (String.concat "," args));
+                Some (Utils.filter_ip_args args)
+          in
+          least_used_cpuid stack albatross user_name >>= function
+          | Error err -> Lwt.return_error err
+          | Ok cpuid -> (
+              let config : Vmm_core.Unikernel.config =
+                {
+                  typ = unikernel.typ;
+                  fail_behaviour = unikernel.fail_behaviour;
+                  startup = unikernel.startup;
+                  memory = unikernel.memory;
+                  block_devices = [];
+                  add_name = false;
+                  bridges;
+                  argv;
+                  numcpus = unikernel.numcpus;
+                  linux_boot_partition = unikernel.linux_boot_partition;
+                  compressed = false;
+                  image = "";
+                  cpuids = Vmm_core.IS.singleton cpuid;
+                }
+              in
+              Albatross_state.query_unikernel_get stack albatross
+                ~domain:user_name ~name:unikernel_name
+                (fun (compressed, binary_string) ->
+                  let config = { config with compressed } in
+                  let data_stream, push_chunks = Lwt_stream.create () in
+                  let push () = Lwt_stream.get data_stream in
+                  push_chunks (Some binary_string);
+                  push_chunks None;
+                  force_create_unikernel stack albatross
+                    ~unikernel_name:clone_name ~push config user
+                  >>= function
+                  | Error (`Msg err, _status) -> Lwt.return_error err
+                  | Ok () -> Lwt.return_ok ())
+              >>= function
+              | Error err ->
+                  Log.err (fun m ->
+                      m "spawn_clone: Error getting binary for %s: %s"
+                        (Configuration.name_to_str unikernel_name)
+                        err);
+                  Lwt.return_error err
+              | Ok () -> Lwt.return_ok ()))
+
   let prune_clone stack albatross group ~unikernel_name ~clone_to_kill
       ~user_name =
     Albatross_state.query stack albatross ~domain:user_name ~name:clone_to_kill
@@ -3135,7 +3211,8 @@ struct
                           (Configuration.name_to_str unikernel_name)
                           scaler.last_cpu_usage
                           (Configuration.name_to_str next_name));
-                    Lwt.return_ok ()))
+                    spawn_clone stack albatross ~unikernel_name:unikernel_key
+                      ~clone_name:next_name ~user_name))
         | Autoscaler.Underloaded (clone_to_kill, scaler) ->
             Log.info (fun m ->
                 m "[%s/%s]: underloaded (%d%%), pruning: %s"
