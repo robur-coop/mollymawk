@@ -270,8 +270,7 @@ let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
                      text-secondary-600 hover:text-gray-50 focus:outline-none \
                      hover:bg-secondary-800 font-semibold " ^ extra_css;
                   ]);
-          ]
-        @ [ a_button_type `Button ])
+          ])
       [ content ])
 
 (** A UI with two buttons, one for decrementing a value and the other for
@@ -299,6 +298,7 @@ let increment_or_decrement_ui ~max_value ~min_value ?(step = 1)
         button_component
           ~attribs:
             [
+              a_button_type `Button;
               Unsafe.string_attrib "x-on:click"
                 (Fmt.str "if (count > %d) count = count - %d" min_value step);
             ]
@@ -325,6 +325,7 @@ let increment_or_decrement_ui ~max_value ~min_value ?(step = 1)
         button_component
           ~attribs:
             [
+              a_button_type `Button;
               Unsafe.string_attrib "x-on:click"
                 (Fmt.str "if (count < %d) count = count + %d" max_value step);
             ]
