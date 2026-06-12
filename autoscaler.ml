@@ -115,161 +115,199 @@ module Cluster_manager = struct
         | None -> None)
     | _ -> None
 
+  let update_next_id clones =
+    let max_id =
+      List.fold_left
+        (fun acc (name, _) ->
+          match extract_name_and_clone_id name with
+          | Some (_, id) -> max acc id
+          | None -> acc)
+        0 clones
+    in
+    max_id + 1
+
+  let create_group primary =
+    {
+      primary;
+      clones = [];
+      last_scale_action = Ptime.epoch;
+      consecutive_high_ticks = 0;
+      consecutive_low_ticks = 0;
+      last_tick_update = Ptime.epoch;
+      next_id = 1;
+    }
+
+  let next_clone_name group =
+    let primary_name = fst group.primary in
+    Fmt.str "%s-clone-%d" primary_name group.next_id
+
   let add_clone_to_group g clone clone_id =
-    if not (List.mem_assoc (fst clone) g.clones) then begin
-      g.clones <- clone :: g.clones;
-      g.next_id <- max g.next_id (clone_id + 1)
-    end
+    if not (List.mem_assoc (fst clone) g.clones) then
+      let new_clones = clone :: g.clones in
+      { g with clones = new_clones; next_id = max g.next_id (clone_id + 1) }
+    else g
 
-  let register_clone user_name clone =
-    match extract_name_and_clone_id (fst clone) with
-    | Some (primary_name, _) -> (
-        match find_group_by_name ~user_name ~unikernel_name:primary_name with
-        | Some g ->
-            g.next_id <- g.next_id + 1;
-            let new_name = Fmt.str "%s-clone-%d" primary_name g.next_id in
-            add_clone_to_group g (new_name, snd clone) g.next_id;
-            g.last_scale_action <- Some (Mirage_ptime.now ());
-            Ok new_name
-        | None ->
-            Error (Fmt.str "No primary group found for '%s'." primary_name))
-    | None ->
-        let g = get_or_create ~user_name clone in
-        g.next_id <- g.next_id + 1;
-        Ok (fst clone)
-
-  let find_or_create_group ~user_name ~unikernel_name t =
-    match extract_name_and_clone_id unikernel_name with
-    | Some (primary_name, clone_id) -> (
-        match find_group_by_name ~user_name ~unikernel_name:primary_name with
-        | Some g ->
-            (* stats arrived before register_clone was called, recover silently *)
-            add_clone_to_group g (unikernel_name, t) clone_id;
-            Ok g
-        | None ->
+  let register_clone group clone =
+    let name = fst clone in
+    if String.length name > 63 then
+      Error (Fmt.str "Clone name '%s' exceeds the 63-character limit" name)
+    else
+      match extract_name_and_clone_id name with
+      | Some (primary_name, clone_id) ->
+          if String.equal primary_name (fst group.primary) then
+            Ok
+              {
+                (add_clone_to_group group clone clone_id) with
+                last_scale_action = Mirage_ptime.now ();
+              }
+          else
             Error
-              (Fmt.str "No primary group found for '%s' (derived from '%s')."
-                 primary_name unikernel_name))
-    | None -> (
-        match find_group_by_name ~user_name ~unikernel_name with
-        | Some g -> Ok g
-        | None ->
-            let g = get_or_create ~user_name (unikernel_name, t) in
-            Ok g)
+              (Fmt.str "Clone '%s' does not match group primary '%s'" name
+                 (fst group.primary))
+      | None -> Error (Fmt.str "Clone name '%s' is not a valid format" name)
 
-  let remove_clone ~user_name clone =
-    match extract_name_and_clone_id (fst clone) with
-    | Some (primary_name, _) -> (
-        match find_group_by_name ~user_name ~unikernel_name:primary_name with
-        | Some g ->
-            g.clones <-
-              List.filter
-                (fun c -> not (String.equal (fst c) (fst clone)))
-                g.clones;
-            g.last_scale_action <- Some (Mirage_ptime.now ());
-            Ok ()
-        | None ->
-            Logs.debug ~src:a_logs (fun m ->
-                m
-                  "[Cluster Manager] No primary group found during removal for \
-                   primary '%s' (derived from clone '%s')."
-                  primary_name (fst clone));
-            Error "Primary group not found during removal")
-    | None ->
-        Logs.debug ~src:a_logs (fun m ->
-            m "[Cluster Manager] Invalid clone name '%s'." (fst clone));
-        Error "Invalid clone name"
+  let remove_clone group clone_name =
+    match extract_name_and_clone_id clone_name with
+    | Some (primary_name, _) ->
+        if String.equal primary_name (fst group.primary) then
+          let new_clones =
+            List.filter
+              (fun (n, _) -> not (String.equal n clone_name))
+              group.clones
+          in
+          let next_id = update_next_id new_clones in
+          Ok
+            {
+              group with
+              clones = new_clones;
+              next_id;
+              last_scale_action = Mirage_ptime.now ();
+            }
+        else
+          Error
+            (Fmt.str "Clone '%s' does not match group primary '%s'" clone_name
+               (fst group.primary))
+    | None -> Error (Fmt.str "Clone name '%s' is not a valid format" clone_name)
 
+  (** [check_group_average group key now rusage] calculates the average CPU
+      usage across all instances in the [group] (primary and clones). Since
+      stats arrive for a single VM at a time (identified by [key]), we: 1.
+      Calculate the current CPU usage for the VM [key] using the new [rusage].
+      2. Use the last cached CPU usage for all other VMs in the group. 3. Update
+      the state of VM [key] with the new measurements. 4. Return the computed
+      average, the updated VM state, and the updated group. *)
   let check_group_average group key now rusage =
     let all_instances = group.primary :: group.clones in
-    let current_vm_state = ref None in
-    let total_usage =
-      List.fold_left
-        (fun acc (name, vm) ->
-          if String.equal name key then begin
-            let current_vm_usage = Cpu_monitor.measure vm.monitor now rusage in
-            let new_monitor = Cpu_monitor.create now rusage in
-            vm.monitor <- new_monitor;
-            vm.last_cpu_usage <- current_vm_usage;
-            vm.last_stats_received <- now;
-            current_vm_state := Some vm;
-            acc +. current_vm_usage
-          end
-          else acc +. vm.last_cpu_usage)
-        0.0 all_instances
-    in
-    match !current_vm_state with
+    match List.assoc_opt key all_instances with
     | None -> Error "Current VM not found in group during average check"
-    | Some state ->
+    | Some vm ->
+        let current_vm_usage = Cpu_monitor.measure vm.monitor now rusage in
+        let state =
+          {
+            monitor = Cpu_monitor.create now rusage;
+            last_cpu_usage = current_vm_usage;
+            last_stats_received = now;
+          }
+        in
+        let total_usage =
+          List.fold_left
+            (fun acc (name, v) ->
+              if String.equal name key then acc +. current_vm_usage
+              else acc +. v.last_cpu_usage)
+            0.0 all_instances
+        in
         let average_usage =
           total_usage /. float_of_int (List.length all_instances)
         in
-        Ok (average_usage, state)
+        (* Construct the new updated group state *)
+        let updated_group =
+          if String.equal key (fst group.primary) then
+            { group with primary = (key, state) }
+          else
+            let new_clones =
+              List.map
+                (fun (n, v) ->
+                  if String.equal n key then (n, state) else (n, v))
+                group.clones
+            in
+            { group with clones = new_clones }
+        in
+        Ok (average_usage, state, updated_group)
 
+  (** [check_group_status group key now rusage] evaluates the scaling status of
+      the [group] when new stats [rusage] at time [now] arrive for the VM [key].
+      It updates the average load of the group, ticks the consecutive high/low
+      counters, and determines if a scaling action (spawn or prune) is
+      triggered. *)
   let check_group_status group key now rusage =
     match check_group_average group key now rusage with
     | Error e -> Error e
-    | Ok (average_usage, current_vm_state) ->
-        let is_cooldown = in_cooldown now group in
+    | Ok (average_usage, current_vm_state, updated_group) ->
+        let is_cooldown = in_cooldown now updated_group in
         let is_high = average_usage > scale_up_threshold_percent in
         let is_low =
-          average_usage < scale_down_threshold_percent && group.clones <> []
+          average_usage < scale_down_threshold_percent
+          && updated_group.clones <> []
         in
-        if should_tick now group then begin
-          group.last_tick_update <- Some now;
-          group.consecutive_high_ticks <-
-            (if is_high && not is_cooldown then group.consecutive_high_ticks + 1
-             else 0);
-          group.consecutive_low_ticks <-
-            (if is_low && not is_cooldown then group.consecutive_low_ticks + 1
-             else 0)
-        end;
-        let trigger state =
-          group.consecutive_high_ticks <- 0;
-          group.consecutive_low_ticks <- 0;
-          group.last_scale_action <- Some now;
-          Ok state
+        let updated_group =
+          if should_tick now updated_group then
+            {
+              updated_group with
+              last_tick_update = now;
+              consecutive_high_ticks =
+                (if is_high && not is_cooldown then
+                   updated_group.consecutive_high_ticks + 1
+                 else 0);
+              consecutive_low_ticks =
+                (if is_low && not is_cooldown then
+                   updated_group.consecutive_low_ticks + 1
+                 else 0);
+            }
+          else updated_group
         in
-        if is_cooldown then Ok (Cooldown current_vm_state)
-        else if group.consecutive_high_ticks >= scale_up_trigger_ticks then
-          trigger (Overloaded current_vm_state)
-        else if group.consecutive_low_ticks >= scale_down_trigger_ticks then
-          let clone_to_kill = fst (List.hd group.clones) in
-          trigger (Underloaded (clone_to_kill, current_vm_state))
+        let trigger state updated_group =
+          let final_group =
+            {
+              updated_group with
+              consecutive_high_ticks = 0;
+              consecutive_low_ticks = 0;
+              last_scale_action = now;
+            }
+          in
+          Ok (state, final_group)
+        in
+        if is_cooldown then Ok (Cooldown current_vm_state, updated_group)
+        else if updated_group.consecutive_high_ticks >= scale_up_trigger_ticks
+        then trigger (Overloaded current_vm_state) updated_group
+        else if updated_group.consecutive_low_ticks >= scale_down_trigger_ticks
+        then
+          let clone_to_kill = fst (List.hd updated_group.clones) in
+          trigger (Underloaded (clone_to_kill, current_vm_state)) updated_group
         else if is_high then
-          Ok (Pending (`Spawn, group.consecutive_high_ticks, current_vm_state))
+          Ok
+            ( Pending
+                (`Spawn, updated_group.consecutive_high_ticks, current_vm_state),
+              updated_group )
         else if is_low then
-          Ok (Pending (`Prune, group.consecutive_low_ticks, current_vm_state))
-        else Ok (Normal current_vm_state)
+          Ok
+            ( Pending
+                (`Prune, updated_group.consecutive_low_ticks, current_vm_state),
+              updated_group )
+        else Ok (Normal current_vm_state, updated_group)
 
-  let is_dead now (vm : t) =
-    Ptime.Span.to_float_s (Ptime.diff now vm.last_stats_received)
-    > death_timeout
-
-  let prune_dead_clusters now =
-    let dead_keys =
-      Hashtbl.fold
-        (fun primary_name group acc ->
-          if is_dead now (snd group.primary) then primary_name :: acc
-          else begin
-            let alive_clones, dead_clones =
-              List.partition (fun (_, vm) -> not (is_dead now vm)) group.clones
-            in
-            match dead_clones with
-            | [] -> acc
-            | _ ->
-                Logs.debug ~src:a_logs (fun m ->
-                    m "[Cluster Manager] Pruning %d dead clones"
-                      (List.length dead_clones));
-                group.clones <- alive_clones;
-                acc
-          end)
-        clusters []
-    in
-    List.iter
-      (fun key ->
-        Logs.debug ~src:a_logs (fun m ->
-            m "[Cluster Manager] Pruning dead cluster: %s" key);
-        Hashtbl.remove clusters key)
-      dead_keys
+  (** [sync_group group active_vm_names] checks if the primary is still alive
+      and prunes any clones that are no longer present in [active_vm_names].
+      Returns the updated group, or Error `Primary_dead if the primary VM has
+      died. *)
+  let sync_group group active_vm_names =
+    let primary_name = fst group.primary in
+    if not (List.mem primary_name active_vm_names) then Error `Primary_dead
+    else
+      let new_clones =
+        List.filter
+          (fun (name, _) -> List.mem name active_vm_names)
+          group.clones
+      in
+      let next_id = update_next_id new_clones in
+      Ok { group with clones = new_clones; next_id }
 end
