@@ -63,9 +63,9 @@ module Cpu_monitor = struct
 end
 
 type t = {
-  mutable monitor : Cpu_monitor.t;
-  mutable last_cpu_usage : float;
-  mutable last_stats_received : Ptime.t;
+  monitor : Cpu_monitor.t;
+  last_cpu_usage : float;
+  last_stats_received : Ptime.t;
 }
 
 type scale_action = [ `Spawn | `Prune ]
@@ -92,12 +92,12 @@ module Cluster_manager = struct
 
   type group = {
     primary : vm;
-    mutable clones : vm list;
-    mutable last_scale_action : Ptime.t option;
-    mutable last_tick_update : Ptime.t option;
-    mutable next_id : int;
-    mutable consecutive_high_ticks : int;
-    mutable consecutive_low_ticks : int;
+    clones : vm list;
+    last_scale_action : Ptime.t;
+    last_tick_update : Ptime.t;
+    next_id : int;
+    consecutive_high_ticks : int;
+    consecutive_low_ticks : int;
   }
 
   let clusters : (string, group) Hashtbl.t = Hashtbl.create 10
