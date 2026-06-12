@@ -1,5 +1,11 @@
 let a_logs = Logs.Src.create "autoscaling-logs"
+
+(** The interval at which a cluster's metrics are evaluated for scaling. *)
 let poll_interval = Duration.of_min 5
+
+(** A span representation of [poll_interval]. *)
+let poll_interval_span =
+  Ptime.Span.of_int_s (Int64.to_int (Duration.to_sec poll_interval))
 
 (** number of times a cluster is checked before deciding if it's overloaded. *)
 let scale_up_trigger_ticks = 3
@@ -8,16 +14,20 @@ let scale_up_trigger_ticks = 3
     this vm can be cloned. *)
 let scale_up_threshold_percent = 90.0
 
+(** if average CPU usage < 40% for [scale_down_trigger_ticks] consecutive
+    checks, one of the clone VMs can be pruned. *)
 let scale_down_threshold_percent = 40.0
+
+(** number of times a cluster is checked before deciding if it's underloaded. *)
 let scale_down_trigger_ticks = 5
 
 (** after spawning a new vm, wait [cooldown_period] before checking that vm
     again. *)
-let cooldown_period = 600.0
+let cooldown_period = Ptime.Span.of_int_s 600
 
 (** if no stats are gotten for a particular vm after [death_timeout] then
     consider the vm destroyed and prune it *)
-let death_timeout = 900.0
+let death_timeout = Ptime.Span.of_int_s 900
 
 module Cpu_monitor = struct
   type t = { last_cpu_time : float; last_wall_time : Ptime.t }
