@@ -56,7 +56,7 @@ module Cpu_monitor = struct
       (* cpu_delta can be negative if the VM was rebooted or stats counter reset *)
     else if cpu_delta < 0.0 then 0.0
     else
-      let pct = cpu_delta /. elasped_time_in_seconds *. 100.0 in
+      let pct = cpu_delta /. elapsed_time_in_seconds *. 100.0 in
       (* TODO: use numcpus to cap it at 100.0% if the vm has more than 1 cpu. Now most
          vms use 1 cpu, so capping at 100% is fine. *)
       Float.min 100.0 pct
