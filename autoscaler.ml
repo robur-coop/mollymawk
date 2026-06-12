@@ -52,7 +52,8 @@ module Cpu_monitor = struct
     let elapsed_time_in_seconds =
       Ptime.Span.to_float_s elapsed_time_difference
     in
-    if elasped_time_in_seconds <= 0.000001 then 0.0
+    if elapsed_time_in_seconds <= 0.0 then 0.0
+      (* cpu_delta can be negative if the VM was rebooted or stats counter reset *)
     else if cpu_delta < 0.0 then 0.0
     else
       let pct = cpu_delta /. elasped_time_in_seconds *. 100.0 in
