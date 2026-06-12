@@ -99,13 +99,9 @@ module Cluster_manager = struct
     consecutive_low_ticks : int;
   }
 
-  let clusters : (string, group) Hashtbl.t = Hashtbl.create 10
-
-  let in_cooldown now = function
-    | { last_scale_action = None; _ } -> false
-    | { last_scale_action = Some t; _ } ->
-        let span = Ptime.diff now t in
-        Ptime.Span.to_float_s span < cooldown_period
+  let in_cooldown now group =
+    let span = Ptime.diff now group.last_scale_action in
+    Ptime.Span.compare span cooldown_period < 0
 
   let should_tick now group =
     match group.last_tick_update with
