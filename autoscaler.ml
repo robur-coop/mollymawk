@@ -48,9 +48,9 @@ module Cpu_monitor = struct
   let measure t now (current_rusage : Vmm_core.Stats.rusage) =
     let curr_cpu_time = get_total_cpu_time current_rusage in
     let cpu_delta = curr_cpu_time -. t.last_cpu_time in
-    let elasped_time_difference = Ptime.diff now t.last_wall_time in
-    let elasped_time_in_seconds =
-      Ptime.Span.to_float_s elasped_time_difference
+    let elapsed_time_difference = Ptime.diff now t.last_wall_time in
+    let elapsed_time_in_seconds =
+      Ptime.Span.to_float_s elapsed_time_difference
     in
     if elasped_time_in_seconds <= 0.000001 then 0.0
     else if cpu_delta < 0.0 then 0.0
