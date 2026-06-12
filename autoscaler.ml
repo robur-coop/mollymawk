@@ -4,8 +4,7 @@ let a_logs = Logs.Src.create "autoscaling-logs"
 let poll_interval = Duration.of_min 5
 
 (** A span representation of [poll_interval]. *)
-let poll_interval_span =
-  Ptime.Span.of_int_s (Int64.to_int (Duration.to_sec poll_interval))
+let poll_interval_span = Ptime.Span.of_int_s (Duration.to_sec poll_interval)
 
 (** number of times a cluster is checked before deciding if it's overloaded. *)
 let scale_up_trigger_ticks = 3
