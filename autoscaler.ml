@@ -104,36 +104,9 @@ module Cluster_manager = struct
     Ptime.Span.compare span cooldown_period < 0
 
   let should_tick now group =
-    match group.last_tick_update with
-    | None -> true
-    | Some t ->
-        let span = Ptime.diff now t in
-        Ptime.Span.to_float_s span >= Duration.to_f poll_interval
+    let span = Ptime.diff now group.last_tick_update in
+    Ptime.Span.compare span poll_interval_span >= 0
 
-  let key ~user_name ~unikernel_name = Fmt.str "%s-%s" user_name unikernel_name
-
-  let find_group_by_name ~user_name ~unikernel_name =
-    Hashtbl.find_opt clusters (key ~user_name ~unikernel_name)
-
-  let get_or_create ~user_name primary =
-    match find_group_by_name ~user_name ~unikernel_name:(fst primary) with
-    | Some g -> g
-    | None ->
-        let g =
-          {
-            primary;
-            clones = [];
-            last_scale_action = None;
-            consecutive_high_ticks = 0;
-            consecutive_low_ticks = 0;
-            last_tick_update = None;
-            next_id = 1;
-          }
-        in
-        Hashtbl.add clusters (key ~user_name ~unikernel_name:(fst primary)) g;
-        g
-
-  (* TODO: in unikernel_create, forbid users from creating unikernels which end with [-clone-ID] *)
   let extract_name_and_clone_id name =
     match List.rev (String.split_on_char '-' name) with
     | id_str :: "clone" :: primary_parts_rev -> (
