@@ -152,6 +152,11 @@ struct
     | Error _e -> invalid_arg "CSS file could not be loaded"
     | Ok css -> css
 
+  let grafana_dashboard assets =
+    KV_ASSETS.get assets (Mirage_kv.Key.v "grafana.json") >|= function
+    | Error _e -> invalid_arg "Grafana dashboard file could not be loaded"
+    | Ok css -> css
+
   let read_image assets key =
     KV_ASSETS.get assets (Mirage_kv.Key.v key) >|= function
     | Error _e -> invalid_arg "Image could not be loaded"
@@ -3230,8 +3235,8 @@ struct
     Lwt.async loop
 
   let request_handler stack management_happy_eyeballs management_domain
-      albatross_instances js_file css_file imgs store http_client happy_eyeballs
-      flow (_ipaddr, _port) reqd =
+      albatross_instances js_file css_file imgs grafana_file store http_client
+      happy_eyeballs flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
           Middleware.http_response reqd
@@ -3321,6 +3326,9 @@ struct
         | "/style.css" ->
             check_meth `GET (fun () ->
                 reply reqd ~content_type:"text/css" css_file `OK)
+        | "/grafana.json" ->
+            check_meth `GET (fun () ->
+                reply reqd ~content_type:"application/json" grafana_file `OK)
         | "/sign-up" -> check_meth `GET (fun () -> sign_up reqd)
         | "/sign-in" -> check_meth `GET (fun () -> sign_in reqd)
         | "/api/register" -> check_meth `POST (fun () -> register store reqd)
@@ -3629,6 +3637,7 @@ struct
       management_domain_name =
     js_contents assets >>= fun js_file ->
     css_contents assets >>= fun css_file ->
+    grafana_dashboard assets >>= fun grafana_file ->
     images assets >>= fun imgs ->
     Store.connect storage >>= function
     | Error (`Msg msg) -> failwith msg
@@ -3655,8 +3664,8 @@ struct
             m "Initialise an HTTP server (no HTTPS) on port %u" port);
         let request_handler =
           request_handler stack management_happy_eyeballs management_domain
-            albatross_instances js_file css_file imgs store http_client
-            happy_eyeballs
+            albatross_instances js_file css_file imgs grafana_file store
+            http_client happy_eyeballs
         in
         Paf.init ~port (S.tcp stack) >>= fun service ->
         Lwt.pause () >>= fun () ->
