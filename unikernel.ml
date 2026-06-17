@@ -155,7 +155,7 @@ struct
   let grafana_dashboard assets =
     KV_ASSETS.get assets (Mirage_kv.Key.v "grafana.json") >|= function
     | Error _e -> invalid_arg "Grafana dashboard file could not be loaded"
-    | Ok css -> css
+    | Ok grafana -> grafana
 
   let read_image assets key =
     KV_ASSETS.get assets (Mirage_kv.Key.v key) >|= function
