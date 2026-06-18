@@ -17,32 +17,31 @@ let memory m = `Int m
 let argv args =
   `List (List.map (fun a -> `String a) (Option.value ~default:[] args))
 
-let unikernel_info (unikernel_name, info) =
-  let block_devices bs =
-    let block
-        { Vmm_core.Unikernel.unikernel_device; host_device; sector_size; size }
-        =
-      `Assoc
-        [
-          ("name", `String unikernel_device);
-          ("host_device", `String host_device);
-          ("sector_size", `Int sector_size);
-          ("size", `Int size);
-        ]
-    in
-    `List (List.map block bs)
-  and bridges bs =
-    let bridge
-        ({ Vmm_core.Unikernel.unikernel_device; host_device; _ } :
-          Vmm_core.Unikernel.net_info) =
-      `Assoc
-        [
-          ("name", `String unikernel_device);
-          ("host_device", `String host_device);
-        ]
-    in
-    `List (List.map bridge bs)
+let block_devices bs =
+  let block
+      { Vmm_core.Unikernel.unikernel_device; host_device; sector_size; size } =
+    `Assoc
+      [
+        ("name", `String unikernel_device);
+        ("host_device", `String host_device);
+        ("sector_size", `Int sector_size);
+        ("size", `Int size);
+      ]
   in
+  `List (List.map block bs)
+
+let bridges bs =
+  let bridge
+      ({ Vmm_core.Unikernel.unikernel_device; host_device; _ } :
+        Vmm_core.Unikernel.net_info) =
+    `Assoc
+      [
+        ("name", `String unikernel_device); ("host_device", `String host_device);
+      ]
+  in
+  `List (List.map bridge bs)
+
+let unikernel_info (unikernel_name, info) =
   `Assoc
     [
       ( "name",
@@ -358,6 +357,8 @@ let config_of_json str =
       linux_boot_partition;
     }
 
+let typ typ = match typ with `Solo5 -> "solo5" | `BHyve -> "bhyve"
+
 let config_to_json (cfg : Vmm_core.Unikernel.config) =
   let block_devices bs =
     let block (name, host_device, sector_size) =
@@ -392,10 +393,9 @@ let config_to_json (cfg : Vmm_core.Unikernel.config) =
     in
     `List (List.map bridge bs)
   in
-  let typ = match cfg.typ with `Solo5 -> "solo5" | `BHyve -> "bhyve" in
   `Assoc
     [
-      ("typ", `String typ);
+      ("typ", `String (typ cfg.typ));
       ("compressed", `Bool cfg.compressed);
       ("fail_behaviour", fail_behaviour cfg.fail_behaviour);
       ("cpuids", cpuids cfg.cpuids);
