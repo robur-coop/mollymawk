@@ -13,7 +13,9 @@ let restart_unikernel_dialog ~unikernel_name ~instance_name info =
                    (Configuration.name_to_str unikernel_name));
               Unsafe.string_attrib "hx-include" "#molly-csrf";
               Unsafe.string_attrib "hx-target" "#restart-container";
-              Unsafe.string_attrib "hx-swap" "innerHTML";
+              Unsafe.string_attrib "hx-swap" "none";
+              Unsafe.string_attrib "hx-on::after-request"
+                "window.parseXhrResponse(event.detail.xhr)";
             ]
           [
             Utils.switch_button ~switch_id:"restart-dialog"

@@ -1370,3 +1370,18 @@ window.mapFields = function (field_id, detail, options) {
 	}
 	return reqs.map(n => ({ title: n, selected: '' }));
 };
+
+function parseXhrResponse(xhr) {
+	let res = {};
+	try {
+		res = JSON.parse(xhr.responseText);
+		if (res.success) {
+			postAlert("bg-primary-300", "Succesful");
+			setTimeout(() => window.location.reload(), 1000);
+		} else {
+			postAlert("bg-secondary-300", res.data);
+		}
+	} catch (error) {
+		postAlert("bg-secondary-300", error);
+	}
+}
