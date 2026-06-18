@@ -357,7 +357,7 @@ let config_of_json str =
       linux_boot_partition;
     }
 
-let typ typ = match typ with `Solo5 -> "solo5" | `BHyve -> "bhyve"
+let typ = function `Solo5 -> "solo5" | `BHyve -> "bhyve"
 
 let config_to_json (cfg : Vmm_core.Unikernel.config) =
   let block_devices bs =
@@ -417,7 +417,7 @@ let unikernel_info_to_arguments_json info =
       ("fail_behaviour", fail_behaviour info.fail_behaviour);
       ("startup", `Int (Option.fold ~none:50 ~some:Fun.id info.startup));
       (* add_name is not found in Vmm_core.Unikernel.info *)
-      ("add_name", `Bool false);
+      ("add_name", `Bool true);
       ("cpuids", cpuids info.cpuids);
       ("memory", memory info.memory);
       ("block_devices", block_devices info.block_devices);
