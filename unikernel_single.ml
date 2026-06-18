@@ -1,3 +1,47 @@
+let restart_unikernel_dialog ~unikernel_name ~instance_name info =
+  Tyxml_html.(
+    div
+      ~a:[ a_class [ "p-4" ]; a_id "restart-container" ]
+      [
+        form
+          ~a:
+            [
+              a_enctype "multipart/form-data";
+              Unsafe.string_attrib "hx-post"
+                (Fmt.str "/api/unikernel/restart?instance=%s&unikernel=%s"
+                   (Configuration.name_to_str instance_name)
+                   (Configuration.name_to_str unikernel_name));
+              Unsafe.string_attrib "hx-include" "#molly-csrf";
+              Unsafe.string_attrib "hx-target" "#restart-container";
+              Unsafe.string_attrib "hx-swap" "innerHTML";
+            ]
+          [
+            Utils.switch_button ~switch_id:"restart-dialog"
+              ~switch_label:"Modify unikernel arguments"
+              (textarea
+                 ~a:
+                   [
+                     a_rows 25;
+                     a_cols 80;
+                     a_required ();
+                     a_name "arguments";
+                     a_id "unikernel-arguments";
+                     a_class
+                       [
+                         "px-3 py-3 rounded-xl border focus:outline-none \
+                          font-mono";
+                       ];
+                   ]
+                 (txt
+                    (Albatross_json.unikernel_info_to_arguments_json info
+                    |> Yojson.Basic.pretty_to_string)));
+            Utils.button_component ~btn_type:`Primary_outlined
+              ~content:(txt "Restart")
+              ~attribs:[ a_button_type `Submit; a_id "restart-button" ]
+              ();
+          ];
+      ])
+
 let unikernel_single_layout ~unikernel_name ~instance_name
     ?(last_update_time = None) ~current_time ~max_allowed unikernel
     scaling_policy =
@@ -121,17 +165,14 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                       [
                         div
                           [
-                            Utils.button_component
-                              ~attribs:
-                                [
-                                  a_onclick
-                                    ("restartUnikernel('" ^ unikernel_name_str
-                                   ^ "', '"
-                                    ^ Configuration.name_to_str instance_name
-                                    ^ "')");
-                                ]
-                              ~content:(txt "Restart")
-                              ~btn_type:`Primary_outlined ();
+                            Modal_dialog.modal_dialog
+                              ~modal_title:"Restart Unikernel"
+                              ~button_type:`Primary_outlined
+                              ~button_content:(txt "Restart")
+                              ~content:
+                                (restart_unikernel_dialog ~unikernel_name
+                                   ~instance_name data)
+                              ();
                           ];
                         div
                           [
