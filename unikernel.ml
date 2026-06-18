@@ -2056,6 +2056,22 @@ struct
   let unikernel_restart stack albatross unikernel (user : User_model.user)
       multipart_body reqd =
     (* TODO use uuid in the future *)
+    let restart ?arguments () =
+      Albatross_state.query stack albatross ~domain:user.name ~name:unikernel
+        (`Unikernel_cmd (`Unikernel_restart arguments))
+      >>= function
+      | Error msg ->
+          Middleware.http_response reqd
+            ~data:(`String ("Error querying albatross: " ^ msg))
+            `Internal_server_error
+      | Ok (_hdr, res) -> (
+          Albatross.set_online albatross;
+          match Albatross_json.res res with
+          | Ok res -> Middleware.http_response reqd ~data:res `OK
+          | Error (`String err) ->
+              Middleware.http_response reqd ~data:(`String err)
+                `Internal_server_error)
+    in
     match Map.find_opt "arguments" multipart_body with
     | Some (_, arguments_str) -> (
         match Albatross_json.arguments_of_json arguments_str with
@@ -2063,25 +2079,8 @@ struct
             Middleware.http_response reqd
               ~data:(`String ("Error parsing arguments: " ^ err))
               `Bad_request
-        | Ok arguments -> (
-            Albatross_state.query stack albatross ~domain:user.name
-              ~name:unikernel
-              (`Unikernel_cmd (`Unikernel_restart (Some arguments)))
-            >>= function
-            | Error msg ->
-                Middleware.http_response reqd
-                  ~data:(`String ("Error querying albatross: " ^ msg))
-                  `Internal_server_error
-            | Ok (_hdr, res) -> (
-                Albatross.set_online albatross;
-                match Albatross_json.res res with
-                | Ok res -> Middleware.http_response reqd ~data:res `OK
-                | Error (`String err) ->
-                    Middleware.http_response reqd ~data:(`String err)
-                      `Internal_server_error)))
-    | _ ->
-        Middleware.http_response reqd
-          ~data:(`String "Couldn't find arguments in request body") `Bad_request
+        | Ok arguments -> restart ~arguments ())
+    | None -> restart ()
 
   let unikernel_create stack albatross_instances http_client token_or_cookie
       (user : User_model.user) reqd =

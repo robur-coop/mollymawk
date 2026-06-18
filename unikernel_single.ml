@@ -16,6 +16,9 @@ let restart_unikernel_dialog ~unikernel_name ~instance_name info =
               Unsafe.string_attrib "hx-swap" "none";
               Unsafe.string_attrib "hx-on::after-request"
                 "window.parseXhrResponse(event.detail.xhr)";
+              Unsafe.string_attrib "hx-on::config-request"
+                "if (!document.getElementById('restart-dialog').checked) \
+                 delete event.detail.parameters['arguments'];";
             ]
           [
             Utils.switch_button ~switch_id:"restart-dialog"
