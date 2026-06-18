@@ -409,3 +409,39 @@ let config_to_json (cfg : Vmm_core.Unikernel.config) =
           ~some:(fun s -> `String s)
           cfg.linux_boot_partition );
     ]
+
+let unikernel_info_to_arguments_json info =
+  `Assoc
+    [
+      ("typ", `String (typ info.Vmm_core.Unikernel.typ));
+      ("fail_behaviour", fail_behaviour info.fail_behaviour);
+      ("startup", `Int (Option.fold ~none:50 ~some:Fun.id info.startup));
+      (* add_name is not found in Vmm_core.Unikernel.info *)
+      ("add_name", `Bool false);
+      ("cpuids", cpuids info.cpuids);
+      ("memory", memory info.memory);
+      ("block_devices", block_devices info.block_devices);
+      ("bridges", bridges info.bridges);
+      ("arguments", argv info.argv);
+      ("numcpus", `Int info.numcpus);
+      ( "linux_boot_partition",
+        `String (Option.fold ~none:"" ~some:Fun.id info.linux_boot_partition) );
+    ]
+
+let arguments_of_json str =
+  match config_of_json str with
+  | Ok config ->
+      Ok
+        {
+          Vmm_core.Unikernel.fail_behaviour = config.fail_behaviour;
+          add_name = config.add_name;
+          startup = config.startup;
+          cpuids = config.cpuids;
+          memory = config.memory;
+          block_devices = config.block_devices;
+          bridges = config.bridges;
+          argv = config.argv;
+          numcpus = config.numcpus;
+          linux_boot_partition = config.linux_boot_partition;
+        }
+  | Error err -> Error err
