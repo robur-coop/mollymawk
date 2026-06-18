@@ -533,29 +533,6 @@ async function deployUnikernel(albatross_instance) {
 	}
 }
 
-async function restartUnikernel(unikernel_name, instance_name) {
-	try {
-		const molly_csrf = document.getElementById("molly-csrf").value;
-		const response = await fetch(`/api/unikernel/restart`, {
-			method: 'POST',
-			body: JSON.stringify({ "name": unikernel_name, "molly_csrf": molly_csrf, "albatross_instance": instance_name }),
-			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-		})
-
-		const data = await response.json();
-		if (data.status === 200) {
-			postAlert("bg-primary-300", `Successful: ${data.data}`);
-			setTimeout(function () {
-				window.location.href = "/dashboard";
-			}, 2000);
-		} else {
-			postAlert("bg-secondary-300", `Error. Restarting ${name} returned ${data.data}.`);
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-	}
-}
-
 async function destroyUnikernel(unikernel_name, instance_name) {
 	try {
 		const molly_csrf = document.getElementById("molly-csrf").value;
