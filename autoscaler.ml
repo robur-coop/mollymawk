@@ -103,9 +103,6 @@ module Cluster_manager = struct
     let span = Ptime.diff now group.last_scale_action in
     Ptime.Span.compare span cooldown_period < 0
 
-  let should_tick now group =
-    let span = Ptime.diff now group.last_tick_update in
-    Ptime.Span.compare span poll_interval_span >= 0
 
   let extract_name_and_clone_id name =
     match List.rev (String.split_on_char '-' name) with
@@ -189,17 +186,14 @@ module Cluster_manager = struct
                (fst group.primary))
     | None -> Error (Fmt.str "Clone name '%s' is not a valid format" clone_name)
 
-  (** [check_group_average group key now rusage] calculates the average CPU
-      usage across all instances in the [group] (primary and clones). Since
-      stats arrive for a single VM at a time (identified by [key]), we: 1.
-      Calculate the current CPU usage for the VM [key] using the new [rusage].
-      2. Use the last cached CPU usage for all other VMs in the group. 3. Update
-      the state of VM [key] with the new measurements. 4. Return the computed
-      average, the updated VM state, and the updated group. *)
-  let check_group_average group key now rusage =
+  (** [update_vm_metrics group key now rusage] calculates the CPU usage for the
+      VM [key] using [rusage] at time [now]. It updates the cached state of VM
+      [key] in the [group] (either primary or one of the clones). Returns the
+      newly updated VM state and the updated group. *)
+  let update_vm_metrics group key now rusage =
     let all_instances = group.primary :: group.clones in
     match List.assoc_opt key all_instances with
-    | None -> Error "Current VM not found in group during average check"
+    | None -> Error "Current VM not found in group during update"
     | Some vm ->
         let current_vm_usage = Cpu_monitor.measure vm.monitor now rusage in
         let state =
@@ -209,17 +203,6 @@ module Cluster_manager = struct
             last_stats_received = now;
           }
         in
-        let total_usage =
-          List.fold_left
-            (fun acc (name, v) ->
-              if String.equal name key then acc +. current_vm_usage
-              else acc +. v.last_cpu_usage)
-            0.0 all_instances
-        in
-        let average_usage =
-          total_usage /. float_of_int (List.length all_instances)
-        in
-        (* Construct the new updated group state *)
         let updated_group =
           if String.equal key (fst group.primary) then
             { group with primary = (key, state) }
@@ -232,68 +215,72 @@ module Cluster_manager = struct
             in
             { group with clones = new_clones }
         in
-        Ok (average_usage, state, updated_group)
+        Ok (state, updated_group)
 
-  (** [check_group_status group key now rusage] evaluates the scaling status of
-      the [group] when new stats [rusage] at time [now] arrive for the VM [key].
-      It updates the average load of the group, ticks the consecutive high/low
-      counters, and determines if a scaling action (spawn or prune) is
-      triggered. *)
-  let check_group_status group key now rusage =
-    match check_group_average group key now rusage with
-    | Error e -> Error e
-    | Ok (average_usage, current_vm_state, updated_group) ->
-        let is_cooldown = in_cooldown now updated_group in
-        let is_high = average_usage > scale_up_threshold_percent in
-        let is_low =
-          average_usage < scale_down_threshold_percent
-          && updated_group.clones <> []
-        in
-        let updated_group =
-          if should_tick now updated_group then
-            {
-              updated_group with
-              last_tick_update = now;
-              consecutive_high_ticks =
-                (if is_high && not is_cooldown then
-                   updated_group.consecutive_high_ticks + 1
-                 else 0);
-              consecutive_low_ticks =
-                (if is_low && not is_cooldown then
-                   updated_group.consecutive_low_ticks + 1
-                 else 0);
-            }
-          else updated_group
-        in
-        let trigger state updated_group =
-          let final_group =
-            {
-              updated_group with
-              consecutive_high_ticks = 0;
-              consecutive_low_ticks = 0;
-              last_scale_action = now;
-            }
-          in
-          Ok (state, final_group)
-        in
-        if is_cooldown then Ok (Cooldown current_vm_state, updated_group)
-        else if updated_group.consecutive_high_ticks >= scale_up_trigger_ticks
-        then trigger (Overloaded current_vm_state) updated_group
-        else if updated_group.consecutive_low_ticks >= scale_down_trigger_ticks
-        then
-          let clone_to_kill = fst (List.hd updated_group.clones) in
-          trigger (Underloaded (clone_to_kill, current_vm_state)) updated_group
-        else if is_high then
-          Ok
-            ( Pending
-                (`Spawn, updated_group.consecutive_high_ticks, current_vm_state),
-              updated_group )
-        else if is_low then
-          Ok
-            ( Pending
-                (`Prune, updated_group.consecutive_low_ticks, current_vm_state),
-              updated_group )
-        else Ok (Normal current_vm_state, updated_group)
+  (** [evaluate_scaling group now] calculates the average CPU usage across all
+      instances in the [group] (primary and clones). It increments/resets the
+      consecutive ticks counters and evaluates the scaling status of the group.
+      Returns the scaling status and the updated group. *)
+  let evaluate_scaling group now =
+    let all_instances = group.primary :: group.clones in
+    let total_usage =
+      List.fold_left
+        (fun acc (_, v) -> acc +. v.last_cpu_usage)
+        0.0 all_instances
+    in
+    let average_usage =
+      total_usage /. float_of_int (List.length all_instances)
+    in
+    let is_cooldown = in_cooldown now group in
+    let is_high = average_usage > scale_up_threshold_percent in
+    let is_low =
+      average_usage < scale_down_threshold_percent
+      && group.clones <> []
+    in
+    let updated_group =
+      {
+        group with
+        last_tick_update = now;
+        consecutive_high_ticks =
+          (if is_high && not is_cooldown then
+             group.consecutive_high_ticks + 1
+           else 0);
+        consecutive_low_ticks =
+          (if is_low && not is_cooldown then
+             group.consecutive_low_ticks + 1
+           else 0);
+      }
+    in
+    let trigger state updated_group =
+      let final_group =
+        {
+          updated_group with
+          consecutive_high_ticks = 0;
+          consecutive_low_ticks = 0;
+          last_scale_action = now;
+        }
+      in
+      Ok (state, final_group)
+    in
+    let primary_state = snd group.primary in
+    if is_cooldown then Ok (Cooldown primary_state, updated_group)
+    else if updated_group.consecutive_high_ticks >= scale_up_trigger_ticks
+    then trigger (Overloaded primary_state) updated_group
+    else if updated_group.consecutive_low_ticks >= scale_down_trigger_ticks
+    then
+      let clone_to_kill = fst (List.hd updated_group.clones) in
+      trigger (Underloaded (clone_to_kill, primary_state)) updated_group
+    else if is_high then
+      Ok
+        ( Pending
+            (`Spawn, updated_group.consecutive_high_ticks, primary_state),
+          updated_group )
+    else if is_low then
+      Ok
+        ( Pending
+            (`Prune, updated_group.consecutive_low_ticks, primary_state),
+          updated_group )
+    else Ok (Normal primary_state, updated_group)
 
   (** [sync_group group active_vm_names] checks if the primary is still alive
       and prunes any clones that are no longer present in [active_vm_names].
