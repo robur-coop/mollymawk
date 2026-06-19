@@ -103,7 +103,6 @@ module Cluster_manager = struct
     let span = Ptime.diff now group.last_scale_action in
     Ptime.Span.compare span cooldown_period < 0
 
-
   let extract_name_and_clone_id name =
     match List.rev (String.split_on_char '-' name) with
     | id_str :: "clone" :: primary_parts_rev -> (
@@ -234,20 +233,17 @@ module Cluster_manager = struct
     let is_cooldown = in_cooldown now group in
     let is_high = average_usage > scale_up_threshold_percent in
     let is_low =
-      average_usage < scale_down_threshold_percent
-      && group.clones <> []
+      average_usage < scale_down_threshold_percent && group.clones <> []
     in
     let updated_group =
       {
         group with
         last_tick_update = now;
         consecutive_high_ticks =
-          (if is_high && not is_cooldown then
-             group.consecutive_high_ticks + 1
+          (if is_high && not is_cooldown then group.consecutive_high_ticks + 1
            else 0);
         consecutive_low_ticks =
-          (if is_low && not is_cooldown then
-             group.consecutive_low_ticks + 1
+          (if is_low && not is_cooldown then group.consecutive_low_ticks + 1
            else 0);
       }
     in
@@ -264,21 +260,18 @@ module Cluster_manager = struct
     in
     let primary_state = snd group.primary in
     if is_cooldown then Ok (Cooldown primary_state, updated_group)
-    else if updated_group.consecutive_high_ticks >= scale_up_trigger_ticks
-    then trigger (Overloaded primary_state) updated_group
-    else if updated_group.consecutive_low_ticks >= scale_down_trigger_ticks
-    then
+    else if updated_group.consecutive_high_ticks >= scale_up_trigger_ticks then
+      trigger (Overloaded primary_state) updated_group
+    else if updated_group.consecutive_low_ticks >= scale_down_trigger_ticks then
       let clone_to_kill = fst (List.hd updated_group.clones) in
       trigger (Underloaded (clone_to_kill, primary_state)) updated_group
     else if is_high then
       Ok
-        ( Pending
-            (`Spawn, updated_group.consecutive_high_ticks, primary_state),
+        ( Pending (`Spawn, updated_group.consecutive_high_ticks, primary_state),
           updated_group )
     else if is_low then
       Ok
-        ( Pending
-            (`Prune, updated_group.consecutive_low_ticks, primary_state),
+        ( Pending (`Prune, updated_group.consecutive_low_ticks, primary_state),
           updated_group )
     else Ok (Normal primary_state, updated_group)
 
