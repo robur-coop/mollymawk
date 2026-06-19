@@ -6,11 +6,11 @@ let restart_unikernel_dialog ~unikernel_name ~instance_name info =
         form
           ~a:
             [
-              a_enctype "multipart/form-data";
               Unsafe.string_attrib "hx-post"
                 (Fmt.str "/api/unikernel/restart?instance=%s&unikernel=%s"
                    (Configuration.name_to_str instance_name)
                    (Configuration.name_to_str unikernel_name));
+              Unsafe.string_attrib "hx-ext" "form-json";
               Unsafe.string_attrib "hx-include" "#molly-csrf";
               Unsafe.string_attrib "hx-target" "#restart-container";
               Unsafe.string_attrib "hx-swap" "none";

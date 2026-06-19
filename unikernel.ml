@@ -2054,7 +2054,7 @@ struct
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
   let unikernel_restart stack albatross unikernel (user : User_model.user)
-      multipart_body reqd =
+      json_dict reqd =
     (* TODO use uuid in the future *)
     let restart ?arguments () =
       Albatross_state.query stack albatross ~domain:user.name ~name:unikernel
@@ -2072,14 +2072,17 @@ struct
               Middleware.http_response reqd ~data:(`String err)
                 `Internal_server_error)
     in
-    match Map.find_opt "arguments" multipart_body with
-    | Some (_, arguments_str) -> (
-        match Albatross_json.arguments_of_json arguments_str with
+    match Utils.Json.get "arguments" json_dict with
+    | Some (`String arguments) -> (
+        match Albatross_json.arguments_of_json arguments with
         | Error (`Msg err) ->
             Middleware.http_response reqd
               ~data:(`String ("Error parsing arguments: " ^ err))
               `Bad_request
         | Ok arguments -> restart ~arguments ())
+    | Some _ ->
+        Middleware.http_response reqd
+          ~data:(`String "Arguments is expected to be a string") `Bad_request
     | None -> restart ()
 
   let unikernel_create stack albatross_instances http_client token_or_cookie
@@ -3557,7 +3560,7 @@ struct
                 authenticate ~check_token:true ~api_meth:true store reqd
                   (albatross_instance req.H1.Request.target (fun albatross ->
                        unikernel (fun unikernel_name ->
-                           extract_multipart_csrf_token
+                           extract_json_csrf_token
                              (unikernel_restart stack albatross unikernel_name)))))
         | "/api/unikernel/console" ->
             check_meth `GET (fun () ->
