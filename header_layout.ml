@@ -25,6 +25,8 @@ let header ?(page_title = "Mollymawk") ~icon () =
               a_crossorigin `Anonymous;
             ]
           (txt "");
+        (* add an htmx extension which lets us submit json from forms, so we can maintain using application/json that should work for the UI and for the API system *)
+        script ~a:[ a_src "https://unpkg.com/htmx-ext-form-json" ] (txt "");
         (* by default htmx doesn't swap on error responses. 
         this allows it to swap for any error code. 
         we need this to display errors to the user
