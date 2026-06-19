@@ -2053,59 +2053,37 @@ struct
         Middleware.http_response reqd
           ~data:(`String "Couldn't find unikernel name in json") `Bad_request
 
-  let unikernel_restart stack albatross_instances (user : User_model.user)
+  let unikernel_restart stack albatross unikernel (user : User_model.user)
       json_dict reqd =
     (* TODO use uuid in the future *)
-    match
-      Utils.Json.(get "name" json_dict, get "albatross_instance" json_dict)
-    with
-    | Some (`String unikernel_name), Some (`String instance_name) -> (
-        match
-          ( Configuration.name_of_str instance_name,
-            Configuration.name_of_str unikernel_name )
-        with
-        | Ok instance_name, Ok unikernel_name -> (
-            match
-              Albatross_state.find_instance_by_name albatross_instances
-                instance_name
-            with
-            | Ok albatross -> (
-                Albatross_state.query stack albatross ~domain:user.name
-                  ~name:unikernel_name
-                  (`Unikernel_cmd (`Unikernel_restart None))
-                >>= function
-                | Error msg ->
-                    Middleware.http_response reqd
-                      ~data:(`String ("Error querying albatross: " ^ msg))
-                      `Internal_server_error
-                | Ok (_hdr, res) -> (
-                    Albatross.set_online albatross;
-                    match Albatross_json.res res with
-                    | Ok res -> Middleware.http_response reqd ~data:res `OK
-                    | Error (`String err) ->
-                        Middleware.http_response reqd ~data:(`String err)
-                          `Internal_server_error))
-            | _ ->
-                Logs.err (fun m ->
-                    m "Error finding albatross instance %s"
-                      (Configuration.name_to_str instance_name));
-                Middleware.http_response reqd
-                  ~data:
-                    (`String
-                       ("Error finding albatross instance: "
-                       ^ Configuration.name_to_str instance_name))
-                  `Not_found)
-        | Error (`Msg err), _ ->
+    let restart ?arguments () =
+      Albatross_state.query stack albatross ~domain:user.name ~name:unikernel
+        (`Unikernel_cmd (`Unikernel_restart arguments))
+      >>= function
+      | Error msg ->
+          Middleware.http_response reqd
+            ~data:(`String ("Error querying albatross: " ^ msg))
+            `Internal_server_error
+      | Ok (_hdr, res) -> (
+          Albatross.set_online albatross;
+          match Albatross_json.res res with
+          | Ok res -> Middleware.http_response reqd ~data:res `OK
+          | Error (`String err) ->
+              Middleware.http_response reqd ~data:(`String err)
+                `Internal_server_error)
+    in
+    match Utils.Json.get "arguments" json_dict with
+    | Some (`String arguments) -> (
+        match Albatross_json.arguments_of_json arguments with
+        | Error (`Msg err) ->
             Middleware.http_response reqd
-              ~data:(`String ("Error converting instance name: " ^ err))
+              ~data:(`String ("Error parsing arguments: " ^ err))
               `Bad_request
-        | _, Error (`Msg err) ->
-            Middleware.http_response reqd
-              ~data:(`String ("Error converting unikernel name: " ^ err))
-              `Bad_request)
-    | _ ->
+        | Ok arguments -> restart ~arguments ())
+    | Some _ ->
         Middleware.http_response reqd
-          ~data:(`String "Couldn't find unikernel name in json") `Bad_request
+          ~data:(`String "Arguments is expected to be a string") `Bad_request
+    | None -> restart ()
 
   let unikernel_create stack albatross_instances http_client token_or_cookie
       (user : User_model.user) reqd =
@@ -3580,8 +3558,10 @@ struct
         | "/api/unikernel/restart" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
-                  (extract_json_csrf_token
-                     (unikernel_restart stack !albatross_instances)))
+                  (albatross_instance req.H1.Request.target (fun albatross ->
+                       unikernel (fun unikernel_name ->
+                           extract_json_csrf_token
+                             (unikernel_restart stack albatross unikernel_name)))))
         | "/api/unikernel/console" ->
             check_meth `GET (fun () ->
                 authenticate store reqd ~check_token:true ~api_meth:true
