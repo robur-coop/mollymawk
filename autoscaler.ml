@@ -11,11 +11,11 @@ let scale_up_trigger_ticks = 3
 
 (** if CPU usage >= 90% for [scale_up_trigger_ticks] consecutive checks then
     this vm can be cloned. *)
-let scale_up_threshold_percent = 90.0
+let scale_up_threshold_percent = 90
 
 (** if average CPU usage < 40% for [scale_down_trigger_ticks] consecutive
     checks, one of the clone VMs can be pruned. *)
-let scale_down_threshold_percent = 40.0
+let scale_down_threshold_percent = 40
 
 (** number of times a cluster is checked before deciding if it's underloaded. *)
 let scale_down_trigger_ticks = 5
@@ -29,41 +29,38 @@ let cooldown_period = Ptime.Span.of_int_s 600
 let death_timeout = Ptime.Span.of_int_s 900
 
 module Cpu_monitor = struct
-  type t = { last_cpu_time : float; last_wall_time : Ptime.t }
+  type t = { last_cpu_time : int; last_wall_time : Ptime.t }
 
-  let timeval_to_float (sec, usec) =
-    let s = Int64.to_float sec in
-    let u = float_of_int usec in
-    s +. (u /. 1_000_000.0)
+  let timeval (sec, usec) = Int64.to_int sec + (usec / 1_000_000)
 
   let get_total_cpu_time (r : Vmm_core.Stats.rusage) =
-    let user_t = timeval_to_float r.utime in
-    let sys_t = timeval_to_float r.stime in
-    user_t +. sys_t
+    let user_t = timeval r.utime in
+    let sys_t = timeval r.stime in
+    user_t + sys_t
 
   let create now (initial_rusage : Vmm_core.Stats.rusage) =
     { last_cpu_time = get_total_cpu_time initial_rusage; last_wall_time = now }
 
   let measure t now (current_rusage : Vmm_core.Stats.rusage) =
     let curr_cpu_time = get_total_cpu_time current_rusage in
-    let cpu_delta = curr_cpu_time -. t.last_cpu_time in
+    let cpu_delta = curr_cpu_time - t.last_cpu_time in
     let elapsed_time_difference = Ptime.diff now t.last_wall_time in
     let elapsed_time_in_seconds =
-      Ptime.Span.to_float_s elapsed_time_difference
+      Option.value ~default:0 (Ptime.Span.to_int_s elapsed_time_difference)
     in
-    if elapsed_time_in_seconds <= 0.0 then 0.0
+    if elapsed_time_in_seconds <= 0 then 0
       (* cpu_delta can be negative if the VM was rebooted or stats counter reset *)
-    else if cpu_delta < 0.0 then 0.0
+    else if cpu_delta < 0 then 0
     else
-      let pct = cpu_delta /. elapsed_time_in_seconds *. 100.0 in
+      let pct = cpu_delta / elapsed_time_in_seconds * 100 in
       (* TODO: use numcpus to cap it at 100.0% if the vm has more than 1 cpu. Now most
          vms use 1 cpu, so capping at 100% is fine. *)
-      Float.min 100.0 pct
+      Int.min 100 pct
 end
 
 type t = {
   monitor : Cpu_monitor.t;
-  last_cpu_usage : float;
+  last_cpu_usage : int;
   last_stats_received : Ptime.t;
 }
 
@@ -223,13 +220,9 @@ module Cluster_manager = struct
   let evaluate_scaling group now =
     let all_instances = group.primary :: group.clones in
     let total_usage =
-      List.fold_left
-        (fun acc (_, v) -> acc +. v.last_cpu_usage)
-        0.0 all_instances
+      List.fold_left (fun acc (_, v) -> acc + v.last_cpu_usage) 0 all_instances
     in
-    let average_usage =
-      total_usage /. float_of_int (List.length all_instances)
-    in
+    let average_usage = total_usage / List.length all_instances in
     let is_cooldown = in_cooldown now group in
     let is_high = average_usage > scale_up_threshold_percent in
     let is_low =
