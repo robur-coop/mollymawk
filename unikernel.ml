@@ -3073,8 +3073,7 @@ struct
               *)
             Lwt.return_ok ())
 
-  let handle_stats stack state ((rusage, _, _, _) : Vmm_core.Stats.t) name store
-      =
+  let handle_stats state ((rusage, _, _, _) : Vmm_core.Stats.t) name store =
     match Vmm_core.Name.name name with
     | None -> Lwt.return_error "VM name has no unikernel label"
     | Some label -> (
@@ -3163,7 +3162,7 @@ struct
   let unikernels_stats stack instance store =
     let cb name st =
       Lwt.async (fun () ->
-          handle_stats stack instance st name store >>= function
+          handle_stats instance st name store >>= function
           | Ok () -> Lwt.return_unit
           | Error err ->
               Logs.err ~src:stats_src (fun m ->
