@@ -622,6 +622,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         t.status <- Status.update t.status (Status.make `Certificate err);
         Lwt.return (Error err)
     | Ok certificates ->
+        set_online t;
         raw_query stack t ~name:vmm_name certificates cmd
           (stats_data vmm_name f)
 
