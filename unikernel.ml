@@ -3072,21 +3072,111 @@ struct
                   3) Destroy clone
               *)
             Lwt.return_ok ())
+
+  let handle_stats stack state ((rusage, _, _, _) : Vmm_core.Stats.t) name store
+      =
+    match Vmm_core.Name.name name with
+    | None -> Lwt.return_error "VM name has no unikernel label"
+    | Some label -> (
+        let unikernel_name = Configuration.name_to_str label in
+        match Vmm_core.Name.Path.to_labels (Vmm_core.Name.path name) with
+        | [ user_label ] -> (
+            match Store.find_by_name store user_label with
+            | None ->
+                Lwt.return_error
+                  (Fmt.str "User %s not found."
+                     (Configuration.name_to_str user_label))
+            | Some user ->
+                let primary_name =
+                  match
+                    Autoscaler.Cluster_manager.extract_name_and_clone_id
+                      unikernel_name
+                  with
+                  | Some (p, _) -> p
+                  | None -> unikernel_name
+                in
+                let is_scaling_enabled =
+                  List.exists
+                    (fun (p : User_model.unikernel_scaling_policy) ->
+                      String.equal
+                        (Configuration.name_to_str p.name)
+                        primary_name)
+                    user.scaling_policies
+                in
+                if is_scaling_enabled then (
+                  Logs.debug ~src:stats_src (fun m ->
+                      m "[Stats] Received stats for %s as %a" unikernel_name
+                        Vmm_core.Stats.pp_rusage rusage);
+                  let now = Mirage_ptime.now () in
+                  let key =
+                    Configuration.name_to_str user.name ^ "-" ^ primary_name
+                  in
+                  (* Get the group this vm should belong to *)
+                  let group =
+                    match Map.find_opt key !scaling_groups with
+                    | Some g -> g
+                    | None ->
+                        let primary_vm =
+                          (primary_name, Autoscaler.create now rusage)
+                        in
+                        Autoscaler.Cluster_manager.create_group primary_vm
+                  in
+                  (* If the vm is a ghost clone, add it to the group*)
+                  let group =
+                    if
+                      (not (String.equal unikernel_name primary_name))
+                      && not (List.mem_assoc unikernel_name group.clones)
+                    then (
+                      let clone_vm =
+                        (unikernel_name, Autoscaler.create now rusage)
+                      in
+                      match
+                        Autoscaler.Cluster_manager.register_clone group clone_vm
+                      with
+                      | Ok updated_g -> updated_g
+                      | Error err ->
+                          Logs.err ~src:stats_src (fun m ->
+                              m "Error registering clone %s: %s" unikernel_name
+                                err);
+                          group)
+                    else group
+                  in
+                  match
+                    Autoscaler.Cluster_manager.update_vm_metrics group
+                      unikernel_name now rusage
+                  with
+                  | Error err ->
+                      Lwt.return_error
+                        (Fmt.str "Error updating metrics for unikernel %s: %s"
+                           unikernel_name err)
+                  | Ok (_, updated_group) ->
+                      scaling_groups :=
+                        Map.add key updated_group !scaling_groups;
+                      if String.equal unikernel_name primary_name then
+                        evaluate_scaling updated_group now key
+                      else Lwt.return_ok ())
+                else Lwt.return (Ok ()))
+        | _ ->
+            Lwt.return_error
+              "VM path must contain exactly one user domain level")
+
+  let unikernels_stats stack instance store =
+    let cb name st =
       Lwt.async (fun () ->
-          handle_stats stack instance st ~unikernel_name user >>= function
+          handle_stats stack instance st name store >>= function
           | Ok () -> Lwt.return_unit
           | Error err ->
-              Logs.info ~src:stats_src (fun m ->
-                  m "Error handling stats for %s: %s" unikernel_name err);
+              Logs.err ~src:stats_src (fun m ->
+                  m "Error handling stats for %s: %s"
+                    (Vmm_core.Name.to_string name)
+                    err);
               Lwt.return_unit);
       Ok ()
     in
-    Albatross_state.query_stats stack instance ~domain:user_name cb >|= function
+    Albatross_state.query_stats stack instance cb >|= function
     | Error err ->
         Error
-          (Fmt.str
-             "Error fetching stats for user %s, with albatross instance %s: %s"
-             (Configuration.name_to_str user_name)
+          (Fmt.str "Error fetching stats for albatross instance %s: %s"
              (Configuration.name_to_str instance.configuration.name)
              err)
     | Ok () -> Ok ()
