@@ -3012,7 +3012,8 @@ struct
               `Bad_request)
 
   let scaling_groups = ref Map.empty
-  let stats_src = Autoscaler.a_logs
+
+  module Autoscaler_Log = (val Logs.src_log Autoscaler.a_logs : Logs.LOG)
 
   let evaluate_scaling group now key =
     match Autoscaler.Cluster_manager.evaluate_scaling group now with
@@ -3021,21 +3022,22 @@ struct
           (Fmt.str "Error evaluating scaling for cluster %s: %s" key err)
     | Ok (status, group) -> (
         scaling_groups := Map.add key group !scaling_groups;
-        let log msg = Logs.info ~src:stats_src (fun m -> m "%s" msg) in
         match status with
         | Autoscaler.Normal scaler -> Lwt.return_ok ()
         | Autoscaler.Pending (`Spawn, ticks, scaler) ->
-            log
-              (Fmt.str "%s: high usage (%d%%), [ticks: %d/%d]" key
-                 scaler.last_cpu_usage ticks Autoscaler.scale_up_trigger_ticks);
+            Autoscaler_Log.info (fun m ->
+                m "%s: high usage (%d%%), [ticks: %d/%d]" key
+                  scaler.last_cpu_usage ticks Autoscaler.scale_up_trigger_ticks);
             Lwt.return_ok ()
         | Autoscaler.Cooldown scaler ->
-            log (Fmt.str "%s: cooldown (usage: %d%%)" key scaler.last_cpu_usage);
+            Autoscaler_Log.info (fun m ->
+                m "%s: cooldown (usage: %d%%)" key scaler.last_cpu_usage);
             Lwt.return_ok ()
         | Autoscaler.Pending (`Prune, ticks, scaler) ->
-            log
-              (Fmt.str "%s: low usage (%d%%), [ticks: %d/%d]" key
-                 scaler.last_cpu_usage ticks Autoscaler.scale_down_trigger_ticks);
+            Autoscaler_Log.info (fun m ->
+                m "%s: low usage (%d%%), [ticks: %d/%d]" key
+                  scaler.last_cpu_usage ticks
+                  Autoscaler.scale_down_trigger_ticks);
             Lwt.return_ok ()
         | Autoscaler.Overloaded scaler -> (
             let next_name = Autoscaler.Cluster_manager.next_clone_name group in
@@ -3051,19 +3053,20 @@ struct
                     1) Deploy new clone with name next_name
                     2) Add new clone to load balancer pool
                 *)
-                log
-                  (Fmt.str "%s: overloaded (%d%%), spawning new clone: %s" key
-                     scaler.last_cpu_usage next_name);
+                Autoscaler_Log.info (fun m ->
+                    m "%s: overloaded (%d%%), spawning new clone: %s" key
+                      scaler.last_cpu_usage next_name);
                 Lwt.return_ok ())
         | Autoscaler.Underloaded (clone_to_kill, scaler) ->
-            log
-              (Fmt.str "[%s]: underloaded (%d%%), pruning: %s" key
-                 scaler.last_cpu_usage clone_to_kill);
+            Autoscaler_Log.info (fun m ->
+                m "[%s]: underloaded (%d%%), pruning: %s" key
+                  scaler.last_cpu_usage clone_to_kill);
             (match
                Autoscaler.Cluster_manager.remove_clone group clone_to_kill
              with
             | Error e ->
-                log (Fmt.str "Error removing clone %s: %s" clone_to_kill e)
+                Autoscaler_Log.info (fun m ->
+                    m "Error removing clone %s: %s" clone_to_kill e)
             | Ok post_prune_group ->
                 scaling_groups := Map.add key post_prune_group !scaling_groups);
             (* TODO 
@@ -3103,7 +3106,7 @@ struct
                     user.scaling_policies
                 in
                 if is_scaling_enabled then (
-                  Logs.debug ~src:stats_src (fun m ->
+                  Autoscaler_Log.debug (fun m ->
                       m "[Stats] Received stats for %s as %a" unikernel_name
                         Vmm_core.Stats.pp_rusage rusage);
                   let now = Mirage_ptime.now () in
@@ -3134,7 +3137,7 @@ struct
                       with
                       | Ok updated_g -> updated_g
                       | Error err ->
-                          Logs.err ~src:stats_src (fun m ->
+                          Autoscaler_Log.err (fun m ->
                               m "Error registering clone %s: %s" unikernel_name
                                 err);
                           group)
@@ -3165,7 +3168,7 @@ struct
           handle_stats instance st name store >>= function
           | Ok () -> Lwt.return_unit
           | Error err ->
-              Logs.err ~src:stats_src (fun m ->
+              Autoscaler_Log.err (fun m ->
                   m "Error handling stats for %s: %s"
                     (Vmm_core.Name.to_string name)
                     err);
@@ -3297,13 +3300,13 @@ struct
             unikernels_stats stack instance store >>= function
             | Ok () -> Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop
             | Error err ->
-                Logs.err ~src:stats_src (fun m ->
+                Autoscaler_Log.err (fun m ->
                     m "Stats stream for %s failed: %s"
                       (Configuration.name_to_str instance.configuration.name)
                       err);
                 Lwt.return_unit)
           (fun exn ->
-            Logs.err ~src:stats_src (fun m ->
+            Autoscaler_Log.err (fun m ->
                 m "Exception in stats stream for %s: %s. Retrying in 10s..."
                   (Configuration.name_to_str instance.configuration.name)
                   (Printexc.to_string exn));
@@ -3320,7 +3323,7 @@ struct
         (fun instance_name instance ->
           let key = Configuration.name_to_str instance_name in
           if not (Map.mem key !active_streams) then (
-            Logs.debug ~src:stats_src (fun m ->
+            Autoscaler_Log.debug (fun m ->
                 m "Spawning new stats stream for albatross instance %s" key);
             let p = spawn_stats_stream instance in
             active_streams := Map.add key p !active_streams))
