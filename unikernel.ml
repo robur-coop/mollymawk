@@ -3297,32 +3297,33 @@ struct
             unikernels_stats stack instance store >>= function
             | Ok () -> Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop
             | Error err ->
-                Logs.debug ~src:stats_src (fun m ->
+                Logs.err ~src:stats_src (fun m ->
                     m "Stats stream for %s failed: %s"
                       (Configuration.name_to_str instance.configuration.name)
                       err);
-                Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop)
+                Lwt.return_unit)
           (fun exn ->
             Logs.err ~src:stats_src (fun m ->
                 m "Exception in stats stream for %s: %s. Retrying in 10s..."
                   (Configuration.name_to_str instance.configuration.name)
                   (Printexc.to_string exn));
-            Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop)
+            Lwt.return_unit)
       in
       stream_loop ()
     in
     let rec loop () =
       Lwt.pause () >>= fun () ->
       let current_instances = !albatross_instances_ref in
+      active_streams :=
+        Map.filter (fun _key p -> Lwt.state p = Lwt.Sleep) !active_streams;
       Albatross.Albatross_map.iter
         (fun instance_name instance ->
           let key = Configuration.name_to_str instance_name in
-          if not (Map.mem key !active_streams) then begin
+          if not (Map.mem key !active_streams) then (
             Logs.debug ~src:stats_src (fun m ->
                 m "Spawning new stats stream for albatross instance %s" key);
             let p = spawn_stats_stream instance in
-            active_streams := Map.add key p !active_streams
-          end)
+            active_streams := Map.add key p !active_streams))
         current_instances;
       Mirage_sleep.ns (Duration.of_sec 30) >>= loop
     in
