@@ -3245,71 +3245,41 @@ struct
     Lwt.async loop
 
   let start_background_scaler_scheduler stack store albatross_instances_ref =
-    let active_streams = Hashtbl.create 5 in
-    let spawn_stats_stream (user : User_model.user) instance_name instance =
-      let user_name = user.User_model.name in
+    let active_streams = ref Map.empty in
+    let spawn_stats_stream instance =
       let rec stream_loop () =
         Lwt.catch
           (fun () ->
-            unikernels_stats stack instance user >>= function
+            unikernels_stats stack instance store >>= function
             | Ok () -> Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop
             | Error err ->
                 Logs.debug ~src:stats_src (fun m ->
-                    m "Stats stream for %s on %s failed: %s"
-                      (Configuration.name_to_str user_name)
-                      (Configuration.name_to_str instance_name)
+                    m "Stats stream for %s failed: %s"
+                      (Configuration.name_to_str instance.configuration.name)
                       err);
                 Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop)
-          (function
-            | Lwt.Canceled ->
-                Logs.debug ~src:stats_src (fun m ->
-                    m "Stats stream for %s on %s cancelled (user deleted)."
-                      (Configuration.name_to_str user_name)
-                      (Configuration.name_to_str instance_name));
-                Lwt.return_unit
-            | exn ->
-                Logs.info ~src:stats_src (fun m ->
-                    m "Exception in stats stream for %s on %s: %s"
-                      (Configuration.name_to_str user_name)
-                      (Configuration.name_to_str instance_name)
-                      (Printexc.to_string exn));
-                Hashtbl.remove active_streams (user_name, instance_name);
-                Lwt.return_unit)
+          (fun exn ->
+            Logs.err ~src:stats_src (fun m ->
+                m "Exception in stats stream for %s: %s. Retrying in 10s..."
+                  (Configuration.name_to_str instance.configuration.name)
+                  (Printexc.to_string exn));
+            Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop)
       in
       stream_loop ()
     in
     let rec loop () =
       Lwt.pause () >>= fun () ->
-      let current_users = Store.users store in
       let current_instances = !albatross_instances_ref in
-      let valid_keys = Hashtbl.create 5 in
-      List.iter
-        (fun user ->
-          Albatross.Albatross_map.iter
-            (fun instance_name instance ->
-              let key = (user.User_model.name, instance_name) in
-              Hashtbl.replace valid_keys key ();
-              if not (Hashtbl.mem active_streams key) then begin
-                Logs.debug ~src:stats_src (fun m ->
-                    m "Spawning new stats stream for %s on %s"
-                      (Configuration.name_to_str user.User_model.name)
-                      (Configuration.name_to_str instance_name));
-                let p = spawn_stats_stream user instance_name instance in
-                Hashtbl.replace active_streams key p
-              end)
-            current_instances)
-        current_users;
-      let to_remove =
-        Hashtbl.fold
-          (fun key p acc ->
-            if not (Hashtbl.mem valid_keys key) then begin
-              Lwt.cancel p;
-              key :: acc
-            end
-            else acc)
-          active_streams []
-      in
-      List.iter (fun key -> Hashtbl.remove active_streams key) to_remove;
+      Albatross.Albatross_map.iter
+        (fun instance_name instance ->
+          let key = Configuration.name_to_str instance_name in
+          if not (Map.mem key !active_streams) then begin
+            Logs.debug ~src:stats_src (fun m ->
+                m "Spawning new stats stream for albatross instance %s" key);
+            let p = spawn_stats_stream instance in
+            active_streams := Map.add key p !active_streams
+          end)
+        current_instances;
       Mirage_sleep.ns (Duration.of_sec 30) >>= loop
     in
     Lwt.async loop
