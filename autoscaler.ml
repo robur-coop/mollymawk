@@ -69,7 +69,7 @@ type scale_action = [ `Spawn | `Prune ]
 type status =
   | Overloaded of t
   | Pending of scale_action * int * t
-  | Underloaded of string * t
+  | Underloaded of Vmm_core.Name.Label.t * t
   | Cooldown of t
   | Normal of t
 
@@ -84,7 +84,7 @@ let create now initial_rusage =
   }
 
 module Cluster_manager = struct
-  type vm = string * t
+  type vm = Vmm_core.Name.Label.t * t
 
   type group = {
     primary : vm;
@@ -101,10 +101,22 @@ module Cluster_manager = struct
     Ptime.Span.compare span cooldown_period < 0
 
   let extract_name_and_clone_id name =
-    match List.rev (String.split_on_char '-' name) with
+    match
+      List.rev (String.split_on_char '-' (Configuration.name_to_str name))
+    with
     | id_str :: "clone" :: primary_parts_rev -> (
         match int_of_string_opt id_str with
-        | Some id -> Some (String.concat "-" (List.rev primary_parts_rev), id)
+        | Some id -> (
+            match
+              Configuration.name_of_str
+                (String.concat "-" (List.rev primary_parts_rev))
+            with
+            | Ok name -> Some (name, id)
+            | Error err ->
+                Logs.info (fun m ->
+                    m "Failed to parse primary VM name from clone name %s"
+                      (Configuration.name_to_str name));
+                None)
         | None -> None)
     | _ -> None
 
@@ -132,7 +144,10 @@ module Cluster_manager = struct
 
   let next_clone_name group =
     let primary_name = fst group.primary in
-    Fmt.str "%s-clone-%d" primary_name group.next_id
+    Vmm_core.Name.Label.of_string
+      (Fmt.str "%s-clone-%d"
+         (Configuration.name_to_str primary_name)
+         group.next_id)
 
   let add_clone_to_group g clone clone_id =
     if not (List.mem_assoc (fst clone) g.clones) then
@@ -142,30 +157,31 @@ module Cluster_manager = struct
 
   let register_clone group clone =
     let name = fst clone in
-    if String.length name > 63 then
-      Error (Fmt.str "Clone name '%s' exceeds the 63-character limit" name)
-    else
-      match extract_name_and_clone_id name with
-      | Some (primary_name, clone_id) ->
-          if String.equal primary_name (fst group.primary) then
-            Ok
-              {
-                (add_clone_to_group group clone clone_id) with
-                last_scale_action = Mirage_ptime.now ();
-              }
-          else
-            Error
-              (Fmt.str "Clone '%s' does not match group primary '%s'" name
-                 (fst group.primary))
-      | None -> Error (Fmt.str "Clone name '%s' is not a valid format" name)
+    match extract_name_and_clone_id name with
+    | Some (primary_name, clone_id) ->
+        if Vmm_core.Name.Label.equal primary_name (fst group.primary) then
+          Ok
+            {
+              (add_clone_to_group group clone clone_id) with
+              last_scale_action = Mirage_ptime.now ();
+            }
+        else
+          Error
+            (Fmt.str "Clone '%s' does not match group primary '%s'"
+               (Configuration.name_to_str name)
+               (Configuration.name_to_str (fst group.primary)))
+    | None ->
+        Error
+          (Fmt.str "Clone name '%s' is not a valid format"
+             (Configuration.name_to_str name))
 
   let remove_clone group clone_name =
     match extract_name_and_clone_id clone_name with
     | Some (primary_name, _) ->
-        if String.equal primary_name (fst group.primary) then
+        if Vmm_core.Name.Label.equal primary_name (fst group.primary) then
           let new_clones =
             List.filter
-              (fun (n, _) -> not (String.equal n clone_name))
+              (fun (n, _) -> not (Vmm_core.Name.Label.equal n clone_name))
               group.clones
           in
           let next_id = update_next_id new_clones in
@@ -178,9 +194,13 @@ module Cluster_manager = struct
             }
         else
           Error
-            (Fmt.str "Clone '%s' does not match group primary '%s'" clone_name
-               (fst group.primary))
-    | None -> Error (Fmt.str "Clone name '%s' is not a valid format" clone_name)
+            (Fmt.str "Clone '%s' does not match group primary '%s'"
+               (Configuration.name_to_str clone_name)
+               (Configuration.name_to_str (fst group.primary)))
+    | None ->
+        Error
+          (Fmt.str "Clone name '%s' is not a valid format"
+             (Configuration.name_to_str clone_name))
 
   (** [update_vm_metrics group key now rusage] calculates the CPU usage for the
       VM [key] using [rusage] at time [now]. It updates the cached state of VM
@@ -200,13 +220,13 @@ module Cluster_manager = struct
           }
         in
         let updated_group =
-          if String.equal key (fst group.primary) then
+          if Vmm_core.Name.Label.equal key (fst group.primary) then
             { group with primary = (key, state) }
           else
             let new_clones =
               List.map
                 (fun (n, v) ->
-                  if String.equal n key then (n, state) else (n, v))
+                  if Vmm_core.Name.Label.equal n key then (n, state) else (n, v))
                 group.clones
             in
             { group with clones = new_clones }

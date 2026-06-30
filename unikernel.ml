@@ -3011,76 +3011,114 @@ struct
               ~data:(`String (Fmt.str "Test failed: %s" (String.escaped err)))
               `Bad_request)
 
-  let scaling_groups = ref Map.empty
+  module Label_map = Albatross.Albatross_map
+
+  let scaling_groups :
+      Autoscaler.Cluster_manager.group Label_map.t Label_map.t ref =
+    ref Label_map.empty
 
   module Autoscaler_Log = (val Logs.src_log Autoscaler.a_logs : Logs.LOG)
 
-  let evaluate_scaling group now key =
+  let put_group (user_name : Vmm_core.Name.Label.t)
+      (unikernel_key : Vmm_core.Name.Label.t) group =
+    let unikernel_map =
+      Option.value ~default:Label_map.empty
+        (Label_map.find_opt user_name !scaling_groups)
+    in
+    scaling_groups :=
+      Label_map.add user_name
+        (Label_map.add unikernel_key group unikernel_map)
+        !scaling_groups
+
+  let evaluate_scaling group now user_name unikernel_key =
     match Autoscaler.Cluster_manager.evaluate_scaling group now with
     | Error err ->
         Lwt.return_error
-          (Fmt.str "Error evaluating scaling for cluster %s: %s" key err)
+          (Fmt.str "Error evaluating scaling for cluster %s/%s: %s"
+             (Configuration.name_to_str user_name)
+             (Configuration.name_to_str unikernel_key)
+             err)
     | Ok (status, group) -> (
-        scaling_groups := Map.add key group !scaling_groups;
+        put_group user_name unikernel_key group;
         match status with
-        | Autoscaler.Normal scaler -> Lwt.return_ok ()
+        | Autoscaler.Normal _scaler -> Lwt.return_ok ()
         | Autoscaler.Pending (`Spawn, ticks, scaler) ->
             Autoscaler_Log.info (fun m ->
-                m "%s: high usage (%d%%), [ticks: %d/%d]" key
+                m "%s/%s: high usage (%d%%), [ticks: %d/%d]"
+                  (Configuration.name_to_str user_name)
+                  (Configuration.name_to_str unikernel_key)
                   scaler.last_cpu_usage ticks Autoscaler.scale_up_trigger_ticks);
             Lwt.return_ok ()
         | Autoscaler.Cooldown scaler ->
             Autoscaler_Log.info (fun m ->
-                m "%s: cooldown (usage: %d%%)" key scaler.last_cpu_usage);
+                m "%s/%s: cooldown (usage: %d%%)"
+                  (Configuration.name_to_str user_name)
+                  (Configuration.name_to_str unikernel_key)
+                  scaler.last_cpu_usage);
             Lwt.return_ok ()
         | Autoscaler.Pending (`Prune, ticks, scaler) ->
             Autoscaler_Log.info (fun m ->
-                m "%s: low usage (%d%%), [ticks: %d/%d]" key
+                m "%s/%s: low usage (%d%%), [ticks: %d/%d]"
+                  (Configuration.name_to_str user_name)
+                  (Configuration.name_to_str unikernel_key)
                   scaler.last_cpu_usage ticks
                   Autoscaler.scale_down_trigger_ticks);
             Lwt.return_ok ()
         | Autoscaler.Overloaded scaler -> (
-            let next_name = Autoscaler.Cluster_manager.next_clone_name group in
-            match
-              Autoscaler.Cluster_manager.register_clone group (next_name, scaler)
-            with
-            | Error e ->
-                Lwt.return_error
-                  (Fmt.str "Error registering clone %s: %s" next_name e)
-            | Ok spawn_group ->
-                scaling_groups := Map.add key spawn_group !scaling_groups;
-                (* TODO 
-                    1) Deploy new clone with name next_name
-                    2) Add new clone to load balancer pool
-                *)
-                Autoscaler_Log.info (fun m ->
-                    m "%s: overloaded (%d%%), spawning new clone: %s" key
-                      scaler.last_cpu_usage next_name);
-                Lwt.return_ok ())
+            match Autoscaler.Cluster_manager.next_clone_name group with
+            | Error (`Msg e) -> Lwt.return_error (Fmt.str "Error: %s" e)
+            | Ok next_name -> (
+                match
+                  Autoscaler.Cluster_manager.register_clone group
+                    (next_name, scaler)
+                with
+                | Error e ->
+                    Lwt.return_error
+                      (Fmt.str "Error registering clone %s: %s"
+                         (Configuration.name_to_str next_name)
+                         e)
+                | Ok spawn_group ->
+                    put_group user_name unikernel_key spawn_group;
+                    (* TODO
+                       1) Deploy new clone with name next_name
+                       2) Add new clone to load balancer pool
+                    *)
+                    Autoscaler_Log.info (fun m ->
+                        m "%s/%s: overloaded (%d%%), spawning new clone: %s"
+                          (Configuration.name_to_str user_name)
+                          (Configuration.name_to_str unikernel_key)
+                          scaler.last_cpu_usage
+                          (Configuration.name_to_str next_name));
+                    Lwt.return_ok ()))
         | Autoscaler.Underloaded (clone_to_kill, scaler) ->
             Autoscaler_Log.info (fun m ->
-                m "[%s]: underloaded (%d%%), pruning: %s" key
-                  scaler.last_cpu_usage clone_to_kill);
+                m "[%s/%s]: underloaded (%d%%), pruning: %s"
+                  (Configuration.name_to_str user_name)
+                  (Configuration.name_to_str unikernel_key)
+                  scaler.last_cpu_usage
+                  (Configuration.name_to_str clone_to_kill));
             (match
                Autoscaler.Cluster_manager.remove_clone group clone_to_kill
              with
             | Error e ->
                 Autoscaler_Log.info (fun m ->
-                    m "Error removing clone %s: %s" clone_to_kill e)
+                    m "Error removing clone %s: %s"
+                      (Configuration.name_to_str clone_to_kill)
+                      e)
             | Ok post_prune_group ->
-                scaling_groups := Map.add key post_prune_group !scaling_groups);
-            (* TODO 
-                  1) Remove clone from load balancer pool
-                  2) Remove clone from group
-                  3) Destroy clone
-              *)
+                put_group user_name unikernel_key post_prune_group);
+            (* TODO
+               1) Remove clone from load balancer pool
+               2) Remove clone from group
+               3) Destroy clone
+            *)
             Lwt.return_ok ())
 
   let handle_stats state ((rusage, _, _, _) : Vmm_core.Stats.t) name store =
     match Vmm_core.Name.name name with
     | None -> Lwt.return_error "VM name has no unikernel label"
     | Some label -> (
-        let unikernel_name = Configuration.name_to_str label in
+        let unikernel_name = label in
         match Vmm_core.Name.Path.to_labels (Vmm_core.Name.path name) with
         | [ user_label ] -> (
             match Store.find_by_name store user_label with
@@ -3098,22 +3136,23 @@ struct
                 let is_scaling_enabled =
                   List.exists
                     (fun (p : User_model.unikernel_scaling_policy) ->
-                      String.equal
-                        (Configuration.name_to_str p.name)
-                        primary_name)
+                      Vmm_core.Name.Label.equal p.name primary_name)
                     user.scaling_policies
                 in
                 if is_scaling_enabled then (
                   Autoscaler_Log.debug (fun m ->
-                      m "[Stats] Received stats for %s as %a" unikernel_name
+                      m "[Stats] Received stats for %s as %a"
+                        (Configuration.name_to_str unikernel_name)
                         Vmm_core.Stats.pp_rusage rusage);
                   let now = Mirage_ptime.now () in
-                  let key =
-                    Configuration.name_to_str user.name ^ "-" ^ primary_name
-                  in
-                  (* Get the group this vm should belong to *)
+
+                  (* Get the group for this user's unikernel (user -> unikernel -> group). *)
                   let group =
-                    match Map.find_opt key !scaling_groups with
+                    let unikernel_map =
+                      Option.value ~default:Label_map.empty
+                        (Label_map.find_opt user.name !scaling_groups)
+                    in
+                    match Label_map.find_opt primary_name unikernel_map with
                     | Some g -> g
                     | None ->
                         let primary_vm =
@@ -3121,10 +3160,16 @@ struct
                         in
                         Autoscaler.Cluster_manager.create_group primary_vm
                   in
-                  (* If the vm is a ghost clone, add it to the group*)
+                  (* a "ghost" clone VM that is already running in
+                     Albatross and sending stats, but is not yet recorded in
+                     [scaling_groups], for example after a mollymawk restart,
+                     where the in-memory state was lost but the clones kept
+                     running. When stats arrive for such a VM we register it
+                     on-the-fly so it starts contributing to scaling decisions. *)
                   let group =
                     if
-                      (not (String.equal unikernel_name primary_name))
+                      (not
+                         (Vmm_core.Name.Label.equal unikernel_name primary_name))
                       && not (List.mem_assoc unikernel_name group.clones)
                     then (
                       let clone_vm =
@@ -3136,7 +3181,8 @@ struct
                       | Ok updated_g -> updated_g
                       | Error err ->
                           Autoscaler_Log.err (fun m ->
-                              m "Error registering clone %s: %s" unikernel_name
+                              m "Error registering clone %s: %s"
+                                (Configuration.name_to_str unikernel_name)
                                 err);
                           group)
                     else group
@@ -3148,12 +3194,14 @@ struct
                   | Error err ->
                       Lwt.return_error
                         (Fmt.str "Error updating metrics for unikernel %s: %s"
-                           unikernel_name err)
+                           (Configuration.name_to_str unikernel_name)
+                           err)
                   | Ok (_, updated_group) ->
-                      scaling_groups :=
-                        Map.add key updated_group !scaling_groups;
-                      if String.equal unikernel_name primary_name then
-                        evaluate_scaling updated_group now key
+                      put_group user.name primary_name updated_group;
+                      if Vmm_core.Name.Label.equal unikernel_name primary_name
+                      then
+                        evaluate_scaling updated_group now user.name
+                          primary_name
                       else Lwt.return_ok ())
                 else Lwt.return (Ok ()))
         | _ ->
