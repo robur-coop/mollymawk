@@ -3090,12 +3090,10 @@ struct
                      (Configuration.name_to_str user_label))
             | Some user ->
                 let primary_name =
-                  match
-                    Autoscaler.Cluster_manager.extract_name_and_clone_id
-                      unikernel_name
-                  with
-                  | Some (p, _) -> p
-                  | None -> unikernel_name
+                  Option.value ~default:unikernel_name
+                    (Option.map fst
+                       (Autoscaler.Cluster_manager.extract_name_and_clone_id
+                          unikernel_name))
                 in
                 let is_scaling_enabled =
                   List.exists
