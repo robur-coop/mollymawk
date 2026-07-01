@@ -597,28 +597,6 @@ struct
         update_albatross_status state (`Incompatible, reply, "unikernel info");
         Error message
 
-  let stats_src = Logs.Src.create "albatross-stats"
-
-  let unikernels_stats stack state user_name =
-    (* TODO: change this callback to the scaling callback later *)
-    let cb name st =
-      Logs.debug ~src:stats_src (fun m ->
-          m "Got stats for VM %s (user %s): %a"
-            (Vmm_core.Name.to_string name)
-            (Configuration.name_to_str user_name)
-            Vmm_core.Stats.pp st);
-      Ok ()
-    in
-    Albatross_state.query_stats stack state ~domain:user_name cb >|= function
-    | Error err ->
-        Error
-          (Fmt.str
-             "Error fetching stats for user %s, with albatross instance %s: %s"
-             (Configuration.name_to_str user_name)
-             (Configuration.name_to_str state.configuration.name)
-             err)
-    | Ok () -> Ok ()
-
   let sign_up reqd =
     let now = Mirage_ptime.now () in
     let csrf = Middleware.generate_csrf_cookie now reqd in
@@ -3033,6 +3011,224 @@ struct
               ~data:(`String (Fmt.str "Test failed: %s" (String.escaped err)))
               `Bad_request)
 
+  module Label_map = Albatross.Albatross_map
+
+  let scaling_groups :
+      Autoscaler.Cluster_manager.group Label_map.t Label_map.t ref =
+    ref Label_map.empty
+
+  module Log = (val Logs.src_log Autoscaler.a_logs : Logs.LOG)
+
+  let put_group (user_name : Vmm_core.Name.Label.t)
+      (unikernel_key : Vmm_core.Name.Label.t) group =
+    let unikernel_map =
+      Option.value ~default:Label_map.empty
+        (Label_map.find_opt user_name !scaling_groups)
+    in
+    scaling_groups :=
+      Label_map.add user_name
+        (Label_map.add unikernel_key group unikernel_map)
+        !scaling_groups
+
+  let evaluate_scaling group now user_name unikernel_key =
+    match Autoscaler.Cluster_manager.evaluate_scaling group now with
+    | Error err ->
+        Lwt.return_error
+          (Fmt.str "Error evaluating scaling for cluster %s/%s: %s"
+             (Configuration.name_to_str user_name)
+             (Configuration.name_to_str unikernel_key)
+             err)
+    | Ok (status, group) -> (
+        put_group user_name unikernel_key group;
+        match status with
+        | Autoscaler.Normal _scaler -> Lwt.return_ok ()
+        | Autoscaler.Pending (`Spawn, ticks, scaler) ->
+            Log.info (fun m ->
+                m "%s/%s: high usage (%d%%), [ticks: %d/%d]"
+                  (Configuration.name_to_str user_name)
+                  (Configuration.name_to_str unikernel_key)
+                  scaler.last_cpu_usage ticks Autoscaler.scale_up_trigger_ticks);
+            Lwt.return_ok ()
+        | Autoscaler.Cooldown scaler ->
+            Log.info (fun m ->
+                m "%s/%s: cooldown (usage: %d%%)"
+                  (Configuration.name_to_str user_name)
+                  (Configuration.name_to_str unikernel_key)
+                  scaler.last_cpu_usage);
+            Lwt.return_ok ()
+        | Autoscaler.Pending (`Prune, ticks, scaler) ->
+            Log.info (fun m ->
+                m "%s/%s: low usage (%d%%), [ticks: %d/%d]"
+                  (Configuration.name_to_str user_name)
+                  (Configuration.name_to_str unikernel_key)
+                  scaler.last_cpu_usage ticks
+                  Autoscaler.scale_down_trigger_ticks);
+            Lwt.return_ok ()
+        | Autoscaler.Overloaded scaler -> (
+            match Autoscaler.Cluster_manager.next_clone_name group with
+            | Error (`Msg e) -> Lwt.return_error (Fmt.str "Error: %s" e)
+            | Ok next_name -> (
+                match
+                  Autoscaler.Cluster_manager.register_clone group
+                    (next_name, scaler)
+                with
+                | Error e ->
+                    Lwt.return_error
+                      (Fmt.str "Error registering clone %s: %s"
+                         (Configuration.name_to_str next_name)
+                         e)
+                | Ok spawn_group ->
+                    put_group user_name unikernel_key spawn_group;
+                    (* TODO
+                       1) Deploy new clone with name next_name
+                       2) Add new clone to load balancer pool
+                    *)
+                    Log.info (fun m ->
+                        m "%s/%s: overloaded (%d%%), spawning new clone: %s"
+                          (Configuration.name_to_str user_name)
+                          (Configuration.name_to_str unikernel_key)
+                          scaler.last_cpu_usage
+                          (Configuration.name_to_str next_name));
+                    Lwt.return_ok ()))
+        | Autoscaler.Underloaded (clone_to_kill, scaler) ->
+            Log.info (fun m ->
+                m "[%s/%s]: underloaded (%d%%), pruning: %s"
+                  (Configuration.name_to_str user_name)
+                  (Configuration.name_to_str unikernel_key)
+                  scaler.last_cpu_usage
+                  (Configuration.name_to_str clone_to_kill));
+            (match
+               Autoscaler.Cluster_manager.remove_clone group clone_to_kill
+             with
+            | Error e ->
+                Log.info (fun m ->
+                    m "Error removing clone %s: %s"
+                      (Configuration.name_to_str clone_to_kill)
+                      e)
+            | Ok post_prune_group ->
+                put_group user_name unikernel_key post_prune_group);
+            (* TODO
+               1) Remove clone from load balancer pool
+               2) Remove clone from group
+               3) Destroy clone
+            *)
+            Lwt.return_ok ())
+
+  let handle_stats state ((rusage, _, _, _) : Vmm_core.Stats.t) name store =
+    match Vmm_core.Name.name name with
+    | None -> Lwt.return_error "VM name has no unikernel label"
+    | Some label -> (
+        let unikernel_name = label in
+        match Vmm_core.Name.Path.to_labels (Vmm_core.Name.path name) with
+        | [ user_label ] -> (
+            match Store.find_by_name store user_label with
+            | None ->
+                Lwt.return_error
+                  (Fmt.str "User %s not found."
+                     (Configuration.name_to_str user_label))
+            | Some user ->
+                let primary_name =
+                  Option.value ~default:unikernel_name
+                    (Option.map fst
+                       (Autoscaler.Cluster_manager.extract_name_and_clone_id
+                          unikernel_name))
+                in
+                let is_scaling_enabled =
+                  List.exists
+                    (fun (p : User_model.unikernel_scaling_policy) ->
+                      Vmm_core.Name.Label.equal p.name primary_name)
+                    user.scaling_policies
+                in
+                if is_scaling_enabled then (
+                  Log.debug (fun m ->
+                      m "[Stats] Received stats for %s as %a"
+                        (Configuration.name_to_str unikernel_name)
+                        Vmm_core.Stats.pp_rusage rusage);
+                  let now = Mirage_ptime.now () in
+
+                  (* Get the group for this user's unikernel (user -> unikernel -> group). *)
+                  let group =
+                    let unikernel_map =
+                      Option.value ~default:Label_map.empty
+                        (Label_map.find_opt user.name !scaling_groups)
+                    in
+                    match Label_map.find_opt primary_name unikernel_map with
+                    | Some g -> g
+                    | None ->
+                        let primary_vm =
+                          (primary_name, Autoscaler.create now rusage)
+                        in
+                        Autoscaler.Cluster_manager.create_group primary_vm
+                  in
+                  (* a "ghost" clone VM that is already running in
+                     Albatross and sending stats, but is not yet recorded in
+                     [scaling_groups], for example after a mollymawk restart,
+                     where the in-memory state was lost but the clones kept
+                     running. When stats arrive for such a VM we register it
+                     on-the-fly so it starts contributing to scaling decisions. *)
+                  let group =
+                    if
+                      (not
+                         (Vmm_core.Name.Label.equal unikernel_name primary_name))
+                      && not (List.mem_assoc unikernel_name group.clones)
+                    then (
+                      let clone_vm =
+                        (unikernel_name, Autoscaler.create now rusage)
+                      in
+                      match
+                        Autoscaler.Cluster_manager.register_clone group clone_vm
+                      with
+                      | Ok updated_g -> updated_g
+                      | Error err ->
+                          Log.err (fun m ->
+                              m "Error registering clone %s: %s"
+                                (Configuration.name_to_str unikernel_name)
+                                err);
+                          group)
+                    else group
+                  in
+                  match
+                    Autoscaler.Cluster_manager.update_vm_metrics group
+                      unikernel_name now rusage
+                  with
+                  | Error err ->
+                      Lwt.return_error
+                        (Fmt.str "Error updating metrics for unikernel %s: %s"
+                           (Configuration.name_to_str unikernel_name)
+                           err)
+                  | Ok (_, updated_group) ->
+                      put_group user.name primary_name updated_group;
+                      if Vmm_core.Name.Label.equal unikernel_name primary_name
+                      then
+                        evaluate_scaling updated_group now user.name
+                          primary_name
+                      else Lwt.return_ok ())
+                else Lwt.return (Ok ()))
+        | _ ->
+            Lwt.return_error
+              "VM path must contain exactly one user domain level")
+
+  let unikernels_stats stack instance store =
+    let cb name st =
+      Lwt.async (fun () ->
+          handle_stats instance st name store >>= function
+          | Ok () -> Lwt.return_unit
+          | Error err ->
+              Log.err (fun m ->
+                  m "Error handling stats for %s: %s"
+                    (Vmm_core.Name.to_string name)
+                    err);
+              Lwt.return_unit);
+      Ok ()
+    in
+    Albatross_state.query_stats stack instance cb >|= function
+    | Error err ->
+        Error
+          (Fmt.str "Error fetching stats for albatross instance %s: %s"
+             (Configuration.name_to_str instance.configuration.name)
+             err)
+    | Ok () -> Ok ()
+
   let seconds_until_next_midnight () =
     let now = Mirage_ptime.now () in
     let date, _ = Ptime.to_date_time now in
@@ -3142,72 +3338,48 @@ struct
     Lwt.async loop
 
   let start_background_scaler_scheduler stack store albatross_instances_ref =
-    let active_streams = Hashtbl.create 5 in
-    let spawn_stats_stream user_name instance_name instance =
+    let active_streams = ref Map.empty in
+    let spawn_stats_stream instance =
       let rec stream_loop () =
         Lwt.catch
           (fun () ->
-            unikernels_stats stack instance user_name >>= function
-            | Ok () -> Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop
-            | Error err ->
-                Logs.debug ~src:stats_src (fun m ->
-                    m "Stats stream for %s on %s failed: %s"
-                      (Configuration.name_to_str user_name)
-                      (Configuration.name_to_str instance_name)
-                      err);
-                Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop)
-          (function
-            | Lwt.Canceled ->
-                Logs.debug ~src:stats_src (fun m ->
-                    m "Stats stream for %s on %s cancelled (user deleted)."
-                      (Configuration.name_to_str user_name)
-                      (Configuration.name_to_str instance_name));
-                Lwt.return_unit
-            | exn ->
-                Logs.info ~src:stats_src (fun m ->
-                    m "Exception in stats stream for %s on %s: %s"
-                      (Configuration.name_to_str user_name)
-                      (Configuration.name_to_str instance_name)
-                      (Printexc.to_string exn));
-                Hashtbl.remove active_streams (user_name, instance_name);
-                Lwt.return_unit)
+            unikernels_stats stack instance store >>= fun res ->
+            Lwt.return (Ok res))
+          (fun exn -> Lwt.return (Error exn))
+        >>= function
+        | Ok (Ok ()) ->
+            Mirage_sleep.ns (Duration.of_sec 10) >>= fun () ->
+            (stream_loop [@tailcall]) ()
+        | Ok (Error err) ->
+            Log.err (fun m ->
+                m "Stats stream for %s failed: %s"
+                  (Configuration.name_to_str instance.configuration.name)
+                  err);
+            Lwt.return_unit
+        | Error exn ->
+            Log.err (fun m ->
+                m "Exception in stats stream for %s: %s. Retrying in 10s..."
+                  (Configuration.name_to_str instance.configuration.name)
+                  (Printexc.to_string exn));
+            Mirage_sleep.ns (Duration.of_sec 10) >>= fun () ->
+            (stream_loop [@tailcall]) ()
       in
       stream_loop ()
     in
     let rec loop () =
       Lwt.pause () >>= fun () ->
-      let current_users = Store.users store in
       let current_instances = !albatross_instances_ref in
-      let valid_keys = Hashtbl.create 5 in
-      List.iter
-        (fun user ->
-          Albatross.Albatross_map.iter
-            (fun instance_name instance ->
-              let key = (user.User_model.name, instance_name) in
-              Hashtbl.replace valid_keys key ();
-              if not (Hashtbl.mem active_streams key) then begin
-                Logs.debug ~src:stats_src (fun m ->
-                    m "Spawning new stats stream for %s on %s"
-                      (Configuration.name_to_str user.User_model.name)
-                      (Configuration.name_to_str instance_name));
-                let p =
-                  spawn_stats_stream user.User_model.name instance_name instance
-                in
-                Hashtbl.replace active_streams key p
-              end)
-            current_instances)
-        current_users;
-      let to_remove =
-        Hashtbl.fold
-          (fun key p acc ->
-            if not (Hashtbl.mem valid_keys key) then begin
-              Lwt.cancel p;
-              key :: acc
-            end
-            else acc)
-          active_streams []
-      in
-      List.iter (fun key -> Hashtbl.remove active_streams key) to_remove;
+      active_streams :=
+        Map.filter (fun _key p -> Lwt.state p = Lwt.Sleep) !active_streams;
+      Albatross.Albatross_map.iter
+        (fun instance_name instance ->
+          let key = Configuration.name_to_str instance_name in
+          if not (Map.mem key !active_streams) then (
+            Log.debug (fun m ->
+                m "Spawning new stats stream for albatross instance %s" key);
+            let p = spawn_stats_stream instance in
+            active_streams := Map.add key p !active_streams))
+        current_instances;
       Mirage_sleep.ns (Duration.of_sec 30) >>= loop
     in
     Lwt.async loop

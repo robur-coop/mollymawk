@@ -614,11 +614,15 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         raw_query stack t ~name:vmm_name certificates cmd
           (block_data vmm_name f)
 
-  let query_stats stack t ~domain f =
+  let query_stats stack t f =
     let cmd = `Stats_cmd `Stats_subscribe in
-    match certs t domain dot_name cmd with
-    | Error str -> Lwt.return (Error str)
-    | Ok (vmm_name, certificates) ->
+    let vmm_name = Vmm_core.Name.root in
+    match gen_cert t cmd dot_name with
+    | Error err ->
+        t.status <- Status.update t.status (Status.make `Certificate err);
+        Lwt.return (Error err)
+    | Ok certificates ->
+        set_online t;
         raw_query stack t ~name:vmm_name certificates cmd
           (stats_data vmm_name f)
 
