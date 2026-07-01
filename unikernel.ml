@@ -3030,39 +3030,31 @@ struct
         (Label_map.add unikernel_key group unikernel_map)
         !scaling_groups
 
-  let prune_clone stack albatross unikernel (user : User_model.user) =
-    match Configuration.name_of_str unikernel with
-    | Error (`Msg err) ->
+  let prune_clone stack albatross unikernel user =
+    Albatross_state.query stack albatross ~domain:user ~name:unikernel
+      (`Unikernel_cmd `Unikernel_destroy)
+    >>= function
+    | Error err ->
         Logs.info ~src:Autoscaler.a_logs (fun m ->
-            m "Error pruning unikernel %s: %s, invalid unikernel name" unikernel
+            m "Error pruning unikernel %s: %s"
+              (Configuration.name_to_str unikernel)
               err);
-        Lwt.return_error "Invalid unikernel name when pruning"
-    | Ok unikernel -> (
-        Albatross_state.query stack albatross ~domain:user.name ~name:unikernel
-          (`Unikernel_cmd `Unikernel_destroy)
-        >>= function
-        | Error err ->
+        Lwt.return_error err
+    | Ok (_hdr, res) -> (
+        Albatross.set_online albatross;
+        match Albatross_json.res res with
+        | Ok res ->
+            Logs.debug ~src:Autoscaler.a_logs (fun m ->
+                m "Succesfully pruned %s" (Configuration.name_to_str unikernel));
+            Lwt.return_ok ()
+        | Error (`String err) ->
             Logs.info ~src:Autoscaler.a_logs (fun m ->
                 m "Error pruning unikernel %s: %s"
                   (Configuration.name_to_str unikernel)
                   err);
-            Lwt.return_error err
-        | Ok (_hdr, res) -> (
-            Albatross.set_online albatross;
-            match Albatross_json.res res with
-            | Ok res ->
-                Logs.debug ~src:Autoscaler.a_logs (fun m ->
-                    m "Succesfully pruned %s"
-                      (Configuration.name_to_str unikernel));
-                Lwt.return_ok ()
-            | Error (`String err) ->
-                Logs.info ~src:Autoscaler.a_logs (fun m ->
-                    m "Error pruning unikernel %s: %s"
-                      (Configuration.name_to_str unikernel)
-                      err);
-                Lwt.return_error err))
+            Lwt.return_error err)
 
-  let evaluate_scaling group now user_name unikernel_key =
+  let evaluate_scaling stack albatross group now user_name unikernel_key =
     match Autoscaler.Cluster_manager.evaluate_scaling group now with
     | Error err ->
         Lwt.return_error
@@ -3122,24 +3114,26 @@ struct
                           scaler.last_cpu_usage
                           (Configuration.name_to_str next_name));
                     Lwt.return_ok ()))
-        | Autoscaler.Underloaded (clone_to_kill, scaler) ->
+        | Autoscaler.Underloaded (clone_to_kill, scaler) -> (
             Log.info (fun m ->
                 m "[%s/%s]: underloaded (%d%%), pruning: %s"
                   (Configuration.name_to_str user_name)
                   (Configuration.name_to_str unikernel_key)
                   scaler.last_cpu_usage
                   (Configuration.name_to_str clone_to_kill));
-            (match
-               Autoscaler.Cluster_manager.remove_clone group clone_to_kill
-             with
+            match
+              Autoscaler.Cluster_manager.remove_clone group clone_to_kill
+            with
             | Error e ->
                 Log.info (fun m ->
                     m "Error removing clone %s: %s"
                       (Configuration.name_to_str clone_to_kill)
-                      e)
+                      e);
+                Lwt.return_error e
             | Ok post_prune_group ->
-                put_group user_name unikernel_key post_prune_group);
-            prune_clone stack albatross clone_to_kill user)
+                (* TODO: remove clone's ip address from load balancer *)
+                put_group user_name unikernel_key post_prune_group;
+                prune_clone stack albatross clone_to_kill user_name))
 
   let handle_stats stack state ((rusage, _, _, _) : Vmm_core.Stats.t) name store
       =
@@ -3228,7 +3222,7 @@ struct
                       put_group user.name primary_name updated_group;
                       if Vmm_core.Name.Label.equal unikernel_name primary_name
                       then
-                        evaluate_scaling updated_group now user.name
+                        evaluate_scaling stack state updated_group now user.name
                           primary_name
                       else Lwt.return_ok ())
                 else Lwt.return (Ok ()))
