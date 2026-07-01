@@ -3017,7 +3017,7 @@ struct
       Autoscaler.Cluster_manager.group Label_map.t Label_map.t ref =
     ref Label_map.empty
 
-  module Autoscaler_Log = (val Logs.src_log Autoscaler.a_logs : Logs.LOG)
+  module Log = (val Logs.src_log Autoscaler.a_logs : Logs.LOG)
 
   let put_group (user_name : Vmm_core.Name.Label.t)
       (unikernel_key : Vmm_core.Name.Label.t) group =
@@ -3043,21 +3043,21 @@ struct
         match status with
         | Autoscaler.Normal _scaler -> Lwt.return_ok ()
         | Autoscaler.Pending (`Spawn, ticks, scaler) ->
-            Autoscaler_Log.info (fun m ->
+            Log.info (fun m ->
                 m "%s/%s: high usage (%d%%), [ticks: %d/%d]"
                   (Configuration.name_to_str user_name)
                   (Configuration.name_to_str unikernel_key)
                   scaler.last_cpu_usage ticks Autoscaler.scale_up_trigger_ticks);
             Lwt.return_ok ()
         | Autoscaler.Cooldown scaler ->
-            Autoscaler_Log.info (fun m ->
+            Log.info (fun m ->
                 m "%s/%s: cooldown (usage: %d%%)"
                   (Configuration.name_to_str user_name)
                   (Configuration.name_to_str unikernel_key)
                   scaler.last_cpu_usage);
             Lwt.return_ok ()
         | Autoscaler.Pending (`Prune, ticks, scaler) ->
-            Autoscaler_Log.info (fun m ->
+            Log.info (fun m ->
                 m "%s/%s: low usage (%d%%), [ticks: %d/%d]"
                   (Configuration.name_to_str user_name)
                   (Configuration.name_to_str unikernel_key)
@@ -3083,7 +3083,7 @@ struct
                        1) Deploy new clone with name next_name
                        2) Add new clone to load balancer pool
                     *)
-                    Autoscaler_Log.info (fun m ->
+                    Log.info (fun m ->
                         m "%s/%s: overloaded (%d%%), spawning new clone: %s"
                           (Configuration.name_to_str user_name)
                           (Configuration.name_to_str unikernel_key)
@@ -3091,7 +3091,7 @@ struct
                           (Configuration.name_to_str next_name));
                     Lwt.return_ok ()))
         | Autoscaler.Underloaded (clone_to_kill, scaler) ->
-            Autoscaler_Log.info (fun m ->
+            Log.info (fun m ->
                 m "[%s/%s]: underloaded (%d%%), pruning: %s"
                   (Configuration.name_to_str user_name)
                   (Configuration.name_to_str unikernel_key)
@@ -3101,7 +3101,7 @@ struct
                Autoscaler.Cluster_manager.remove_clone group clone_to_kill
              with
             | Error e ->
-                Autoscaler_Log.info (fun m ->
+                Log.info (fun m ->
                     m "Error removing clone %s: %s"
                       (Configuration.name_to_str clone_to_kill)
                       e)
@@ -3140,7 +3140,7 @@ struct
                     user.scaling_policies
                 in
                 if is_scaling_enabled then (
-                  Autoscaler_Log.debug (fun m ->
+                  Log.debug (fun m ->
                       m "[Stats] Received stats for %s as %a"
                         (Configuration.name_to_str unikernel_name)
                         Vmm_core.Stats.pp_rusage rusage);
@@ -3180,7 +3180,7 @@ struct
                       with
                       | Ok updated_g -> updated_g
                       | Error err ->
-                          Autoscaler_Log.err (fun m ->
+                          Log.err (fun m ->
                               m "Error registering clone %s: %s"
                                 (Configuration.name_to_str unikernel_name)
                                 err);
@@ -3214,7 +3214,7 @@ struct
           handle_stats instance st name store >>= function
           | Ok () -> Lwt.return_unit
           | Error err ->
-              Autoscaler_Log.err (fun m ->
+              Log.err (fun m ->
                   m "Error handling stats for %s: %s"
                     (Vmm_core.Name.to_string name)
                     err);
@@ -3343,20 +3343,26 @@ struct
       let rec stream_loop () =
         Lwt.catch
           (fun () ->
-            unikernels_stats stack instance store >>= function
-            | Ok () -> Mirage_sleep.ns (Duration.of_sec 10) >>= stream_loop
-            | Error err ->
-                Autoscaler_Log.err (fun m ->
-                    m "Stats stream for %s failed: %s"
-                      (Configuration.name_to_str instance.configuration.name)
-                      err);
-                Lwt.return_unit)
-          (fun exn ->
-            Autoscaler_Log.err (fun m ->
+            unikernels_stats stack instance store >>= fun res ->
+            Lwt.return (Ok res))
+          (fun exn -> Lwt.return (Error exn))
+        >>= function
+        | Ok (Ok ()) ->
+            Mirage_sleep.ns (Duration.of_sec 10) >>= fun () ->
+            (stream_loop [@tailcall]) ()
+        | Ok (Error err) ->
+            Log.err (fun m ->
+                m "Stats stream for %s failed: %s"
+                  (Configuration.name_to_str instance.configuration.name)
+                  err);
+            Lwt.return_unit
+        | Error exn ->
+            Log.err (fun m ->
                 m "Exception in stats stream for %s: %s. Retrying in 10s..."
                   (Configuration.name_to_str instance.configuration.name)
                   (Printexc.to_string exn));
-            Lwt.return_unit)
+            Mirage_sleep.ns (Duration.of_sec 10) >>= fun () ->
+            (stream_loop [@tailcall]) ()
       in
       stream_loop ()
     in
@@ -3369,7 +3375,7 @@ struct
         (fun instance_name instance ->
           let key = Configuration.name_to_str instance_name in
           if not (Map.mem key !active_streams) then (
-            Autoscaler_Log.debug (fun m ->
+            Log.debug (fun m ->
                 m "Spawning new stats stream for albatross instance %s" key);
             let p = spawn_stats_stream instance in
             active_streams := Map.add key p !active_streams))
