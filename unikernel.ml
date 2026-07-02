@@ -3019,48 +3019,94 @@ struct
 
   module Log = (val Logs.src_log Autoscaler.a_logs : Logs.LOG)
 
-  let put_group (user_name : Vmm_core.Name.Label.t)
-      (unikernel_key : Vmm_core.Name.Label.t) group =
+  let put_group ~(user_name : Vmm_core.Name.Label.t)
+      ~(unikernel_name : Vmm_core.Name.Label.t) group =
     let unikernel_map =
       Option.value ~default:Label_map.empty
         (Label_map.find_opt user_name !scaling_groups)
     in
     scaling_groups :=
       Label_map.add user_name
-        (Label_map.add unikernel_key group unikernel_map)
+        (Label_map.add unikernel_name group unikernel_map)
         !scaling_groups
 
-  let evaluate_scaling group now user_name unikernel_key =
+  let prune_clone stack albatross group ~unikernel_name ~clone_to_kill
+      ~user_name =
+    Albatross_state.query stack albatross ~domain:user_name ~name:clone_to_kill
+      (`Unikernel_cmd `Unikernel_destroy)
+    >>= function
+    | Error err ->
+        Log.err (fun m ->
+            m "Error pruning unikernel %s: %s"
+              (Configuration.name_to_str clone_to_kill)
+              err);
+        Lwt.return_error err
+    | Ok (_hdr, res) -> (
+        Albatross.set_online albatross;
+        match Albatross_json.res res with
+        | Ok _res -> (
+            (* We perform remove_clone and put_group here *after* successfully pruning
+               to avoid a race condition where late stats re-register a dying clone. *)
+            match
+              Autoscaler.Cluster_manager.remove_clone group clone_to_kill
+            with
+            | Error e ->
+                Log.err (fun m ->
+                    m "Error removing clone %s: %s"
+                      (Configuration.name_to_str clone_to_kill)
+                      e);
+                Lwt.return_error e
+            | Ok post_prune_group ->
+                Log.debug (fun m ->
+                    m "Succesfully pruned %s"
+                      (Configuration.name_to_str clone_to_kill));
+
+                (* TODO: remove clone's ip address from load balancer *)
+
+                (* calling put_group here with post_prune_group means we pass back 
+                   the groups state when prune_clone was called even though new metrics
+                   may have been received and registered. however, the data will correct itself 
+                   when the next stats get received after put_group is done. *)
+                put_group ~user_name ~unikernel_name post_prune_group;
+                Lwt.return_ok ())
+        | Error (`String err) ->
+            Log.err (fun m ->
+                m "Error pruning unikernel %s: %s"
+                  (Configuration.name_to_str clone_to_kill)
+                  err);
+            Lwt.return_error err)
+
+  let evaluate_scaling stack albatross group now ~user_name ~unikernel_name =
     match Autoscaler.Cluster_manager.evaluate_scaling group now with
     | Error err ->
         Lwt.return_error
           (Fmt.str "Error evaluating scaling for cluster %s/%s: %s"
              (Configuration.name_to_str user_name)
-             (Configuration.name_to_str unikernel_key)
+             (Configuration.name_to_str unikernel_name)
              err)
     | Ok (status, group) -> (
-        put_group user_name unikernel_key group;
+        put_group ~user_name ~unikernel_name group;
         match status with
         | Autoscaler.Normal _scaler -> Lwt.return_ok ()
         | Autoscaler.Pending (`Spawn, ticks, scaler) ->
             Log.info (fun m ->
                 m "%s/%s: high usage (%d%%), [ticks: %d/%d]"
                   (Configuration.name_to_str user_name)
-                  (Configuration.name_to_str unikernel_key)
+                  (Configuration.name_to_str unikernel_name)
                   scaler.last_cpu_usage ticks Autoscaler.scale_up_trigger_ticks);
             Lwt.return_ok ()
         | Autoscaler.Cooldown scaler ->
             Log.info (fun m ->
                 m "%s/%s: cooldown (usage: %d%%)"
                   (Configuration.name_to_str user_name)
-                  (Configuration.name_to_str unikernel_key)
+                  (Configuration.name_to_str unikernel_name)
                   scaler.last_cpu_usage);
             Lwt.return_ok ()
         | Autoscaler.Pending (`Prune, ticks, scaler) ->
             Log.info (fun m ->
                 m "%s/%s: low usage (%d%%), [ticks: %d/%d]"
                   (Configuration.name_to_str user_name)
-                  (Configuration.name_to_str unikernel_key)
+                  (Configuration.name_to_str unikernel_name)
                   scaler.last_cpu_usage ticks
                   Autoscaler.scale_down_trigger_ticks);
             Lwt.return_ok ()
@@ -3078,7 +3124,7 @@ struct
                          (Configuration.name_to_str next_name)
                          e)
                 | Ok spawn_group ->
-                    put_group user_name unikernel_key spawn_group;
+                    put_group ~user_name ~unikernel_name spawn_group;
                     (* TODO
                        1) Deploy new clone with name next_name
                        2) Add new clone to load balancer pool
@@ -3086,7 +3132,7 @@ struct
                     Log.info (fun m ->
                         m "%s/%s: overloaded (%d%%), spawning new clone: %s"
                           (Configuration.name_to_str user_name)
-                          (Configuration.name_to_str unikernel_key)
+                          (Configuration.name_to_str unikernel_name)
                           scaler.last_cpu_usage
                           (Configuration.name_to_str next_name));
                     Lwt.return_ok ()))
@@ -3094,27 +3140,14 @@ struct
             Log.info (fun m ->
                 m "[%s/%s]: underloaded (%d%%), pruning: %s"
                   (Configuration.name_to_str user_name)
-                  (Configuration.name_to_str unikernel_key)
+                  (Configuration.name_to_str unikernel_name)
                   scaler.last_cpu_usage
                   (Configuration.name_to_str clone_to_kill));
-            (match
-               Autoscaler.Cluster_manager.remove_clone group clone_to_kill
-             with
-            | Error e ->
-                Log.info (fun m ->
-                    m "Error removing clone %s: %s"
-                      (Configuration.name_to_str clone_to_kill)
-                      e)
-            | Ok post_prune_group ->
-                put_group user_name unikernel_key post_prune_group);
-            (* TODO
-               1) Remove clone from load balancer pool
-               2) Remove clone from group
-               3) Destroy clone
-            *)
-            Lwt.return_ok ())
+            prune_clone stack albatross group ~unikernel_name ~clone_to_kill
+              ~user_name)
 
-  let handle_stats state ((rusage, _, _, _) : Vmm_core.Stats.t) name store =
+  let handle_stats stack state ((rusage, _, _, _) : Vmm_core.Stats.t) name store
+      =
     match Vmm_core.Name.name name with
     | None -> Lwt.return_error "VM name has no unikernel label"
     | Some label -> (
@@ -3197,11 +3230,12 @@ struct
                            (Configuration.name_to_str unikernel_name)
                            err)
                   | Ok (_, updated_group) ->
-                      put_group user.name primary_name updated_group;
+                      put_group ~user_name:user.name
+                        ~unikernel_name:primary_name updated_group;
                       if Vmm_core.Name.Label.equal unikernel_name primary_name
                       then
-                        evaluate_scaling updated_group now user.name
-                          primary_name
+                        evaluate_scaling stack state updated_group now
+                          ~user_name:user.name ~unikernel_name:primary_name
                       else Lwt.return_ok ())
                 else Lwt.return (Ok ()))
         | _ ->
@@ -3211,7 +3245,7 @@ struct
   let unikernels_stats stack instance store =
     let cb name st =
       Lwt.async (fun () ->
-          handle_stats instance st name store >>= function
+          handle_stats stack instance st name store >>= function
           | Ok () -> Lwt.return_unit
           | Error err ->
               Log.err (fun m ->
