@@ -3036,7 +3036,7 @@ struct
       (`Unikernel_cmd `Unikernel_destroy)
     >>= function
     | Error err ->
-        Logs.info ~src:Autoscaler.a_logs (fun m ->
+        Log.err (fun m ->
             m "Error pruning unikernel %s: %s"
               (Configuration.name_to_str clone_to_kill)
               err);
@@ -3045,22 +3045,22 @@ struct
         Albatross.set_online albatross;
         match Albatross_json.res res with
         | Ok _res -> (
-            Logs.debug ~src:Autoscaler.a_logs (fun m ->
-                m "Succesfully pruned %s"
-                  (Configuration.name_to_str clone_to_kill));
-
             (* We perform remove_clone and put_group here *after* successfully pruning
                to avoid a race condition where late stats re-register a dying clone. *)
             match
               Autoscaler.Cluster_manager.remove_clone group clone_to_kill
             with
             | Error e ->
-                Logs.info ~src:Autoscaler.a_logs (fun m ->
+                Log.err (fun m ->
                     m "Error removing clone %s: %s"
                       (Configuration.name_to_str clone_to_kill)
                       e);
                 Lwt.return_error e
             | Ok post_prune_group ->
+                Log.debug (fun m ->
+                    m "Succesfully pruned %s"
+                      (Configuration.name_to_str clone_to_kill));
+
                 (* TODO: remove clone's ip address from load balancer *)
 
                 (* calling put_group here with post_prune_group means we pass back 
@@ -3070,7 +3070,7 @@ struct
                 put_group ~user_name ~unikernel_key post_prune_group;
                 Lwt.return_ok ())
         | Error (`String err) ->
-            Logs.info ~src:Autoscaler.a_logs (fun m ->
+            Log.err (fun m ->
                 m "Error pruning unikernel %s: %s"
                   (Configuration.name_to_str clone_to_kill)
                   err);
