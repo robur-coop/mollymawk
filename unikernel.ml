@@ -3020,18 +3020,18 @@ struct
   module Log = (val Logs.src_log Autoscaler.a_logs : Logs.LOG)
 
   let put_group ~(user_name : Vmm_core.Name.Label.t)
-      ~(unikernel_key : Vmm_core.Name.Label.t) group =
+      ~(unikernel_name : Vmm_core.Name.Label.t) group =
     let unikernel_map =
       Option.value ~default:Label_map.empty
         (Label_map.find_opt user_name !scaling_groups)
     in
     scaling_groups :=
       Label_map.add user_name
-        (Label_map.add unikernel_key group unikernel_map)
+        (Label_map.add unikernel_name group unikernel_map)
         !scaling_groups
 
-  let prune_clone stack albatross group ~unikernel_key ~clone_to_kill ~user_name
-      =
+  let prune_clone stack albatross group ~unikernel_name ~clone_to_kill
+      ~user_name =
     Albatross_state.query stack albatross ~domain:user_name ~name:clone_to_kill
       (`Unikernel_cmd `Unikernel_destroy)
     >>= function
@@ -3067,7 +3067,7 @@ struct
                    the groups state when prune_clone was called even though new metrics
                    may have been received and registered. however, the data will correct itself 
                    when the next stats get received after put_group is done. *)
-                put_group ~user_name ~unikernel_key post_prune_group;
+                put_group ~user_name ~unikernel_name post_prune_group;
                 Lwt.return_ok ())
         | Error (`String err) ->
             Log.err (fun m ->
@@ -3076,37 +3076,37 @@ struct
                   err);
             Lwt.return_error err)
 
-  let evaluate_scaling stack albatross group now ~user_name ~unikernel_key =
+  let evaluate_scaling stack albatross group now ~user_name ~unikernel_name =
     match Autoscaler.Cluster_manager.evaluate_scaling group now with
     | Error err ->
         Lwt.return_error
           (Fmt.str "Error evaluating scaling for cluster %s/%s: %s"
              (Configuration.name_to_str user_name)
-             (Configuration.name_to_str unikernel_key)
+             (Configuration.name_to_str unikernel_name)
              err)
     | Ok (status, group) -> (
-        put_group ~user_name ~unikernel_key group;
+        put_group ~user_name ~unikernel_name group;
         match status with
         | Autoscaler.Normal _scaler -> Lwt.return_ok ()
         | Autoscaler.Pending (`Spawn, ticks, scaler) ->
             Log.info (fun m ->
                 m "%s/%s: high usage (%d%%), [ticks: %d/%d]"
                   (Configuration.name_to_str user_name)
-                  (Configuration.name_to_str unikernel_key)
+                  (Configuration.name_to_str unikernel_name)
                   scaler.last_cpu_usage ticks Autoscaler.scale_up_trigger_ticks);
             Lwt.return_ok ()
         | Autoscaler.Cooldown scaler ->
             Log.info (fun m ->
                 m "%s/%s: cooldown (usage: %d%%)"
                   (Configuration.name_to_str user_name)
-                  (Configuration.name_to_str unikernel_key)
+                  (Configuration.name_to_str unikernel_name)
                   scaler.last_cpu_usage);
             Lwt.return_ok ()
         | Autoscaler.Pending (`Prune, ticks, scaler) ->
             Log.info (fun m ->
                 m "%s/%s: low usage (%d%%), [ticks: %d/%d]"
                   (Configuration.name_to_str user_name)
-                  (Configuration.name_to_str unikernel_key)
+                  (Configuration.name_to_str unikernel_name)
                   scaler.last_cpu_usage ticks
                   Autoscaler.scale_down_trigger_ticks);
             Lwt.return_ok ()
@@ -3124,7 +3124,7 @@ struct
                          (Configuration.name_to_str next_name)
                          e)
                 | Ok spawn_group ->
-                    put_group ~user_name ~unikernel_key spawn_group;
+                    put_group ~user_name ~unikernel_name spawn_group;
                     (* TODO
                        1) Deploy new clone with name next_name
                        2) Add new clone to load balancer pool
@@ -3132,7 +3132,7 @@ struct
                     Log.info (fun m ->
                         m "%s/%s: overloaded (%d%%), spawning new clone: %s"
                           (Configuration.name_to_str user_name)
-                          (Configuration.name_to_str unikernel_key)
+                          (Configuration.name_to_str unikernel_name)
                           scaler.last_cpu_usage
                           (Configuration.name_to_str next_name));
                     Lwt.return_ok ()))
@@ -3140,10 +3140,10 @@ struct
             Log.info (fun m ->
                 m "[%s/%s]: underloaded (%d%%), pruning: %s"
                   (Configuration.name_to_str user_name)
-                  (Configuration.name_to_str unikernel_key)
+                  (Configuration.name_to_str unikernel_name)
                   scaler.last_cpu_usage
                   (Configuration.name_to_str clone_to_kill));
-            prune_clone stack albatross group ~unikernel_key ~clone_to_kill
+            prune_clone stack albatross group ~unikernel_name ~clone_to_kill
               ~user_name)
 
   let handle_stats stack state ((rusage, _, _, _) : Vmm_core.Stats.t) name store
@@ -3230,12 +3230,12 @@ struct
                            (Configuration.name_to_str unikernel_name)
                            err)
                   | Ok (_, updated_group) ->
-                      put_group ~user_name:user.name ~unikernel_key:primary_name
-                        updated_group;
+                      put_group ~user_name:user.name
+                        ~unikernel_name:primary_name updated_group;
                       if Vmm_core.Name.Label.equal unikernel_name primary_name
                       then
                         evaluate_scaling stack state updated_group now
-                          ~user_name:user.name ~unikernel_key:primary_name
+                          ~user_name:user.name ~unikernel_name:primary_name
                       else Lwt.return_ok ())
                 else Lwt.return (Ok ()))
         | _ ->
