@@ -263,19 +263,31 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               m "albatross buffer too small: %u bytes, requires %u bytes"
                 (String.length data - 4 - off)
                 len);
-          acc)
-      else if String.length data = off then acc
+          (acc, None))
+      else if String.length data = off then (acc, None)
       else (
         Logs.warn (fun m ->
             m "albatross buffer too small: %u bytes leftover"
               (String.length data - off));
-        acc)
+        (acc, None))
     in
-    split [] data 0 |> List.rev
+    split [] data 0 |> fun (acc, left) -> (List.rev acc, left)
 
-  let rec continue_reading name f d flow =
+  let split_many_with_leftover data =
+    let rec split acc data off =
+      if String.length data - off >= 4 then
+        let len = Int32.to_int (String.get_int32_be data off) in
+        if String.length data - off >= 4 + len then
+          split (String.sub data (4 + off) len :: acc) data (off + len + 4)
+        else (acc, Some (String.sub data off (String.length data - off)))
+      else if String.length data = off then (acc, None)
+      else (acc, Some (String.sub data off (String.length data - off)))
+    in
+    split [] data 0
+
+  let rec continue_reading name f ?(split = split_many) d flow =
     let open Lwt.Infix in
-    let bufs = split_many d in
+    let bufs, left_over = split d in
     let r =
       List.fold_left
         (fun acc d ->
@@ -287,7 +299,13 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     | Ok () -> (
         TLS.read flow >>= fun r ->
         match r with
-        | Ok (`Data d) -> continue_reading name f (Cstruct.to_string d) flow
+        | Ok (`Data d) -> (
+            match left_over with
+            | None -> continue_reading name f (Cstruct.to_string d) flow
+            | Some left_over_string ->
+                continue_reading name f ~split:split_many_with_leftover
+                  (left_over_string ^ Cstruct.to_string d)
+                  flow)
         | Ok `Eof ->
             Logs.info (fun m ->
                 m "albatross received eof while reading stream %a"
@@ -372,7 +390,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               m "albatross stop reading unikernel binary %a: error %s"
                 Vmm_core.Name.pp name s);
           Error ()
-      | Ok (hdr, `Success (`Unikernel_image (_compressed, data))) -> f data
+      | Ok (hdr, `Success (`Unikernel_image (_compressed, data))) ->
+          let _ = f data in
+          Error ()
       | Ok w ->
           Logs.warn (fun m ->
               m "albatross unexpected reply, need unikernel binary, got %a"
@@ -380,7 +400,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 w);
           Ok ()
     in
-    continue_reading name dec d tls_flow
+    continue_reading ~split:split_many_with_leftover name dec d tls_flow
 
   let raw_query (stack : S.t) t ?(name = Vmm_core.Name.root) certificates cmd
       ?push f =
