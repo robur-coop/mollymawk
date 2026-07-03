@@ -3126,17 +3126,7 @@ struct
                         ~unikernel_name:clone_name ~push config user
                       >>= function
                       | Error (`Msg err, _status) -> Lwt.return_error err
-                      | Ok () -> (
-                          Lwt.return_ok () >>= function
-                          | Error err ->
-                              Log.err (fun m ->
-                                  m
-                                    "spawn_clone: Error getting binary for %s: \
-                                     %s"
-                                    (Configuration.name_to_str unikernel_name)
-                                    err);
-                              Lwt.return_error err
-                          | Ok () -> Lwt.return_ok ()))
+                      | Ok () -> Lwt.return_ok ())
                   | Ok w ->
                       Logs.err (fun m ->
                           m "albatross returned: %a"
