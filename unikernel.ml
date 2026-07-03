@@ -3418,6 +3418,70 @@ struct
     in
     Lwt.async loop
 
+  let run_prune_dead_clusters stack albatross_instances =
+    let rec loop () =
+      Log.debug (fun m ->
+          m "Pruning dead clusters in %a" Ptime.Span.pp Autoscaler.death_timeout);
+      let sleep_ns =
+        Duration.of_sec
+          (Option.value ~default:600
+             (Ptime.Span.to_int_s Autoscaler.death_timeout))
+      in
+      Lwt.choose
+        [
+          Mirage_sleep.ns sleep_ns;
+          ( Lwt.catch
+              (fun () ->
+                Log.debug (fun m -> m "Starting background pruning...");
+                Label_map.bindings !scaling_groups
+                |> Lwt_list.iter_p (fun (user_name, unikernel_map) ->
+                    user_unikernels stack albatross_instances user_name
+                    >|= fun results ->
+                    let active_vm_names =
+                      List.fold_left
+                        (fun acc (_instance_name, vms) ->
+                          let names =
+                            List.filter_map
+                              (fun (name, _info) -> Vmm_core.Name.name name)
+                              vms
+                          in
+                          acc @ names)
+                        [] results
+                    in
+                    Label_map.iter
+                      (fun unikernel_key group ->
+                        match
+                          Autoscaler.Cluster_manager.sync_group group
+                            active_vm_names
+                        with
+                        | Ok updated_group ->
+                            put_group user_name unikernel_key updated_group
+                        | Error `Primary_dead ->
+                            Log.warn (fun m ->
+                                m "Primary dead for %s/%s. Removing cluster."
+                                  (Configuration.name_to_str user_name)
+                                  (Configuration.name_to_str unikernel_key));
+                            let updated_unikernel_map =
+                              Label_map.remove unikernel_key unikernel_map
+                            in
+                            if Label_map.is_empty updated_unikernel_map then
+                              scaling_groups :=
+                                Label_map.remove user_name !scaling_groups
+                            else
+                              scaling_groups :=
+                                Label_map.add user_name updated_unikernel_map
+                                  !scaling_groups)
+                      unikernel_map))
+              (fun exn ->
+                Log.err (fun m ->
+                    m "Background pruning failed: %s" (Printexc.to_string exn));
+                Lwt.return_unit)
+          >>= fun () -> Mirage_sleep.ns sleep_ns );
+        ]
+      >>= fun () -> loop ()
+    in
+    Lwt.async loop
+
   let request_handler stack management_happy_eyeballs management_domain
       albatross_instances js_file css_file imgs grafana_file store http_client
       happy_eyeballs flow (_ipaddr, _port) reqd =
@@ -3861,5 +3925,6 @@ struct
         start_background_scheduler happy_eyeballs stack store
           albatross_instances http_client;
         start_background_scaler_scheduler stack store albatross_instances;
+        run_prune_dead_clusters stack !albatross_instances;
         th
 end
