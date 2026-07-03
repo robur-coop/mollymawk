@@ -3086,28 +3086,38 @@ struct
               least_used_cpuid stack albatross user_name >>= function
               | Error err -> Lwt.return_error err
               | Ok cpuid -> (
-                  let config : Vmm_core.Unikernel.config =
-                    {
-                      typ = unikernel.typ;
-                      fail_behaviour = unikernel.fail_behaviour;
-                      startup = unikernel.startup;
-                      memory = unikernel.memory;
-                      block_devices = [];
-                      add_name = true;
-                      bridges;
-                      (* we assume for unikernels which are scaled, their ip is configured via DNSvizor *)
-                      argv;
-                      numcpus = unikernel.numcpus;
-                      linux_boot_partition = unikernel.linux_boot_partition;
-                      compressed = false;
-                      image = "";
-                      cpuids = Vmm_core.IS.singleton cpuid;
-                    }
-                  in
-                  Albatross_state.query_unikernel_get stack albatross
-                    ~domain:user_name ~name:unikernel_name
-                    (fun (compressed, binary_string) ->
-                      let config = { config with compressed } in
+                  Albatross_state.query stack albatross ~domain:user_name
+                    ~name:unikernel_name
+                    (`Unikernel_cmd (`Unikernel_get 4))
+                  >>= function
+                  | Error err ->
+                      Log.err (fun m ->
+                          m "Error getting binary for %s: %s"
+                            (Configuration.name_to_str unikernel_name)
+                            err);
+                      Lwt.return_error err
+                  | Ok
+                      ( _hdr,
+                        `Success (`Unikernel_image (compressed, binary_string))
+                      ) -> (
+                      let config : Vmm_core.Unikernel.config =
+                        {
+                          typ = unikernel.typ;
+                          fail_behaviour = unikernel.fail_behaviour;
+                          startup = unikernel.startup;
+                          memory = unikernel.memory;
+                          block_devices = [];
+                          add_name = true;
+                          bridges;
+                          (* we assume for unikernels which are scaled, their ip is configured via DNSvizor *)
+                          argv;
+                          numcpus = unikernel.numcpus;
+                          linux_boot_partition = unikernel.linux_boot_partition;
+                          compressed;
+                          image = binary_string;
+                          cpuids = Vmm_core.IS.singleton cpuid;
+                        }
+                      in
                       let data_stream, push_chunks = Lwt_stream.create () in
                       let push () = Lwt_stream.get data_stream in
                       push_chunks (Some binary_string);
@@ -3116,15 +3126,26 @@ struct
                         ~unikernel_name:clone_name ~push config user
                       >>= function
                       | Error (`Msg err, _status) -> Lwt.return_error err
-                      | Ok () -> Lwt.return_ok ())
-                  >>= function
-                  | Error err ->
-                      Log.err (fun m ->
-                          m "spawn_clone: Error getting binary for %s: %s"
-                            (Configuration.name_to_str unikernel_name)
-                            err);
-                      Lwt.return_error err
-                  | Ok () -> Lwt.return_ok ())))
+                      | Ok () -> (
+                          Lwt.return_ok () >>= function
+                          | Error err ->
+                              Log.err (fun m ->
+                                  m
+                                    "spawn_clone: Error getting binary for %s: \
+                                     %s"
+                                    (Configuration.name_to_str unikernel_name)
+                                    err);
+                              Lwt.return_error err
+                          | Ok () -> Lwt.return_ok ()))
+                  | Ok w ->
+                      Logs.err (fun m ->
+                          m "albatross returned: %a"
+                            (Vmm_commands.pp_wire ~verbose:true)
+                            w);
+                      Lwt.return_error
+                        (Fmt.str "Expected unikernel binary, but got %a"
+                           (Vmm_commands.pp_wire ~verbose:false)
+                           w))))
 
   let prune_clone stack albatross group ~unikernel_name ~clone_to_kill
       ~user_name =
