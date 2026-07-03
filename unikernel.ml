@@ -3075,14 +3075,6 @@ struct
                      -> (unikernel_device, Some host_device, None))
                   unikernel.bridges
               in
-              let argv =
-                let name_arg =
-                  "--name=" ^ Configuration.name_to_str unikernel_name
-                in
-                match unikernel.argv with
-                | None -> Some [ name_arg ]
-                | Some args -> Some (name_arg :: args)
-              in
               least_used_cpuid stack albatross user_name >>= function
               | Error err -> Lwt.return_error err
               | Ok cpuid -> (
@@ -3110,7 +3102,7 @@ struct
                           add_name = true;
                           bridges;
                           (* we assume for unikernels which are scaled, their ip is configured via DNSvizor *)
-                          argv;
+                          argv = unikernel.argv;
                           numcpus = unikernel.numcpus;
                           linux_boot_partition = unikernel.linux_boot_partition;
                           compressed;
