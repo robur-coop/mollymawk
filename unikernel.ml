@@ -3101,7 +3101,9 @@ struct
                   let push () = Lwt_stream.get data_stream in
                   Albatross_state.query_unikernel_binary stack albatross
                     ~domain:user_name ~name:unikernel_name (fun binary_string ->
-                      Ok (push_chunks (Some binary_string)))
+                      push_chunks (Some binary_string);
+                      push_chunks None;
+                      Ok ())
                   >>= function
                   | Error err ->
                       put_group ~user_name ~unikernel_name
@@ -3127,11 +3129,19 @@ struct
                           | Error e ->
                               (* this is fine because on the next cycle, when stats are received with the clone name, 
                             it will correct itself and be added to the group. we should cancel the cooldown here.*)
+                              Log.err (fun m ->
+                                  m "Error registering clone %s: %s"
+                                    (Configuration.name_to_str clone_name)
+                                    e);
                               Lwt.return_error
                                 (Fmt.str "Error registering clone %s: %s"
                                    (Configuration.name_to_str clone_name)
                                    e)
                           | Ok spawn_group ->
+                              Log.debug (fun m ->
+                                  m "Successfully cloned %s to %s"
+                                    (Configuration.name_to_str unikernel_name)
+                                    (Configuration.name_to_str clone_name));
                               (* TODO Add new clone to load balancer pool *)
                               put_group ~user_name ~unikernel_name spawn_group;
                               Lwt.return_ok ())))))
