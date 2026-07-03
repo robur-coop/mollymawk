@@ -3079,9 +3079,29 @@ struct
               least_used_cpuid stack albatross user_name >>= function
               | Error err -> Lwt.return_error err
               | Ok cpuid -> (
-                  Albatross_state.query stack albatross ~domain:user_name
-                    ~name:unikernel_name
-                    (`Unikernel_cmd (`Unikernel_get 4))
+                  let config : Vmm_core.Unikernel.config =
+                    {
+                      typ = unikernel.typ;
+                      fail_behaviour = unikernel.fail_behaviour;
+                      startup = unikernel.startup;
+                      memory = unikernel.memory;
+                      block_devices = [];
+                      add_name = true;
+                      bridges;
+                      (* we assume for unikernels which are scaled, their ip is configured via DNSvizor *)
+                      argv = unikernel.argv;
+                      numcpus = unikernel.numcpus;
+                      linux_boot_partition = unikernel.linux_boot_partition;
+                      compressed = true;
+                      image = "";
+                      cpuids = Vmm_core.IS.singleton cpuid;
+                    }
+                  in
+                  let data_stream, push_chunks = Lwt_stream.create () in
+                  let push () = Lwt_stream.get data_stream in
+                  Albatross_state.query_unikernel_binary stack albatross
+                    ~domain:user_name ~name:unikernel_name (fun binary_string ->
+                      Ok (push_chunks (Some binary_string)))
                   >>= function
                   | Error err ->
                       put_group ~user_name ~unikernel_name
@@ -3091,32 +3111,7 @@ struct
                             (Configuration.name_to_str unikernel_name)
                             err);
                       Lwt.return_error err
-                  | Ok
-                      ( _hdr,
-                        `Success (`Unikernel_image (compressed, binary_string))
-                      ) -> (
-                      let config : Vmm_core.Unikernel.config =
-                        {
-                          typ = unikernel.typ;
-                          fail_behaviour = unikernel.fail_behaviour;
-                          startup = unikernel.startup;
-                          memory = unikernel.memory;
-                          block_devices = [];
-                          add_name = true;
-                          bridges;
-                          (* we assume for unikernels which are scaled, their ip is configured via DNSvizor *)
-                          argv = unikernel.argv;
-                          numcpus = unikernel.numcpus;
-                          linux_boot_partition = unikernel.linux_boot_partition;
-                          compressed;
-                          image = binary_string;
-                          cpuids = Vmm_core.IS.singleton cpuid;
-                        }
-                      in
-                      let data_stream, push_chunks = Lwt_stream.create () in
-                      let push () = Lwt_stream.get data_stream in
-                      push_chunks (Some binary_string);
-                      push_chunks None;
+                  | Ok () -> (
                       force_create_unikernel stack albatross
                         ~unikernel_name:clone_name ~push config user
                       >>= function
@@ -3139,16 +3134,7 @@ struct
                           | Ok spawn_group ->
                               (* TODO Add new clone to load balancer pool *)
                               put_group ~user_name ~unikernel_name spawn_group;
-                              Lwt.return_ok ()))
-                  | Ok w ->
-                      Logs.err (fun m ->
-                          m "albatross returned: %a"
-                            (Vmm_commands.pp_wire ~verbose:true)
-                            w);
-                      Lwt.return_error
-                        (Fmt.str "Expected unikernel binary, but got %a"
-                           (Vmm_commands.pp_wire ~verbose:false)
-                           w))))
+                              Lwt.return_ok ())))))
 
   let prune_clone stack albatross group ~unikernel_name ~clone_to_kill
       ~user_name =

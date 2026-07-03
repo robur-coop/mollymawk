@@ -365,6 +365,23 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     in
     continue_reading name dec d tls_flow
 
+  let get_unikernel_binary name f tls_flow d =
+    let dec = function
+      | Error s ->
+          Logs.err (fun m ->
+              m "albatross stop reading unikernel binary %a: error %s"
+                Vmm_core.Name.pp name s);
+          Error ()
+      | Ok (hdr, `Success (`Unikernel_image (_compressed, data))) -> f data
+      | Ok w ->
+          Logs.warn (fun m ->
+              m "albatross unexpected reply, need unikernel binary, got %a"
+                (Vmm_commands.pp_wire ~verbose:false)
+                w);
+          Ok ()
+    in
+    continue_reading name dec d tls_flow
+
   let raw_query (stack : S.t) t ?(name = Vmm_core.Name.root) certificates cmd
       ?push f =
     let open Lwt.Infix in
@@ -613,6 +630,14 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     | Ok (vmm_name, certificates) ->
         raw_query stack t ~name:vmm_name certificates cmd
           (block_data vmm_name f)
+
+  let query_unikernel_binary stack t ~domain ~name f =
+    let cmd = `Unikernel_cmd (`Unikernel_get 4) in
+    match certs t domain name cmd with
+    | Error str -> Lwt.return (Error str)
+    | Ok (vmm_name, certificates) ->
+        raw_query stack t ~name:vmm_name certificates cmd
+          (get_unikernel_binary vmm_name f)
 
   let query_stats stack t f =
     let cmd = `Stats_cmd `Stats_subscribe in
