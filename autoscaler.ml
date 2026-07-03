@@ -205,6 +205,8 @@ module Cluster_manager = struct
           (Fmt.str "Clone name '%s' is not a valid format"
              (Configuration.name_to_str clone_name))
 
+  let remove_cooldown group = { group with last_scale_action = Ptime.epoch }
+
   (** [update_vm_metrics group key now rusage] calculates the CPU usage for the
       VM [key] using [rusage] at time [now]. It updates the cached state of VM
       [key] in the [group] (either primary or one of the clones). Returns the

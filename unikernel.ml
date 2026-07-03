@@ -3045,7 +3045,8 @@ struct
         (Label_map.add unikernel_name group unikernel_map)
         !scaling_groups
 
-  let spawn_clone stack store albatross ~unikernel_name ~clone_name ~user_name =
+  let spawn_clone stack store albatross ~unikernel_name ~clone_name ~user_name
+      group scaler =
     match Store.find_by_name store user_name with
     | None -> Lwt.return_error "User not found"
     | Some user -> (
@@ -3083,6 +3084,8 @@ struct
                     (`Unikernel_cmd (`Unikernel_get 4))
                   >>= function
                   | Error err ->
+                      put_group ~user_name ~unikernel_name
+                        (Autoscaler.Cluster_manager.remove_cooldown group);
                       Log.err (fun m ->
                           m "Error getting binary for %s: %s"
                             (Configuration.name_to_str unikernel_name)
@@ -3117,8 +3120,26 @@ struct
                       force_create_unikernel stack albatross
                         ~unikernel_name:clone_name ~push config user
                       >>= function
-                      | Error (`Msg err, _status) -> Lwt.return_error err
-                      | Ok () -> Lwt.return_ok ())
+                      | Error (`Msg err, _status) ->
+                          put_group ~user_name ~unikernel_name
+                            (Autoscaler.Cluster_manager.remove_cooldown group);
+                          Lwt.return_error err
+                      | Ok () -> (
+                          match
+                            Autoscaler.Cluster_manager.register_clone group
+                              (clone_name, scaler)
+                          with
+                          | Error e ->
+                              (* this is fine because on the next cycle, when stats are received with the clone name, 
+                            it will correct itself and be added to the group. we should cancel the cooldown here.*)
+                              Lwt.return_error
+                                (Fmt.str "Error registering clone %s: %s"
+                                   (Configuration.name_to_str clone_name)
+                                   e)
+                          | Ok spawn_group ->
+                              (* TODO Add new clone to load balancer pool *)
+                              put_group ~user_name ~unikernel_name spawn_group;
+                              Lwt.return_ok ()))
                   | Ok w ->
                       Logs.err (fun m ->
                           m "albatross returned: %a"
@@ -3135,6 +3156,7 @@ struct
       (`Unikernel_cmd `Unikernel_destroy)
     >>= function
     | Error err ->
+        (* TODO: remove cooldown if destroying the clone fails. *)
         Log.err (fun m ->
             m "Error pruning unikernel %s: %s"
               (Configuration.name_to_str clone_to_kill)
@@ -3160,7 +3182,7 @@ struct
                     m "Succesfully pruned %s"
                       (Configuration.name_to_str clone_to_kill));
 
-                (* TODO: remove clone's ip address from load balancer *)
+                (* TODO: remove clone's ip address from load balancer. *)
 
                 (* calling put_group here with post_prune_group means we pass back 
                    the groups state when prune_clone was called even though new metrics
@@ -3213,30 +3235,15 @@ struct
         | Autoscaler.Overloaded scaler -> (
             match Autoscaler.Cluster_manager.next_clone_name group with
             | Error (`Msg e) -> Lwt.return_error (Fmt.str "Error: %s" e)
-            | Ok next_name -> (
-                match
-                  Autoscaler.Cluster_manager.register_clone group
-                    (next_name, scaler)
-                with
-                | Error e ->
-                    Lwt.return_error
-                      (Fmt.str "Error registering clone %s: %s"
-                         (Configuration.name_to_str next_name)
-                         e)
-                | Ok spawn_group ->
-                    put_group ~user_name ~unikernel_name spawn_group;
-                    (* TODO
-                       1) Deploy new clone with name next_name
-                       2) Add new clone to load balancer pool
-                    *)
-                    Log.info (fun m ->
-                        m "%s/%s: overloaded (%d%%), spawning new clone: %s"
-                          (Configuration.name_to_str user_name)
-                          (Configuration.name_to_str unikernel_name)
-                          scaler.last_cpu_usage
-                          (Configuration.name_to_str next_name));
-                    spawn_clone stack store albatross ~unikernel_name
-                      ~clone_name:next_name ~user_name))
+            | Ok next_name ->
+                Log.info (fun m ->
+                    m "%s/%s: overloaded (%d%%), spawning new clone: %s"
+                      (Configuration.name_to_str user_name)
+                      (Configuration.name_to_str unikernel_name)
+                      scaler.last_cpu_usage
+                      (Configuration.name_to_str next_name));
+                spawn_clone stack store albatross ~unikernel_name
+                  ~clone_name:next_name ~user_name group scaler)
         | Autoscaler.Underloaded (clone_to_kill, scaler) ->
             Log.info (fun m ->
                 m "[%s/%s]: underloaded (%d%%), pruning: %s"
