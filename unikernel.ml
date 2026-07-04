@@ -3079,6 +3079,16 @@ struct
               least_used_cpuid stack albatross user_name >>= function
               | Error err -> Lwt.return_error err
               | Ok cpuid -> (
+                  let argv =
+                    Option.fold unikernel.argv ~none:None ~some:(fun arg ->
+                        Some
+                          (List.fold_left
+                             (fun acc arg ->
+                               if String.starts_with ~prefix:"--name=" arg then
+                                 acc
+                               else arg :: acc)
+                             [] arg))
+                  in
                   let config : Vmm_core.Unikernel.config =
                     {
                       typ = unikernel.typ;
@@ -3089,7 +3099,7 @@ struct
                       add_name = true;
                       bridges;
                       (* we assume for unikernels which are scaled, their ip is configured via DNSvizor *)
-                      argv = unikernel.argv;
+                      argv;
                       numcpus = unikernel.numcpus;
                       linux_boot_partition = unikernel.linux_boot_partition;
                       compressed = true;
