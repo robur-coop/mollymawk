@@ -3086,7 +3086,7 @@ struct
                           (fun arg ->
                             String.split_on_char ' ' arg
                             |> List.filter (fun s ->
-                                   not (String.starts_with ~prefix:"--name=" s))
+                                not (String.starts_with ~prefix:"--name=" s))
                             |> String.concat " ")
                           args
                         |> List.filter (fun s -> s <> ""))
