@@ -3080,14 +3080,17 @@ struct
               | Error err -> Lwt.return_error err
               | Ok cpuid -> (
                   let argv =
-                    Option.fold unikernel.argv ~none:None ~some:(fun arg ->
-                        Some
-                          (List.fold_left
-                             (fun acc arg ->
-                               if String.starts_with ~prefix:"--name=" arg then
-                                 acc
-                               else arg :: acc)
-                             [] arg))
+                    Option.map
+                      (fun args ->
+                        List.map
+                          (fun arg ->
+                            String.split_on_char ' ' arg
+                            |> List.filter (fun s ->
+                                   not (String.starts_with ~prefix:"--name=" s))
+                            |> String.concat " ")
+                          args
+                        |> List.filter (fun s -> s <> ""))
+                      unikernel.argv
                   in
                   let config : Vmm_core.Unikernel.config =
                     {
