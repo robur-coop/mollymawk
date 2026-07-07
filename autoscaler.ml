@@ -156,6 +156,9 @@ module Cluster_manager = struct
     else g
 
   let register_clone group clone =
+    (* TODO: add a validation rule during unikernel creation so users 
+            can't name any vm with the suffix "-clone-INT". 
+            What about unikernels deployed directly on albatross? *)
     let name = fst clone in
     match extract_name_and_clone_id name with
     | Some (primary_name, clone_id) ->
@@ -201,6 +204,8 @@ module Cluster_manager = struct
         Error
           (Fmt.str "Clone name '%s' is not a valid format"
              (Configuration.name_to_str clone_name))
+
+  let remove_cooldown group = { group with last_scale_action = Ptime.epoch }
 
   (** [update_vm_metrics group key now rusage] calculates the CPU usage for the
       VM [key] using [rusage] at time [now]. It updates the cached state of VM

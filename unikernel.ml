@@ -3019,6 +3019,21 @@ struct
 
   module Log = (val Logs.src_log Autoscaler.a_logs : Logs.LOG)
 
+  let least_used_cpuid stack albatross user_name =
+    user_unikernels_by_instance stack albatross user_name >|= fun unikernels ->
+    match Albatross_state.policy ~domain:user_name albatross with
+    | Error err -> Error err
+    | Ok None -> Error "No policy found for user"
+    | Ok (Some p) -> (
+        let cpu_usage_count = Utils.cpu_usage_count p unikernels in
+        let sorted_cpus =
+          cpu_usage_count
+          |> List.sort (fun (_, c1) (_, c2) -> Int.compare c1 c2)
+        in
+        match sorted_cpus with
+        | (id, _) :: _ -> Ok id
+        | [] -> Error "No cpuids available in user policy")
+
   let put_group ~(user_name : Vmm_core.Name.Label.t)
       ~(unikernel_name : Vmm_core.Name.Label.t) group =
     let unikernel_map =
@@ -3030,12 +3045,127 @@ struct
         (Label_map.add unikernel_name group unikernel_map)
         !scaling_groups
 
+  let spawn_clone stack store albatross ~unikernel_name ~clone_name ~user_name
+      group scaler =
+    match Store.find_by_name store user_name with
+    | None -> Lwt.return_error "User not found"
+    | Some user -> (
+        user_unikernel stack albatross ~user_name ~unikernel_name >>= function
+        | Error err ->
+            Lwt.return_error
+              (Fmt.str "An error occured trying to fetch %s from albatross: %s"
+                 (Configuration.name_to_str unikernel_name)
+                 err)
+        | Ok (_, unikernel) -> (
+            if
+              (* unikernels with block devices can't be reliably scaled because block devices can't be shared by multiple unikernels *)
+              unikernel.block_devices <> []
+            then begin
+              Log.info (fun m ->
+                  m
+                    "spawn_clone: Aborting clone of %s because it has block \
+                     devices."
+                    (Configuration.name_to_str unikernel_name));
+              Lwt.return_error
+                "Unikernels with block devices cannot be safely cloned"
+            end
+            else
+              let bridges =
+                List.map
+                  (fun { Vmm_core.Unikernel.unikernel_device; host_device; _ }
+                     -> (unikernel_device, Some host_device, None))
+                  unikernel.bridges
+              in
+              least_used_cpuid stack albatross user_name >>= function
+              | Error err -> Lwt.return_error err
+              | Ok cpuid -> (
+                  let argv =
+                    Option.map
+                      (fun args ->
+                        List.map
+                          (fun arg ->
+                            String.split_on_char ' ' arg
+                            |> List.filter (fun s ->
+                                not (String.starts_with ~prefix:"--name=" s))
+                            |> String.concat " ")
+                          args
+                        |> List.filter (fun s -> s <> ""))
+                      unikernel.argv
+                  in
+                  let config : Vmm_core.Unikernel.config =
+                    {
+                      typ = unikernel.typ;
+                      fail_behaviour = unikernel.fail_behaviour;
+                      startup = unikernel.startup;
+                      memory = unikernel.memory;
+                      block_devices = [];
+                      add_name = true;
+                      bridges;
+                      (* we assume for unikernels which are scaled, their ip is configured via DNSvizor *)
+                      argv;
+                      numcpus = unikernel.numcpus;
+                      linux_boot_partition = unikernel.linux_boot_partition;
+                      compressed = true;
+                      image = "";
+                      cpuids = Vmm_core.IS.singleton cpuid;
+                    }
+                  in
+                  let data_stream, push_chunks = Lwt_stream.create () in
+                  let push () = Lwt_stream.get data_stream in
+                  Albatross_state.query_unikernel_binary stack albatross
+                    ~domain:user_name ~name:unikernel_name (fun binary_string ->
+                      push_chunks (Some binary_string);
+                      push_chunks None;
+                      Ok ())
+                  >>= function
+                  | Error err ->
+                      put_group ~user_name ~unikernel_name
+                        (Autoscaler.Cluster_manager.remove_cooldown group);
+                      Log.err (fun m ->
+                          m "Error getting binary for %s: %s"
+                            (Configuration.name_to_str unikernel_name)
+                            err);
+                      Lwt.return_error err
+                  | Ok () -> (
+                      force_create_unikernel stack albatross
+                        ~unikernel_name:clone_name ~push config user
+                      >>= function
+                      | Error (`Msg err, _status) ->
+                          put_group ~user_name ~unikernel_name
+                            (Autoscaler.Cluster_manager.remove_cooldown group);
+                          Lwt.return_error err
+                      | Ok () -> (
+                          match
+                            Autoscaler.Cluster_manager.register_clone group
+                              (clone_name, scaler)
+                          with
+                          | Error e ->
+                              (* this is fine because on the next cycle, when stats are received with the clone name, 
+                            it will correct itself and be added to the group. we should cancel the cooldown here.*)
+                              Log.err (fun m ->
+                                  m "Error registering clone %s: %s"
+                                    (Configuration.name_to_str clone_name)
+                                    e);
+                              Lwt.return_error
+                                (Fmt.str "Error registering clone %s: %s"
+                                   (Configuration.name_to_str clone_name)
+                                   e)
+                          | Ok spawn_group ->
+                              Log.debug (fun m ->
+                                  m "Successfully cloned %s to %s"
+                                    (Configuration.name_to_str unikernel_name)
+                                    (Configuration.name_to_str clone_name));
+                              (* TODO Add new clone to load balancer pool *)
+                              put_group ~user_name ~unikernel_name spawn_group;
+                              Lwt.return_ok ())))))
+
   let prune_clone stack albatross group ~unikernel_name ~clone_to_kill
       ~user_name =
     Albatross_state.query stack albatross ~domain:user_name ~name:clone_to_kill
       (`Unikernel_cmd `Unikernel_destroy)
     >>= function
     | Error err ->
+        (* TODO: remove cooldown if destroying the clone fails. *)
         Log.err (fun m ->
             m "Error pruning unikernel %s: %s"
               (Configuration.name_to_str clone_to_kill)
@@ -3061,7 +3191,7 @@ struct
                     m "Succesfully pruned %s"
                       (Configuration.name_to_str clone_to_kill));
 
-                (* TODO: remove clone's ip address from load balancer *)
+                (* TODO: remove clone's ip address from load balancer. *)
 
                 (* calling put_group here with post_prune_group means we pass back 
                    the groups state when prune_clone was called even though new metrics
@@ -3076,7 +3206,8 @@ struct
                   err);
             Lwt.return_error err)
 
-  let evaluate_scaling stack albatross group now ~user_name ~unikernel_name =
+  let evaluate_scaling stack store albatross group now user_name unikernel_name
+      =
     match Autoscaler.Cluster_manager.evaluate_scaling group now with
     | Error err ->
         Lwt.return_error
@@ -3113,29 +3244,15 @@ struct
         | Autoscaler.Overloaded scaler -> (
             match Autoscaler.Cluster_manager.next_clone_name group with
             | Error (`Msg e) -> Lwt.return_error (Fmt.str "Error: %s" e)
-            | Ok next_name -> (
-                match
-                  Autoscaler.Cluster_manager.register_clone group
-                    (next_name, scaler)
-                with
-                | Error e ->
-                    Lwt.return_error
-                      (Fmt.str "Error registering clone %s: %s"
-                         (Configuration.name_to_str next_name)
-                         e)
-                | Ok spawn_group ->
-                    put_group ~user_name ~unikernel_name spawn_group;
-                    (* TODO
-                       1) Deploy new clone with name next_name
-                       2) Add new clone to load balancer pool
-                    *)
-                    Log.info (fun m ->
-                        m "%s/%s: overloaded (%d%%), spawning new clone: %s"
-                          (Configuration.name_to_str user_name)
-                          (Configuration.name_to_str unikernel_name)
-                          scaler.last_cpu_usage
-                          (Configuration.name_to_str next_name));
-                    Lwt.return_ok ()))
+            | Ok next_name ->
+                Log.info (fun m ->
+                    m "%s/%s: overloaded (%d%%), spawning new clone: %s"
+                      (Configuration.name_to_str user_name)
+                      (Configuration.name_to_str unikernel_name)
+                      scaler.last_cpu_usage
+                      (Configuration.name_to_str next_name));
+                spawn_clone stack store albatross ~unikernel_name
+                  ~clone_name:next_name ~user_name group scaler)
         | Autoscaler.Underloaded (clone_to_kill, scaler) ->
             Log.info (fun m ->
                 m "[%s/%s]: underloaded (%d%%), pruning: %s"
@@ -3234,8 +3351,8 @@ struct
                         ~unikernel_name:primary_name updated_group;
                       if Vmm_core.Name.Label.equal unikernel_name primary_name
                       then
-                        evaluate_scaling stack state updated_group now
-                          ~user_name:user.name ~unikernel_name:primary_name
+                        evaluate_scaling stack store state updated_group now
+                          user.name primary_name
                       else Lwt.return_ok ())
                 else Lwt.return (Ok ()))
         | _ ->
