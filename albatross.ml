@@ -505,7 +505,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 | Ok () -> (
                     let rec read_reply ?expected acc =
                       match expected with
-                      | Some x when x <= 0 -> Lwt.return (Ok acc)
+                      | Some x when x <= 0 -> Lwt.return (Ok (Buffer.contents acc))
                       | Some _ | None -> (
                           TLS.read tls_flow >>= function
                           | Ok `Eof ->
@@ -526,9 +526,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                                 | None -> None
                                 | Some x -> Some (x - String.length chunk_str)
                               in
-                              read_reply ?expected (acc ^ chunk_str))
+                              read_reply ?expected (Buffer.add_string acc chunk_str))
                     in
-                    read_reply "" >>= function
+                    read_reply (Buffer.create 0x7ff) >>= function
                     | Ok full_data -> (
                         f tls_flow full_data >|= function
                         | Ok _ as o -> o
