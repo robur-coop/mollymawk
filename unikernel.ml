@@ -3140,7 +3140,7 @@ struct
                               (clone_name, scaler)
                           with
                           | Error e ->
-                              (* this is fine because on the next cycle, when stats are received with the clone name, 
+                              (* this is fine because on the next cycle, when stats are received with the clone name,
                             it will correct itself and be added to the group. we should cancel the cooldown here.*)
                               Log.err (fun m ->
                                   m "Error registering clone %s: %s"
@@ -3193,9 +3193,9 @@ struct
 
                 (* TODO: remove clone's ip address from load balancer. *)
 
-                (* calling put_group here with post_prune_group means we pass back 
+                (* calling put_group here with post_prune_group means we pass back
                    the groups state when prune_clone was called even though new metrics
-                   may have been received and registered. however, the data will correct itself 
+                   may have been received and registered. however, the data will correct itself
                    when the next stats get received after put_group is done. *)
                 put_group ~user_name ~unikernel_name post_prune_group;
                 Lwt.return_ok ())
@@ -3572,7 +3572,7 @@ struct
                             active_vm_names
                         with
                         | Ok updated_group ->
-                            put_group user_name unikernel_key updated_group
+                            put_group ~user_name ~unikernel_key updated_group
                         | Error `Primary_dead ->
                             Log.warn (fun m ->
                                 m "Primary dead for %s/%s. Removing cluster."
