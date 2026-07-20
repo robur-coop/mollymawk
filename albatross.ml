@@ -503,41 +503,52 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                   | Some f -> send_data f)
                 >>= function
                 | Ok () -> (
-                    TLS.read tls_flow >>= fun r ->
-                    match r with
-                    | Ok (`Data d) -> (
-                        f tls_flow (Cstruct.to_string d) >|= function
+                    let rec read_reply ?expected acc =
+                      match expected with
+                      | Some x when x <= 0 ->
+                          Lwt.return (Ok (Buffer.contents acc))
+                      | Some _ | None -> (
+                          TLS.read tls_flow >>= function
+                          | Ok `Eof ->
+                              Lwt.return (Error "EOF while reading response")
+                          | Error e ->
+                              Lwt.return
+                                (Error (Fmt.str "Read error: %a" TLS.pp_error e))
+                          | Ok (`Data chunk) ->
+                              let chunk_str = Cstruct.to_string chunk in
+                              let expected =
+                                match expected with
+                                | None when String.length chunk_str >= 4 ->
+                                    let len =
+                                      Int32.to_int
+                                        (String.get_int32_be chunk_str 0)
+                                    in
+                                    Some (len + 4 - String.length chunk_str)
+                                | None -> None
+                                | Some x -> Some (x - String.length chunk_str)
+                              in
+                              Buffer.add_string acc chunk_str;
+                              read_reply ?expected acc)
+                    in
+                    read_reply (Buffer.create 0x7ff) >>= function
+                    | Ok full_data -> (
+                        f tls_flow full_data >|= function
                         | Ok _ as o -> o
                         | Error msg as e ->
                             t.status <-
                               Status.update t.status
                                 (Status.make `Incompatible msg);
                             e)
-                    | Ok `Eof ->
+                    | Error err ->
                         TLS.close tls_flow >|= fun () ->
-                        let err =
-                          Fmt.str "Eof while querying %a %a" Vmm_core.Name.pp
-                            name
-                            (Vmm_commands.pp ~verbose:false)
-                            cmd
-                        in
                         Logs.err (fun m ->
-                            m "albatross %s (%a:%u): %s" config_name Ipaddr.pp
-                              config.server_ip config.server_port err);
-                        t.status <-
-                          Status.update t.status (Status.make `Incompatible err);
-                        Error err
-                    | Error e ->
-                        TLS.close tls_flow >|= fun () ->
-                        let err =
-                          Fmt.str "Error reading while querying %a %a: %a"
-                            Vmm_core.Name.pp name
-                            (Vmm_commands.pp ~verbose:false)
-                            cmd TLS.pp_error e
-                        in
-                        Logs.err (fun m ->
-                            m "albatross %s (%a:%u): %s" config_name Ipaddr.pp
-                              config.server_ip config.server_port err);
+                            m
+                              "albatross %s (%a:%u): Error reading while \
+                               querying %a %a: %s"
+                              config_name Ipaddr.pp config.server_ip
+                              config.server_port Vmm_core.Name.pp name
+                              (Vmm_commands.pp ~verbose:false)
+                              cmd err);
                         t.status <-
                           Status.update t.status (Status.make `Incompatible err);
                         Error err)
