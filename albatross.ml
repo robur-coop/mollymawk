@@ -504,33 +504,46 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 >>= function
                 | Ok () -> (
                     let rec read_full acc expected =
-                      if expected <= 0 then
-                        Lwt.return (Ok acc)
+                      if expected <= 0 then Lwt.return (Ok acc)
                       else
                         TLS.read tls_flow >>= function
-                        | Ok `Eof -> Lwt.return (Error "EOF while reading response")
-                        | Error e -> Lwt.return (Error (Fmt.str "Read error: %a" TLS.pp_error e))
+                        | Ok `Eof ->
+                            Lwt.return (Error "EOF while reading response")
+                        | Error e ->
+                            Lwt.return
+                              (Error (Fmt.str "Read error: %a" TLS.pp_error e))
                         | Ok (`Data chunk) ->
                             let chunk_str = Cstruct.to_string chunk in
-                            read_full (acc ^ chunk_str) (expected - String.length chunk_str)
+                            read_full (acc ^ chunk_str)
+                              (expected - String.length chunk_str)
                     in
                     let get_full_response () =
                       TLS.read tls_flow >>= function
                       | Ok `Eof -> Lwt.return (Error "EOF while reading header")
-                      | Error e -> Lwt.return (Error (Fmt.str "Read error: %a" TLS.pp_error e))
-                      | Ok (`Data chunk) ->
+                      | Error e ->
+                          Lwt.return
+                            (Error (Fmt.str "Read error: %a" TLS.pp_error e))
+                      | Ok (`Data chunk) -> (
                           let chunk_str = Cstruct.to_string chunk in
                           if String.length chunk_str >= 4 then
-                            let len = Int32.to_int (String.get_int32_be chunk_str 0) in
+                            let len =
+                              Int32.to_int (String.get_int32_be chunk_str 0)
+                            in
                             let expected = len + 4 - String.length chunk_str in
                             read_full chunk_str expected
                           else
-                            read_full chunk_str (4 - String.length chunk_str) >>= function
+                            read_full chunk_str (4 - String.length chunk_str)
+                            >>= function
                             | Error err -> Lwt.return (Error err)
                             | Ok full_header ->
-                                let len = Int32.to_int (String.get_int32_be full_header 0) in
-                                let expected = len + 4 - String.length full_header in
-                                read_full full_header expected
+                                let len =
+                                  Int32.to_int
+                                    (String.get_int32_be full_header 0)
+                                in
+                                let expected =
+                                  len + 4 - String.length full_header
+                                in
+                                read_full full_header expected)
                     in
                     get_full_response () >>= function
                     | Ok full_data -> (
@@ -544,9 +557,13 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                     | Error err ->
                         TLS.close tls_flow >|= fun () ->
                         Logs.err (fun m ->
-                            m "albatross %s (%a:%u): Error reading while querying %a %a: %s"
-                              config_name Ipaddr.pp config.server_ip config.server_port
-                              Vmm_core.Name.pp name (Vmm_commands.pp ~verbose:false) cmd err);
+                            m
+                              "albatross %s (%a:%u): Error reading while \
+                               querying %a %a: %s"
+                              config_name Ipaddr.pp config.server_ip
+                              config.server_port Vmm_core.Name.pp name
+                              (Vmm_commands.pp ~verbose:false)
+                              cmd err);
                         t.status <-
                           Status.update t.status (Status.make `Incompatible err);
                         Error err)
