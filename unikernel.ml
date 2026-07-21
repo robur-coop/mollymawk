@@ -3566,20 +3566,20 @@ struct
                         [] results
                     in
                     Label_map.iter
-                      (fun unikernel_key group ->
+                      (fun unikernel_name group ->
                         match
                           Autoscaler.Cluster_manager.sync_group group
                             active_vm_names
                         with
                         | Ok updated_group ->
-                            put_group ~user_name ~unikernel_key updated_group
+                            put_group ~user_name ~unikernel_name updated_group
                         | Error `Primary_dead ->
                             Log.warn (fun m ->
                                 m "Primary dead for %s/%s. Removing cluster."
                                   (Configuration.name_to_str user_name)
-                                  (Configuration.name_to_str unikernel_key));
+                                  (Configuration.name_to_str unikernel_name));
                             let updated_unikernel_map =
-                              Label_map.remove unikernel_key unikernel_map
+                              Label_map.remove unikernel_name unikernel_map
                             in
                             if Label_map.is_empty updated_unikernel_map then
                               scaling_groups :=
