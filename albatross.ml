@@ -371,6 +371,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 Vmm_core.Name.pp name s);
           Error ()
       | Ok (hdr, `Data (`Stats_data d)) -> f hdr.Vmm_commands.name d
+      | Ok (hdr, `Data (`Old_stats_data (ru, mem, _vmm, ifd))) ->
+          f hdr.Vmm_commands.name (ru, mem, ifd)
       | Ok (_, `Success (`String _)) ->
           (* ignore the success subscribed *)
           Ok ()
