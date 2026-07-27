@@ -279,15 +279,21 @@ let config_of_json str =
       (get "memory" dict)
   in
   let* bridges =
+    let brdige bs =
+      List.fold_left
+        (fun r x ->
+          let* r = r in
+          let* b = bridge_of_json x in
+          Ok (b :: r))
+        (Ok []) bs
+    in
     match get "network_interfaces" dict with
-    | None -> Ok []
-    | Some (`List bs) ->
-        List.fold_left
-          (fun r x ->
-            let* r = r in
-            let* b = bridge_of_json x in
-            Ok (b :: r))
-          (Ok []) bs
+    | None -> (
+        match get "bridges" dict with
+        | None -> Ok []
+        | Some (`List bs) -> brdige bs
+        | Some _ -> Error (`Msg "expected a list of network devices"))
+    | Some (`List bs) -> brdige bs
     | Some _ -> Error (`Msg "expected a list of network devices")
   in
   let* block_devices =
