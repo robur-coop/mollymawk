@@ -3263,8 +3263,7 @@ struct
             prune_clone stack albatross group ~unikernel_name ~clone_to_kill
               ~user_name)
 
-  let handle_stats stack state ((rusage, _, _) : Vmm_core.Stats.t) name store
-      =
+  let handle_stats stack state ((rusage, _, _) : Vmm_core.Stats.t) name store =
     match Vmm_core.Name.name name with
     | None -> Lwt.return_error "VM name has no unikernel label"
     | Some label -> (
