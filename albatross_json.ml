@@ -279,7 +279,7 @@ let config_of_json str =
       (get "memory" dict)
   in
   let* bridges =
-    let brdige bs =
+    let bridge bs =
       List.fold_left
         (fun r x ->
           let* r = r in
@@ -288,12 +288,8 @@ let config_of_json str =
         (Ok []) bs
     in
     match get "network_interfaces" dict with
-    | None -> (
-        match get "bridges" dict with
-        | None -> Ok []
-        | Some (`List bs) -> brdige bs
-        | Some _ -> Error (`Msg "expected a list of network devices"))
-    | Some (`List bs) -> brdige bs
+    | None -> Ok []
+    | Some (`List bs) -> bridge bs
     | Some _ -> Error (`Msg "expected a list of network devices")
   in
   let* block_devices =
@@ -427,7 +423,7 @@ let unikernel_info_to_arguments_json info =
       ("cpuids", cpuids info.cpuids);
       ("memory", memory info.memory);
       ("block_devices", block_devices info.block_devices);
-      ("bridges", bridges info.bridges);
+      ("network_interfaces", bridges info.bridges);
       ("arguments", argv info.argv);
       ("numcpus", `Int info.numcpus);
       ( "linux_boot_partition",
