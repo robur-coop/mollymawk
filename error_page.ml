@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let error_layout (error : Utils.Status.t) =
   Tyxml_html.(
     section

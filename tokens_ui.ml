@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let create_token =
   Tyxml_html.(
     section

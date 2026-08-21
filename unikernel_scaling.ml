@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let display_policy ~instance_name ~unikernel_name ~max_allowed scaling_policy =
   match max_allowed with
   | Error err ->

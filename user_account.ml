@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let user_account_layout (user : User_model.user) ~active_cookie_value
     current_time =
   let user_name = Configuration.name_to_str user.name in

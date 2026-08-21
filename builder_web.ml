@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let ( let* ) = Result.bind
 let base_url = "https://builds.robur.coop"
 

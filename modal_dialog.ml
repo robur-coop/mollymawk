@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let modal_dialog ~modal_title ~button_content ?(button_type = `Primary_full)
     ~content () =
   Tyxml_html.(

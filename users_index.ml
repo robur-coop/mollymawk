@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let users_index_layout (users : User_model.user list) current_time =
   Tyxml_html.(
     section

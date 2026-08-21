@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let render_log log = Fmt.str "%a" Albatross.Status.pp_error log
 
 let albatross_status_layout (albatross : Albatross.t) =

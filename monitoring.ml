@@ -1,4 +1,3 @@
-open Mollymawk_libraries
 open Tyxml_html
 
 let log_levels =

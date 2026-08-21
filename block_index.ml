@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let block_index_layout instance_name blocks policy =
   let total_block_used =
     List.fold_left (fun total_size (_, size, _) -> total_size + size) 0 blocks

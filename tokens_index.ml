@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let tokens_index_layout tokens current_time =
   Tyxml_html.(
     section

@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let instance_unikernels instance_name albatross_instance_unikernels current_time
     =
   Tyxml_html.(

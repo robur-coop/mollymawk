@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 type handler = H1.Reqd.t -> unit Lwt.t
 type middleware = handler -> handler
 

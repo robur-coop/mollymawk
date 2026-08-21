@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let restart_unikernel_dialog ~unikernel_name ~instance_name info =
   Tyxml_html.(
     div

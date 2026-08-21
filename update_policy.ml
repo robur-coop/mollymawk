@@ -1,5 +1,3 @@
-open Mollymawk_libraries
-
 let update_policy_layout (user : User_model.user) ~user_policy
     ~unallocated_resources instance_name =
   Tyxml_html.(
