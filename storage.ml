@@ -2,14 +2,7 @@ open Utils.Json
 
 let current_version = 10
 (* version history:
-   1 was initial (fields until email_verification_uuid)
-   2 added active
-   3 added super_user (but did not serialise it)
-   4 properly serialised super_user
-   5 cookie has two new fields last_access and user_agent
-   6 tokens has 3 new fields: name, last_access and usage_count
-   7 added unikernel_updates to keep track of when unikernels are updated
-   8 we now store a list of configurations, and each has a name field. also, no more version field in configuration
+   [1 - 8] deprecated.
    9 email configuration is now stored
    10 we now have scaling policies for unikernels, default is no policy for existing unikernels
 *)
@@ -37,18 +30,12 @@ let t_of_json json =
           let* () =
             if v = current_version then Ok ()
             else if v = 9 then Ok ()
-            else if v = 8 then Ok ()
-            else if v = 7 then Ok ()
-            else if v = 6 then Ok ()
-            else if v = 5 then Ok ()
-            else if v = 4 then Ok ()
-            else if v = 3 then Ok ()
-            else if v = 2 then Ok ()
-            else if v = 1 then Ok ()
             else
               Error
                 (`Msg
-                   (Fmt.str "expected version %u, found version %u"
+                   (Fmt.str
+                      "expected version %u, found version %u. note: version [1 \
+                       - 8] is now deprecated."
                       current_version v))
           in
           let* users =
@@ -56,32 +43,20 @@ let t_of_json json =
               (fun acc js ->
                 let* acc = acc in
                 let* user =
-                  if v = 1 then User_model.user_v1_of_json js
-                  else if v = 2 || v = 3 then User_model.user_v2_of_json js
-                  else if v = 4 || v = 5 then
-                    User_model.(user_v3_of_json cookie_v1_of_json) js
-                  else if v = 6 then
-                    User_model.(user_v4_of_json cookie_v1_of_json) js
-                  else if v = 7 || v = 8 || v = 9 then
-                    User_model.(user_v5_of_json cookie_of_json) js
+                  if v = 9 then User_model.(user_v5_of_json cookie_of_json) js
                   else User_model.(user_of_json cookie_of_json) js
                 in
                 Ok (user :: acc))
               (Ok []) users
           in
-          let* configurations =
-            if v < 8 then Configuration.of_json_v1 configuration
-            else Configuration.of_json configuration
-          in
+          let* configurations = Configuration.of_json configuration in
           let* email =
             match email with
             | None -> Ok None
             | Some e -> (
-                if v < 9 then Ok None
-                else
-                  match Utils.Email.of_json e with
-                  | Ok email -> Ok (Some email)
-                  | Error _msg -> Ok None)
+                match Utils.Email.of_json e with
+                | Ok email -> Ok (Some email)
+                | Error _msg -> Ok None)
           in
           Ok (users, configurations, email)
       | _ -> Error (`Msg "invalid data: no version and users field"))
