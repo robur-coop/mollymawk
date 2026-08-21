@@ -302,7 +302,7 @@ let user_to_json (u : user) =
         `List (List.map scaling_policy_to_json u.scaling_policies) );
     ]
 
-let user_v5_of_json cookie_fn = function
+let user_old_of_json cookie_fn = function
   | `Assoc xs -> (
       match
         Utils.Json.

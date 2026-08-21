@@ -43,7 +43,7 @@ let t_of_json json =
               (fun acc js ->
                 let* acc = acc in
                 let* user =
-                  if v = 9 then User_model.(user_v5_of_json cookie_of_json) js
+                  if v = 9 then User_model.(user_old_of_json cookie_of_json) js
                   else User_model.(user_of_json cookie_of_json) js
                 in
                 Ok (user :: acc))
