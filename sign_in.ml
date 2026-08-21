@@ -1,3 +1,4 @@
+open Mollymawk_libraries
 open Tyxml
 
 let login_page ~icon () =

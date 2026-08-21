@@ -1,3 +1,4 @@
+open Mollymawk_libraries
 open Tyxml
 
 let dashboard_layout ~csrf (user : User_model.user) ~icon

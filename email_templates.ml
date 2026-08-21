@@ -1,3 +1,5 @@
+open Mollymawk_libraries
+
 let handbook_link = "https://robur-coop.github.io/mollymawk-handbook/index.html"
 
 let link_button ~href ~text =

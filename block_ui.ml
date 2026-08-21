@@ -1,3 +1,5 @@
+open Mollymawk_libraries
+
 let create_block instance_name total_free_space =
   Tyxml_html.(
     section

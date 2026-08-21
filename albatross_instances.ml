@@ -1,3 +1,5 @@
+open Mollymawk_libraries
+
 let select_instance (user : User_model.user) albatross_instances
     (callback : string) =
   Tyxml_html.(

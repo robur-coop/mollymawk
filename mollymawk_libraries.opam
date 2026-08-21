@@ -1,0 +1,31 @@
+opam-version: "2.0"
+synopsis:     "Library implementing functionality used by Mollymawk"
+name:         "mollymawk_libraries"
+homepage:     "https://github.com/robur-coop/mollymawk"
+dev-repo:     "git+https://github.com/robur-coop/mollymawk.git"
+bug-reports:  "https://github.com/robur-coop/mollymawk/issues"
+author:       ["robur"]
+maintainer:   ["robur"]
+license:      "BSD-2-Clause"
+
+build: [
+  ["dune" "subst" ] {dev}
+  ["dune" "build"   "-p" name "-j" jobs]
+  ["dune" "runtest" "-p" name "-j" jobs] {with-test}
+]
+
+depends: [
+  "dune"
+  "ocaml"
+  "logs"
+  "uuidm"
+  "ptime"
+  "albatross"
+  "mirage-crypto-rng"
+  "yojson"
+  "mrmime"
+  "lwt"
+  "http-mirage-client"
+  "tyxml"
+  "alcotest"
+]

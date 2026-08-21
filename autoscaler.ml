@@ -1,3 +1,4 @@
+open Mollymawk_libraries
 let a_logs = Logs.Src.create "autoscaling"
 
 (** The interval at which a cluster's metrics are evaluated for scaling. *)

@@ -1,4 +1,5 @@
 open Tyxml
+open Mollymawk_libraries
 
 let register_page ~csrf ~icon =
   let page =

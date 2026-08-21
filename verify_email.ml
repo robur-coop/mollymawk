@@ -1,3 +1,4 @@
+open Mollymawk_libraries
 open Tyxml
 
 let verify_page ~csrf ~icon (user : User_model.user) =

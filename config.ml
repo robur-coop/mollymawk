@@ -2,6 +2,8 @@
 open Mirage
 
 let assets = crunch "assets"
+
+let local_libs = [ "mollymawk_libraries" ] 
 let dhcp_requests = make_dhcp_requests ()
 
 let management_stack, lease =
@@ -59,7 +61,7 @@ let mollymawk =
       package "mrmime";
     ]
   in
-  main ~packages "Unikernel.Main"
+  main ~local_libs ~packages "Unikernel.Main"
     ~deps:[ dep management_domain_name ]
     (stackv4v6 @-> stackv4v6 @-> dns_client @-> kv_ro @-> block @-> http_client
    @-> job)
