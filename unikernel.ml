@@ -32,6 +32,268 @@ struct
   module Dns = Dns_client_mirage.Make (S) (HE)
   module Management_HE = Happy_eyeballs_mirage.Make (Management_S)
 
+  module BlockMake (BLOCK : Mirage_block.S) = struct
+    module Stored_data = OneFFS.Make (BLOCK)
+    open Lwt.Infix
+
+    type t = {
+      disk : Stored_data.t;
+      mutable users : User_model.user list;
+      mutable configurations : Configuration.t list;
+      mutable email : Utils.Email.t option;
+    }
+
+    let write_data t =
+      Stored_data.write t.disk
+        (Yojson.Basic.to_string
+           (Storage.t_to_json t.users t.configurations t.email))
+
+    let read_data disk =
+      Stored_data.read disk >|= function
+      | Ok (Some s) ->
+          let ( let* ) = Result.bind in
+          let* json = Utils.Json.from_string s in
+          let* t = Storage.t_of_json json in
+          Ok t
+      | Ok None -> Ok ([], [], None)
+      | Error e ->
+          Storage.error_msgf "error while reading storage: %a"
+            Stored_data.pp_error e
+
+    let connect block =
+      Stored_data.connect block >>= fun disk ->
+      read_data disk >|= function
+      | Error _ as e -> e
+      | Ok (users, configurations, email) ->
+          Ok { disk; users; configurations; email }
+
+    let configurations { configurations; _ } = configurations
+    let email { email; _ } = email
+
+    let store_configurations t configurations =
+      let t' = { t with configurations } in
+      write_data t' >|= function
+      | Ok () ->
+          t.configurations <- configurations;
+          Ok t.configurations
+      | Error we ->
+          Storage.error_msgf "error while writing storage: %a"
+            Stored_data.pp_write_error we
+
+    let store_email t email =
+      let t' = { t with email } in
+      write_data t' >|= function
+      | Ok () ->
+          t.email <- email;
+          Ok t.email
+      | Error we ->
+          Storage.error_msgf "error while writing storage: %a"
+            Stored_data.pp_write_error we
+
+    let upsert_configuration t (configuration : Configuration.t)
+        (mode : [ `Create | `Update ]) =
+      let name_eq (c : Configuration.t) =
+        Vmm_core.Name.Label.equal c.name configuration.name
+      in
+      let exists = List.exists name_eq t.configurations in
+      match mode with
+      | `Create ->
+          if exists then
+            Lwt.return
+              (Storage.error_msgf "configuration %s already exists"
+                 (Configuration.name_to_str configuration.name))
+          else store_configurations t (t.configurations @ [ configuration ])
+      | `Update ->
+          if not exists then
+            Lwt.return
+              (Storage.error_msgf "configuration %s not found"
+                 (Configuration.name_to_str configuration.name))
+          else
+            let configurations =
+              List.map
+                (fun c -> if name_eq c then configuration else c)
+                t.configurations
+            in
+            store_configurations t configurations
+
+    let delete_configuration t name =
+      let before = t.configurations in
+      let configurations =
+        List.filter
+          (fun (c : Configuration.t) ->
+            not (Vmm_core.Name.Label.equal c.name name))
+          before
+      in
+      let deleted_any = List.length configurations <> List.length before in
+      let t' = { t with configurations } in
+      write_data t' >|= function
+      | Ok () ->
+          if deleted_any then (
+            t.configurations <- configurations;
+            Ok t.configurations)
+          else
+            Storage.error_msgf "configuration '%s' not found"
+              (Configuration.name_to_str name)
+      | Error we ->
+          Storage.error_msgf "error while writing storage: %a"
+            Stored_data.pp_write_error we
+
+    let add_user t user =
+      let t' = { t with users = user :: t.users } in
+      write_data t' >|= function
+      | Ok () ->
+          t.users <- user :: t.users;
+          Ok ()
+      | Error we ->
+          Storage.error_msgf "error while writing storage: %a"
+            Stored_data.pp_write_error we
+
+    let delete_user t (user : User_model.user) =
+      let users =
+        List.fold_left
+          (fun acc u ->
+            if u.User_model.uuid <> user.uuid then u :: acc else acc)
+          [] t.users
+      in
+      let t' = { t with users } in
+      write_data t' >|= function
+      | Ok () ->
+          t.users <- users;
+          Ok ()
+      | Error we ->
+          Storage.error_msgf "error while writing storage: %a"
+            Stored_data.pp_write_error we
+
+    let update_user t (user : User_model.user) =
+      let users =
+        List.map
+          (fun (u : User_model.user) ->
+            match u.uuid = user.uuid with true -> user | false -> u)
+          t.users
+      in
+      let t' = { t with users } in
+      write_data t' >|= function
+      | Ok () ->
+          t.users <- users;
+          Ok ()
+      | Error we ->
+          Storage.error_msgf "error while writing storage: %a"
+            Stored_data.pp_write_error we
+
+    let users { users; _ } = users
+
+    let find_by_email store email =
+      List.find_opt
+        (fun user -> Mrmime.Mailbox.equal user.User_model.email email)
+        store.users
+
+    let find_by_name store name =
+      List.find_opt
+        (fun user -> Vmm_core.Name.Label.compare user.User_model.name name = 0)
+        store.users
+
+    let find_by_uuid store uuid =
+      List.find_opt
+        (fun user -> String.equal user.User_model.uuid uuid)
+        store.users
+
+    let find_by_cookie store cookie_value =
+      List.fold_left
+        (fun acc user ->
+          match acc with
+          | Some _ as s -> s
+          | None -> (
+              match
+                List.find_opt
+                  (fun (cookie : User_model.cookie) ->
+                    String.equal User_model.session_cookie
+                      cookie.User_model.name
+                    && String.equal cookie_value cookie.value)
+                  user.User_model.cookies
+              with
+              | None -> None
+              | Some c -> Some (user, c)))
+        None store.users
+
+    let find_by_api_token store token =
+      List.find_map
+        (fun (user : User_model.user) ->
+          match
+            List.find_opt
+              (fun (token_ : User_model.token) ->
+                String.equal token token_.value)
+              user.tokens
+          with
+          | Some token_ -> Some (user, token_)
+          | None -> None)
+        store.users
+
+    let increment_token_usage store (token : User_model.token)
+        (user : User_model.user) =
+      let token = { token with usage_count = token.usage_count + 1 } in
+      let tokens =
+        List.map
+          (fun (token' : User_model.token) ->
+            if String.equal token.value token'.value then token else token')
+          user.tokens
+      in
+      let updated_user = User_model.update_user user ~tokens () in
+      update_user store updated_user >>= function
+      | Ok () -> Lwt.return (Ok ())
+      | Error (`Msg err) ->
+          Logs.err (fun m -> m "Error with storage: %s" err);
+          Lwt.return (Error (`Msg err))
+
+    let update_cookie_usage store (cookie : User_model.cookie)
+        (user : User_model.user) reqd =
+      let cookie = { cookie with user_agent = Middleware.user_agent reqd } in
+      let cookies =
+        List.map
+          (fun (cookie' : User_model.cookie) ->
+            if String.equal cookie.value cookie'.value then cookie else cookie')
+          user.cookies
+      in
+      let updated_user = User_model.update_user user ~cookies () in
+      update_user store updated_user >>= function
+      | Ok () -> Lwt.return (Ok ())
+      | Error (`Msg err) ->
+          Logs.err (fun m -> m "Error with storage: %s" err);
+          Lwt.return (Error (`Msg err))
+
+    let update_user_unikernel_updates store
+        (new_update : User_model.unikernel_update) (user : User_model.user) =
+      let is_unique (u : User_model.unikernel_update) =
+        not (Vmm_core.Name.Label.equal u.name new_update.name)
+      in
+      let updated_list =
+        new_update :: List.filter is_unique user.unikernel_updates
+      in
+      let updated_user =
+        User_model.update_user user ~unikernel_updates:updated_list ()
+      in
+      update_user store updated_user >>= function
+      | Ok () -> Lwt.return (Ok ())
+      | Error (`Msg err) ->
+          Logs.err (fun m -> m "Error with storage: %s" err);
+          Lwt.return (Error (`Msg err))
+
+    let count_users store = List.length store.users
+
+    let find_email_verification_token store uuid =
+      List.find_opt
+        (fun user ->
+          Option.fold ~none:false
+            ~some:(fun uu -> Uuidm.equal uu uuid)
+            user.User_model.email_verification_uuid)
+        store.users
+
+    let count_active store =
+      List.length (List.filter (fun u -> u.User_model.active) store.users)
+
+    let count_superusers store =
+      List.length (List.filter (fun u -> u.User_model.super_user) store.users)
+  end
+
   let recipient email =
     match Colombe_emile.to_path email with
     | Ok path -> [ Colombe.Forward_path.Forward_path path ]
@@ -176,7 +438,7 @@ struct
         { molly_img; robur_img; albatross_img; mirage_img; dashboard_img }
     | _ -> failwith "Unexpected number of images"
 
-  module Store = Storage.Make (BLOCK)
+  module Store = BlockMake (BLOCK)
   module Map = Map.Make (String)
 
   let csrf_verification f user csrf reqd =
