@@ -363,7 +363,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     in
     continue_reading name dec d tls_flow
 
-  let stats_data name f tls_flow d =
+  let stats_data name
+      (f : Vmm_core.Name.t -> Vmm_core.Stats.t -> (unit, unit) result) tls_flow
+      d =
     let dec = function
       | Error s ->
           Logs.err (fun m ->
