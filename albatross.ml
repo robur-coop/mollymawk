@@ -363,7 +363,9 @@ module Make (S : Tcpip.Stack.V4V6) = struct
     in
     continue_reading name dec d tls_flow
 
-  let stats_data name f tls_flow d =
+  let stats_data name
+      (f : Vmm_core.Name.t -> Vmm_core.Stats.t -> (unit, unit) result) tls_flow
+      d =
     let dec = function
       | Error s ->
           Logs.err (fun m ->
@@ -371,6 +373,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                 Vmm_core.Name.pp name s);
           Error ()
       | Ok (hdr, `Data (`Stats_data d)) -> f hdr.Vmm_commands.name d
+      | Ok (hdr, `Data (`Old_stats_data (ru, mem, _vmm, ifd))) ->
+          f hdr.Vmm_commands.name (ru, mem, ifd)
       | Ok (_, `Success (`String _)) ->
           (* ignore the success subscribed *)
           Ok ()
