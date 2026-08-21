@@ -1,5 +1,4 @@
 (library
  (name mollymawk_libraries)
- (public_name mollymawk_libraries)
  (libraries uuidm ptime albatross mirage-crypto-rng yojson mrmime lwt http-mirage-client tyxml)
  (wrapped false))
