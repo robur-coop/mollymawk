@@ -6,7 +6,6 @@ let of_string_exn f =
 let label_of_string_exn label =
   of_string_exn (Vmm_core.Name.Label.of_string label)
 
-let ip_of_string_exn ip = of_string_exn (Ipaddr.of_string ip)
 let email_of_string_exn email = of_string_exn (Mrmime.Mailbox.of_string email)
 
 let signing_request_exn pk =
@@ -95,7 +94,7 @@ let mock_storage ?(version = 10) ?(users = []) ?(configuration = [])
 
 let mock_email =
   {
-    Utils.Email.server = ip_of_string_exn "10.0.0.1";
+    Utils.Email.server = Ipaddr.of_string_exn "10.0.0.1";
     port = 56;
     from_email = email_of_string_exn "test@robur.coop";
     base_url = "robur.coop";
@@ -105,7 +104,7 @@ let mock_email =
 let mock_albatross_config =
   {
     Configuration.name = label_of_string_exn "default";
-    server_ip = ip_of_string_exn "10.0.0.1";
+    server_ip = Ipaddr.of_string_exn "10.0.0.1";
     server_port = 25;
     updated_at = Ptime.epoch;
     private_key;
