@@ -34,8 +34,7 @@ let msg_t =
 let pp_storage ppf (users, configuration, email) =
   Fmt.pf ppf "%a" Yojson.Basic.pp (Storage.t_to_json users configuration email)
 
-let eq_key k1 k2 =
-  String.equal (X509.Public_key.fingerprint k1) (X509.Public_key.fingerprint k2)
+let eq_key k1 k2 = String.equal k1 k2
 
 let eq_config (config_1 : Configuration.t list)
     (config_2 : Configuration.t list) =
@@ -65,9 +64,11 @@ let eq_config (config_1 : Configuration.t list)
       && Ipaddr.compare si1 si2 = 0
       && sp1 = sp2 && Ptime.equal ua1 ua2
       && eq_key
-           (X509.Certificate.public_key cer1)
-           (X509.Certificate.public_key cer2)
-      && eq_key (X509.Private_key.public pk1) (X509.Private_key.public pk2)
+           (X509.Certificate.fingerprint `SHA256 cer1)
+           (X509.Certificate.fingerprint `SHA256 cer2)
+      && eq_key
+           (X509.Private_key.encode_der pk1)
+           (X509.Private_key.encode_der pk2)
   | _ -> false
 
 let eq_users (users_1 : User_model.user list) (users_2 : User_model.user list) =
