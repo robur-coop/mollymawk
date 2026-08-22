@@ -158,13 +158,13 @@ let check_valid_version () =
 let check_invalid_version () =
   let expected =
     `Msg
-      "expected version 10, found version 11. note: version [1 - 8] is now \
+      "expected version 10, found version 1000. note: version [1 - 8] is now \
        deprecated."
   in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should fail to start when version is invalid" (Error expected)
-      (Storage.t_of_json (mock_storage ~version:11 ())))
+      (Storage.t_of_json (mock_storage ~version:1000 ())))
 
 let check_email_config_in_v9 () =
   let expected = ([], [], Some mock_email) in
