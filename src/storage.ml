@@ -163,12 +163,12 @@ let count_active users =
 let count_superusers users =
   List.length (List.filter (fun u -> u.User_model.super_user) users)
 
-let configruation_label_eq (c1 : Configuration.t) (c2 : Configuration.t) =
+let configuration_label_eq (c1 : Configuration.t) (c2 : Configuration.t) =
   Vmm_core.Name.Label.equal c1.name c2.name
 
 let exists (configurations : Configuration.t list)
     (configuration : Configuration.t) =
-  List.exists (configruation_label_eq configuration) configurations
+  List.exists (configuration_label_eq configuration) configurations
 
 let store_email t email =
   t.email <- email;
@@ -192,7 +192,7 @@ let update_configuration t (configuration : Configuration.t) =
     t.configurations <-
       List.map
         (fun c ->
-          if configruation_label_eq c configuration then configuration else c)
+          if configuration_label_eq c configuration then configuration else c)
         t.configurations;
     Ok t)
 
