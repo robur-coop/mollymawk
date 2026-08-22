@@ -154,4 +154,3 @@ let count_active users =
 
 let count_superusers users =
   List.length (List.filter (fun u -> u.User_model.super_user) users)
-  
