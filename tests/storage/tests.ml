@@ -17,7 +17,7 @@ let private_key =
   X509.Private_key.generate ~seed:"robur_in_essaouira_2026" `ED25519
 
 let second_private_key =
-  X509.Private_key.generate ~seed:"robur_in_essaouira_20_26" `ED25519
+  X509.Private_key.generate ~seed:"robur_is_great_2026" `ED25519
 
 let certificate_exn pk =
   match
