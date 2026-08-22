@@ -293,14 +293,14 @@ struct
     in
     go (Map.empty, []) m
 
-  let generate_csrf_token store storage_data user now reqd =
+  let generate_csrf_token store user now reqd =
     let csrf = Middleware.generate_csrf_cookie now reqd in
     let updated_user =
       User_model.update_user user ~updated_at:now
         ~cookies:(csrf :: user.cookies) ()
     in
-    Store.write_data store (Storage.update_user storage_data updated_user)
-    >>= function
+    Storage.update_user store updated_user;
+    Store.write_data store >>= function
     | Ok () -> Lwt.return (Ok csrf.value)
     | Error (`Msg err) ->
         let error =
@@ -398,7 +398,7 @@ struct
       Middleware.email_verified_middleware user (f user) reqd
     else f user reqd
 
-  let authenticate_user ~check_admin ~check_token storage_data reqd =
+  let authenticate_user ~check_admin ~check_token store reqd =
     let ( let* ) = Result.bind in
     let current_time = Mirage_ptime.now () in
     let user_is_active user =
@@ -416,9 +416,7 @@ struct
       | Error (`Msg err) ->
           Error (`Cookie, "No molly-session in cookie header. " ^ err)
       | Ok cookie_value -> (
-          match
-            Storage.find_by_cookie storage_data.Storage.users cookie_value
-          with
+          match Storage.find_by_cookie store.Storage.users cookie_value with
           | None -> Error (`Cookie, "Failed to find user with cookie")
           | Some (user, cookie) ->
               if User_model.is_valid_cookie cookie current_time then
@@ -431,7 +429,7 @@ struct
               else Error (`Cookie, "Session value doesn't match user session"))
     in
     let valid_token token_value =
-      match Storage.find_by_api_token storage_data.users token_value with
+      match Storage.find_by_api_token store.users token_value with
       | Some (user, token) ->
           if User_model.is_valid_token token current_time then Ok (user, token)
           else Error (`Token, "Token value is not valid " ^ token_value)
@@ -451,8 +449,8 @@ struct
     else check_cookie reqd
 
   let authenticate ?(check_admin = false) ?(api_meth = false)
-      ?(check_token = false) store storage_data reqd f =
-    match authenticate_user ~check_admin ~check_token storage_data reqd with
+      ?(check_token = false) store reqd f =
+    match authenticate_user ~check_admin ~check_token store reqd with
     | Error (v, msg) ->
         Logs.err (fun m -> m "authenticate: %s" msg);
         if api_meth || v = `Token then
@@ -461,21 +459,16 @@ struct
           Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
             ~with_error:true ~msg reqd ()
     | Ok (`Token (user, token)) -> (
-        Store.write_data store
-          (Storage.update_user storage_data
-             (Storage.increment_token_usage token user))
-        >>= function
+        Storage.update_user store (Storage.increment_token_usage token user);
+        Store.write_data store >>= function
         | Error (`Msg err) ->
             Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error
         | Ok () -> f `Token user reqd)
     | Ok (`Cookie (user, cookie)) -> (
-        Store.write_data store
-          (Storage.update_user storage_data
-             (Storage.update_cookie_usage cookie
-                (Middleware.user_agent reqd)
-                user))
-        >>= function
+        Storage.update_user store
+          (Storage.update_cookie_usage cookie (Middleware.user_agent reqd) user);
+        Store.write_data store >>= function
         | Error (`Msg err) ->
             Logs.err (fun m -> m "Error with storage: %s" err);
             Middleware.http_response reqd ~data:(`String err)
@@ -631,7 +624,7 @@ struct
           (Sign_in.login_page ~icon:"/images/robur.png" ())
           `OK
 
-  let register store storage_data reqd =
+  let register store reqd =
     decode_request_body reqd >>= fun data ->
     match Utils.Json.from_string data with
     | Error (`Msg err) ->
@@ -675,11 +668,9 @@ struct
             | Ok (name, email) ->
                 if Middleware.csrf_cookie_verification form_csrf reqd then
                   let existing_email =
-                    Storage.find_by_email storage_data.Storage.users email
+                    Storage.find_by_email store.Storage.users email
                   in
-                  let existing_name =
-                    Storage.find_by_name storage_data.users name
-                  in
+                  let existing_name = Storage.find_by_name store.users name in
                   match (existing_name, existing_email) with
                   | Some _, None ->
                       Middleware.http_response reqd
@@ -693,7 +684,7 @@ struct
                       let created_at = Mirage_ptime.now () in
                       let user, cookie =
                         let active, super_user =
-                          if Storage.count_users storage_data.users = 0 then
+                          if Storage.count_users store.users = 0 then
                             (true, true)
                           else (false, false)
                         in
@@ -701,9 +692,8 @@ struct
                           ~created_at ~active ~super_user
                           ~user_agent:(Middleware.user_agent reqd)
                       in
-                      Store.write_data store
-                        (Storage.add_user storage_data user)
-                      >>= function
+                      Storage.add_user store user;
+                      Store.write_data store >>= function
                       | Ok () ->
                           let cookie_value =
                             cookie.name ^ "=" ^ cookie.value
@@ -744,7 +734,7 @@ struct
         Middleware.http_response reqd
           ~data:(`String "Register account: expected a dictionary") `Bad_request
 
-  let login store storage_data reqd =
+  let login store reqd =
     decode_request_body reqd >>= fun data ->
     match Utils.Json.from_string data with
     | Error (`Msg err) ->
@@ -767,9 +757,7 @@ struct
                 Middleware.http_response reqd ~data:(`String err) `Bad_request
             | Ok email -> (
                 let now = Mirage_ptime.now () in
-                let user =
-                  Storage.find_by_email storage_data.Storage.users email
-                in
+                let user = Storage.find_by_email store.Storage.users email in
                 match
                   User_model.login_user ~email ~password
                     ~user_agent:(Middleware.user_agent reqd)
@@ -779,9 +767,8 @@ struct
                     Middleware.http_response reqd ~data:(`String err)
                       `Bad_request
                 | Ok (user, cookie) -> (
-                    Store.write_data store
-                      (Storage.update_user storage_data user)
-                    >>= function
+                    Storage.update_user store user;
+                    Store.write_data store >>= function
                     | Ok () ->
                         let cookie_value =
                           cookie.name ^ "=" ^ cookie.value
@@ -810,17 +797,17 @@ struct
         Middleware.http_response reqd
           ~data:(`String "Update password: expected a dictionary") `Bad_request
 
-  let verify_email store storage_data (user : User_model.user) reqd =
+  let verify_email store (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store storage_data user now reqd >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf -> (
         let email_verification_uuid = User_model.generate_uuid () in
         let updated_user =
           User_model.update_user user ~updated_at:now
             ~email_verification_uuid:(Some email_verification_uuid) ()
         in
-        Store.write_data store (Storage.update_user storage_data updated_user)
-        >>= function
+        Storage.update_user store updated_user;
+        Store.write_data store >>= function
         | Ok () ->
             let verification_link =
               Utils.Email.generate_verification_link email_verification_uuid
@@ -837,27 +824,25 @@ struct
         Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
-  let verify_email_token store storage_data verification_token
-      (user : User_model.user) reqd =
+  let verify_email_token store verification_token (user : User_model.user) reqd
+      =
     match
       let ( let* ) = Result.bind in
       let* uuid =
         Option.to_result ~none:(`Msg "invalid UUID")
           (Uuidm.of_string verification_token)
       in
-      let u =
-        Storage.find_email_verification_token storage_data.Storage.users uuid
-      in
+      let u = Storage.find_email_verification_token store.Storage.users uuid in
       User_model.verify_email_token u verification_token (Mirage_ptime.now ())
     with
     | Ok user' ->
-        if String.equal user.uuid user'.uuid then
-          Store.write_data store (Storage.update_user storage_data user)
-          >>= function
+        if String.equal user.uuid user'.uuid then (
+          Storage.update_user store user;
+          Store.write_data store >>= function
           | Ok () -> Middleware.redirect_to_page ~path:"/dashboard" reqd ()
           | Error (`Msg msg) ->
               Middleware.http_response reqd ~data:(`String msg)
-                `Internal_server_error
+                `Internal_server_error)
         else
           Middleware.http_response reqd
             ~data:(`String "Logged in user is not the to-be-verified one")
@@ -866,11 +851,11 @@ struct
         Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
           ~with_error:true reqd ~msg:s ()
 
-  let toggle_account_attribute json_dict store storage_data reqd ~key update_fn
-      error_on_last ~error_message =
+  let toggle_account_attribute json_dict store reqd ~key update_fn error_on_last
+      ~error_message =
     match Utils.Json.get "uuid" json_dict with
     | Some (`String uuid) -> (
-        match Storage.find_by_uuid storage_data.Storage.users uuid with
+        match Storage.find_by_uuid store.Storage.users uuid with
         | None ->
             Logs.warn (fun m -> m "%s : Account not found" key);
             Middleware.http_response reqd ~data:(`String "Account not found")
@@ -882,9 +867,8 @@ struct
               Middleware.http_response reqd ~data:error_message `Forbidden)
             else
               let updated_user = update_fn user in
-              Store.write_data store
-                (Storage.update_user storage_data updated_user)
-              >>= function
+              Storage.update_user store updated_user;
+              Store.write_data store >>= function
               | Ok () ->
                   Middleware.http_response reqd
                     ~data:(`String "Updated user successfully") `OK
@@ -897,37 +881,34 @@ struct
         Middleware.http_response reqd
           ~data:(`String "Couldn't find a UUID in the JSON.") `Bad_request
 
-  let toggle_account_activation store storage_data _user json_dict reqd =
-    toggle_account_attribute json_dict store storage_data reqd
-      ~key:"toggle-active-account"
+  let toggle_account_activation store _user json_dict reqd =
+    toggle_account_attribute json_dict store reqd ~key:"toggle-active-account"
       (fun user ->
         User_model.update_user user ~active:(not user.active)
           ~updated_at:(Mirage_ptime.now ()) ())
-      (fun user -> user.active && Storage.count_active storage_data.users <= 1)
+      (fun user -> user.active && Storage.count_active store.users <= 1)
       ~error_message:(`String "Cannot deactivate last active user")
 
-  let toggle_admin_activation store storage_data _user json_dict reqd =
-    toggle_account_attribute json_dict store storage_data reqd
-      ~key:"toggle-admin-account"
+  let toggle_admin_activation store _user json_dict reqd =
+    toggle_account_attribute json_dict store reqd ~key:"toggle-admin-account"
       (fun user ->
         User_model.update_user user ~super_user:(not user.super_user)
           ~updated_at:(Mirage_ptime.now ()) ())
       (fun user ->
-        user.super_user
-        && Storage.count_superusers storage_data.Storage.users <= 1)
+        user.super_user && Storage.count_superusers store.Storage.users <= 1)
       ~error_message:(`String "Cannot remove last administrator")
 
-  let delete_account store storage_data _user json_dict reqd =
+  let delete_account store _user json_dict reqd =
     match Utils.Json.get "uuid" json_dict with
     | Some (`String uuid) -> (
-        match Storage.find_by_uuid storage_data.Storage.users uuid with
+        match Storage.find_by_uuid store.Storage.users uuid with
         | None ->
             Logs.warn (fun m -> m "delete-account : Account not found");
             Middleware.http_response reqd ~data:(`String "Account not found")
               `Not_found
         | Some user -> (
-            Store.write_data store (Storage.delete_user storage_data user)
-            >>= function
+            Storage.delete_user store user;
+            Store.write_data store >>= function
             | Ok () ->
                 Middleware.http_response reqd
                   ~data:(`String "Deleted user successfully") `OK
@@ -943,10 +924,10 @@ struct
           ~data:(`String "delete-user: Couldn't find a UUID in the JSON.")
           `Bad_request
 
-  let dashboard stack albatross_instances store storage_data _
-      (user : User_model.user) reqd =
+  let dashboard stack albatross_instances store _ (user : User_model.user) reqd
+      =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store storage_data user now reqd >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         (* TODO use uuid in the future *)
         user_unikernels stack albatross_instances user.name
@@ -965,11 +946,11 @@ struct
         Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
-  let account_page store storage_data _ (user : User_model.user) reqd =
+  let account_page store _ (user : User_model.user) reqd =
     match Middleware.session_cookie_value reqd with
     | Ok active_cookie_value -> (
         let now = Mirage_ptime.now () in
-        generate_csrf_token store storage_data user now reqd >>= function
+        generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user ~page_title:"Account"
@@ -986,8 +967,7 @@ struct
         Middleware.http_response ~api_meth:false reqd ~data:(`String err)
           `Bad_request
 
-  let update_password store storage_data (user : User_model.user) json_dict reqd
-      =
+  let update_password store (user : User_model.user) json_dict reqd =
     match
       Utils.Json.
         ( get "current_password" json_dict,
@@ -1023,8 +1003,8 @@ struct
             User_model.update_user user ~password:new_password_hash
               ~updated_at:now ()
           in
-          Store.write_data store (Storage.update_user storage_data updated_user)
-          >>= function
+          Storage.update_user store updated_user;
+          Store.write_data store >>= function
           | Ok () ->
               Middleware.http_response reqd
                 ~data:(`String "Updated password successfully") `OK
@@ -1040,20 +1020,20 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let new_user_cookies ~user ~filter ~redirect store storage_data reqd =
+  let new_user_cookies ~user ~filter ~redirect store reqd =
     let now = Mirage_ptime.now () in
     let cookies = List.filter filter user.User_model.cookies in
     let updated_user =
       User_model.update_user user ~cookies ~updated_at:now ()
     in
-    Store.write_data store (Storage.update_user storage_data updated_user)
-    >>= function
+    Storage.update_user store updated_user;
+    Store.write_data store >>= function
     | Ok () -> redirect
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Storage error with %s" err);
         Middleware.http_response reqd ~data:(`String err) `Internal_server_error
 
-  let close_sessions ?to_logout_cookie ?(logout = false) store storage_data
+  let close_sessions ?to_logout_cookie ?(logout = false) store
       (user : User_model.user) _json_dict reqd =
     match Middleware.session_cookie_value reqd with
     | Ok cookie_value -> (
@@ -1079,7 +1059,7 @@ struct
                     Middleware.redirect_to_page ~path:"/account"
                       ~msg:"Closed session successfully" reqd () )
             in
-            new_user_cookies ~user ~filter ~redirect store storage_data reqd
+            new_user_cookies ~user ~filter ~redirect store reqd
         | None ->
             Middleware.http_response ~api_meth:false reqd
               ~data:(`String "Authentication cookie not found.") `Not_found)
@@ -1090,7 +1070,7 @@ struct
                ("Session cookie error: Couldn't find a session cookie. " ^ err))
           `Bad_request
 
-  let close_session store storage_data (user : User_model.user) json_dict reqd =
+  let close_session store (user : User_model.user) json_dict reqd =
     match Utils.Json.(get "session_value" json_dict) with
     | Some (`String session_value) -> (
         let now = Mirage_ptime.now () in
@@ -1103,8 +1083,8 @@ struct
         let updated_user =
           User_model.update_user user ~cookies ~updated_at:now ()
         in
-        Store.write_data store (Storage.update_user storage_data updated_user)
-        >>= function
+        Storage.update_user store updated_user;
+        Store.write_data store >>= function
         | Ok () ->
             Middleware.http_response reqd
               ~data:(`String "Session closed successfully") `OK
@@ -1120,23 +1100,23 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let users store storage_data _ (user : User_model.user) reqd =
+  let users store _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store storage_data user now reqd >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Users"
-             ~content:(Users_index.users_index_layout storage_data.users now)
+             ~content:(Users_index.users_index_layout store.users now)
              ~icon:"/images/robur.png" ())
           `OK
     | Error err ->
         Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
-  let albatross_settings store storage_data albatross_instances _
-      (user : User_model.user) reqd =
+  let albatross_settings store albatross_instances _ (user : User_model.user)
+      reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store storage_data user now reqd >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
@@ -1151,15 +1131,15 @@ struct
         Middleware.http_response ~api_meth:false reqd ~title:err.title
           ~data:err.data `Internal_server_error
 
-  let email_settings store storage_data _ (user : User_model.user) reqd =
+  let email_settings store _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store storage_data user now reqd >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Email Settings"
              ~content:
                (Settings_page.settings_layout ~active_tab:Email
-                  (Email_config.email_config_layout storage_data.email))
+                  (Email_config.email_config_layout store.email))
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
@@ -1184,23 +1164,22 @@ struct
           ~data:(`String ("Re-initialization failed. See error logs: " ^ err))
           `Internal_server_error
 
-  let update_albatross_configuration stack store storage_data
-      albatross_instances (update_or_create : [ `Update | `Create ]) _user
-      json_dict reqd =
+  let update_albatross_configuration stack store albatross_instances
+      (update_or_create : [ `Update | `Create ]) _user json_dict reqd =
     match Configuration.of_json_from_http json_dict (Mirage_ptime.now ()) with
     | Ok configuration_settings -> (
         Albatross_state.init stack configuration_settings >>= function
         | Ok new_albatross_instance -> (
             match
-              Storage.upsert_configuration storage_data configuration_settings
+              Storage.upsert_configuration store configuration_settings
                 update_or_create
             with
             | Error err ->
                 Middleware.http_response
                   ~data:(`String (String.escaped err))
                   reqd `Bad_request
-            | Ok s -> (
-                Store.write_data store s >>= function
+            | Ok () -> (
+                Store.write_data store >>= function
                 | Ok () ->
                     albatross_instances :=
                       Albatross.Albatross_map.update configuration_settings.name
@@ -1219,15 +1198,13 @@ struct
           ~data:(`String (String.escaped err))
           reqd `Bad_request
 
-  let delete_albatross_config store storage_data albatross_instances _user
-      json_dict reqd =
+  let delete_albatross_config store albatross_instances _user json_dict reqd =
     match Utils.Json.get "name" json_dict with
     | Some (`String name) -> (
         match Configuration.name_of_str name with
         | Ok name -> (
-            Store.write_data store
-              (Storage.delete_configuration storage_data name)
-            >>= function
+            Storage.delete_configuration store name;
+            Store.write_data store >>= function
             | Ok _new_configurations ->
                 albatross_instances :=
                   Albatross.Albatross_map.remove name !albatross_instances;
@@ -1246,15 +1223,15 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let deploy_form stack store storage_data http_client albatross _
-      (user : User_model.user) reqd =
+  let deploy_form stack store http_client albatross _ (user : User_model.user)
+      reqd =
     let now = Mirage_ptime.now () in
     Builder_web.fetch_unikernel_jobs http_client >>= fun builder_jobs ->
     user_unikernels_by_instance stack albatross user.name
     >>= fun unikernels_by_albatross_instance ->
     user_blocks_by_instance stack albatross user.name
     >>= fun blocks_by_albatross_instance ->
-    generate_csrf_token store storage_data user now reqd >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf -> (
         match Albatross_state.policy albatross ~domain:user.name with
         | Ok p -> (
@@ -1432,8 +1409,8 @@ struct
              `Error)
           `Bad_request
 
-  let unikernel_scaling_policy_update stack store storage_data albatross
-      unikernel_name (user : User_model.user) multipart_body reqd =
+  let unikernel_scaling_policy_update stack store albatross unikernel_name
+      (user : User_model.user) multipart_body reqd =
     let current_scaling_policy =
       List.find_opt
         (fun (scaling_policy : User_model.unikernel_scaling_policy) ->
@@ -1444,8 +1421,8 @@ struct
     in
     let update_unikernel_scaling scaling_policies =
       let user = User_model.update_user user ~scaling_policies () in
-      Store.write_data store (Storage.update_user storage_data user)
-      >>= function
+      Storage.update_user store user;
+      Store.write_data store >>= function
       | Ok () ->
           reply reqd
             (Utils.display_alert
@@ -1532,7 +1509,7 @@ struct
           (Utils.display_alert "Missing max number of clones to spawn." `Error)
           `Bad_request
 
-  let unikernel_info_one stack store storage_data albatross unikernel_name _
+  let unikernel_info_one stack store albatross unikernel_name _
       (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
     user_unikernel stack albatross ~user_name:user.name ~unikernel_name
@@ -1547,7 +1524,7 @@ struct
           `Internal_server_error
     | Ok unikernel -> (
         let now = Mirage_ptime.now () in
-        generate_csrf_token store storage_data user now reqd >>= function
+        generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
             let last_update_time =
               match
@@ -1583,8 +1560,8 @@ struct
             Middleware.http_response ~api_meth:false reqd ~title:err.title
               ~data:err.data `Internal_server_error)
 
-  let unikernel_prepare_update stack store storage_data http_client albatross
-      unikernel_name _ (user : User_model.user) reqd =
+  let unikernel_prepare_update stack store http_client albatross unikernel_name
+      _ (user : User_model.user) reqd =
     let open Update_flow in
     let pipeline =
       let* name, unikernel =
@@ -1596,7 +1573,7 @@ struct
     pipeline >>= function
     | Ok (Update_available (name, unikernel, build_comparison)) -> (
         let now = Mirage_ptime.now () in
-        generate_csrf_token store storage_data user now reqd >>= function
+        generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
             reply reqd ~content_type:"text/html"
               (Dashboard.dashboard_layout ~csrf user
@@ -1672,7 +1649,7 @@ struct
 
   let process_change stack ~unikernel_name ~job ~to_be_updated_unikernel
       ~currently_running_unikernel (unikernel_cfg : Vmm_core.Unikernel.config)
-      (user : User_model.user) store storage_data http_client
+      (user : User_model.user) store http_client
       (change_kind : [ `Rollback | `Update ]) albatross =
     let change_string = function
       | `Rollback -> "rollback"
@@ -1688,10 +1665,9 @@ struct
         timestamp = Mirage_ptime.now ();
       }
     in
-    Store.write_data store
-      (Storage.update_user storage_data
-         (Storage.update_user_unikernel_updates unikernel_update user))
-    >>= function
+    Storage.update_user store
+      (Storage.update_user_unikernel_updates unikernel_update user);
+    Store.write_data store >>= function
     | Error (`Msg err) ->
         let data =
           Utils.Json.to_string
@@ -1750,7 +1726,7 @@ struct
               | Ok () -> *)
 
   let process_rollback stack albatross ~unikernel_name current_time store
-      storage_data http_client reqd (user : User_model.user) =
+      http_client reqd (user : User_model.user) =
     let unikernel_name_str = Configuration.name_to_str unikernel_name in
     match
       List.find_opt
@@ -1767,7 +1743,7 @@ struct
           process_change stack ~unikernel_name ~job:old_unikernel.job
             ~to_be_updated_unikernel:old_unikernel.uuid
             ~currently_running_unikernel:old_unikernel.uuid old_unikernel.config
-            user store storage_data http_client `Rollback albatross
+            user store http_client `Rollback albatross
           >>= function
           | Ok _res ->
               Middleware.http_response reqd ~title:"Rollback Successful"
@@ -1802,10 +1778,9 @@ struct
 
   let process_unikernel_update ~unikernel_name ~job ~to_be_updated_unikernel
       ~currently_running_unikernel ~http_liveliness_address ~dns_liveliness
-      stack cfg user store storage_data http_client albatross reqd =
+      stack cfg user store http_client albatross reqd =
     process_change stack ~unikernel_name ~job ~to_be_updated_unikernel
-      ~currently_running_unikernel cfg user store storage_data http_client
-      `Update albatross
+      ~currently_running_unikernel cfg user store http_client `Update albatross
     >>= function
     | Ok _res -> (
         let unikernel_name_str = Configuration.name_to_str unikernel_name in
@@ -1819,7 +1794,7 @@ struct
                    %s. now performing a rollback"
                   unikernel_name_str to_be_updated_unikernel err);
             process_rollback stack albatross ~unikernel_name
-              (Mirage_ptime.now ()) store storage_data http_client reqd user
+              (Mirage_ptime.now ()) store http_client reqd user
         | Ok () ->
             Middleware.http_response reqd ~title:"Update Successful"
               ~data:
@@ -1837,7 +1812,7 @@ struct
                ^ " with error " ^ err))
           http_status
 
-  let unikernel_update stack store storage_data albatross_instances http_client
+  let unikernel_update stack store albatross_instances http_client
       (user : User_model.user) json_dict reqd =
     let config_or_none field = function
       | None | Some `Null -> Ok None
@@ -1950,13 +1925,12 @@ struct
                               ~to_be_updated_unikernel
                               ~currently_running_unikernel
                               ~http_liveliness_address ~dns_liveliness stack cfg
-                              user store storage_data http_client albatross reqd
-                        )
+                              user store http_client albatross reqd)
                     | Ok (Some cfg) ->
                         process_unikernel_update ~unikernel_name ~job
                           ~to_be_updated_unikernel ~currently_running_unikernel
                           ~http_liveliness_address ~dns_liveliness stack cfg
-                          user store storage_data http_client albatross reqd)
+                          user store http_client albatross reqd)
                 | _ ->
                     Middleware.http_response
                       ~data:
@@ -1994,8 +1968,8 @@ struct
           ~data:(`String "Couldn't find job or build in json. Received ")
           `Bad_request
 
-  let unikernel_rollback stack store storage_data albatross_instances
-      http_client (user : User_model.user) json_dict reqd =
+  let unikernel_rollback stack store albatross_instances http_client
+      (user : User_model.user) json_dict reqd =
     match
       Utils.Json.
         (get "unikernel_name" json_dict, get "albatross_instance" json_dict)
@@ -2012,7 +1986,7 @@ struct
             with
             | Ok albatross ->
                 process_rollback stack albatross ~unikernel_name
-                  (Mirage_ptime.now ()) store storage_data http_client reqd user
+                  (Mirage_ptime.now ()) store http_client reqd user
             | _ ->
                 Middleware.http_response reqd
                   ~data:
@@ -2318,16 +2292,16 @@ struct
          (Configuration.name_to_str unikernel_name))
       `OK
 
-  let view_user stack albatross_instances store storage_data uuid
+  let view_user stack albatross_instances store uuid
       (page : [> `Profile | `Unikernels | `Policy ]) _ (user : User_model.user)
       reqd =
-    match Storage.find_by_uuid storage_data.Storage.users uuid with
+    match Storage.find_by_uuid store.Storage.users uuid with
     | Some u -> (
         user_unikernels stack albatross_instances u.name >>= fun unikernels ->
         user_deceased_by_instance stack albatross_instances u.name
         >>= fun deceased_unikernels ->
         let now = Mirage_ptime.now () in
-        generate_csrf_token store storage_data user now reqd >>= function
+        generate_csrf_token store user now reqd >>= function
         | Ok csrf -> (
             let reply content =
               reply reqd ~content_type:"text/html"
@@ -2367,9 +2341,8 @@ struct
           ~data:(`String ("Couldn't find account with uuid: " ^ uuid))
           reqd `Not_found
 
-  let edit_policy store storage_data uuid albatross _ (user : User_model.user)
-      reqd =
-    match Storage.find_by_uuid storage_data.Storage.users uuid with
+  let edit_policy store uuid albatross _ (user : User_model.user) reqd =
+    match Storage.find_by_uuid store.Storage.users uuid with
     | Some u -> (
         let user_policy =
           Option.value ~default:Albatross_state.empty_policy
@@ -2380,7 +2353,7 @@ struct
         match Albatross_state.policy_resource_avalaible albatross with
         | Ok unallocated_resources -> (
             let now = Mirage_ptime.now () in
-            generate_csrf_token store storage_data user now reqd >>= function
+            generate_csrf_token store user now reqd >>= function
             | Ok csrf ->
                 reply reqd ~content_type:"text/html"
                   (Dashboard.dashboard_layout ~csrf user
@@ -2406,13 +2379,12 @@ struct
           ~data:(`String ("Couldn't find account with uuid: " ^ uuid))
           reqd `Not_found
 
-  let update_policy stack albatross_instances storage_data _user json_dict reqd
-      =
+  let update_policy stack albatross_instances store _user json_dict reqd =
     match
       Utils.Json.(get "user_uuid" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String user_uuid), Some (`String instance_name) -> (
-        match Storage.find_by_uuid storage_data.Storage.users user_uuid with
+        match Storage.find_by_uuid store.Storage.users user_uuid with
         | Some u -> (
             match Configuration.name_of_str instance_name with
             | Ok instance_name -> (
@@ -2505,8 +2477,7 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let blocks stack store storage_data albatross _ (user : User_model.user) reqd
-      =
+  let blocks stack store albatross _ (user : User_model.user) reqd =
     user_blocks_by_instance stack albatross user.name >>= fun blocks ->
     let now = Mirage_ptime.now () in
     let policy =
@@ -2514,7 +2485,7 @@ struct
         ~error:(fun _ -> None)
         (Albatross_state.policy ~domain:user.name albatross)
     in
-    generate_csrf_token store storage_data user now reqd >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user
@@ -2837,10 +2808,9 @@ struct
         Middleware.http_response reqd
           ~data:(`String "Couldn't find block name in json") `Bad_request
 
-  let account_usage stack store storage_data albatross _
-      (user : User_model.user) reqd =
+  let account_usage stack store albatross _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store storage_data user now reqd >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         user_blocks_by_instance stack albatross user.name >>= fun blocks ->
         user_unikernels_by_instance stack albatross user.name
@@ -2863,9 +2833,8 @@ struct
         Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
           reqd `Internal_server_error
 
-  let choose_instance store storage_data
-      (albatross_instances : Albatross_state.a_map) callback _
-      (user : User_model.user) reqd =
+  let choose_instance store (albatross_instances : Albatross_state.a_map)
+      callback _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     if Albatross.Albatross_map.cardinal albatross_instances = 1 then
       let instance_name, _ =
@@ -2876,7 +2845,7 @@ struct
           (Middleware.construct_instance_redirect_url callback instance_name)
         reqd ()
     else
-      generate_csrf_token store storage_data user now reqd >>= function
+      generate_csrf_token store user now reqd >>= function
       | Ok csrf ->
           reply reqd ~content_type:"text/html"
             (Dashboard.dashboard_layout ~csrf user ~page_title:"Choose instance"
@@ -2891,9 +2860,9 @@ struct
           Middleware.http_response ~api_meth:false ~title:err.title
             ~data:err.data reqd `Internal_server_error
 
-  let api_tokens store storage_data _ (user : User_model.user) reqd =
+  let api_tokens store _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store storage_data user now reqd >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Tokens"
@@ -2905,7 +2874,7 @@ struct
         Middleware.http_response reqd ~title:err.title ~data:err.data
           `Internal_server_error
 
-  let create_token store storage_data (user : User_model.user) json_dict reqd =
+  let create_token store (user : User_model.user) json_dict reqd =
     match
       Utils.Json.(get "token_name" json_dict, get "token_expiry" json_dict)
     with
@@ -2916,8 +2885,8 @@ struct
           User_model.update_user user ~tokens:(token :: user.tokens)
             ~updated_at:now ()
         in
-        Store.write_data store (Storage.update_user storage_data updated_user)
-        >>= function
+        Storage.update_user store updated_user;
+        Store.write_data store >>= function
         | Ok () ->
             Middleware.http_response reqd
               ~data:(User_model.token_to_json token)
@@ -2934,7 +2903,7 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let delete_token store storage_data (user : User_model.user) json_dict reqd =
+  let delete_token store (user : User_model.user) json_dict reqd =
     match Utils.Json.(get "token_value" json_dict) with
     | Some (`String value) -> (
         let now = Mirage_ptime.now () in
@@ -2947,8 +2916,8 @@ struct
         let updated_user =
           User_model.update_user user ~tokens ~updated_at:now ()
         in
-        Store.write_data store (Storage.update_user storage_data updated_user)
-        >>= function
+        Storage.update_user store updated_user;
+        Store.write_data store >>= function
         | Ok () ->
             Middleware.http_response reqd
               ~data:(`String "Token deleted successfully") `OK
@@ -2964,7 +2933,7 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let update_token store storage_data (user : User_model.user) json_dict reqd =
+  let update_token store (user : User_model.user) json_dict reqd =
     match
       Utils.Json.
         ( get "token_name" json_dict,
@@ -2992,9 +2961,8 @@ struct
                 ~tokens:(updated_token :: user_tokens)
                 ~updated_at:now ()
             in
-            Store.write_data store
-              (Storage.update_user storage_data updated_user)
-            >>= function
+            Storage.update_user store updated_user;
+            Store.write_data store >>= function
             | Ok () ->
                 Middleware.http_response reqd
                   ~data:(User_model.token_to_json updated_token)
@@ -3014,10 +2982,10 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let view_albatross_error_logs store storage_data albatross _
-      (user : User_model.user) reqd =
+  let view_albatross_error_logs store albatross _ (user : User_model.user) reqd
+      =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store storage_data user now reqd >>= function
+    generate_csrf_token store user now reqd >>= function
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Albatross Errors"
@@ -3043,11 +3011,10 @@ struct
                (Fmt.str "Unexpected error parsing email settings: %s %s" ms1 ms2))
           `Bad_request
 
-  let update_email_configuration store storage_data _user json_dict reqd =
+  let update_email_configuration store _user json_dict reqd =
     with_valid_email_config json_dict reqd (fun email_settings ->
-        Store.write_data store
-          (Storage.store_email storage_data (Some email_settings))
-        >>= function
+        Storage.store_email store (Some email_settings);
+        Store.write_data store >>= function
         | Ok _ ->
             Middleware.http_response reqd
               ~data:(`String "Email settings verified and saved successfully")
@@ -3110,9 +3077,9 @@ struct
         (Label_map.add unikernel_name group unikernel_map)
         !scaling_groups
 
-  let spawn_clone stack storage_data albatross ~unikernel_name ~clone_name
-      ~user_name group scaler =
-    match Storage.find_by_name storage_data.Storage.users user_name with
+  let spawn_clone stack store albatross ~unikernel_name ~clone_name ~user_name
+      group scaler =
+    match Storage.find_by_name store.Storage.users user_name with
     | None -> Lwt.return_error "User not found"
     | Some user -> (
         user_unikernel stack albatross ~user_name ~unikernel_name >>= function
@@ -3271,8 +3238,8 @@ struct
                   err);
             Lwt.return_error err)
 
-  let evaluate_scaling stack storage_data albatross group now user_name
-      unikernel_name =
+  let evaluate_scaling stack store albatross group now user_name unikernel_name
+      =
     match Autoscaler.Cluster_manager.evaluate_scaling group now with
     | Error err ->
         Lwt.return_error
@@ -3316,7 +3283,7 @@ struct
                       (Configuration.name_to_str unikernel_name)
                       scaler.last_cpu_usage
                       (Configuration.name_to_str next_name));
-                spawn_clone stack storage_data albatross ~unikernel_name
+                spawn_clone stack store albatross ~unikernel_name
                   ~clone_name:next_name ~user_name group scaler)
         | Autoscaler.Underloaded (clone_to_kill, scaler) ->
             Log.info (fun m ->
@@ -3328,17 +3295,14 @@ struct
             prune_clone stack albatross group ~unikernel_name ~clone_to_kill
               ~user_name)
 
-  let handle_stats stack state ((rusage, _, _) : Vmm_core.Stats.t) storage_data
-      name =
+  let handle_stats stack state ((rusage, _, _) : Vmm_core.Stats.t) store name =
     match Vmm_core.Name.name name with
     | None -> Lwt.return_error "VM name has no unikernel label"
     | Some label -> (
         let unikernel_name = label in
         match Vmm_core.Name.Path.to_labels (Vmm_core.Name.path name) with
         | [ user_label ] -> (
-            match
-              Storage.find_by_name storage_data.Storage.users user_label
-            with
+            match Storage.find_by_name store.Storage.users user_label with
             | None ->
                 Lwt.return_error
                   (Fmt.str "User %s not found."
@@ -3418,18 +3382,18 @@ struct
                         ~unikernel_name:primary_name updated_group;
                       if Vmm_core.Name.Label.equal unikernel_name primary_name
                       then
-                        evaluate_scaling stack storage_data state updated_group
-                          now user.name primary_name
+                        evaluate_scaling stack store state updated_group now
+                          user.name primary_name
                       else Lwt.return_ok ())
                 else Lwt.return (Ok ()))
         | _ ->
             Lwt.return_error
               "VM path must contain exactly one user domain level")
 
-  let unikernels_stats stack instance storage_data =
+  let unikernels_stats stack instance store =
     let cb name st =
       Lwt.async (fun () ->
-          handle_stats stack instance st storage_data name >>= function
+          handle_stats stack instance st store name >>= function
           | Ok () -> Lwt.return_unit
           | Error err ->
               Log.err (fun m ->
@@ -3530,7 +3494,7 @@ struct
                 m "Background update check failed: %s" (Printexc.to_string exn));
             Lwt.return_unit)
 
-  let start_background_scheduler happy_eyeballs stack storage_data
+  let start_background_scheduler happy_eyeballs stack store
       albatross_instances_ref http_client =
     let rec loop () =
       let delay = seconds_until_next_midnight () in
@@ -3541,9 +3505,8 @@ struct
           Logs.info (fun m -> m "Starting background update...");
           Lwt.choose
             [
-              run_background_update_check happy_eyeballs
-                storage_data.Storage.users stack storage_data.email
-                !albatross_instances_ref http_client;
+              run_background_update_check happy_eyeballs store.Storage.users
+                stack store.email !albatross_instances_ref http_client;
               ( Mirage_sleep.ns (Duration.of_hour 1) >|= fun () ->
                 Logs.warn (fun m ->
                     m "Background update timed out after 1 hour") );
@@ -3668,8 +3631,8 @@ struct
     Lwt.async loop
 
   let request_handler stack management_happy_eyeballs management_domain
-      albatross_instances js_file css_file imgs grafana_file store storage_data
-      http_client happy_eyeballs flow (_ipaddr, _port) reqd =
+      albatross_instances js_file css_file imgs grafana_file store http_client
+      happy_eyeballs flow (_ipaddr, _port) reqd =
     Lwt.async (fun () ->
         let bad_request () =
           Middleware.http_response reqd
@@ -3764,21 +3727,18 @@ struct
                 reply reqd ~content_type:"application/json" grafana_file `OK)
         | "/sign-up" -> check_meth `GET (fun () -> sign_up reqd)
         | "/sign-in" -> check_meth `GET (fun () -> sign_in reqd)
-        | "/api/register" ->
-            check_meth `POST (fun () -> register store storage_data reqd)
-        | "/api/login" ->
-            check_meth `POST (fun () -> login store storage_data reqd)
+        | "/api/register" -> check_meth `POST (fun () -> register store reqd)
+        | "/api/login" -> check_meth `POST (fun () -> login store reqd)
         | "/verify-email" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd
-                  (email_verification (verify_email store storage_data)))
+                authenticate store reqd
+                  (email_verification (verify_email store)))
         | "/auth/verify" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "token" with
                 | Ok token ->
-                    authenticate store storage_data reqd
-                      (email_verification
-                         (verify_email_token store storage_data token))
+                    authenticate store reqd
+                      (email_verification (verify_email_token store token))
                 | Error err ->
                     Middleware.http_response ~api_meth:false ~data:(`String err)
                       reqd `Bad_request)
@@ -3787,84 +3747,76 @@ struct
                 Middleware.redirect_to_instance_selector "/dashboard" reqd ())
         | "/dashboard" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd
-                  (dashboard stack !albatross_instances store storage_data))
+                authenticate store reqd
+                  (dashboard stack !albatross_instances store))
         | "/account" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd
-                  (account_page store storage_data))
+                authenticate store reqd (account_page store))
         | "/account/password/update" ->
             check_meth `POST (fun () ->
-                authenticate store storage_data reqd
-                  (extract_json_csrf_token (update_password store storage_data)))
+                authenticate store reqd
+                  (extract_json_csrf_token (update_password store)))
         | "/api/account/sessions/close" ->
             check_meth `POST (fun () ->
-                authenticate store storage_data reqd
-                  (extract_json_csrf_token (close_sessions store storage_data)))
+                authenticate store reqd
+                  (extract_json_csrf_token (close_sessions store)))
         | "/logout" ->
             check_meth `POST (fun () ->
-                authenticate store storage_data reqd
-                  (extract_json_csrf_token
-                     (close_sessions ~logout:true store storage_data)))
+                authenticate store reqd
+                  (extract_json_csrf_token (close_sessions ~logout:true store)))
         | "/api/account/session/close" ->
             check_meth `POST (fun () ->
-                authenticate store storage_data reqd
-                  (extract_json_csrf_token (close_session store storage_data)))
+                authenticate store reqd
+                  (extract_json_csrf_token (close_session store)))
         | "/blocks" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd
-                  (albatross_instance "/blocks"
-                     (blocks stack store storage_data)))
+                authenticate store reqd
+                  (albatross_instance "/blocks" (blocks stack store)))
         | "/api/block/delete" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
                      (delete_block stack !albatross_instances)))
         | "/api/block/create" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store storage_data
-                  reqd (fun token_or_cookie user reqd ->
+                authenticate ~check_token:true ~api_meth:true store reqd
+                  (fun token_or_cookie user reqd ->
                     create_or_upload_block stack !albatross_instances `Create
                       token_or_cookie user reqd))
         | "/api/block/download" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
                      (download_block stack !albatross_instances)))
             >>= fun () -> Paf.TCP.close flow
         | "/api/block/upload" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store storage_data
-                  reqd (fun token_or_cookie user reqd ->
+                authenticate ~check_token:true ~api_meth:true store reqd
+                  (fun token_or_cookie user reqd ->
                     create_or_upload_block stack !albatross_instances `Upload
                       token_or_cookie user reqd))
         | "/tokens" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd
-                  (api_tokens store storage_data))
+                authenticate store reqd (api_tokens store))
         | "/api/tokens/create" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store storage_data reqd
-                  (extract_json_csrf_token (create_token store storage_data)))
+                authenticate ~api_meth:true store reqd
+                  (extract_json_csrf_token (create_token store)))
         | "/api/tokens/delete" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store storage_data reqd
-                  (extract_json_csrf_token (delete_token store storage_data)))
+                authenticate ~api_meth:true store reqd
+                  (extract_json_csrf_token (delete_token store)))
         | "/api/tokens/update" ->
             check_meth `POST (fun () ->
-                authenticate ~api_meth:true store storage_data reqd
-                  (extract_json_csrf_token (update_token store storage_data)))
+                authenticate ~api_meth:true store reqd
+                  (extract_json_csrf_token (update_token store)))
         | "/admin/users" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true store storage_data reqd
-                  (users store storage_data))
+                authenticate ~check_admin:true store reqd (users store))
         | "/usage" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd
-                  (albatross_instance "/usage"
-                     (account_usage stack store storage_data)))
+                authenticate store reqd
+                  (albatross_instance "/usage" (account_usage stack store)))
         | "/select/instance" ->
             check_meth `GET (fun () ->
                 let callback_link =
@@ -3876,16 +3828,14 @@ struct
                   | Some link -> link
                   | None -> "/dashboard"
                 in
-                authenticate store storage_data reqd
-                  (choose_instance store storage_data !albatross_instances
-                     callback_link))
+                authenticate store reqd
+                  (choose_instance store !albatross_instances callback_link))
         | "/admin/user/profile" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "uuid" with
                 | Ok uuid ->
-                    authenticate ~check_admin:true store storage_data reqd
-                      (view_user stack !albatross_instances store storage_data
-                         uuid `Profile)
+                    authenticate ~check_admin:true store reqd
+                      (view_user stack !albatross_instances store uuid `Profile)
                 | Error err ->
                     Middleware.http_response ~api_meth:false ~data:(`String err)
                       reqd `Bad_request)
@@ -3893,9 +3843,9 @@ struct
             check_meth `GET (fun () ->
                 match get_query_parameter "uuid" with
                 | Ok uuid ->
-                    authenticate ~check_admin:true store storage_data reqd
-                      (view_user stack !albatross_instances store storage_data
-                         uuid `Unikernels)
+                    authenticate ~check_admin:true store reqd
+                      (view_user stack !albatross_instances store uuid
+                         `Unikernels)
                 | Error err ->
                     Middleware.http_response ~api_meth:false ~data:(`String err)
                       reqd `Bad_request)
@@ -3903,9 +3853,8 @@ struct
             check_meth `GET (fun () ->
                 match get_query_parameter "uuid" with
                 | Ok uuid ->
-                    authenticate ~check_admin:true store storage_data reqd
-                      (view_user stack !albatross_instances store storage_data
-                         uuid `Policy)
+                    authenticate ~check_admin:true store reqd
+                      (view_user stack !albatross_instances store uuid `Policy)
                 | Error err ->
                     Middleware.http_response ~api_meth:false ~data:(`String err)
                       reqd `Bad_request)
@@ -3913,186 +3862,161 @@ struct
             check_meth `GET (fun () ->
                 match get_query_parameter "uuid" with
                 | Ok uuid ->
-                    authenticate ~check_admin:true store storage_data reqd
+                    authenticate ~check_admin:true store reqd
                       (albatross_instance req.H1.Request.target
-                         (edit_policy store storage_data uuid))
+                         (edit_policy store uuid))
                 | Error err ->
                     Middleware.http_response ~api_meth:false ~data:(`String err)
                       reqd `Bad_request)
         | "/admin/settings/albatross" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true store storage_data reqd
-                  (albatross_settings store storage_data !albatross_instances))
+                authenticate ~check_admin:true store reqd
+                  (albatross_settings store !albatross_instances))
         | "/admin/albatross/errors" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true store storage_data reqd
+                authenticate ~check_admin:true store reqd
                   (albatross_instance req.H1.Request.target
-                     (view_albatross_error_logs store storage_data)))
+                     (view_albatross_error_logs store)))
         | "/api/admin/albatross/retry" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_admin:true ~api_meth:true store reqd
                   (albatross_instance req.H1.Request.target
                      (retry_initializing_instance stack albatross_instances)))
         | "/admin/settings/email" ->
             check_meth `GET (fun () ->
-                authenticate ~check_admin:true store storage_data reqd
-                  (email_settings store storage_data))
+                authenticate ~check_admin:true store reqd (email_settings store))
         | "/api/admin/settings/albatross/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (update_albatross_configuration stack store storage_data
+                     (update_albatross_configuration stack store
                         albatross_instances `Update)))
         | "/api/admin/settings/albatross/create" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (update_albatross_configuration stack store storage_data
+                     (update_albatross_configuration stack store
                         albatross_instances `Create)))
         | "/api/admin/settings/albatross/delete" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (delete_albatross_config store storage_data
-                        albatross_instances)))
+                     (delete_albatross_config store albatross_instances)))
         | "/api/admin/settings/email/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store storage_data
-                  reqd
-                  (extract_json_csrf_token
-                     (update_email_configuration store storage_data)))
+                authenticate ~check_admin:true ~api_meth:true store reqd
+                  (extract_json_csrf_token (update_email_configuration store)))
         | "/api/admin/settings/email/test" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
                      (test_email_configuration happy_eyeballs)))
         | "/api/admin/u/policy/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_admin:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (update_policy stack !albatross_instances storage_data)))
+                     (update_policy stack !albatross_instances store)))
         | "/api/admin/user/activate/toggle" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store storage_data
-                  reqd
-                  (extract_json_csrf_token
-                     (toggle_account_activation store storage_data)))
+                authenticate ~check_admin:true ~api_meth:true store reqd
+                  (extract_json_csrf_token (toggle_account_activation store)))
         | "/api/admin/user/admin/toggle" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store storage_data
-                  reqd
-                  (extract_json_csrf_token
-                     (toggle_admin_activation store storage_data)))
+                authenticate ~check_admin:true ~api_meth:true store reqd
+                  (extract_json_csrf_token (toggle_admin_activation store)))
         | "/api/admin/user/account/delete" ->
             check_meth `POST (fun () ->
-                authenticate ~check_admin:true ~api_meth:true store storage_data
-                  reqd
-                  (extract_json_csrf_token (delete_account store storage_data)))
+                authenticate ~check_admin:true ~api_meth:true store reqd
+                  (extract_json_csrf_token (delete_account store)))
         | "/api/unikernels" ->
             check_meth `GET (fun () ->
-                authenticate ~api_meth:true ~check_token:true store storage_data
-                  reqd
+                authenticate ~api_meth:true ~check_token:true store reqd
                   (unikernel_info stack !albatross_instances))
         | "/unikernel/info" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd
+                authenticate store reqd
                   (albatross_instance req.H1.Request.target (fun albatross ->
-                       unikernel
-                         (unikernel_info_one stack store storage_data albatross))))
+                       unikernel (unikernel_info_one stack store albatross))))
         | "/unikernel/console" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd
+                authenticate store reqd
                   (albatross_instance req.H1.Request.target (fun albatross ->
                        unikernel
                          (unikernel_console_viewer albatross.configuration.name))))
         | "/unikernel/deploy" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd
+                authenticate store reqd
                   (albatross_instance "/unikernel/deploy"
-                     (deploy_form stack store storage_data http_client)))
+                     (deploy_form stack store http_client)))
         | "/api/unikernel/monitoring/status" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd ~check_token:true
-                  ~api_meth:true
+                authenticate store reqd ~check_token:true ~api_meth:true
                   (unikernel
                      (unikernel_monitoring_status management_happy_eyeballs
                         management_domain)))
         | "/api/unikernel/monitoring/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_multipart_csrf_token
                      (unikernel_monitoring_update management_happy_eyeballs
                         management_domain)))
         | "/api/unikernel/scaling/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_token:true ~api_meth:true store reqd
                   (albatross_instance req.H1.Request.target (fun albatross ->
                        unikernel (fun unikernel_name ->
                            extract_multipart_csrf_token
                              (unikernel_scaling_policy_update stack store
-                                storage_data albatross unikernel_name)))))
+                                albatross unikernel_name)))))
         | "/api/unikernel/destroy" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
                      (unikernel_destroy stack !albatross_instances)))
         | "/api/unikernel/restart" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_token:true ~api_meth:true store reqd
                   (albatross_instance req.H1.Request.target (fun albatross ->
                        unikernel (fun unikernel_name ->
                            extract_json_csrf_token
                              (unikernel_restart stack albatross unikernel_name)))))
         | "/api/unikernel/console" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd ~check_token:true
-                  ~api_meth:true
+                authenticate store reqd ~check_token:true ~api_meth:true
                   (albatross_instance req.H1.Request.target (fun albatross ->
                        unikernel (unikernel_console stack albatross))))
         | "/api/unikernel/create" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store storage_data
-                  reqd (fun token_or_cookie user reqd ->
+                authenticate ~check_token:true ~api_meth:true store reqd
+                  (fun token_or_cookie user reqd ->
                     unikernel_create stack !albatross_instances http_client
                       token_or_cookie user reqd))
         | "/unikernel/update" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd
+                authenticate store reqd
                   (albatross_instance req.H1.Request.target (fun albatross ->
                        unikernel
-                         (unikernel_prepare_update stack store storage_data
-                            http_client albatross))))
+                         (unikernel_prepare_update stack store http_client
+                            albatross))))
         | "/api/unikernel/update" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (unikernel_update stack store storage_data
-                        !albatross_instances http_client)))
+                     (unikernel_update stack store !albatross_instances
+                        http_client)))
         | "/api/unikernel/rollback" ->
             check_meth `POST (fun () ->
-                authenticate ~check_token:true ~api_meth:true store storage_data
-                  reqd
+                authenticate ~check_token:true ~api_meth:true store reqd
                   (extract_json_csrf_token
-                     (unikernel_rollback stack store storage_data
-                        !albatross_instances http_client)))
+                     (unikernel_rollback stack store !albatross_instances
+                        http_client)))
         | "/unikernel/update/compare-changes" ->
             check_meth `GET (fun () ->
-                authenticate store storage_data reqd
+                authenticate store reqd
                   (albatross_instance req.H1.Request.target (fun albatross ->
                        unikernel
-                         (unikernel_prepare_update stack store storage_data
-                            http_client albatross))))
+                         (unikernel_prepare_update stack store http_client
+                            albatross))))
         | _ ->
             Middleware.http_response ~api_meth:false ~title:"Page not found"
               ~data:(`String "This page cannot be found.") reqd `Bad_request)
@@ -4115,7 +4039,7 @@ struct
     images assets >>= fun imgs ->
     Store.connect storage >>= function
     | Error (`Msg msg) -> failwith msg
-    | Ok (store, storage_data) ->
+    | Ok store ->
         let dns = Dns.create (stack, HE.create stack) in
         let happy_eyeballs = HE.create ~getaddrinfo:(getaddrinfo dns) stack in
         let management_happy_eyeballs =
@@ -4130,7 +4054,7 @@ struct
               Logs.info (fun m -> m "Domain from DHCP lease: %s" domain_name);
               Domain_name.of_string_exn domain_name
         in
-        Albatross_state.init_all stack storage_data.Storage.configurations
+        Albatross_state.init_all stack store.Storage.configurations
         >>= fun albatross_instances ->
         let albatross_instances = ref albatross_instances in
         let port = K.port () in
@@ -4139,16 +4063,16 @@ struct
         let request_handler =
           request_handler stack management_happy_eyeballs management_domain
             albatross_instances js_file css_file imgs grafana_file store
-            storage_data http_client happy_eyeballs
+            http_client happy_eyeballs
         in
         Paf.init ~port (S.tcp stack) >>= fun service ->
         Lwt.pause () >>= fun () ->
         let http = Paf.http_service ~error_handler request_handler in
         let (`Initialized th) = Paf.serve http service in
         Lwt.pause () >>= fun () ->
-        start_background_scheduler happy_eyeballs stack storage_data
+        start_background_scheduler happy_eyeballs stack store
           albatross_instances http_client;
-        start_background_scaler_scheduler stack storage_data albatross_instances;
+        start_background_scaler_scheduler stack store albatross_instances;
         run_prune_dead_clusters stack !albatross_instances;
         th
 end
