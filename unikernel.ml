@@ -32,268 +32,6 @@ struct
   module Dns = Dns_client_mirage.Make (S) (HE)
   module Management_HE = Happy_eyeballs_mirage.Make (Management_S)
 
-  module BlockMake (BLOCK : Mirage_block.S) = struct
-    module Stored_data = OneFFS.Make (BLOCK)
-    open Lwt.Infix
-
-    type t = {
-      disk : Stored_data.t;
-      mutable users : User_model.user list;
-      mutable configurations : Configuration.t list;
-      mutable email : Utils.Email.t option;
-    }
-
-    let write_data t =
-      Stored_data.write t.disk
-        (Yojson.Basic.to_string
-           (Storage.t_to_json t.users t.configurations t.email))
-
-    let read_data disk =
-      Stored_data.read disk >|= function
-      | Ok (Some s) ->
-          let ( let* ) = Result.bind in
-          let* json = Utils.Json.from_string s in
-          let* t = Storage.t_of_json json in
-          Ok t
-      | Ok None -> Ok ([], [], None)
-      | Error e ->
-          Storage.error_msgf "error while reading storage: %a"
-            Stored_data.pp_error e
-
-    let connect block =
-      Stored_data.connect block >>= fun disk ->
-      read_data disk >|= function
-      | Error _ as e -> e
-      | Ok (users, configurations, email) ->
-          Ok { disk; users; configurations; email }
-
-    let configurations { configurations; _ } = configurations
-    let email { email; _ } = email
-
-    let store_configurations t configurations =
-      let t' = { t with configurations } in
-      write_data t' >|= function
-      | Ok () ->
-          t.configurations <- configurations;
-          Ok t.configurations
-      | Error we ->
-          Storage.error_msgf "error while writing storage: %a"
-            Stored_data.pp_write_error we
-
-    let store_email t email =
-      let t' = { t with email } in
-      write_data t' >|= function
-      | Ok () ->
-          t.email <- email;
-          Ok t.email
-      | Error we ->
-          Storage.error_msgf "error while writing storage: %a"
-            Stored_data.pp_write_error we
-
-    let upsert_configuration t (configuration : Configuration.t)
-        (mode : [ `Create | `Update ]) =
-      let name_eq (c : Configuration.t) =
-        Vmm_core.Name.Label.equal c.name configuration.name
-      in
-      let exists = List.exists name_eq t.configurations in
-      match mode with
-      | `Create ->
-          if exists then
-            Lwt.return
-              (Storage.error_msgf "configuration %s already exists"
-                 (Configuration.name_to_str configuration.name))
-          else store_configurations t (t.configurations @ [ configuration ])
-      | `Update ->
-          if not exists then
-            Lwt.return
-              (Storage.error_msgf "configuration %s not found"
-                 (Configuration.name_to_str configuration.name))
-          else
-            let configurations =
-              List.map
-                (fun c -> if name_eq c then configuration else c)
-                t.configurations
-            in
-            store_configurations t configurations
-
-    let delete_configuration t name =
-      let before = t.configurations in
-      let configurations =
-        List.filter
-          (fun (c : Configuration.t) ->
-            not (Vmm_core.Name.Label.equal c.name name))
-          before
-      in
-      let deleted_any = List.length configurations <> List.length before in
-      let t' = { t with configurations } in
-      write_data t' >|= function
-      | Ok () ->
-          if deleted_any then (
-            t.configurations <- configurations;
-            Ok t.configurations)
-          else
-            Storage.error_msgf "configuration '%s' not found"
-              (Configuration.name_to_str name)
-      | Error we ->
-          Storage.error_msgf "error while writing storage: %a"
-            Stored_data.pp_write_error we
-
-    let add_user t user =
-      let t' = { t with users = user :: t.users } in
-      write_data t' >|= function
-      | Ok () ->
-          t.users <- user :: t.users;
-          Ok ()
-      | Error we ->
-          Storage.error_msgf "error while writing storage: %a"
-            Stored_data.pp_write_error we
-
-    let delete_user t (user : User_model.user) =
-      let users =
-        List.fold_left
-          (fun acc u ->
-            if u.User_model.uuid <> user.uuid then u :: acc else acc)
-          [] t.users
-      in
-      let t' = { t with users } in
-      write_data t' >|= function
-      | Ok () ->
-          t.users <- users;
-          Ok ()
-      | Error we ->
-          Storage.error_msgf "error while writing storage: %a"
-            Stored_data.pp_write_error we
-
-    let update_user t (user : User_model.user) =
-      let users =
-        List.map
-          (fun (u : User_model.user) ->
-            match u.uuid = user.uuid with true -> user | false -> u)
-          t.users
-      in
-      let t' = { t with users } in
-      write_data t' >|= function
-      | Ok () ->
-          t.users <- users;
-          Ok ()
-      | Error we ->
-          Storage.error_msgf "error while writing storage: %a"
-            Stored_data.pp_write_error we
-
-    let users { users; _ } = users
-
-    let find_by_email store email =
-      List.find_opt
-        (fun user -> Mrmime.Mailbox.equal user.User_model.email email)
-        store.users
-
-    let find_by_name store name =
-      List.find_opt
-        (fun user -> Vmm_core.Name.Label.compare user.User_model.name name = 0)
-        store.users
-
-    let find_by_uuid store uuid =
-      List.find_opt
-        (fun user -> String.equal user.User_model.uuid uuid)
-        store.users
-
-    let find_by_cookie store cookie_value =
-      List.fold_left
-        (fun acc user ->
-          match acc with
-          | Some _ as s -> s
-          | None -> (
-              match
-                List.find_opt
-                  (fun (cookie : User_model.cookie) ->
-                    String.equal User_model.session_cookie
-                      cookie.User_model.name
-                    && String.equal cookie_value cookie.value)
-                  user.User_model.cookies
-              with
-              | None -> None
-              | Some c -> Some (user, c)))
-        None store.users
-
-    let find_by_api_token store token =
-      List.find_map
-        (fun (user : User_model.user) ->
-          match
-            List.find_opt
-              (fun (token_ : User_model.token) ->
-                String.equal token token_.value)
-              user.tokens
-          with
-          | Some token_ -> Some (user, token_)
-          | None -> None)
-        store.users
-
-    let increment_token_usage store (token : User_model.token)
-        (user : User_model.user) =
-      let token = { token with usage_count = token.usage_count + 1 } in
-      let tokens =
-        List.map
-          (fun (token' : User_model.token) ->
-            if String.equal token.value token'.value then token else token')
-          user.tokens
-      in
-      let updated_user = User_model.update_user user ~tokens () in
-      update_user store updated_user >>= function
-      | Ok () -> Lwt.return (Ok ())
-      | Error (`Msg err) ->
-          Logs.err (fun m -> m "Error with storage: %s" err);
-          Lwt.return (Error (`Msg err))
-
-    let update_cookie_usage store (cookie : User_model.cookie)
-        (user : User_model.user) reqd =
-      let cookie = { cookie with user_agent = Middleware.user_agent reqd } in
-      let cookies =
-        List.map
-          (fun (cookie' : User_model.cookie) ->
-            if String.equal cookie.value cookie'.value then cookie else cookie')
-          user.cookies
-      in
-      let updated_user = User_model.update_user user ~cookies () in
-      update_user store updated_user >>= function
-      | Ok () -> Lwt.return (Ok ())
-      | Error (`Msg err) ->
-          Logs.err (fun m -> m "Error with storage: %s" err);
-          Lwt.return (Error (`Msg err))
-
-    let update_user_unikernel_updates store
-        (new_update : User_model.unikernel_update) (user : User_model.user) =
-      let is_unique (u : User_model.unikernel_update) =
-        not (Vmm_core.Name.Label.equal u.name new_update.name)
-      in
-      let updated_list =
-        new_update :: List.filter is_unique user.unikernel_updates
-      in
-      let updated_user =
-        User_model.update_user user ~unikernel_updates:updated_list ()
-      in
-      update_user store updated_user >>= function
-      | Ok () -> Lwt.return (Ok ())
-      | Error (`Msg err) ->
-          Logs.err (fun m -> m "Error with storage: %s" err);
-          Lwt.return (Error (`Msg err))
-
-    let count_users store = List.length store.users
-
-    let find_email_verification_token store uuid =
-      List.find_opt
-        (fun user ->
-          Option.fold ~none:false
-            ~some:(fun uu -> Uuidm.equal uu uuid)
-            user.User_model.email_verification_uuid)
-        store.users
-
-    let count_active store =
-      List.length (List.filter (fun u -> u.User_model.active) store.users)
-
-    let count_superusers store =
-      List.length (List.filter (fun u -> u.User_model.super_user) store.users)
-  end
-
   let recipient email =
     match Colombe_emile.to_path email with
     | Ok path -> [ Colombe.Forward_path.Forward_path path ]
@@ -438,7 +176,7 @@ struct
         { molly_img; robur_img; albatross_img; mirage_img; dashboard_img }
     | _ -> failwith "Unexpected number of images"
 
-  module Store = BlockMake (BLOCK)
+  module Store = Store.Make (BLOCK)
   module Map = Map.Make (String)
 
   let csrf_verification f user csrf reqd =
@@ -677,7 +415,7 @@ struct
       | Error (`Msg err) ->
           Error (`Cookie, "No molly-session in cookie header. " ^ err)
       | Ok cookie_value -> (
-          match Store.find_by_cookie store cookie_value with
+          match Storage.find_by_cookie store.Store.users cookie_value with
           | None -> Error (`Cookie, "Failed to find user with cookie")
           | Some (user, cookie) ->
               if User_model.is_valid_cookie cookie current_time then
@@ -690,7 +428,7 @@ struct
               else Error (`Cookie, "Session value doesn't match user session"))
     in
     let valid_token token_value =
-      match Store.find_by_api_token store token_value with
+      match Storage.find_by_api_token store.Store.users token_value with
       | Some (user, token) ->
           if User_model.is_valid_token token current_time then Ok (user, token)
           else Error (`Token, "Token value is not valid " ^ token_value)
@@ -720,13 +458,16 @@ struct
           Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
             ~with_error:true ~msg reqd ()
     | Ok (`Token (user, token)) -> (
-        Store.increment_token_usage store token user >>= function
+        Store.update_user store (Storage.increment_token_usage token user)
+        >>= function
         | Error (`Msg err) ->
             Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error
         | Ok () -> f `Token user reqd)
     | Ok (`Cookie (user, cookie)) -> (
-        Store.update_cookie_usage store cookie user reqd >>= function
+        Store.update_user store
+          (Storage.update_cookie_usage cookie (Middleware.user_agent reqd) user)
+        >>= function
         | Error (`Msg err) ->
             Logs.err (fun m -> m "Error with storage: %s" err);
             Middleware.http_response reqd ~data:(`String err)
@@ -925,8 +666,12 @@ struct
                   `Bad_request
             | Ok (name, email) ->
                 if Middleware.csrf_cookie_verification form_csrf reqd then
-                  let existing_email = Store.find_by_email store email in
-                  let existing_name = Store.find_by_name store name in
+                  let existing_email =
+                    Storage.find_by_email store.Store.users email
+                  in
+                  let existing_name =
+                    Storage.find_by_name store.Store.users name
+                  in
                   match (existing_name, existing_email) with
                   | Some _, None ->
                       Middleware.http_response reqd
@@ -940,7 +685,8 @@ struct
                       let created_at = Mirage_ptime.now () in
                       let user, cookie =
                         let active, super_user =
-                          if Store.count_users store = 0 then (true, true)
+                          if Storage.count_users store.Store.users = 0 then
+                            (true, true)
                           else (false, false)
                         in
                         User_model.create_user ~name ~email ~password
@@ -1011,7 +757,7 @@ struct
                 Middleware.http_response reqd ~data:(`String err) `Bad_request
             | Ok email -> (
                 let now = Mirage_ptime.now () in
-                let user = Store.find_by_email store email in
+                let user = Storage.find_by_email store.Store.users email in
                 match
                   User_model.login_user ~email ~password
                     ~user_agent:(Middleware.user_agent reqd)
@@ -1084,7 +830,7 @@ struct
         Option.to_result ~none:(`Msg "invalid UUID")
           (Uuidm.of_string verification_token)
       in
-      let u = Store.find_email_verification_token store uuid in
+      let u = Storage.find_email_verification_token store.Store.users uuid in
       User_model.verify_email_token u verification_token (Mirage_ptime.now ())
     with
     | Ok user' ->
@@ -1106,7 +852,7 @@ struct
       ~error_message =
     match Utils.Json.get "uuid" json_dict with
     | Some (`String uuid) -> (
-        match Store.find_by_uuid store uuid with
+        match Storage.find_by_uuid store.Store.users uuid with
         | None ->
             Logs.warn (fun m -> m "%s : Account not found" key);
             Middleware.http_response reqd ~data:(`String "Account not found")
@@ -1136,7 +882,7 @@ struct
       (fun user ->
         User_model.update_user user ~active:(not user.active)
           ~updated_at:(Mirage_ptime.now ()) ())
-      (fun user -> user.active && Store.count_active store <= 1)
+      (fun user -> user.active && Storage.count_active store.Store.users <= 1)
       ~error_message:(`String "Cannot deactivate last active user")
 
   let toggle_admin_activation store _user json_dict reqd =
@@ -1144,13 +890,14 @@ struct
       (fun user ->
         User_model.update_user user ~super_user:(not user.super_user)
           ~updated_at:(Mirage_ptime.now ()) ())
-      (fun user -> user.super_user && Store.count_superusers store <= 1)
+      (fun user ->
+        user.super_user && Storage.count_superusers store.Store.users <= 1)
       ~error_message:(`String "Cannot remove last administrator")
 
   let delete_account store _user json_dict reqd =
     match Utils.Json.get "uuid" json_dict with
     | Some (`String uuid) -> (
-        match Store.find_by_uuid store uuid with
+        match Storage.find_by_uuid store.Store.users uuid with
         | None ->
             Logs.warn (fun m -> m "delete-account : Account not found");
             Middleware.http_response reqd ~data:(`String "Account not found")
@@ -1901,7 +1648,9 @@ struct
         timestamp = Mirage_ptime.now ();
       }
     in
-    Store.update_user_unikernel_updates store unikernel_update user >>= function
+    Store.update_user store
+      (Storage.update_user_unikernel_updates unikernel_update user)
+    >>= function
     | Error (`Msg err) ->
         let data =
           Utils.Json.to_string
@@ -2529,7 +2278,7 @@ struct
   let view_user stack albatross_instances store uuid
       (page : [> `Profile | `Unikernels | `Policy ]) _ (user : User_model.user)
       reqd =
-    match Store.find_by_uuid store uuid with
+    match Storage.find_by_uuid store.Store.users uuid with
     | Some u -> (
         user_unikernels stack albatross_instances u.name >>= fun unikernels ->
         user_deceased_by_instance stack albatross_instances u.name
@@ -2576,7 +2325,7 @@ struct
           reqd `Not_found
 
   let edit_policy store uuid albatross _ (user : User_model.user) reqd =
-    match Store.find_by_uuid store uuid with
+    match Storage.find_by_uuid store.Store.users uuid with
     | Some u -> (
         let user_policy =
           Option.value ~default:Albatross_state.empty_policy
@@ -2618,7 +2367,7 @@ struct
       Utils.Json.(get "user_uuid" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String user_uuid), Some (`String instance_name) -> (
-        match Store.find_by_uuid store user_uuid with
+        match Storage.find_by_uuid store.Store.users user_uuid with
         | Some u -> (
             match Configuration.name_of_str instance_name with
             | Ok instance_name -> (
@@ -3309,7 +3058,7 @@ struct
 
   let spawn_clone stack store albatross ~unikernel_name ~clone_name ~user_name
       group scaler =
-    match Store.find_by_name store user_name with
+    match Storage.find_by_name store.Store.users user_name with
     | None -> Lwt.return_error "User not found"
     | Some user -> (
         user_unikernel stack albatross ~user_name ~unikernel_name >>= function
@@ -3532,7 +3281,7 @@ struct
         let unikernel_name = label in
         match Vmm_core.Name.Path.to_labels (Vmm_core.Name.path name) with
         | [ user_label ] -> (
-            match Store.find_by_name store user_label with
+            match Storage.find_by_name store.Store.users user_label with
             | None ->
                 Lwt.return_error
                   (Fmt.str "User %s not found."
