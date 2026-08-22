@@ -42,16 +42,32 @@ let eq_config (config_1 : Configuration.t list)
   match (config_1, config_2) with
   | [], [] -> true
   | c1 :: _, c2 :: _ ->
-      Vmm_core.Name.Label.equal c1.name c2.name
-      && Ipaddr.compare c1.server_ip c2.server_ip = 0
-      && c1.server_port = c2.server_port
-      && Ptime.equal c1.updated_at c2.updated_at
+      let {
+        Configuration.name = n1;
+        server_ip = si1;
+        server_port = sp1;
+        updated_at = ua1;
+        certificate = cer1;
+        private_key = pk1;
+      } =
+        c1
+      and {
+        Configuration.name = n2;
+        server_ip = si2;
+        server_port = sp2;
+        updated_at = ua2;
+        certificate = cer2;
+        private_key = pk2;
+      } =
+        c2
+      in
+      Vmm_core.Name.Label.equal n1 n2
+      && Ipaddr.compare si1 si2 = 0
+      && sp1 = sp2 && Ptime.equal ua1 ua2
       && eq_key
-           (X509.Certificate.public_key c1.certificate)
-           (X509.Certificate.public_key c2.certificate)
-      && eq_key
-           (X509.Private_key.public c1.private_key)
-           (X509.Private_key.public c2.private_key)
+           (X509.Certificate.public_key cer1)
+           (X509.Certificate.public_key cer2)
+      && eq_key (X509.Private_key.public pk1) (X509.Private_key.public pk2)
   | _ -> false
 
 let eq_users (users_1 : User_model.user list) (users_2 : User_model.user list) =
@@ -102,11 +118,27 @@ let eq_users (users_1 : User_model.user list) (users_2 : User_model.user list) =
   | _ -> false
 
 let eq_emails (e1 : Utils.Email.t) (e2 : Utils.Email.t) =
-  Ipaddr.compare e1.server e2.server = 0
-  && e1.port = e2.port
-  && String.equal e1.base_url e2.base_url
-  && Mrmime.Mailbox.equal e1.from_email e2.from_email
-  && Option.equal Mrmime.Mailbox.equal e1.to_email e2.to_email
+  let {
+    Utils.Email.server = s1;
+    port = p1;
+    base_url = bu1;
+    from_email = fe1;
+    to_email = te1;
+  } =
+    e1
+  and {
+    Utils.Email.server = s2;
+    port = p2;
+    base_url = bu2;
+    from_email = fe2;
+    to_email = te2;
+  } =
+    e2
+  in
+  Ipaddr.compare s1 s2 = 0
+  && p1 = p2 && String.equal bu1 bu2
+  && Mrmime.Mailbox.equal fe1 fe2
+  && Option.equal Mrmime.Mailbox.equal te1 te2
 
 let eq_storage (u1, c1, e1) (u2, c2, e2) =
   eq_users u1 u2 && eq_config c1 c2 && Option.equal eq_emails e1 e2
