@@ -11,10 +11,17 @@ module Make (BLOCK : Mirage_block.S) = struct
     mutable email : Utils.Email.t option;
   }
 
-  let write_data t =
+  let write_data t fn res =
     Stored_data.write t.disk
       (Yojson.Basic.to_string
          (Storage.t_to_json t.users t.configurations t.email))
+    >|= function
+    | Ok () ->
+        fn;
+        Ok res
+    | Error we ->
+        Storage.error_msgf "error while writing storage: %a"
+          Stored_data.pp_write_error we
 
   let read_data disk =
     Stored_data.read disk >|= function
@@ -40,23 +47,11 @@ module Make (BLOCK : Mirage_block.S) = struct
 
   let store_configurations t configurations =
     let t' = { t with configurations } in
-    write_data t' >|= function
-    | Ok () ->
-        t.configurations <- configurations;
-        Ok t.configurations
-    | Error we ->
-        Storage.error_msgf "error while writing storage: %a"
-          Stored_data.pp_write_error we
+    write_data t' (t.configurations <- configurations) t.configurations
 
   let store_email t email =
     let t' = { t with email } in
-    write_data t' >|= function
-    | Ok () ->
-        t.email <- email;
-        Ok t.email
-    | Error we ->
-        Storage.error_msgf "error while writing storage: %a"
-          Stored_data.pp_write_error we
+    write_data t' (t.email <- email) t.email
 
   let upsert_configuration t (configuration : Configuration.t)
       (mode : [ `Create | `Update ]) =
@@ -85,36 +80,18 @@ module Make (BLOCK : Mirage_block.S) = struct
           store_configurations t configurations
 
   let delete_configuration t name =
-    let before = t.configurations in
     let configurations =
       List.filter
         (fun (c : Configuration.t) ->
           not (Vmm_core.Name.Label.equal c.name name))
-        before
+        t.configurations
     in
-    let deleted_any = List.length configurations <> List.length before in
     let t' = { t with configurations } in
-    write_data t' >|= function
-    | Ok () ->
-        if deleted_any then (
-          t.configurations <- configurations;
-          Ok t.configurations)
-        else
-          Storage.error_msgf "configuration '%s' not found"
-            (Configuration.name_to_str name)
-    | Error we ->
-        Storage.error_msgf "error while writing storage: %a"
-          Stored_data.pp_write_error we
+    write_data t' (t.configurations <- configurations) t.configurations
 
   let add_user t user =
     let t' = { t with users = user :: t.users } in
-    write_data t' >|= function
-    | Ok () ->
-        t.users <- user :: t.users;
-        Ok ()
-    | Error we ->
-        Storage.error_msgf "error while writing storage: %a"
-          Stored_data.pp_write_error we
+    write_data t' (t.users <- user :: t.users) ()
 
   let delete_user t (user : User_model.user) =
     let users =
@@ -123,13 +100,7 @@ module Make (BLOCK : Mirage_block.S) = struct
         [] t.users
     in
     let t' = { t with users } in
-    write_data t' >|= function
-    | Ok () ->
-        t.users <- users;
-        Ok ()
-    | Error we ->
-        Storage.error_msgf "error while writing storage: %a"
-          Stored_data.pp_write_error we
+    write_data t' (t.users <- users) ()
 
   let update_user t (user : User_model.user) =
     let users =
@@ -139,13 +110,7 @@ module Make (BLOCK : Mirage_block.S) = struct
         t.users
     in
     let t' = { t with users } in
-    write_data t' >|= function
-    | Ok () ->
-        t.users <- users;
-        Ok ()
-    | Error we ->
-        Storage.error_msgf "error while writing storage: %a"
-          Stored_data.pp_write_error we
+    write_data t' (t.users <- users) ()
 
   let users { users; _ } = users
 end
