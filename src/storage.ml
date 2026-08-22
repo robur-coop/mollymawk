@@ -170,31 +170,27 @@ let exists (configurations : Configuration.t list)
     (configuration : Configuration.t) =
   List.exists (configuration_name_eq configuration) configurations
 
-let store_email t email =
-  t.email <- email;
-  t
+let store_email t email = t.email <- email
 
 let insert_configuration t (configuration : Configuration.t) =
   if exists t.configurations configuration then
     Error
       (Fmt.str "configuration %s already exists"
          (Configuration.name_to_str configuration.name))
-  else (
-    t.configurations <- t.configurations @ [ configuration ];
-    Ok t)
+  else Ok (t.configurations <- t.configurations @ [ configuration ])
 
 let update_configuration t (configuration : Configuration.t) =
   if not (exists t.configurations configuration) then
     Error
       (Fmt.str "configuration %s not found"
          (Configuration.name_to_str configuration.name))
-  else (
-    t.configurations <-
-      List.map
-        (fun c ->
-          if configuration_name_eq c configuration then configuration else c)
-        t.configurations;
-    Ok t)
+  else
+    Ok
+      (t.configurations <-
+        List.map
+          (fun c ->
+            if configuration_name_eq c configuration then configuration else c)
+          t.configurations)
 
 let upsert_configuration t (configuration : Configuration.t) mode =
   match mode with
@@ -207,12 +203,9 @@ let delete_configuration t name =
       (fun (c : Configuration.t) -> not (Vmm_core.Name.Label.equal c.name name))
       t.configurations
   in
-  t.configurations <- configurations;
-  t
+  t.configurations <- configurations
 
-let add_user t user =
-  t.users <- user :: t.users;
-  t
+let add_user t user = t.users <- user :: t.users
 
 let delete_user t (user : User_model.user) =
   let users =
@@ -220,8 +213,7 @@ let delete_user t (user : User_model.user) =
       (fun acc u -> if u.User_model.uuid <> user.uuid then u :: acc else acc)
       [] t.users
   in
-  t.users <- users;
-  t
+  t.users <- users
 
 let update_user t (user : User_model.user) =
   let users =
@@ -230,5 +222,4 @@ let update_user t (user : User_model.user) =
         match u.uuid = user.uuid with true -> user | false -> u)
       t.users
   in
-  t.users <- users;
-  t
+  t.users <- users
