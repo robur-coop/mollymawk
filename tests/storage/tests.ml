@@ -344,6 +344,47 @@ let check_missing_private_key_in_albatross_config () =
       (Error expected)
       (Storage.t_of_json bad_json))
 
+let check_multiple_valid_albatross_configs_with_same_name () =
+  let expected = `Msg "Duplicated albatross configurations" in
+  Alcotest.(
+    check (result storage_t msg_t)
+      "mollymawk should fail to start if two albatross configs have the same \
+       name"
+      (Error expected)
+      (Storage.t_of_json
+         (mock_storage ~version:10
+            ~configuration:[ mock_albatross_config; mock_albatross_config ]
+            ())))
+
+let check_multiple_valid_albatross_configs_with_different_names () =
+  let expected =
+    ( [],
+      [
+        {
+          mock_albatross_config with
+          Configuration.name = label_of_string_exn "default-2";
+        };
+        mock_albatross_config;
+      ],
+      None )
+  in
+  Alcotest.(
+    check (result storage_t msg_t)
+      "mollymawk should fail to start if two albatross configs have the same \
+       name"
+      (Ok expected)
+      (Storage.t_of_json
+         (mock_storage ~version:10
+            ~configuration:
+              [
+                mock_albatross_config;
+                {
+                  mock_albatross_config with
+                  Configuration.name = label_of_string_exn "default-2";
+                };
+              ]
+            ())))
+
 let version_tests =
   [
     ("Deprecated version", `Quick, check_deprecated_version);
@@ -376,6 +417,12 @@ let albatross_config_tests =
       check_invalid_private_key_in_albatross_config );
     ("Empty certificate", `Quick, check_missing_certificate_in_albatross_config);
     ("Empty private_key", `Quick, check_missing_private_key_in_albatross_config);
+    ( "Multiple albatross configurations with the same name",
+      `Quick,
+      check_multiple_valid_albatross_configs_with_same_name );
+    ( "Multiple albatross configurations with the different names",
+      `Quick,
+      check_multiple_valid_albatross_configs_with_different_names );
   ]
 
 let tests =
