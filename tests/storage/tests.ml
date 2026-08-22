@@ -34,6 +34,9 @@ let msg_t =
 let pp_storage ppf (users, configuration, email) =
   Fmt.pf ppf "%a" Yojson.Basic.pp (Storage.t_to_json users configuration email)
 
+let eq_key k1 k2 =
+  String.equal (X509.Public_key.fingerprint k1) (X509.Public_key.fingerprint k2)
+
 let eq_config (config_1 : Configuration.t list)
     (config_2 : Configuration.t list) =
   match (config_1, config_2) with
@@ -43,16 +46,12 @@ let eq_config (config_1 : Configuration.t list)
       && Ipaddr.compare c1.server_ip c2.server_ip = 0
       && c1.server_port = c2.server_port
       && Ptime.equal c1.updated_at c2.updated_at
-      && String.equal
-           (X509.Public_key.fingerprint
-              (X509.Certificate.public_key c1.certificate))
-           (X509.Public_key.fingerprint
-              (X509.Certificate.public_key c2.certificate))
-      && String.equal
-           (X509.Public_key.fingerprint
-              (X509.Private_key.public c1.private_key))
-           (X509.Public_key.fingerprint
-              (X509.Private_key.public c2.private_key))
+      && eq_key
+           (X509.Certificate.public_key c1.certificate)
+           (X509.Certificate.public_key c2.certificate)
+      && eq_key
+           (X509.Private_key.public c1.private_key)
+           (X509.Private_key.public c2.private_key)
   | _ -> false
 
 let cmp_option f o1 o2 =
