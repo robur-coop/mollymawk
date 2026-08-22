@@ -117,11 +117,6 @@ let increment_token_usage (token : User_model.token) (user : User_model.user) =
       user.tokens
   in
   User_model.update_user user ~tokens ()
-(* update_user store updated_user >>= function
-  | Ok () -> Lwt.return (Ok ())
-  | Error (`Msg err) ->
-      Logs.err (fun m -> m "Error with storage: %s" err);
-      Lwt.return (Error (`Msg err)) *)
 
 let update_cookie_usage (cookie : User_model.cookie) user_agent
     (user : User_model.user) =
@@ -133,11 +128,6 @@ let update_cookie_usage (cookie : User_model.cookie) user_agent
       user.cookies
   in
   User_model.update_user user ~cookies ()
-(* update_user store updated_user >>= function
-  | Ok () -> Lwt.return (Ok ())
-  | Error (`Msg err) ->
-      Logs.err (fun m -> m "Error with storage: %s" err);
-      Lwt.return (Error (`Msg err)) *)
 
 let update_user_unikernel_updates (new_update : User_model.unikernel_update)
     (user : User_model.user) =
@@ -148,12 +138,6 @@ let update_user_unikernel_updates (new_update : User_model.unikernel_update)
     new_update :: List.filter is_unique user.unikernel_updates
   in
   User_model.update_user user ~unikernel_updates:updated_list ()
-
-(* update_user store updated_user >>= function
-  | Ok () -> Lwt.return (Ok ())
-  | Error (`Msg err) ->
-      Logs.err (fun m -> m "Error with storage: %s" err);
-      Lwt.return (Error (`Msg err)) *)
 
 let count_users users = List.length users
 
@@ -170,3 +154,4 @@ let count_active users =
 
 let count_superusers users =
   List.length (List.filter (fun u -> u.User_model.super_user) users)
+  

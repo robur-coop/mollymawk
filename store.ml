@@ -1,5 +1,3 @@
-include Storage
-
 module Make (BLOCK : Mirage_block.S) = struct
   module Stored_data = OneFFS.Make (BLOCK)
   open Lwt.Infix
