@@ -54,13 +54,6 @@ let eq_config (config_1 : Configuration.t list)
            (X509.Private_key.public c2.private_key)
   | _ -> false
 
-let cmp_option f o1 o2 =
-  match (o1, o2) with
-  | None, None -> true
-  | None, _ -> false
-  | Some _, None -> false
-  | Some a, Some b -> f a b
-
 let eq_users (users_1 : User_model.user list) (users_2 : User_model.user list) =
   match (users_1, users_2) with
   | [], [] -> true
@@ -73,8 +66,8 @@ let eq_users (users_1 : User_model.user list) (users_2 : User_model.user list) =
       && u1.super_user = u2.super_user
       && Ptime.equal u1.updated_at u2.updated_at
       && Ptime.equal u1.created_at u2.created_at
-      && cmp_option Ptime.equal u1.email_verified u2.email_verified
-      && cmp_option Uuidm.equal u1.email_verification_uuid
+      && Option.equal Ptime.equal u1.email_verified u2.email_verified
+      && Option.equal Uuidm.equal u1.email_verification_uuid
            u2.email_verification_uuid
   | _ -> false
 
@@ -83,10 +76,10 @@ let eq_emails (e1 : Utils.Email.t) (e2 : Utils.Email.t) =
   && e1.port = e2.port
   && String.equal e1.base_url e2.base_url
   && Mrmime.Mailbox.equal e1.from_email e2.from_email
-  && cmp_option Mrmime.Mailbox.equal e1.to_email e2.to_email
+  && Option.equal Mrmime.Mailbox.equal e1.to_email e2.to_email
 
 let eq_storage (u1, c1, e1) (u2, c2, e2) =
-  eq_users u1 u2 && eq_config c1 c2 && cmp_option eq_emails e1 e2
+  eq_users u1 u2 && eq_config c1 c2 && Option.equal eq_emails e1 e2
 
 let storage_t = Alcotest.testable pp_storage eq_storage
 
