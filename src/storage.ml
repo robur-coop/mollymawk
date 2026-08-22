@@ -7,7 +7,15 @@ let current_version = 10
    10 we now have scaling policies for unikernels, default is no policy for existing unikernels
 *)
 
-type t = User_model.user list * Configuration.t list * Utils.Email.t option
+type t = {
+  mutable users : User_model.user list;
+  mutable configurations : Configuration.t list;
+  mutable email : Utils.Email.t option;
+}
+
+let configurations { configurations; _ } = configurations
+let email { email; _ } = email
+let users { users; _ } = users
 
 let t_to_json ?(version = current_version) users configurations email =
   `Assoc
@@ -154,3 +162,73 @@ let count_active users =
 
 let count_superusers users =
   List.length (List.filter (fun u -> u.User_model.super_user) users)
+
+let configruation_label_eq (c1 : Configuration.t) (c2 : Configuration.t) =
+  Vmm_core.Name.Label.equal c1.name c2.name
+
+let exists (configurations : Configuration.t list)
+    (configuration : Configuration.t) =
+  List.exists (configruation_label_eq configuration) configurations
+
+let store_email t email =
+  t.email <- email;
+  t
+
+let insert_configuration t (configuration : Configuration.t) =
+  if exists t.configurations configuration then
+    Error
+      (Fmt.str "configuration %s already exists"
+         (Configuration.name_to_str configuration.name))
+  else (
+    t.configurations <- t.configurations @ [ configuration ];
+    Ok t)
+
+let update_configuration t (configuration : Configuration.t) =
+  if not (exists t.configurations configuration) then
+    Error
+      (Fmt.str "configuration %s not found"
+         (Configuration.name_to_str configuration.name))
+  else (
+    t.configurations <-
+      List.map
+        (fun c ->
+          if configruation_label_eq c configuration then configuration else c)
+        t.configurations;
+    Ok t)
+
+let upsert_configuration t (configuration : Configuration.t) mode =
+  match mode with
+  | `Create -> insert_configuration t configuration
+  | `Update -> update_configuration t configuration
+
+let delete_configuration t name =
+  let configurations =
+    List.filter
+      (fun (c : Configuration.t) -> not (Vmm_core.Name.Label.equal c.name name))
+      t.configurations
+  in
+  t.configurations <- configurations;
+  t
+
+let add_user t user =
+  t.users <- user :: t.users;
+  t
+
+let delete_user t (user : User_model.user) =
+  let users =
+    List.fold_left
+      (fun acc u -> if u.User_model.uuid <> user.uuid then u :: acc else acc)
+      [] t.users
+  in
+  t.users <- users;
+  t
+
+let update_user t (user : User_model.user) =
+  let users =
+    List.map
+      (fun (u : User_model.user) ->
+        match u.uuid = user.uuid with true -> user | false -> u)
+      t.users
+  in
+  t.users <- users;
+  t
