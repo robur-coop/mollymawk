@@ -135,7 +135,7 @@ let eq_emails (e1 : Utils.Email.t) (e2 : Utils.Email.t) =
     e2
   in
   Ipaddr.compare s1 s2 = 0
-  && p1 = p2 && String.equal bu1 bu2
+  && Int.equal p1 p2 && String.equal bu1 bu2
   && Mrmime.Mailbox.equal fe1 fe2
   && Option.equal Mrmime.Mailbox.equal te1 te2
 
