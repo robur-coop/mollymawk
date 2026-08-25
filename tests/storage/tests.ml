@@ -34,87 +34,85 @@ let msg_t =
 let pp_storage ppf (users, configuration, email) =
   Fmt.pf ppf "%a" Yojson.Basic.pp (Storage.t_to_json users configuration email)
 
+let eq_config_pair (c1 : Configuration.t) (c2 : Configuration.t) =
+  let {
+    Configuration.name = n1;
+    server_ip = si1;
+    server_port = sp1;
+    updated_at = ua1;
+    certificate = cer1;
+    private_key = pk1;
+  } =
+    c1
+  and {
+    Configuration.name = n2;
+    server_ip = si2;
+    server_port = sp2;
+    updated_at = ua2;
+    certificate = cer2;
+    private_key = pk2;
+  } =
+    c2
+  in
+  Vmm_core.Name.Label.equal n1 n2
+  && Ipaddr.compare si1 si2 = 0
+  && Int.equal sp1 sp2 && Ptime.equal ua1 ua2
+  && String.equal
+       (X509.Certificate.fingerprint `SHA256 cer1)
+       (X509.Certificate.fingerprint `SHA256 cer2)
+  && String.equal
+       (X509.Private_key.encode_der pk1)
+       (X509.Private_key.encode_der pk2)
+
 let eq_config (config_1 : Configuration.t list)
     (config_2 : Configuration.t list) =
-  match (config_1, config_2) with
-  | [], [] -> true
-  | c1 :: _, c2 :: _ ->
-      let {
-        Configuration.name = n1;
-        server_ip = si1;
-        server_port = sp1;
-        updated_at = ua1;
-        certificate = cer1;
-        private_key = pk1;
-      } =
-        c1
-      and {
-        Configuration.name = n2;
-        server_ip = si2;
-        server_port = sp2;
-        updated_at = ua2;
-        certificate = cer2;
-        private_key = pk2;
-      } =
-        c2
-      in
-      Vmm_core.Name.Label.equal n1 n2
-      && Ipaddr.compare si1 si2 = 0
-      && Int.equal sp1 sp2 && Ptime.equal ua1 ua2
-      && String.equal
-           (X509.Certificate.fingerprint `SHA256 cer1)
-           (X509.Certificate.fingerprint `SHA256 cer2)
-      && String.equal
-           (X509.Private_key.encode_der pk1)
-           (X509.Private_key.encode_der pk2)
-  | _ -> false
+  List.equal eq_config_pair config_1 config_2
+
+let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
+  let {
+    User_model.name = n1;
+    email = e1;
+    password = p1;
+    uuid = id1;
+    active = a1;
+    super_user = s1;
+    updated_at = uat1;
+    created_at = cat1;
+    email_verified = ev1;
+    email_verification_uuid = evu1;
+    tokens = _tk1;
+    cookies = _ck1;
+    unikernel_updates = _uk1;
+    scaling_policies = _sp1;
+  } =
+    u1
+  and {
+    User_model.name = n2;
+    email = e2;
+    password = p2;
+    uuid = id2;
+    active = a2;
+    super_user = s2;
+    updated_at = uat2;
+    created_at = cat2;
+    email_verified = ev2;
+    email_verification_uuid = evu2;
+    tokens = _tk2;
+    cookies = _ck2;
+    unikernel_updates = _uk2;
+    scaling_policies = _sp2;
+  } =
+    u2
+  in
+  Vmm_core.Name.Label.equal n1 n2
+  && Mrmime.Mailbox.equal e1 e2 && String.equal p1 p2 && String.equal id1 id2
+  && Bool.equal a1 a2 && Bool.equal s1 s2 && Ptime.equal uat1 uat2
+  && Ptime.equal cat1 cat2
+  && Option.equal Ptime.equal ev1 ev2
+  && Option.equal Uuidm.equal evu1 evu2
 
 let eq_users (users_1 : User_model.user list) (users_2 : User_model.user list) =
-  match (users_1, users_2) with
-  | [], [] -> true
-  | u1 :: _, u2 :: _ ->
-      let {
-        User_model.name = n1;
-        email = e1;
-        password = p1;
-        uuid = id1;
-        active = a1;
-        super_user = s1;
-        updated_at = uat1;
-        created_at = cat1;
-        email_verified = ev1;
-        email_verification_uuid = evu1;
-        tokens = _tk1;
-        cookies = _ck1;
-        unikernel_updates = _uk1;
-        scaling_policies = _sp1;
-      } =
-        u1
-      and {
-        User_model.name = n2;
-        email = e2;
-        password = p2;
-        uuid = id2;
-        active = a2;
-        super_user = s2;
-        updated_at = uat2;
-        created_at = cat2;
-        email_verified = ev2;
-        email_verification_uuid = evu2;
-        tokens = _tk2;
-        cookies = _ck2;
-        unikernel_updates = _uk2;
-        scaling_policies = _sp2;
-      } =
-        u2
-      in
-      Vmm_core.Name.Label.equal n1 n2
-      && Mrmime.Mailbox.equal e1 e2 && String.equal p1 p2
-      && String.equal id1 id2 && Bool.equal a1 a2 && Bool.equal s1 s2
-      && Ptime.equal uat1 uat2 && Ptime.equal cat1 cat2
-      && Option.equal Ptime.equal ev1 ev2
-      && Option.equal Uuidm.equal evu1 evu2
-  | _ -> false
+  List.equal eq_user_pair users_1 users_2
 
 let eq_emails (e1 : Utils.Email.t) (e2 : Utils.Email.t) =
   let {
