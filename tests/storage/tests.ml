@@ -64,7 +64,7 @@ let eq_config (config_1 : Configuration.t list)
       && String.equal
            (X509.Certificate.fingerprint `SHA256 cer1)
            (X509.Certificate.fingerprint `SHA256 cer2)
-      && eq_key
+      && String.equal
            (X509.Private_key.encode_der pk1)
            (X509.Private_key.encode_der pk2)
   | _ -> false
