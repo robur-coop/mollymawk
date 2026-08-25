@@ -34,8 +34,6 @@ let msg_t =
 let pp_storage ppf (users, configuration, email) =
   Fmt.pf ppf "%a" Yojson.Basic.pp (Storage.t_to_json users configuration email)
 
-let eq_key k1 k2 = String.equal k1 k2
-
 let eq_config (config_1 : Configuration.t list)
     (config_2 : Configuration.t list) =
   match (config_1, config_2) with
