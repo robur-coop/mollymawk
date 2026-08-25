@@ -342,6 +342,7 @@ let check_missing_private_key_in_albatross_config () =
       (Error expected)
       (Storage.t_of_json bad_json))
 
+(** This test currently will not pass.*)
 let check_multiple_valid_albatross_configs_with_same_name () =
   let expected = `Msg "Duplicated albatross configurations" in
   Alcotest.(
