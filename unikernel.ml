@@ -176,7 +176,7 @@ struct
         { molly_img; robur_img; albatross_img; mirage_img; dashboard_img }
     | _ -> failwith "Unexpected number of images"
 
-  module Store = Storage.Make (BLOCK)
+  module Store = Store.Make (BLOCK)
   module Map = Map.Make (String)
 
   let csrf_verification f user csrf reqd =
@@ -299,7 +299,8 @@ struct
       User_model.update_user user ~updated_at:now
         ~cookies:(csrf :: user.cookies) ()
     in
-    Store.update_user store updated_user >>= function
+    Storage.update_user store updated_user;
+    Store.write_data store >>= function
     | Ok () -> Lwt.return (Ok csrf.value)
     | Error (`Msg err) ->
         let error =
@@ -415,7 +416,7 @@ struct
       | Error (`Msg err) ->
           Error (`Cookie, "No molly-session in cookie header. " ^ err)
       | Ok cookie_value -> (
-          match Store.find_by_cookie store cookie_value with
+          match Storage.find_by_cookie store.Storage.users cookie_value with
           | None -> Error (`Cookie, "Failed to find user with cookie")
           | Some (user, cookie) ->
               if User_model.is_valid_cookie cookie current_time then
@@ -428,7 +429,7 @@ struct
               else Error (`Cookie, "Session value doesn't match user session"))
     in
     let valid_token token_value =
-      match Store.find_by_api_token store token_value with
+      match Storage.find_by_api_token store.users token_value with
       | Some (user, token) ->
           if User_model.is_valid_token token current_time then Ok (user, token)
           else Error (`Token, "Token value is not valid " ^ token_value)
@@ -458,13 +459,16 @@ struct
           Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
             ~with_error:true ~msg reqd ()
     | Ok (`Token (user, token)) -> (
-        Store.increment_token_usage store token user >>= function
+        Storage.update_user store (Storage.increment_token_usage token user);
+        Store.write_data store >>= function
         | Error (`Msg err) ->
             Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error
         | Ok () -> f `Token user reqd)
     | Ok (`Cookie (user, cookie)) -> (
-        Store.update_cookie_usage store cookie user reqd >>= function
+        Storage.update_user store
+          (Storage.update_cookie_usage cookie (Middleware.user_agent reqd) user);
+        Store.write_data store >>= function
         | Error (`Msg err) ->
             Logs.err (fun m -> m "Error with storage: %s" err);
             Middleware.http_response reqd ~data:(`String err)
@@ -663,8 +667,10 @@ struct
                   `Bad_request
             | Ok (name, email) ->
                 if Middleware.csrf_cookie_verification form_csrf reqd then
-                  let existing_email = Store.find_by_email store email in
-                  let existing_name = Store.find_by_name store name in
+                  let existing_email =
+                    Storage.find_by_email store.Storage.users email
+                  in
+                  let existing_name = Storage.find_by_name store.users name in
                   match (existing_name, existing_email) with
                   | Some _, None ->
                       Middleware.http_response reqd
@@ -678,14 +684,16 @@ struct
                       let created_at = Mirage_ptime.now () in
                       let user, cookie =
                         let active, super_user =
-                          if Store.count_users store = 0 then (true, true)
+                          if Storage.count_users store.users = 0 then
+                            (true, true)
                           else (false, false)
                         in
                         User_model.create_user ~name ~email ~password
                           ~created_at ~active ~super_user
                           ~user_agent:(Middleware.user_agent reqd)
                       in
-                      Store.add_user store user >>= function
+                      Storage.add_user store user;
+                      Store.write_data store >>= function
                       | Ok () ->
                           let cookie_value =
                             cookie.name ^ "=" ^ cookie.value
@@ -749,7 +757,7 @@ struct
                 Middleware.http_response reqd ~data:(`String err) `Bad_request
             | Ok email -> (
                 let now = Mirage_ptime.now () in
-                let user = Store.find_by_email store email in
+                let user = Storage.find_by_email store.Storage.users email in
                 match
                   User_model.login_user ~email ~password
                     ~user_agent:(Middleware.user_agent reqd)
@@ -759,7 +767,8 @@ struct
                     Middleware.http_response reqd ~data:(`String err)
                       `Bad_request
                 | Ok (user, cookie) -> (
-                    Store.update_user store user >>= function
+                    Storage.update_user store user;
+                    Store.write_data store >>= function
                     | Ok () ->
                         let cookie_value =
                           cookie.name ^ "=" ^ cookie.value
@@ -797,7 +806,8 @@ struct
           User_model.update_user user ~updated_at:now
             ~email_verification_uuid:(Some email_verification_uuid) ()
         in
-        Store.update_user store updated_user >>= function
+        Storage.update_user store updated_user;
+        Store.write_data store >>= function
         | Ok () ->
             let verification_link =
               Utils.Email.generate_verification_link email_verification_uuid
@@ -822,16 +832,17 @@ struct
         Option.to_result ~none:(`Msg "invalid UUID")
           (Uuidm.of_string verification_token)
       in
-      let u = Store.find_email_verification_token store uuid in
+      let u = Storage.find_email_verification_token store.Storage.users uuid in
       User_model.verify_email_token u verification_token (Mirage_ptime.now ())
     with
     | Ok user' ->
-        if String.equal user.uuid user'.uuid then
-          Store.update_user store user >>= function
+        if String.equal user.uuid user'.uuid then (
+          Storage.update_user store user;
+          Store.write_data store >>= function
           | Ok () -> Middleware.redirect_to_page ~path:"/dashboard" reqd ()
           | Error (`Msg msg) ->
               Middleware.http_response reqd ~data:(`String msg)
-                `Internal_server_error
+                `Internal_server_error)
         else
           Middleware.http_response reqd
             ~data:(`String "Logged in user is not the to-be-verified one")
@@ -844,7 +855,7 @@ struct
       ~error_message =
     match Utils.Json.get "uuid" json_dict with
     | Some (`String uuid) -> (
-        match Store.find_by_uuid store uuid with
+        match Storage.find_by_uuid store.Storage.users uuid with
         | None ->
             Logs.warn (fun m -> m "%s : Account not found" key);
             Middleware.http_response reqd ~data:(`String "Account not found")
@@ -856,7 +867,8 @@ struct
               Middleware.http_response reqd ~data:error_message `Forbidden)
             else
               let updated_user = update_fn user in
-              Store.update_user store updated_user >>= function
+              Storage.update_user store updated_user;
+              Store.write_data store >>= function
               | Ok () ->
                   Middleware.http_response reqd
                     ~data:(`String "Updated user successfully") `OK
@@ -874,7 +886,7 @@ struct
       (fun user ->
         User_model.update_user user ~active:(not user.active)
           ~updated_at:(Mirage_ptime.now ()) ())
-      (fun user -> user.active && Store.count_active store <= 1)
+      (fun user -> user.active && Storage.count_active store.users <= 1)
       ~error_message:(`String "Cannot deactivate last active user")
 
   let toggle_admin_activation store _user json_dict reqd =
@@ -882,19 +894,21 @@ struct
       (fun user ->
         User_model.update_user user ~super_user:(not user.super_user)
           ~updated_at:(Mirage_ptime.now ()) ())
-      (fun user -> user.super_user && Store.count_superusers store <= 1)
+      (fun user ->
+        user.super_user && Storage.count_superusers store.Storage.users <= 1)
       ~error_message:(`String "Cannot remove last administrator")
 
   let delete_account store _user json_dict reqd =
     match Utils.Json.get "uuid" json_dict with
     | Some (`String uuid) -> (
-        match Store.find_by_uuid store uuid with
+        match Storage.find_by_uuid store.Storage.users uuid with
         | None ->
             Logs.warn (fun m -> m "delete-account : Account not found");
             Middleware.http_response reqd ~data:(`String "Account not found")
               `Not_found
         | Some user -> (
-            Store.delete_user store user >>= function
+            Storage.delete_user store user;
+            Store.write_data store >>= function
             | Ok () ->
                 Middleware.http_response reqd
                   ~data:(`String "Deleted user successfully") `OK
@@ -989,7 +1003,8 @@ struct
             User_model.update_user user ~password:new_password_hash
               ~updated_at:now ()
           in
-          Store.update_user store updated_user >>= function
+          Storage.update_user store updated_user;
+          Store.write_data store >>= function
           | Ok () ->
               Middleware.http_response reqd
                 ~data:(`String "Updated password successfully") `OK
@@ -1011,7 +1026,8 @@ struct
     let updated_user =
       User_model.update_user user ~cookies ~updated_at:now ()
     in
-    Store.update_user store updated_user >>= function
+    Storage.update_user store updated_user;
+    Store.write_data store >>= function
     | Ok () -> redirect
     | Error (`Msg err) ->
         Logs.warn (fun m -> m "Storage error with %s" err);
@@ -1067,7 +1083,8 @@ struct
         let updated_user =
           User_model.update_user user ~cookies ~updated_at:now ()
         in
-        Store.update_user store updated_user >>= function
+        Storage.update_user store updated_user;
+        Store.write_data store >>= function
         | Ok () ->
             Middleware.http_response reqd
               ~data:(`String "Session closed successfully") `OK
@@ -1089,7 +1106,7 @@ struct
     | Ok csrf ->
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Users"
-             ~content:(Users_index.users_index_layout (Store.users store) now)
+             ~content:(Users_index.users_index_layout store.users now)
              ~icon:"/images/robur.png" ())
           `OK
     | Error err ->
@@ -1122,7 +1139,7 @@ struct
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Email Settings"
              ~content:
                (Settings_page.settings_layout ~active_tab:Email
-                  (Email_config.email_config_layout (Store.email store)))
+                  (Email_config.email_config_layout store.email))
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
           `OK
@@ -1153,19 +1170,26 @@ struct
     | Ok configuration_settings -> (
         Albatross_state.init stack configuration_settings >>= function
         | Ok new_albatross_instance -> (
-            Store.upsert_configuration store configuration_settings
-              update_or_create
-            >>= function
-            | Ok _new_configurations ->
-                albatross_instances :=
-                  Albatross.Albatross_map.update configuration_settings.name
-                    (fun _prev -> Some new_albatross_instance)
-                    !albatross_instances;
-                Middleware.http_response reqd
-                  ~data:(`String "Configuration updated successfully") `OK
-            | Error (`Msg err) ->
-                Middleware.http_response reqd ~data:(`String err)
-                  `Internal_server_error)
+            match
+              Storage.upsert_configuration store configuration_settings
+                update_or_create
+            with
+            | Error err ->
+                Middleware.http_response
+                  ~data:(`String (String.escaped err))
+                  reqd `Bad_request
+            | Ok () -> (
+                Store.write_data store >>= function
+                | Ok () ->
+                    albatross_instances :=
+                      Albatross.Albatross_map.update configuration_settings.name
+                        (fun _prev -> Some new_albatross_instance)
+                        !albatross_instances;
+                    Middleware.http_response reqd
+                      ~data:(`String "Configuration updated successfully") `OK
+                | Error (`Msg err) ->
+                    Middleware.http_response reqd ~data:(`String err)
+                      `Internal_server_error))
         | Error (_, err) ->
             Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error)
@@ -1179,7 +1203,8 @@ struct
     | Some (`String name) -> (
         match Configuration.name_of_str name with
         | Ok name -> (
-            Store.delete_configuration store name >>= function
+            Storage.delete_configuration store name;
+            Store.write_data store >>= function
             | Ok _new_configurations ->
                 albatross_instances :=
                   Albatross.Albatross_map.remove name !albatross_instances;
@@ -1396,7 +1421,8 @@ struct
     in
     let update_unikernel_scaling scaling_policies =
       let user = User_model.update_user user ~scaling_policies () in
-      Store.update_user store user >>= function
+      Storage.update_user store user;
+      Store.write_data store >>= function
       | Ok () ->
           reply reqd
             (Utils.display_alert
@@ -1639,7 +1665,9 @@ struct
         timestamp = Mirage_ptime.now ();
       }
     in
-    Store.update_user_unikernel_updates store unikernel_update user >>= function
+    Storage.update_user store
+      (Storage.update_user_unikernel_updates unikernel_update user);
+    Store.write_data store >>= function
     | Error (`Msg err) ->
         let data =
           Utils.Json.to_string
@@ -2267,7 +2295,7 @@ struct
   let view_user stack albatross_instances store uuid
       (page : [> `Profile | `Unikernels | `Policy ]) _ (user : User_model.user)
       reqd =
-    match Store.find_by_uuid store uuid with
+    match Storage.find_by_uuid store.Storage.users uuid with
     | Some u -> (
         user_unikernels stack albatross_instances u.name >>= fun unikernels ->
         user_deceased_by_instance stack albatross_instances u.name
@@ -2314,7 +2342,7 @@ struct
           reqd `Not_found
 
   let edit_policy store uuid albatross _ (user : User_model.user) reqd =
-    match Store.find_by_uuid store uuid with
+    match Storage.find_by_uuid store.Storage.users uuid with
     | Some u -> (
         let user_policy =
           Option.value ~default:Albatross_state.empty_policy
@@ -2356,7 +2384,7 @@ struct
       Utils.Json.(get "user_uuid" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String user_uuid), Some (`String instance_name) -> (
-        match Store.find_by_uuid store user_uuid with
+        match Storage.find_by_uuid store.Storage.users user_uuid with
         | Some u -> (
             match Configuration.name_of_str instance_name with
             | Ok instance_name -> (
@@ -2857,7 +2885,8 @@ struct
           User_model.update_user user ~tokens:(token :: user.tokens)
             ~updated_at:now ()
         in
-        Store.update_user store updated_user >>= function
+        Storage.update_user store updated_user;
+        Store.write_data store >>= function
         | Ok () ->
             Middleware.http_response reqd
               ~data:(User_model.token_to_json token)
@@ -2887,7 +2916,8 @@ struct
         let updated_user =
           User_model.update_user user ~tokens ~updated_at:now ()
         in
-        Store.update_user store updated_user >>= function
+        Storage.update_user store updated_user;
+        Store.write_data store >>= function
         | Ok () ->
             Middleware.http_response reqd
               ~data:(`String "Token deleted successfully") `OK
@@ -2931,7 +2961,8 @@ struct
                 ~tokens:(updated_token :: user_tokens)
                 ~updated_at:now ()
             in
-            Store.update_user store updated_user >>= function
+            Storage.update_user store updated_user;
+            Store.write_data store >>= function
             | Ok () ->
                 Middleware.http_response reqd
                   ~data:(User_model.token_to_json updated_token)
@@ -2982,7 +3013,8 @@ struct
 
   let update_email_configuration store _user json_dict reqd =
     with_valid_email_config json_dict reqd (fun email_settings ->
-        Store.store_email store (Some email_settings) >>= function
+        Storage.store_email store (Some email_settings);
+        Store.write_data store >>= function
         | Ok _ ->
             Middleware.http_response reqd
               ~data:(`String "Email settings verified and saved successfully")
@@ -3047,7 +3079,7 @@ struct
 
   let spawn_clone stack store albatross ~unikernel_name ~clone_name ~user_name
       group scaler =
-    match Store.find_by_name store user_name with
+    match Storage.find_by_name store.Storage.users user_name with
     | None -> Lwt.return_error "User not found"
     | Some user -> (
         user_unikernel stack albatross ~user_name ~unikernel_name >>= function
@@ -3270,7 +3302,7 @@ struct
         let unikernel_name = label in
         match Vmm_core.Name.Path.to_labels (Vmm_core.Name.path name) with
         | [ user_label ] -> (
-            match Store.find_by_name store user_label with
+            match Storage.find_by_name store.Storage.users user_label with
             | None ->
                 Lwt.return_error
                   (Fmt.str "User %s not found."
@@ -3473,8 +3505,8 @@ struct
           Logs.info (fun m -> m "Starting background update...");
           Lwt.choose
             [
-              run_background_update_check happy_eyeballs (Store.users store)
-                stack (Store.email store) !albatross_instances_ref http_client;
+              run_background_update_check happy_eyeballs store.Storage.users
+                stack store.email !albatross_instances_ref http_client;
               ( Mirage_sleep.ns (Duration.of_hour 1) >|= fun () ->
                 Logs.warn (fun m ->
                     m "Background update timed out after 1 hour") );
@@ -4022,7 +4054,7 @@ struct
               Logs.info (fun m -> m "Domain from DHCP lease: %s" domain_name);
               Domain_name.of_string_exn domain_name
         in
-        Albatross_state.init_all stack (Store.configurations store)
+        Albatross_state.init_all stack store.Storage.configurations
         >>= fun albatross_instances ->
         let albatross_instances = ref albatross_instances in
         let port = K.port () in

@@ -1,0 +1,20 @@
+(test
+ (name tests)
+ (libraries
+  mollymawk_libraries
+  alcotest
+  albatross
+  yojson
+  mrmime
+  uuidm
+  mirage-crypto-rng
+  mirage-crypto-rng.unix
+  ptime
+  fmt
+  logs
+  x509
+  ipaddr
+  ohex
+  http-mirage-client
+  emile
+  tyxml))
