@@ -61,7 +61,7 @@ let eq_config (config_1 : Configuration.t list)
       Vmm_core.Name.Label.equal n1 n2
       && Ipaddr.compare si1 si2 = 0
       && sp1 = sp2 && Ptime.equal ua1 ua2
-      && eq_key
+      && String.equal
            (X509.Certificate.fingerprint `SHA256 cer1)
            (X509.Certificate.fingerprint `SHA256 cer2)
       && eq_key
