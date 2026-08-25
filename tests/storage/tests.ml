@@ -110,7 +110,7 @@ let eq_users (users_1 : User_model.user list) (users_2 : User_model.user list) =
       in
       Vmm_core.Name.Label.equal n1 n2
       && Mrmime.Mailbox.equal e1 e2 && String.equal p1 p2
-      && String.equal id1 id2 && a1 = a2 && s1 = s2 && Ptime.equal uat1 uat2
+      && String.equal id1 id2 && Bool.equal a1 a2 && Bool.equal s1 s2 && Ptime.equal uat1 uat2
       && Ptime.equal cat1 cat2
       && Option.equal Ptime.equal ev1 ev2
       && Option.equal Uuidm.equal evu1 evu2
