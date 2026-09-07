@@ -12,6 +12,7 @@ let int = Alcotest.int
 let unit = Alcotest.unit
 let () = Mirage_crypto_rng_unix.use_default ()
 
+(* this dump was gotten from a locally running instance of mollymawk. in store.ml, the function read_disk outputs a string. this is the string that is contained in the value raw_dump below. *)
 let raw_dump =
   {|{
   "version": 10,
