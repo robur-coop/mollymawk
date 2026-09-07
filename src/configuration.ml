@@ -128,10 +128,13 @@ let of_json json =
           (fun acc cfg ->
             let* acc = acc in
             let* c = one_of_json cfg in
-            if List.exists (fun (existing : t) -> Vmm_core.Name.Label.equal existing.name c.name) acc then
-              Error (`Msg "Duplicated albatross configurations")
-            else
-              Ok (c :: acc))
+            if
+              List.exists
+                (fun (existing : t) ->
+                  Vmm_core.Name.Label.equal existing.name c.name)
+                acc
+            then Error (`Msg "Duplicated albatross configurations")
+            else Ok (c :: acc))
           (Ok []) cfgs
       in
       Ok (List.rev cfgs)

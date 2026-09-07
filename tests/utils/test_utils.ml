@@ -10,10 +10,10 @@ let string = Alcotest.string
 let bool = Alcotest.bool
 let int = Alcotest.int
 let unit = Alcotest.unit
-
 let () = Mirage_crypto_rng_unix.use_default ()
 
-let raw_dump = {|{
+let raw_dump =
+  {|{
   "version": 10,
   "users": [
     {
@@ -571,11 +571,8 @@ let json_of_string_exn f =
 let label_of_string_exn label =
   of_string_exn (Vmm_core.Name.Label.of_string label)
 
-let name_of_string_exn name =
-  of_string_exn (Vmm_core.Name.of_string name)
-
-let email_of_string_exn email =
-  of_string_exn (Mrmime.Mailbox.of_string email)
+let name_of_string_exn name = of_string_exn (Vmm_core.Name.of_string name)
+let email_of_string_exn email = of_string_exn (Mrmime.Mailbox.of_string email)
 
 let signing_request_exn pk =
   match X509.Signing_request.create [] pk with
@@ -807,9 +804,7 @@ let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
   let email_box = email_of_string_exn email in
   let now = Mirage_ptime.now () in
   let user, _cookie =
-    User_model.create_user ~name:name_lbl ~email:email_box ~password
-      ~active ~super_user ~created_at:now
-      ~user_agent:(Some "Alcotest/1.0")
+    User_model.create_user ~name:name_lbl ~email:email_box ~password ~active
+      ~super_user ~created_at:now ~user_agent:(Some "Alcotest/1.0")
   in
   { user with tokens }
-
