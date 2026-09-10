@@ -1,169 +1,4 @@
-Mirage_crypto_rng_unix.use_default ();;
-
-let of_string_exn f =
-  match f with Ok a -> a | Error (`Msg err) -> failwith err
-
-let label_of_string_exn label =
-  of_string_exn (Vmm_core.Name.Label.of_string label)
-
-let email_of_string_exn email = of_string_exn (Mrmime.Mailbox.of_string email)
-
-let signing_request_exn pk =
-  match X509.Signing_request.create [] pk with
-  | Ok c -> c
-  | Error _ -> failwith "invalid signing request"
-
-let private_key =
-  X509.Private_key.generate ~seed:"robur_in_essaouira_2026" `ED25519
-
-let second_private_key =
-  X509.Private_key.generate ~seed:"robur_is_great_2026" `ED25519
-
-let certificate_exn pk =
-  match
-    X509.Signing_request.sign (signing_request_exn pk) ~valid_from:Ptime.epoch
-      ~valid_until:(Mirage_ptime.now ()) pk []
-  with
-  | Ok c -> c
-  | Error _ -> failwith "invalid certificate"
-
-let msg_t =
-  let pp ppf (`Msg s) = Fmt.string ppf s in
-  Alcotest.testable pp (fun (`Msg a) (`Msg b) -> String.equal a b)
-
-let pp_storage ppf (users, configuration, email) =
-  Fmt.pf ppf "%a" Yojson.Basic.pp (Storage.t_to_json users configuration email)
-
-let eq_config_pair (c1 : Configuration.t) (c2 : Configuration.t) =
-  let {
-    Configuration.name = n1;
-    server_ip = si1;
-    server_port = sp1;
-    updated_at = ua1;
-    certificate = cer1;
-    private_key = pk1;
-  } =
-    c1
-  and {
-    Configuration.name = n2;
-    server_ip = si2;
-    server_port = sp2;
-    updated_at = ua2;
-    certificate = cer2;
-    private_key = pk2;
-  } =
-    c2
-  in
-  Vmm_core.Name.Label.equal n1 n2
-  && Ipaddr.compare si1 si2 = 0
-  && Int.equal sp1 sp2 && Ptime.equal ua1 ua2
-  && String.equal
-       (X509.Certificate.fingerprint `SHA256 cer1)
-       (X509.Certificate.fingerprint `SHA256 cer2)
-  && String.equal
-       (X509.Private_key.encode_der pk1)
-       (X509.Private_key.encode_der pk2)
-
-let eq_config (config_1 : Configuration.t list)
-    (config_2 : Configuration.t list) =
-  List.equal eq_config_pair config_1 config_2
-
-let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
-  let {
-    User_model.name = n1;
-    email = e1;
-    password = p1;
-    uuid = id1;
-    active = a1;
-    super_user = s1;
-    updated_at = uat1;
-    created_at = cat1;
-    email_verified = ev1;
-    email_verification_uuid = evu1;
-    tokens = _tk1;
-    cookies = _ck1;
-    unikernel_updates = _uk1;
-    scaling_policies = _sp1;
-  } =
-    u1
-  and {
-    User_model.name = n2;
-    email = e2;
-    password = p2;
-    uuid = id2;
-    active = a2;
-    super_user = s2;
-    updated_at = uat2;
-    created_at = cat2;
-    email_verified = ev2;
-    email_verification_uuid = evu2;
-    tokens = _tk2;
-    cookies = _ck2;
-    unikernel_updates = _uk2;
-    scaling_policies = _sp2;
-  } =
-    u2
-  in
-  Vmm_core.Name.Label.equal n1 n2
-  && Mrmime.Mailbox.equal e1 e2 && String.equal p1 p2 && String.equal id1 id2
-  && Bool.equal a1 a2 && Bool.equal s1 s2 && Ptime.equal uat1 uat2
-  && Ptime.equal cat1 cat2
-  && Option.equal Ptime.equal ev1 ev2
-  && Option.equal Uuidm.equal evu1 evu2
-
-let eq_users (users_1 : User_model.user list) (users_2 : User_model.user list) =
-  List.equal eq_user_pair users_1 users_2
-
-let eq_emails (e1 : Utils.Email.t) (e2 : Utils.Email.t) =
-  let {
-    Utils.Email.server = s1;
-    port = p1;
-    base_url = bu1;
-    from_email = fe1;
-    to_email = te1;
-  } =
-    e1
-  and {
-    Utils.Email.server = s2;
-    port = p2;
-    base_url = bu2;
-    from_email = fe2;
-    to_email = te2;
-  } =
-    e2
-  in
-  Ipaddr.compare s1 s2 = 0
-  && Int.equal p1 p2 && String.equal bu1 bu2
-  && Mrmime.Mailbox.equal fe1 fe2
-  && Option.equal Mrmime.Mailbox.equal te1 te2
-
-let eq_storage (u1, c1, e1) (u2, c2, e2) =
-  eq_users u1 u2 && eq_config c1 c2 && Option.equal eq_emails e1 e2
-
-let storage_t = Alcotest.testable pp_storage eq_storage
-
-let mock_storage ?(version = 10) ?(users = []) ?(configuration = [])
-    ?(email = None) () =
-  Storage.t_to_json ~version users configuration email
-
-let mock_email =
-  {
-    Utils.Email.server = Ipaddr.of_string_exn "10.0.0.1";
-    port = 56;
-    from_email = email_of_string_exn "test@robur.coop";
-    base_url = "robur.coop";
-    to_email = None;
-  }
-
-let mock_albatross_config =
-  {
-    Configuration.name = label_of_string_exn "default";
-    server_ip = Ipaddr.of_string_exn "10.0.0.1";
-    server_port = 25;
-    updated_at = Ptime.epoch;
-    private_key;
-    certificate = certificate_exn private_key;
-  }
+open Test_utils
 
 let check_deprecated_version () =
   let expected =
@@ -357,11 +192,11 @@ let check_multiple_valid_albatross_configs_with_different_names () =
   let expected =
     ( [],
       [
+        mock_albatross_config;
         {
           mock_albatross_config with
           Configuration.name = label_of_string_exn "default-2";
         };
-        mock_albatross_config;
       ],
       None )
   in
@@ -382,6 +217,20 @@ let check_multiple_valid_albatross_configs_with_different_names () =
               ]
             ())))
 
+let check_disk_dump () =
+  let json = Utils.Json.from_string raw_dump in
+  match Storage.t_of_json (json_of_string_exn json) with
+  | Ok (users, configs, email) ->
+      Alcotest.(check int "4 users in dump" 4 (List.length users));
+      Alcotest.(check int "1 configuration in dump" 1 (List.length configs));
+      Alcotest.(check bool "Email config present" true (Option.is_some email));
+      let serialized = Storage.t_to_json users configs email in
+      Alcotest.(
+        check (result storage_t msg_t) "roundtrip serialization matches"
+          (Ok (users, configs, email))
+          (Storage.t_of_json serialized))
+  | Error (`Msg err) -> Alcotest.fail err
+
 let version_tests =
   [
     ("Deprecated version", `Quick, check_deprecated_version);
@@ -396,6 +245,9 @@ let email_config_tests =
     ("Email configuration in v10", `Quick, check_email_config_in_v10);
     ("No email configuration in v10", `Quick, check_no_email_config_in_v10);
   ]
+
+let disk_dump_tests =
+  [ ("Test with live data from a disk dump", `Quick, check_disk_dump) ]
 
 let albatross_config_tests =
   [
@@ -427,6 +279,7 @@ let tests =
     ("Version tests", version_tests);
     ("Email config tests", email_config_tests);
     ("Albatross config tests", albatross_config_tests);
+    ("Disk dump tests", disk_dump_tests);
   ]
 
 let () = Alcotest.run "Mollymawk data serialization tests for storage" tests

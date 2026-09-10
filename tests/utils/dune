@@ -1,7 +1,6 @@
-(test
- (name tests)
+(library
+ (name test_utils)
  (libraries
-  test_utils
   mollymawk_libraries
   alcotest
   albatross

@@ -123,10 +123,19 @@ let of_json json =
   match json with
   | `List cfgs ->
       let ( let* ) = Result.bind in
-      List.fold_left
-        (fun acc cfg ->
-          let* acc = acc in
-          let* c = one_of_json cfg in
-          Ok (c :: acc))
-        (Ok []) cfgs
+      let* cfgs =
+        List.fold_left
+          (fun acc cfg ->
+            let* acc = acc in
+            let* c = one_of_json cfg in
+            if
+              List.exists
+                (fun (existing : t) ->
+                  Vmm_core.Name.Label.equal existing.name c.name)
+                acc
+            then Error (`Msg "Duplicated albatross configurations")
+            else Ok (c :: acc))
+          (Ok []) cfgs
+      in
+      Ok (List.rev cfgs)
   | _ -> Error (`Msg "configuration: expected a list")
