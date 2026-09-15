@@ -3,205 +3,205 @@ let () = Mirage_crypto_rng_unix.use_default ()
 (* this dump was gotten from a locally running instance of mollymawk. in store.ml, the function read_disk outputs a string. this is the string that is contained in the value raw_dump below. *)
 let raw_dump =
   {|{
-  "version": 10,
-  "users": [
-    {
-      "name": "user",
-      "email": "user@robur.net",
-      "email_verified": null,
-      "password": "vn2hllXeTYpW2n9+gPf2Bnal6T2qms8acPQHb+0=",
-      "uuid": "1d0a80e3-323b-4b45-9efd-bad03762e87f",
-      "tokens": [],
-      "cookies": [
-        {
-          "name": "molly_csrf",
-          "created_at": "2026-04-13 19:29:36-00:00",
-          "value": "OGZkZjg4NDYtZGQyNS00MjFjLTg5NGQtZjk3OTAwODllMWM3",
-          "expires_in": 3600,
-          "uuid": "f4c766d0-a9df-4bfd-986e-1b3cdc5a9414",
-          "last_access": "2026-04-13 19:29:36-00:00",
-          "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
-        },
-        {
-          "name": "molly_session",
-          "created_at": "2025-12-28 18:18:24-00:00",
-          "value": "MDQwZmNiZmMtOGM3MC00OTM2LTlmMjctOTExMDQwZGM3MDNl",
-          "expires_in": 604800,
-          "uuid": "1d0a80e3-323b-4b45-9efd-bad03762e87f",
-          "last_access": "2025-12-28 18:18:24-00:00",
-          "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
-        },
-      ],
-      "created_at": "2026-04-13 19:31:50-00:00",
-      "updated_at": "2026-04-13 19:29:58-00:00",
-      "email_verification_uuid": "fbf1fd08-0a19-464e-a7bc-e79d1d5f7fc7",
-      "active": true,
-      "super_user": false,
-      "unikernel_updates": [],
-      "scaling_policies": []
-    },
-    {
-      "name": "user2",
-      "email": "user2@robur.coop",
-      "email_verified": "2025-12-28 13:34:10-00:00",
-      "password": "WomWAonZcOsQ9ueSRwFbT7nvQAtcsfNFl/o7T66=",
-      "uuid": "28538638-0136-43e1-9146-bf7649917a33",
-      "tokens": [],
-      "cookies": [
-        {
-          "name": "molly_csrf",
-          "created_at": "2025-12-28 13:38:45-00:00",
-          "value": "MWIyYWNiNzctMzUxYS00NWU0LTgzZjctOTUxODhjNmM5NGUx",
-          "expires_in": 3600,
-          "uuid": "aeb59d61-7992-42c6-8f64-91f1cfbfe476",
-          "last_access": "2025-12-28 13:38:45-00:00",
-          "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
-        },
-        {
-          "name": "molly_session",
-          "created_at": "2025-12-28 13:33:06-00:00",
-          "value": "MzNjYTM1ZGItYWVkYS00YTBkLThmMTctMDBiNWM3MWY3MDg2",
-          "expires_in": 604800,
-          "uuid": "28538638-0136-43e1-9146-bf7649917a33",
-          "last_access": "2025-12-28 13:33:06-00:00",
-          "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
-        },
-      ],
-      "created_at": "2025-12-28 13:34:17-00:00",
-      "updated_at": "2025-12-28 13:38:45-00:00",
-      "email_verification_uuid": "56245e21-0201-47fd-b7f3-5cbee960c6af",
-      "active": true,
-      "super_user": false,
-      "unikernel_updates": [],
-      "scaling_policies": []
-    },
-    {
-      "name": "user3",
-      "email": "user3@robur.coop",
-      "email_verified": "2025-12-28 12:35:08-00:00",
-      "password": "eVHL6CIc5phEoElSOACRkCFZD68vzHAt9StFI=",
-      "uuid": "1f42ba42-5458-479b-8095-8450afde8d6b",
-      "tokens": [
-        {
-          "token_type": "Bearer",
-          "value": "3cb6bc72-a52d-4f4f-969c-c85465875774",
-          "expires_in": 800000,
-          "created_at": "2025-12-09 05:12:11-00:00",
-          "last_access": "2025-12-09 05:12:11-00:00",
-          "name": "updated-gitlab-token",
-          "usage_count": 0
-        },
-        {
-          "token_type": "Bearer",
-          "value": "6bc27967-30cd-4090-af8f-3997c47c25e1",
-          "expires_in": 2419200,
-          "created_at": "2025-12-05 04:14:38-00:00",
-          "last_access": "2025-12-05 04:14:38-00:00",
-          "name": "fobud",
-          "usage_count": 68
-        },
-      ],
-      "cookies": [
-        {
-          "name": "molly_csrf",
-          "created_at": "2026-08-25 23:10:15-00:00",
-          "value": "NjgzOTI1ZDEtYTgyMy00MDY4LTlkMzgtZWY5YjRjYjNjNzcz",
-          "expires_in": 3600,
-          "uuid": "c0c0529c-e905-437a-82f9-4ae3be68856a",
-          "last_access": "2026-08-25 23:10:15-00:00",
-          "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
-        },
-        {
-          "name": "molly_session",
-          "created_at": "2026-08-25 23:09:50-00:00",
-          "value": "YzhlZmUyOGMtODQ0Mi00ZGNhLWI1NmYtM2FiMDNkMDQ1ODI5",
-          "expires_in": 604800,
-          "uuid": "1f42ba42-5458-479b-8095-8450afde8d6b",
-          "last_access": "2026-08-25 23:09:50-00:00",
-          "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
-        }
-      ],
-      "created_at": "2026-07-28 07:20:46-00:00",
-      "updated_at": "2026-08-25 23:10:15-00:00",
-      "email_verification_uuid": "3e49c0d0-8c1c-4ed7-9763-355d73f62257",
-      "active": true,
-      "super_user": true,
-      "unikernel_updates": [
-        {
-          "name": "hello",
-          "job": "hello",
-          "uuid": "6cc1a49d-eb1e-4f46-8471-6452206d1475",
-          "config": {
-            "typ": "solo5",
-            "compressed": false,
-            "fail_behaviour": {
-              "restart": null,
-              "exit_code": [],
-              "all_exit_codes": false
-            },
-            "cpuids": [
-              0
-            ],
-            "memory": 32,
-            "block_devices": [],
-            "network_interfaces": [],
-            "arguments": [],
-            "numcpus": 1,
-            "linux_boot_partition": null
+    "version": 10,
+    "users": [
+      {
+        "name": "user",
+        "email": "user@robur.net",
+        "email_verified": null,
+        "password": "vn2hllXeTYpW2n9+gPf2Bnal6T2qms8acPQHb+0=",
+        "uuid": "1d0a80e3-323b-4b45-9efd-bad03762e87f",
+        "tokens": [],
+        "cookies": [
+          {
+            "name": "molly_csrf",
+            "created_at": "2026-04-13 19:29:36-00:00",
+            "value": "OGZkZjg4NDYtZGQyNS00MjFjLTg5NGQtZjk3OTAwODllMWM3",
+            "expires_in": 3600,
+            "uuid": "f4c766d0-a9df-4bfd-986e-1b3cdc5a9414",
+            "last_access": "2026-04-13 19:29:36-00:00",
+            "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
           },
-          "timestamp": "2026-05-01 18:14:22-00:00"
-        },
-        {
-          "name": "hello-4",
-          "job": "hello",
-          "uuid": "",
-          "config": {
-            "typ": "solo5",
-            "compressed": false,
-            "fail_behaviour": {
-              "restart": null,
-              "exit_code": [],
-              "all_exit_codes": false
-            },
-            "cpuids": [
-              0
-            ],
-            "memory": 1,
-            "block_devices": [],
-            "network_interfaces": [],
-            "arguments": [],
-            "numcpus": 1,
-            "linux_boot_partition": null
+          {
+            "name": "molly_session",
+            "created_at": "2025-12-28 18:18:24-00:00",
+            "value": "MDQwZmNiZmMtOGM3MC00OTM2LTlmMjctOTExMDQwZGM3MDNl",
+            "expires_in": 604800,
+            "uuid": "1d0a80e3-323b-4b45-9efd-bad03762e87f",
+            "last_access": "2025-12-28 18:18:24-00:00",
+            "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+          }
+        ],
+        "created_at": "2026-04-13 19:31:50-00:00",
+        "updated_at": "2026-04-13 19:29:58-00:00",
+        "email_verification_uuid": "fbf1fd08-0a19-464e-a7bc-e79d1d5f7fc7",
+        "active": true,
+        "super_user": false,
+        "unikernel_updates": [],
+        "scaling_policies": []
+      },
+      {
+        "name": "user2",
+        "email": "user2@robur.coop",
+        "email_verified": "2025-12-28 13:34:10-00:00",
+        "password": "WomWAonZcOsQ9ueSRwFbT7nvQAtcsfNFl/o7T66=",
+        "uuid": "28538638-0136-43e1-9146-bf7649917a33",
+        "tokens": [],
+        "cookies": [
+          {
+            "name": "molly_csrf",
+            "created_at": "2025-12-28 13:38:45-00:00",
+            "value": "MWIyYWNiNzctMzUxYS00NWU0LTgzZjctOTUxODhjNmM5NGUx",
+            "expires_in": 3600,
+            "uuid": "aeb59d61-7992-42c6-8f64-91f1cfbfe476",
+            "last_access": "2025-12-28 13:38:45-00:00",
+            "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
           },
-          "timestamp": "2025-12-08 17:58:24-00:00"
-        },
-      ],
-      "scaling_policies": [
-        {
-          "name": "hello",
-          "primary_albatross_instance": "local-server",
-          "max_instances": 3
-        }
-      ]
+          {
+            "name": "molly_session",
+            "created_at": "2025-12-28 13:33:06-00:00",
+            "value": "MzNjYTM1ZGItYWVkYS00YTBkLThmMTctMDBiNWM3MWY3MDg2",
+            "expires_in": 604800,
+            "uuid": "28538638-0136-43e1-9146-bf7649917a33",
+            "last_access": "2025-12-28 13:33:06-00:00",
+            "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+          }
+        ],
+        "created_at": "2025-12-28 13:34:17-00:00",
+        "updated_at": "2025-12-28 13:38:45-00:00",
+        "email_verification_uuid": "56245e21-0201-47fd-b7f3-5cbee960c6af",
+        "active": true,
+        "super_user": false,
+        "unikernel_updates": [],
+        "scaling_policies": []
+      },
+      {
+        "name": "user3",
+        "email": "user3@robur.coop",
+        "email_verified": "2025-12-28 12:35:08-00:00",
+        "password": "eVHL6CIc5phEoElSOACRkCFZD68vzHAt9StFI=",
+        "uuid": "1f42ba42-5458-479b-8095-8450afde8d6b",
+        "tokens": [
+          {
+            "token_type": "Bearer",
+            "value": "3cb6bc72-a52d-4f4f-969c-c85465875774",
+            "expires_in": 800000,
+            "created_at": "2025-12-09 05:12:11-00:00",
+            "last_access": "2025-12-09 05:12:11-00:00",
+            "name": "updated-gitlab-token",
+            "usage_count": 0
+          },
+          {
+            "token_type": "Bearer",
+            "value": "6bc27967-30cd-4090-af8f-3997c47c25e1",
+            "expires_in": 2419200,
+            "created_at": "2025-12-05 04:14:38-00:00",
+            "last_access": "2025-12-05 04:14:38-00:00",
+            "name": "fobud",
+            "usage_count": 68
+          }
+        ],
+        "cookies": [
+          {
+            "name": "molly_csrf",
+            "created_at": "2026-08-25 23:10:15-00:00",
+            "value": "NjgzOTI1ZDEtYTgyMy00MDY4LTlkMzgtZWY5YjRjYjNjNzcz",
+            "expires_in": 3600,
+            "uuid": "c0c0529c-e905-437a-82f9-4ae3be68856a",
+            "last_access": "2026-08-25 23:10:15-00:00",
+            "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+          },
+          {
+            "name": "molly_session",
+            "created_at": "2026-08-25 23:09:50-00:00",
+            "value": "YzhlZmUyOGMtODQ0Mi00ZGNhLWI1NmYtM2FiMDNkMDQ1ODI5",
+            "expires_in": 604800,
+            "uuid": "1f42ba42-5458-479b-8095-8450afde8d6b",
+            "last_access": "2026-08-25 23:09:50-00:00",
+            "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+          }
+        ],
+        "created_at": "2026-07-28 07:20:46-00:00",
+        "updated_at": "2026-08-25 23:10:15-00:00",
+        "email_verification_uuid": "3e49c0d0-8c1c-4ed7-9763-355d73f62257",
+        "active": true,
+        "super_user": true,
+        "unikernel_updates": [
+          {
+            "name": "hello",
+            "job": "hello",
+            "uuid": "6cc1a49d-eb1e-4f46-8471-6452206d1475",
+            "config": {
+              "typ": "solo5",
+              "compressed": false,
+              "fail_behaviour": {
+                "restart": null,
+                "exit_code": [],
+                "all_exit_codes": false
+              },
+              "cpuids": [
+                0
+              ],
+              "memory": 32,
+              "block_devices": [],
+              "network_interfaces": [],
+              "arguments": [],
+              "numcpus": 1,
+              "linux_boot_partition": null
+            },
+            "timestamp": "2026-05-01 18:14:22-00:00"
+          },
+          {
+            "name": "hello-4",
+            "job": "hello",
+            "uuid": "",
+            "config": {
+              "typ": "solo5",
+              "compressed": false,
+              "fail_behaviour": {
+                "restart": null,
+                "exit_code": [],
+                "all_exit_codes": false
+              },
+              "cpuids": [
+                0
+              ],
+              "memory": 1,
+              "block_devices": [],
+              "network_interfaces": [],
+              "arguments": [],
+              "numcpus": 1,
+              "linux_boot_partition": null
+            },
+            "timestamp": "2025-12-08 17:58:24-00:00"
+          }
+        ],
+        "scaling_policies": [
+          {
+            "name": "hello",
+            "primary_albatross_instance": "local-server",
+            "max_instances": 3
+          }
+        ]
+      }
+    ],
+    "configuration": [
+      {
+        "name": "local-server",
+        "certificate": "-----BEGIN CERTIFICATE-----\nMIH1MIGooAMCAQICCh4RFZsMHQSV7UMwBQYDK2VwMA0xCzAJBgNVBAMMAmNhMB4X\nDTI1MTIwNTEzMTk0MVoXDTM1MTIwMzEzMTk1MVowDTELMAkGA1UEAwwCY2EwKjAF\nBgMrZXADIQCD6DablGzl/JEQqieuP0B4CWhVlmnLoe5c777q8cOCr6MkMCIwDwYD\nVR0PAQH/BAUDAwfGADAPBgNVHRMBAf8EBTADAQH/MAUGAytlcANBAHNte6yJzB5f\nNkq0L4w7rHhUEIWg1igHciNMXLzJTrxxpm5RxDFmnS3yEhARmMVd2N5h6N/K1200\nZDgtaQRpDQw=\n-----END CERTIFICATE-----\n",
+        "private_key": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIPa9DMmlMckBoVrWvcxB3yq1dQHe9oGhFSLShZA18vvb\n-----END PRIVATE KEY-----\n",
+        "server_ip": "10.0.0.1",
+        "server_port": 1025,
+        "updated_at": "2026-04-15 11:20:27-00:00"
+      }
+    ],
+    "email": {
+      "server": "10.0.0.1",
+      "port": 25,
+      "from_email": "no-reply@robur.coop",
+      "base_url": "127.0.0.2"
     }
-  ],
-  "configuration": [
-    {
-      "name": "local-server",
-      "certificate": "-----BEGIN CERTIFICATE-----\nMIH1MIGooAMCAQICCh4RFZsMHQSV7UMwBQYDK2VwMA0xCzAJBgNVBAMMAmNhMB4X\nDTI1MTIwNTEzMTk0MVoXDTM1MTIwMzEzMTk1MVowDTELMAkGA1UEAwwCY2EwKjAF\nBgMrZXADIQCD6DablGzl/JEQqieuP0B4CWhVlmnLoe5c777q8cOCr6MkMCIwDwYD\nVR0PAQH/BAUDAwfGADAPBgNVHRMBAf8EBTADAQH/MAUGAytlcANBAHNte6yJzB5f\nNkq0L4w7rHhUEIWg1igHciNMXLzJTrxxpm5RxDFmnS3yEhARmMVd2N5h6N/K1200\nZDgtaQRpDQw=\n-----END CERTIFICATE-----\n",
-      "private_key": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIPa9DMmlMckBoVrWvcxB3yq1dQHe9oGhFSLShZA18vvb\n-----END PRIVATE KEY-----\n",
-      "server_ip": "10.0.0.1",
-      "server_port": 1025,
-      "updated_at": "2026-04-15 11:20:27-00:00"
-    }
-  ],
-  "email": {
-    "server": "10.0.0.1",
-    "port": 25,
-    "from_email": "no-reply@robur.coop",
-    "base_url": "127.0.0.2"
-  }
-}|}
+  }|}
 
 (** Helper exception unwrap *)
 let of_string_exn f =
