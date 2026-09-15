@@ -1,15 +1,3 @@
-type 'a testable = 'a Alcotest.testable
-
-let testable = Alcotest.testable
-let check = Alcotest.check
-let result = Alcotest.result
-let list = Alcotest.list
-let pair = Alcotest.pair
-let option = Alcotest.option
-let string = Alcotest.string
-let bool = Alcotest.bool
-let int = Alcotest.int
-let unit = Alcotest.unit
 let () = Mirage_crypto_rng_unix.use_default ()
 
 (* this dump was gotten from a locally running instance of mollymawk. in store.ml, the function read_disk outputs a string. this is the string that is contained in the value raw_dump below. *)
@@ -595,19 +583,19 @@ let certificate_exn pk =
   | Error _ -> failwith "invalid certificate"
 
 (** Alcotest Testables *)
-let msg_t : [ `Msg of string ] testable =
+let msg_t : [ `Msg of string ] Alcotest.testable =
   let pp ppf (`Msg s) = Fmt.string ppf s in
-  testable pp (fun (`Msg a) (`Msg b) -> String.equal a b)
+  Alcotest.testable pp (fun (`Msg a) (`Msg b) -> String.equal a b)
 
-let yojson_t : Yojson.Basic.t testable =
+let yojson_t : Yojson.Basic.t Alcotest.testable =
   let pp ppf j = Fmt.pf ppf "%s" (Yojson.Basic.pretty_to_string j) in
-  testable pp Yojson.Basic.equal
+  Alcotest.testable pp Yojson.Basic.equal
 
 let user_t =
   let pp ppf (u : User_model.user) =
     Fmt.pf ppf "%a" Yojson.Basic.pp (User_model.user_to_json u)
   in
-  testable pp (fun (u1 : User_model.user) (u2 : User_model.user) ->
+  Alcotest.testable pp (fun (u1 : User_model.user) (u2 : User_model.user) ->
       Vmm_core.Name.Label.equal u1.name u2.name
       && Mrmime.Mailbox.equal u1.email u2.email
       && String.equal u1.uuid u2.uuid
@@ -618,7 +606,7 @@ let token_t =
   let pp ppf (t : User_model.token) =
     Fmt.pf ppf "%a" Yojson.Basic.pp (User_model.token_to_json t)
   in
-  testable pp (fun (t1 : User_model.token) (t2 : User_model.token) ->
+  Alcotest.testable pp (fun (t1 : User_model.token) (t2 : User_model.token) ->
       String.equal t1.name t2.name
       && String.equal t1.value t2.value
       && Int.equal t1.expires_in t2.expires_in
@@ -628,7 +616,7 @@ let cookie_t =
   let pp ppf (c : User_model.cookie) =
     Fmt.pf ppf "%s=%s (expires: %d)" c.name c.value c.expires_in
   in
-  testable pp (fun (c1 : User_model.cookie) (c2 : User_model.cookie) ->
+  Alcotest.testable pp (fun (c1 : User_model.cookie) (c2 : User_model.cookie) ->
       String.equal c1.name c2.name
       && String.equal c1.value c2.value
       && Int.equal c1.expires_in c2.expires_in)
@@ -637,7 +625,7 @@ let email_config_t =
   let pp ppf (e : Utils.Email.t) =
     Fmt.pf ppf "%a" Yojson.Basic.pp (Utils.Email.to_json (Some e))
   in
-  testable pp (fun (e1 : Utils.Email.t) (e2 : Utils.Email.t) ->
+  Alcotest.testable pp (fun (e1 : Utils.Email.t) (e2 : Utils.Email.t) ->
       Ipaddr.compare e1.server e2.server = 0
       && Int.equal e1.port e2.port
       && String.equal e1.base_url e2.base_url
@@ -649,14 +637,14 @@ let config_pair_t =
       (Configuration.name_to_str c.name)
       Ipaddr.pp c.server_ip c.server_port
   in
-  testable pp (fun (c1 : Configuration.t) (c2 : Configuration.t) ->
+  Alcotest.testable pp (fun (c1 : Configuration.t) (c2 : Configuration.t) ->
       Vmm_core.Name.Label.equal c1.name c2.name
       && Ipaddr.compare c1.server_ip c2.server_ip = 0
       && Int.equal c1.server_port c2.server_port)
 
 let policy_t =
   let pp ppf (p : Vmm_core.Policy.t) = Fmt.pf ppf "%a" Vmm_core.Policy.pp p in
-  testable pp (fun (p1 : Vmm_core.Policy.t) (p2 : Vmm_core.Policy.t) ->
+  Alcotest.testable pp (fun (p1 : Vmm_core.Policy.t) (p2 : Vmm_core.Policy.t) ->
       Int.equal p1.unikernels p2.unikernels
       && Vmm_core.IS.equal p1.cpuids p2.cpuids
       && Int.equal p1.memory p2.memory
@@ -771,7 +759,7 @@ let eq_emails (e1 : Utils.Email.t) (e2 : Utils.Email.t) =
 let eq_storage (u1, c1, e1) (u2, c2, e2) =
   eq_users u1 u2 && eq_config c1 c2 && Option.equal eq_emails e1 e2
 
-let storage_t = testable pp_storage eq_storage
+let storage_t = Alcotest.testable pp_storage eq_storage
 
 let mock_storage ?(version = 10) ?(users = []) ?(configuration = [])
     ?(email = None) () =
@@ -799,7 +787,7 @@ let mock_albatross_config =
 
 (** User Creation Helper *)
 let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
-    ?(password = "securePassword123") ?(active = true) ?(super_user = false)
+    ?(password = "Password123!") ?(active = true) ?(super_user = false)
     ?(tokens = []) () =
   let name_lbl = label_of_string_exn name in
   let email_box = email_of_string_exn email in
