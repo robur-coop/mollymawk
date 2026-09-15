@@ -43,9 +43,7 @@ let check_registration_with_no_email () =
            ~super_user:false ~user_agent:(Some "Alcotest")))
 
 let check_duplicate_user () =
-  let existing_user =
-    make_mock_user ~name:"test" ~email:"test@robur.coop" ()
-  in
+  let existing_user = make_mock_user ~name:"test" ~email:"test@robur.coop" () in
   let users = [ existing_user ] in
 
   let dup_name = label_of_string_exn "test" in
