@@ -450,3 +450,13 @@ let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
       ~super_user ~created_at:now ~user_agent:(Some "Alcotest/1.0")
   in
   { user with tokens }
+
+let string_contains ~sub str =
+  let len_sub = String.length sub in
+  let len_str = String.length str in
+  let rec check i =
+    if i + len_sub > len_str then false
+    else if String.sub str i len_sub = sub then true
+    else check (i + 1)
+  in
+  check 0
