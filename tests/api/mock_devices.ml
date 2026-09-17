@@ -46,3 +46,9 @@ module HE = Happy_eyeballs_mirage.Make (Tcpip_stack_socket.V4V6)
 module DNS = Dns_client_mirage.Make (Tcpip_stack_socket.V4V6) (HE)
 module Mimic_HE = Mimic_happy_eyeballs.Make (Tcpip_stack_socket.V4V6) (HE) (DNS)
 module Client = Http_mirage_client.Make (Tcpip_stack_socket.V4V6.TCP) (Mimic_HE)
+
+module App =
+  Unikernel.Main (Tcpip_stack_socket.V4V6) (Tcpip_stack_socket.V4V6) (DNS)
+    (Mock_KV)
+    (Mock_Block)
+    (Client)
