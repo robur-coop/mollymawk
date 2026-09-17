@@ -1,5 +1,8 @@
 (test
  (name api_tests)
+ (enabled_if
+  (= %{context_name} "default"))
+ (flags :standard -warn-error -a)
  (libraries
   test_utils
   mollymawk_libraries
@@ -12,7 +15,6 @@
   mirage-crypto-rng.unix
   ptime
   fmt
-  logs
   x509
   ipaddr
   ohex
@@ -20,6 +22,22 @@
   emile
   tyxml
   uri
-  duration))
+  duration
+  lwt.unix
+  tcpip.stack-socket
+  paf
+  paf.mirage
+  oneffs
+  mirage-block
+  mirage-kv
+  mimic-happy-eyeballs
+  sendmail-mirage
+  colombe.emile
+  dns-client-mirage
+  happy-eyeballs-mirage
+  tls-mirage
+  mirage-runtime
+  multipart_form
+  multipart_form-lwt))
 
-(copy_files# ../../autoscaler.ml)
+(copy_files# ../../*.ml)
