@@ -451,14 +451,21 @@ let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
   in
   { user with tokens }
 
-let make_post_request ~path ~body ?(csrf_token = "") () =
+let make_post_request ~path ~body ?(csrf_token = "") ?(session_cookie = "") () =
+  let cookie_hdr =
+    match (session_cookie, csrf_token) with
+    | "", "" -> ""
+    | s, "" -> Fmt.str "Cookie: molly_session=%s\r\n" s
+    | "", c -> Fmt.str "Cookie: molly_csrf=%s\r\n" c
+    | s, c -> Fmt.str "Cookie: molly_session=%s; molly_csrf=%s\r\n" s c
+  in
   Fmt.str
     "POST %s HTTP/1.1\r\n\
      Host: localhost\r\n\
      Content-Type: application/json\r\n\
      Content-Length: %d\r\n\
      User-Agent: Alcotest-client\r\n\
-     Cookie: molly_csrf=%s\r\n\
+     %s\
      \r\n\
      %s"
-    path (String.length body) csrf_token body
+    path (String.length body) cookie_hdr body
