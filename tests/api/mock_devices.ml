@@ -41,3 +41,8 @@ end = struct
   let write () _sector_start _bufs = Lwt.return (Ok ())
   let create () = ()
 end
+
+module HE = Happy_eyeballs_mirage.Make (Tcpip_stack_socket.V4V6)
+module DNS = Dns_client_mirage.Make (Tcpip_stack_socket.V4V6) (HE)
+module Mimic_HE = Mimic_happy_eyeballs.Make (Tcpip_stack_socket.V4V6) (HE) (DNS)
+module Client = Http_mirage_client.Make (Tcpip_stack_socket.V4V6.TCP) (Mimic_HE)
