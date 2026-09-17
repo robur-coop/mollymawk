@@ -52,3 +52,45 @@ module App =
     (Mock_KV)
     (Mock_Block)
     (Client)
+
+(* this function query_endpoint is for in-memory http requests *)
+let query_endpoint handler raw_request_str =
+  let output_buffer = Buffer.create 1024 in
+  let finished_promise, notify_finished = Lwt.wait () in
+  let request_handler reqd =
+    Lwt.async (fun () ->
+        Lwt.catch
+          (fun () ->
+            handler reqd >>= fun () ->
+            Lwt.wakeup_later notify_finished ();
+            Lwt.return_unit)
+          (fun exn ->
+            Logs.err (fun m ->
+                m "Handler exception: %s" (Printexc.to_string exn));
+            Lwt.wakeup_later_exn notify_finished exn;
+            Lwt.return_unit))
+  in
+  let conn = H1.Server_connection.create request_handler in
+  let bs =
+    Bigstringaf.of_string ~off:0
+      ~len:(String.length raw_request_str)
+      raw_request_str
+  in
+  let _ =
+    H1.Server_connection.read_eof conn bs ~off:0 ~len:(Bigstringaf.length bs)
+  in
+  finished_promise >>= fun () ->
+  let rec drain () =
+    match H1.Server_connection.next_write_operation conn with
+    | `Write iovecs ->
+        List.iter
+          (fun { H1.IOVec.buffer; off; len } ->
+            let s = Bigstringaf.substring ~off ~len buffer in
+            Buffer.add_string output_buffer s;
+            H1.Server_connection.report_write_result conn (`Ok len))
+          iovecs;
+        drain ()
+    | `Yield | `Upgrade | `Close _ -> ()
+  in
+  drain ();
+  Lwt.return (Buffer.contents output_buffer)
