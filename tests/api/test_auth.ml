@@ -1,4 +1,14 @@
 open Test_utils
+open Mock_devices
+
+let make_register_request ?(csrf = "valid-csrf-token-1234") ~name ~email
+    ~password () =
+  let json_body =
+    Fmt.str
+      {|{ "name": "%s", "email": "%s", "password": "%s", "form_csrf": "%s" }|}
+      name email password csrf
+  in
+  make_post_request ~path:"/api/register" ~body:json_body ~csrf_token:csrf ()
 
 let check_valid_registration () =
   let name = label_of_string_exn "test" in
