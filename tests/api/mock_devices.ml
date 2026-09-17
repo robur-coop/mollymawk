@@ -94,3 +94,9 @@ let query_endpoint handler raw_request_str =
   in
   drain ();
   Lwt.return (Buffer.contents output_buffer)
+
+let init_mock_store () =
+  let block = Mock_Block.create () in
+  App.Store.connect block >>= function
+  | Error (`Msg msg) -> failwith msg
+  | Ok store -> Lwt.return store
