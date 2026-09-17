@@ -460,3 +460,15 @@ let string_contains ~sub str =
     else check (i + 1)
   in
   check 0
+
+let make_post_request ~path ~body ?(csrf_token = "") () =
+  Fmt.str
+    "POST %s HTTP/1.1\r\n\
+     Host: localhost\r\n\
+     Content-Type: application/json\r\n\
+     Content-Length: %d\r\n\
+     User-Agent: Alcotest-client\r\n\
+     Cookie: molly_csrf=%s\r\n\
+     \r\n\
+     %s"
+    path (String.length body) csrf_token body
