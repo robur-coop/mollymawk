@@ -1,5 +1,6 @@
 open Test_utils
 open Mock_devices
+open Lwt.Infix
 
 let make_register_request ?(csrf = "valid-csrf-token-1234") ~name ~email
     ~password () =
@@ -154,6 +155,120 @@ let check_email_token_verification () =
         (verified_user.email_verification_uuid = None)
   | Error (`Msg err) -> failwith err
 
+let check_registration_endpoint () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let raw_http_request =
+        make_register_request ~name:"test" ~email:"test@robur.coop"
+          ~password:"SecretPassword123!" ()
+      in
+      query_endpoint (App.register store) raw_http_request
+      >>= fun response_str ->
+      Printf.printf "Response:\n%s\n%!" response_str;
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" response_str);
+
+      Alcotest.(check bool)
+        "Response contains redirect to dashboard" true
+        (string_contains ~sub:"location: /dashboard"
+           (String.lowercase_ascii response_str));
+
+      Alcotest.(check bool)
+        "Response body contains user name test" true
+        (string_contains ~sub:"\"name\":\"test\"" response_str);
+
+      Alcotest.(check int)
+        "User stored in database" 1
+        (List.length store.Storage.users);
+      let saved_user = List.hd store.Storage.users in
+      Alcotest.(check string)
+        "Saved user name matches" "test"
+        (Configuration.name_to_str saved_user.name);
+      Alcotest.(check bool) "First user is superuser" true saved_user.super_user;
+      Alcotest.(check bool) "First user is active" true saved_user.active;
+
+      Lwt.return_unit )
+
+let check_duplicate_registration_endpoint () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req1 =
+        make_register_request ~name:"test2" ~email:"test2@robur.coop"
+          ~password:"SecretPassword123!" ()
+      in
+      query_endpoint (App.register store) req1 >>= fun resp1 ->
+      Printf.printf "Response 1:\n%s\n%!" resp1;
+      Alcotest.(check bool)
+        "First registration succeeds" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp1);
+
+      let req2 =
+        make_register_request ~name:"test2" ~email:"test3@robur.coop"
+          ~password:"SecretPassword123!" ()
+      in
+      query_endpoint (App.register store) req2 >>= fun resp2 ->
+      Printf.printf "Response 2:\n%s\n%!" resp2;
+      Alcotest.(check bool)
+        "Duplicate name is 400 Bad Request" true
+        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp2);
+      Alcotest.(check bool)
+        "Duplicate name error message" true
+        (string_contains ~sub:"A user with this name already exist." resp2);
+
+      Lwt.return_unit )
+
+let check_registration_endpoint_bad_email () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req =
+        make_register_request ~name:"testuser" ~email:"testuser@"
+          ~password:"SecretPassword123!" ()
+      in
+      query_endpoint (App.register store) req >>= fun resp ->
+      Printf.printf "Response:\n%s\n%!" resp;
+      Alcotest.(check bool)
+        "Response has HTTP 400 Bad Request" true
+        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+      Alcotest.(check bool)
+        "Error message indicates invalid email" true
+        (string_contains ~sub:"Invalid email address." resp);
+      Lwt.return_unit )
+
+let check_registration_endpoint_empty_name () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req =
+        make_register_request ~name:"" ~email:"test@robur.coop"
+          ~password:"SecretPassword123!" ()
+      in
+      query_endpoint (App.register store) req >>= fun resp ->
+      Printf.printf "Response:\n%s\n%!" resp;
+      Alcotest.(check bool)
+        "Response has HTTP 400 Bad Request" true
+        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+      Alcotest.(check bool)
+        "Error message indicates all fields must be filled" true
+        (string_contains ~sub:"All fields must be filled." resp);
+      Lwt.return_unit )
+
+let check_registration_endpoint_bad_name () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req =
+        make_register_request ~name:"test user" ~email:"test@robur.coop"
+          ~password:"SecretPassword123!" ()
+      in
+      query_endpoint (App.register store) req >>= fun resp ->
+      Printf.printf "Response:\n%s\n%!" resp;
+      Alcotest.(check bool)
+        "Response has HTTP 400 Bad Request" true
+        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+      Alcotest.(check bool)
+        "Error message indicates invalid label" true
+        (string_contains ~sub:"invalid label" resp);
+      Lwt.return_unit )
+
 let tests =
   [
     ("Valid registration", `Quick, check_valid_registration);
@@ -167,4 +282,17 @@ let tests =
       `Quick,
       check_failed_login_wrong_password );
     ("Email token verification", `Quick, check_email_token_verification);
+    ("Register a user", `Quick, check_registration_endpoint);
+    ( "Reject duplicate registration",
+      `Quick,
+      check_duplicate_registration_endpoint );
+    ( "Register endpoint with bad email",
+      `Quick,
+      check_registration_endpoint_bad_email );
+    ( "Register endpoint with empty name",
+      `Quick,
+      check_registration_endpoint_empty_name );
+    ( "Register endpoint with bad name (whitespace)",
+      `Quick,
+      check_registration_endpoint_bad_name );
   ]
