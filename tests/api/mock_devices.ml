@@ -14,3 +14,29 @@ module Mock_KV : Mirage_kv.RO = struct
   let last_modified _ _ = Lwt.return (Ok Ptime.epoch)
   let get_partial _ _ ~offset:_ ~length:_ = Lwt.return (Ok "dummy")
 end
+
+module Mock_Block : sig
+  include Mirage_block.S
+
+  val create : unit -> t
+end = struct
+  type t = unit
+  type error = Mirage_block.error
+  type write_error = Mirage_block.write_error
+
+  let pp_error = Mirage_block.pp_error
+  let pp_write_error = Mirage_block.pp_write_error
+
+  let get_info () =
+    Lwt.return
+      {
+        Mirage_block.read_write = true;
+        sector_size = 512;
+        size_sectors = 4096L;
+      }
+
+  let disconnect () = Lwt.return_unit
+  let read () _sector_start _bufs = Lwt.return (Ok ())
+  let write () _sector_start _bufs = Lwt.return (Ok ())
+  let create () = ()
+end
