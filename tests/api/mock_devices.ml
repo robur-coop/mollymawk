@@ -65,8 +65,6 @@ let query_endpoint handler raw_request_str =
             Lwt.wakeup_later notify_finished ();
             Lwt.return_unit)
           (fun exn ->
-            Logs.err (fun m ->
-                m "Handler exception: %s" (Printexc.to_string exn));
             Lwt.wakeup_later_exn notify_finished exn;
             Lwt.return_unit))
   in
