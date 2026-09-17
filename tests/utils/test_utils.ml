@@ -451,16 +451,6 @@ let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
   in
   { user with tokens }
 
-let string_contains ~sub str =
-  let len_sub = String.length sub in
-  let len_str = String.length str in
-  let rec check i =
-    if i + len_sub > len_str then false
-    else if String.sub str i len_sub = sub then true
-    else check (i + 1)
-  in
-  check 0
-
 let make_post_request ~path ~body ?(csrf_token = "") () =
   Fmt.str
     "POST %s HTTP/1.1\r\n\

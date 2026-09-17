@@ -171,12 +171,12 @@ let check_registration_endpoint () =
 
       Alcotest.(check bool)
         "Response contains redirect to dashboard" true
-        (string_contains ~sub:"location: /dashboard"
+        (String.includes ~affix:"location: /dashboard"
            (String.lowercase_ascii response_str));
 
       Alcotest.(check bool)
         "Response body contains user name test" true
-        (string_contains ~sub:"\"name\":\"test\"" response_str);
+        (String.includes ~affix:"\"name\":\"test\"" response_str);
 
       Alcotest.(check int)
         "User stored in database" 1
@@ -214,7 +214,7 @@ let check_duplicate_registration_endpoint () =
         (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp2);
       Alcotest.(check bool)
         "Duplicate name error message" true
-        (string_contains ~sub:"A user with this name already exist." resp2);
+        (String.includes ~affix:"A user with this name already exist." resp2);
 
       Lwt.return_unit )
 
@@ -232,7 +232,7 @@ let check_registration_endpoint_bad_email () =
         (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
       Alcotest.(check bool)
         "Error message indicates invalid email" true
-        (string_contains ~sub:"Invalid email address." resp);
+        (String.includes ~affix:"Invalid email address." resp);
       Lwt.return_unit )
 
 let check_registration_endpoint_empty_name () =
@@ -249,7 +249,7 @@ let check_registration_endpoint_empty_name () =
         (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
       Alcotest.(check bool)
         "Error message indicates all fields must be filled" true
-        (string_contains ~sub:"All fields must be filled." resp);
+        (String.includes ~affix:"All fields must be filled." resp);
       Lwt.return_unit )
 
 let check_registration_endpoint_bad_name () =
@@ -266,7 +266,7 @@ let check_registration_endpoint_bad_name () =
         (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
       Alcotest.(check bool)
         "Error message indicates invalid label" true
-        (string_contains ~sub:"invalid label" resp);
+        (String.includes ~affix:"invalid label" resp);
       Lwt.return_unit )
 
 let tests =
