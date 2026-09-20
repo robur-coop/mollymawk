@@ -162,7 +162,7 @@ let check_registration_endpoint () =
         make_register_request ~name:"test" ~email:"test@robur.coop"
           ~password:"SecretPassword123!" ()
       in
-      query_endpoint (App.register store) raw_http_request
+      query_endpoint (make_app_request_handler store) raw_http_request
       >>= fun response_str ->
       Printf.printf "Response:\n%s\n%!" response_str;
       Alcotest.(check bool)
@@ -197,7 +197,7 @@ let check_duplicate_registration_endpoint () =
         make_register_request ~name:"test2" ~email:"test2@robur.coop"
           ~password:"SecretPassword123!" ()
       in
-      query_endpoint (App.register store) req1 >>= fun resp1 ->
+      query_endpoint (make_app_request_handler store) req1 >>= fun resp1 ->
       Printf.printf "Response 1:\n%s\n%!" resp1;
       Alcotest.(check bool)
         "First registration succeeds" true
@@ -207,7 +207,7 @@ let check_duplicate_registration_endpoint () =
         make_register_request ~name:"test2" ~email:"test3@robur.coop"
           ~password:"SecretPassword123!" ()
       in
-      query_endpoint (App.register store) req2 >>= fun resp2 ->
+      query_endpoint (make_app_request_handler store) req2 >>= fun resp2 ->
       Printf.printf "Response 2:\n%s\n%!" resp2;
       Alcotest.(check bool)
         "Duplicate name is 400 Bad Request" true
@@ -225,7 +225,7 @@ let check_registration_endpoint_bad_email () =
         make_register_request ~name:"testuser" ~email:"testuser@"
           ~password:"SecretPassword123!" ()
       in
-      query_endpoint (App.register store) req >>= fun resp ->
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Printf.printf "Response:\n%s\n%!" resp;
       Alcotest.(check bool)
         "Response has HTTP 400 Bad Request" true
@@ -242,7 +242,7 @@ let check_registration_endpoint_empty_name () =
         make_register_request ~name:"" ~email:"test@robur.coop"
           ~password:"SecretPassword123!" ()
       in
-      query_endpoint (App.register store) req >>= fun resp ->
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Printf.printf "Response:\n%s\n%!" resp;
       Alcotest.(check bool)
         "Response has HTTP 400 Bad Request" true
@@ -259,7 +259,7 @@ let check_registration_endpoint_bad_name () =
         make_register_request ~name:"test user" ~email:"test@robur.coop"
           ~password:"SecretPassword123!" ()
       in
-      query_endpoint (App.register store) req >>= fun resp ->
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Printf.printf "Response:\n%s\n%!" resp;
       Alcotest.(check bool)
         "Response has HTTP 400 Bad Request" true
