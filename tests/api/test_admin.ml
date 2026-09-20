@@ -2,27 +2,6 @@ open Test_utils
 open Mock_devices
 open Lwt.Infix
 
-let toggle_active_endpoint store reqd =
-  App.authenticate ~check_admin:true ~api_meth:true store reqd
-    (App.extract_json_csrf_token (App.toggle_account_activation store))
-
-let toggle_admin_endpoint store reqd =
-  App.authenticate ~check_admin:true ~api_meth:true store reqd
-    (App.extract_json_csrf_token (App.toggle_admin_activation store))
-
-let delete_account_endpoint store reqd =
-  App.authenticate ~check_admin:true ~api_meth:true store reqd
-    (App.extract_json_csrf_token (App.delete_account store))
-
-let admin_router store reqd =
-  let req = H1.Reqd.request reqd in
-  let path = Uri.(pct_decode (path (of_string req.H1.Request.target))) in
-  match path with
-  | "/api/admin/user/activate/toggle" -> toggle_active_endpoint store reqd
-  | "/api/admin/user/admin/toggle" -> toggle_admin_endpoint store reqd
-  | "/api/admin/user/account/delete" -> delete_account_endpoint store reqd
-  | _ -> Middleware.http_response reqd ~data:(`String "Not found") `Not_found
-
 let now = Mirage_ptime.now ()
 
 let make_admin =
@@ -73,7 +52,7 @@ let check_toggle_account_active () =
         make_post_request ~path:"/api/admin/user/activate/toggle" ~body
           ~session_cookie ~csrf_token ()
       in
-      query_endpoint (admin_router store) req >>= fun resp ->
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
         "Response has HTTP 200 OK" true
         (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
@@ -96,7 +75,7 @@ let check_guard_last_active_user () =
         make_post_request ~path:"/api/admin/user/activate/toggle" ~body
           ~session_cookie ~csrf_token ()
       in
-      query_endpoint (admin_router store) req >>= fun resp ->
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
         "Response has HTTP 403 Forbidden" true
         (String.starts_with ~prefix:"HTTP/1.1 403 Forbidden" resp);
@@ -121,7 +100,7 @@ let check_toggle_admin_superuser () =
         make_post_request ~path:"/api/admin/user/admin/toggle" ~body
           ~session_cookie ~csrf_token ()
       in
-      query_endpoint (admin_router store) req >>= fun resp ->
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
         "Response has HTTP 200 OK" true
         (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
@@ -146,7 +125,7 @@ let check_guard_last_administrator () =
         make_post_request ~path:"/api/admin/user/admin/toggle" ~body
           ~session_cookie ~csrf_token ()
       in
-      query_endpoint (admin_router store) req >>= fun resp ->
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
         "Response has HTTP 403 Forbidden" true
         (String.starts_with ~prefix:"HTTP/1.1 403 Forbidden" resp);
@@ -171,7 +150,7 @@ let check_delete_account_success () =
         make_post_request ~path:"/api/admin/user/account/delete" ~body
           ~session_cookie ~csrf_token ()
       in
-      query_endpoint (admin_router store) req >>= fun resp ->
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
         "Response has HTTP 200 OK" true
         (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
@@ -194,7 +173,7 @@ let check_delete_account_not_found () =
         make_post_request ~path:"/api/admin/user/account/delete" ~body
           ~session_cookie ~csrf_token ()
       in
-      query_endpoint (admin_router store) req >>= fun resp ->
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
         "Response has HTTP 404 Not Found" true
         (String.starts_with ~prefix:"HTTP/1.1 404 Not Found" resp);
