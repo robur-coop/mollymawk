@@ -53,22 +53,45 @@ module App =
     (Mock_Block)
     (Client)
 
+let make_app_request_handler store =
+  let js_file = "/* some js */" in
+  let css_file = "/* some css */" in
+  let grafana_file = "{}" in
+  let imgs : Unikernel.images =
+    {
+      molly_img = "molly";
+      robur_img = "robur";
+      albatross_img = "albatross";
+      mirage_img = "mirage";
+      dashboard_img = "dashboard";
+    }
+  in
+  let management_domain = Domain_name.of_string_exn "robur.coop" in
+  let albatross_instances = ref App.Label_map.empty in
+  let client_addr = (Ipaddr.of_string_exn "127.0.0.1", 8080) in
+  let v4 = Ipaddr.V4.Prefix.global in
+  let udp =
+    Lwt_main.run
+      (Udpv4v6_socket.connect ~ipv4_only:false ~ipv6_only:false v4 None)
+  in
+  let tcp =
+    Lwt_main.run
+      (Tcpv4v6_socket.connect ~ipv4_only:false ~ipv6_only:false v4 None)
+  in
+  let stack = Lwt_main.run (Tcpip_stack_socket.V4V6.connect udp tcp) in
+  let happy_eyeballs = HE.create stack in
+  let management_happy_eyeballs = happy_eyeballs in
+  let http_client = Lwt_main.run (Client.connect Mimic.empty) in
+  let flow : App.Paf.TCP.flow = Obj.magic () in
+  App.request_handler stack management_happy_eyeballs management_domain
+    albatross_instances js_file css_file imgs grafana_file store http_client
+    happy_eyeballs flow client_addr
+
 (* this function query_endpoint is for in-memory http requests *)
 let query_endpoint handler raw_request_str =
   let output_buffer = Buffer.create 1024 in
   let finished_promise, notify_finished = Lwt.wait () in
-  let request_handler reqd =
-    Lwt.async (fun () ->
-        Lwt.catch
-          (fun () ->
-            handler reqd >>= fun () ->
-            Lwt.wakeup_later notify_finished ();
-            Lwt.return_unit)
-          (fun exn ->
-            Lwt.wakeup_later_exn notify_finished exn;
-            Lwt.return_unit))
-  in
-  let conn = H1.Server_connection.create request_handler in
+  let conn = H1.Server_connection.create handler in
   let bs =
     Bigstringaf.of_string ~off:0
       ~len:(String.length raw_request_str)
@@ -77,7 +100,6 @@ let query_endpoint handler raw_request_str =
   let _ =
     H1.Server_connection.read_eof conn bs ~off:0 ~len:(Bigstringaf.length bs)
   in
-  finished_promise >>= fun () ->
   let rec drain () =
     match H1.Server_connection.next_write_operation conn with
     | `Write iovecs ->
@@ -87,11 +109,17 @@ let query_endpoint handler raw_request_str =
             Buffer.add_string output_buffer s;
             H1.Server_connection.report_write_result conn (`Ok len))
           iovecs;
-        drain ()
-    | `Yield | `Upgrade | `Close _ -> ()
+        if Buffer.length output_buffer > 0 then (
+          if Lwt.is_sleeping finished_promise then
+            Lwt.wakeup_later notify_finished ())
+        else drain ()
+    | `Yield -> H1.Server_connection.yield_writer conn (fun () -> drain ())
+    | `Close _ | `Upgrade ->
+        if Lwt.is_sleeping finished_promise then
+          Lwt.wakeup_later notify_finished ()
   in
   drain ();
-  Lwt.return (Buffer.contents output_buffer)
+  finished_promise >>= fun () -> Lwt.return (Buffer.contents output_buffer)
 
 let init_mock_store () =
   let block = Mock_Block.create () in
