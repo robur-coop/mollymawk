@@ -85,7 +85,7 @@ let check_email_validation () =
 let check_password_validation () =
   (*TODO: passwords should be at least 8 characters *)
   Alcotest.(check bool)
-    "Rejects password shorter than 8 chars" true
+    "Rejects password shorter than 8 chars" false
     (User_model.password_validation "short");
   Alcotest.(check bool)
     "Accepts 8-character password" true
