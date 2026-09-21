@@ -218,7 +218,10 @@ let email_of_string_exn email = of_string_exn (Mrmime.Mailbox.of_string email)
 
 let signing_request_exn ?(cn = "mock-ca") pk =
   let name =
-    [ X509.Distinguished_name.(Relative_distinguished_name.singleton (CN cn)) ]
+    [
+      X509.Distinguished_name.(
+        Relative_distinguished_name.singleton (CN (Common_name.v cn)));
+    ]
   in
   let key_usage = [ `Digital_signature; `Key_cert_sign ] in
   let basic_constraints = (true, None) in
@@ -242,7 +245,10 @@ let second_private_key =
 let certificate_exn ?(cn = "mock-ca") pk =
   let csr = signing_request_exn ~cn pk in
   let name =
-    [ X509.Distinguished_name.(Relative_distinguished_name.singleton (CN cn)) ]
+    [
+      X509.Distinguished_name.(
+        Relative_distinguished_name.singleton (CN (Common_name.v cn)));
+    ]
   in
   let key_usage = [ `Digital_signature; `Key_cert_sign ] in
   let basic_constraints = (true, None) in
