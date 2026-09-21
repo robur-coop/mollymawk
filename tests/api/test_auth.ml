@@ -257,6 +257,235 @@ let check_registration_endpoint_bad_name () =
         (String.includes ~affix:"invalid label" resp);
       Lwt.return_unit )
 
+let check_login_endpoint () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let user =
+        make_mock_user ~name:"test" ~email:"test@robur.coop"
+          ~password:"Password123!" ()
+      in
+      store.Storage.users <- [ user ];
+      let body =
+        {|{ "email": "test@robur.coop", "password": "Password123!" }|}
+      in
+      let req = make_post_request ~path:"/api/login" ~body () in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+      Alcotest.(check bool)
+        "Sets session cookie" true
+        (String.includes ~affix:"Set-Cookie: molly_session=" resp);
+      Alcotest.(check bool)
+        "Redirects to dashboard" true
+        (String.includes ~affix:"location: /dashboard"
+           (String.lowercase_ascii resp));
+      Alcotest.(check bool)
+        "Response body contains test" true
+        (String.includes ~affix:"\"name\":\"test\"" resp);
+      let updated_user =
+        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
+      in
+      Alcotest.(check bool)
+        "User has session cookie" true
+        (List.exists
+           (fun (c : User_model.cookie) ->
+             String.equal c.name User_model.session_cookie)
+           updated_user.cookies);
+      Lwt.return_unit )
+
+let check_logout_endpoint () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let now = Mirage_ptime.now () in
+      let user =
+        make_mock_user ~name:"test" ~email:"test@robur.coop"
+          ~password:"Password123!" ()
+      in
+      let session_cookie = List.hd user.cookies in
+      let csrf_cookie =
+        User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid:user.uuid
+          ~created_at:now ~user_agent:(Some "Alcotest-client") ()
+      in
+      let user = { user with cookies = [ session_cookie; csrf_cookie ] } in
+      store.Storage.users <- [ user ];
+      let body = Fmt.str {|{ "molly_csrf": "%s" }|} csrf_cookie.value in
+      let req =
+        make_post_request ~path:"/logout" ~body
+          ~session_cookie:session_cookie.value ~csrf_token:csrf_cookie.value ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+      Alcotest.(check bool)
+        "Logout success message" true
+        (String.includes ~affix:"Logout successful" resp);
+      let updated_user =
+        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
+      in
+      Alcotest.(check bool)
+        "Session cookie removed after logout" false
+        (List.exists
+           (fun (c : User_model.cookie) ->
+             String.equal c.value session_cookie.value)
+           updated_user.cookies);
+      Lwt.return_unit )
+
+let check_update_password_endpoint () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let now = Mirage_ptime.now () in
+      let user =
+        make_mock_user ~name:"test" ~email:"test@robur.coop"
+          ~password:"OldPassword123!" ()
+      in
+      let session_cookie = List.hd user.cookies in
+      let csrf_cookie =
+        User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid:user.uuid
+          ~created_at:now ~user_agent:(Some "Alcotest-client") ()
+      in
+      let user = { user with cookies = [ session_cookie; csrf_cookie ] } in
+      store.Storage.users <- [ user ];
+      let body =
+        Fmt.str
+          {|{ "current_password": "OldPassword123!", "new_password": "NewSecretPassword123!", "confirm_password": "NewSecretPassword123!", "molly_csrf": "%s" }|}
+          csrf_cookie.value
+      in
+      let req =
+        make_post_request ~path:"/account/password/update" ~body
+          ~session_cookie:session_cookie.value ~csrf_token:csrf_cookie.value ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+      Alcotest.(check bool)
+        "Password updated message" true
+        (String.includes ~affix:"Updated password successfully" resp);
+      let updated_user =
+        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
+      in
+      let expected_hash =
+        User_model.hash_password ~password:"NewSecretPassword123!"
+          ~uuid:user.uuid
+      in
+      Alcotest.(check bool)
+        "Stored password hash matches new password" true
+        (String.equal updated_user.password expected_hash);
+      Lwt.return_unit )
+
+let check_close_sessions_endpoint () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let now = Mirage_ptime.now () in
+      let user =
+        make_mock_user ~name:"test" ~email:"test@robur.coop"
+          ~password:"Password123!" ()
+      in
+      let session_cookie_1 = List.hd user.cookies in
+      let session_cookie_2 =
+        User_model.generate_cookie ~name:User_model.session_cookie
+          ~uuid:user.uuid ~created_at:now ~user_agent:(Some "Second-client") ()
+      in
+      let csrf_cookie =
+        User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid:user.uuid
+          ~created_at:now ~user_agent:(Some "Alcotest-client") ()
+      in
+      let user =
+        {
+          user with
+          cookies = [ session_cookie_1; session_cookie_2; csrf_cookie ];
+        }
+      in
+      store.Storage.users <- [ user ];
+      let body = Fmt.str {|{ "molly_csrf": "%s" }|} csrf_cookie.value in
+      let req =
+        make_post_request ~path:"/api/account/sessions/close" ~body
+          ~session_cookie:session_cookie_1.value ~csrf_token:csrf_cookie.value
+          ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+      Alcotest.(check bool)
+        "Closed all sessions message" true
+        (String.includes ~affix:"Closed all sessions successfully" resp);
+      let updated_user =
+        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
+      in
+      Alcotest.(check bool)
+        "Current session still active" true
+        (List.exists
+           (fun (c : User_model.cookie) ->
+             String.equal c.value session_cookie_1.value)
+           updated_user.cookies);
+      Alcotest.(check bool)
+        "Other session closed" false
+        (List.exists
+           (fun (c : User_model.cookie) ->
+             String.equal c.value session_cookie_2.value)
+           updated_user.cookies);
+      Lwt.return_unit )
+
+let check_close_session_endpoint () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let now = Mirage_ptime.now () in
+      let user =
+        make_mock_user ~name:"test" ~email:"test@robur.coop"
+          ~password:"Password123!" ()
+      in
+      let session_cookie_1 = List.hd user.cookies in
+      let session_cookie_2 =
+        User_model.generate_cookie ~name:User_model.session_cookie
+          ~uuid:user.uuid ~created_at:now ~user_agent:(Some "Second-client") ()
+      in
+      let csrf_cookie =
+        User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid:user.uuid
+          ~created_at:now ~user_agent:(Some "Alcotest-client") ()
+      in
+      let user =
+        {
+          user with
+          cookies = [ session_cookie_1; session_cookie_2; csrf_cookie ];
+        }
+      in
+      store.Storage.users <- [ user ];
+      let body =
+        Fmt.str {|{ "session_value": "%s", "molly_csrf": "%s" }|}
+          session_cookie_2.value csrf_cookie.value
+      in
+      let req =
+        make_post_request ~path:"/api/account/session/close" ~body
+          ~session_cookie:session_cookie_1.value ~csrf_token:csrf_cookie.value
+          ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+      Alcotest.(check bool)
+        "Session closed message" true
+        (String.includes ~affix:"Session closed successfully" resp);
+      let updated_user =
+        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
+      in
+      Alcotest.(check bool)
+        "Current session still active" true
+        (List.exists
+           (fun (c : User_model.cookie) ->
+             String.equal c.value session_cookie_1.value)
+           updated_user.cookies);
+      Alcotest.(check bool)
+        "Targeted session closed" false
+        (List.exists
+           (fun (c : User_model.cookie) ->
+             String.equal c.value session_cookie_2.value)
+           updated_user.cookies);
+      Lwt.return_unit )
+
 let tests =
   [
     ("Valid registration", `Quick, check_valid_registration);
@@ -283,4 +512,9 @@ let tests =
     ( "Register endpoint with bad name (whitespace)",
       `Quick,
       check_registration_endpoint_bad_name );
+    ("Login endpoint", `Quick, check_login_endpoint);
+    ("Logout endpoint", `Quick, check_logout_endpoint);
+    ("Update password endpoint", `Quick, check_update_password_endpoint);
+    ("Close all other sessions endpoint", `Quick, check_close_sessions_endpoint);
+    ("Close specific session endpoint", `Quick, check_close_session_endpoint);
   ]
