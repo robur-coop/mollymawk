@@ -2,6 +2,7 @@
  (name api_tests)
  (enabled_if
   (= %{context_name} "default"))
+ (instrumentation (backend bisect_ppx_ng))
  (libraries
   test_utils
   mollymawk_libraries
