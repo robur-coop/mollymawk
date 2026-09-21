@@ -394,7 +394,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               m "albatross stop reading unikernel binary %a: error %s"
                 Vmm_core.Name.pp name s);
           Error ()
-      | Ok (hdr, `Success (`Unikernel_image (_compressed, data))) ->
+      | Ok (_hdr, `Success (`Unikernel_image (_compressed, data))) ->
           let _ = f data in
           Error ()
       | Ok w ->

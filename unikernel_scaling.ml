@@ -46,7 +46,7 @@ let display_policy ~instance_name ~unikernel_name ~max_allowed scaling_policy =
                 Utils.switch_button
                   ~initial_state:
                     (Option.fold ~none:false
-                       ~some:(fun p -> true)
+                       ~some:(fun _p -> true)
                        scaling_policy)
                   ~switch_id:"should_scale" ~switch_label:"Scale this unikernel"
                   (div

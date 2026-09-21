@@ -1,6 +1,6 @@
 open Tyxml
 
-let console_viewer_layout instance_name unikernel_name =
+let console_viewer_layout _instance_name unikernel_name =
   let page =
     Html.(
       html
