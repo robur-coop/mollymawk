@@ -112,7 +112,7 @@ module Cluster_manager = struct
                 (String.concat "-" (List.rev primary_parts_rev))
             with
             | Ok name -> Some (name, id)
-            | Error err ->
+            | Error _err ->
                 Logs.info (fun m ->
                     m "Failed to parse primary VM name from clone name %s"
                       (Configuration.name_to_str name));

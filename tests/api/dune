@@ -2,7 +2,6 @@
  (name api_tests)
  (enabled_if
   (= %{context_name} "default"))
- (flags :standard -warn-error -a)
  (libraries
   test_utils
   mollymawk_libraries

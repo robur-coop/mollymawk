@@ -39,7 +39,7 @@ let mollymawk =
       package "logs";
       package "x509";
       package "tls-mirage";
-      package ~min:"2.8.0" "albatross";
+      package ~min:"2.8.1" "albatross";
       package "yojson";
       package "uri";
       package "tyxml";
@@ -47,7 +47,7 @@ let mollymawk =
       package "mirage-crypto-rng";
       package "uuidm";
       package "emile";
-      package ~sublibs:[ "emile" ] ~min:"0.12.0" ~max:"0.13.0" "colombe";
+      package ~sublibs:[ "emile" ] ~min:"0.13.0" "colombe";
       package "sendmail";
       package ~sublibs:[ "mirage" ] ~min:"0.5.0" "paf";
       package "oneffs";

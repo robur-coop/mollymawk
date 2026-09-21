@@ -16,16 +16,35 @@ build: [
 
 depends: [
   "dune"
-  "ocaml"
+  "ocaml" {>= "5.5.0"}
   "logs"
-  "uuidm"
-  "ptime"
-  "albatross"
-  "mirage-crypto-rng"
-  "yojson"
-  "mrmime"
-  "lwt"
-  "http-mirage-client"
-  "tyxml"
-  "alcotest"
+  "uuidm" {>= "0.9.10"}
+  "ptime" {>= "1.2.0"}
+  "albatross" {>= "2.8.1"}
+  "mirage-crypto-rng" {>= "2.4.1"}
+  "yojson" {>= "2.2.2"}
+  "mrmime" {>= "0.7.2"}
+  "lwt" {>= "6.1.2"}
+  "http-mirage-client" {>= "0.0.10"}
+  "tyxml" {>= "4.6.0"}
+  "alcotest" {>= "1.9.1"}
+  "multipart_form-lwt" {>= "0.8.0"}
+  "sendmail-mirage" {>= "0.13.0"}
+  "colombe" {>= "0.13.0"}
+  "mirage-block" {>= "3.0.2"}
+  "mirage-kv" {>= "6.1.1"}
+  "oneffs" {>= "0.1.0"}
+  "fmt" {>= "0.11.0"}
+  "x509" {>= "1.2.0"}
+  "ipaddr" {>= "5.6.2"}
+  "ohex" {>= "0.2.0"}
+  "emile" {>= "1.1"}
+  "uri" {>= "4.4.0"}
+  "duration" {>= "0.3.1"}
+  "tcpip" {>= "9.0.1"}
+  "paf" {>= "0.8.0"}
+  "mimic-happy-eyeballs" {>= "0.0.10"}
+  "dns-client-mirage" {>= "10.2.5"}
+  "happy-eyeballs-mirage" {>= "2.0.1"}
+  "tls-mirage" {>= "2.1.2"}
 ]

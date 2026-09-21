@@ -1,5 +1,3 @@
-open Lwt.Infix
-
 let ( let* ) = Lwt_result.bind
 
 type user_unikernel_available_updates = {

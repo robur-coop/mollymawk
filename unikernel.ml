@@ -33,12 +33,8 @@ struct
   module Management_HE = Happy_eyeballs_mirage.Make (Management_S)
 
   let recipient email =
-    match Colombe_emile.to_path email with
-    | Ok path -> [ Colombe.Forward_path.Forward_path path ]
-    | Error (`Msg e) ->
-        Logs.err (fun m ->
-            m "Type conversion failed for %s: %s" (Emile.to_string email) e);
-        []
+    let path = Colombe_emile.to_path email in
+    [ Colombe.Forward_path.Forward_path path ]
 
   let getaddrinfo dns : HE.getaddrinfo =
    fun record_type destination ->
@@ -94,11 +90,7 @@ struct
     let addr =
       match Ipaddr.to_v4 ip with Some addr -> addr | None -> Ipaddr.V4.any
     in
-    let sender =
-      match Colombe_emile.to_path email_config.from_email with
-      | Ok path -> Some path
-      | Error _ -> None
-    in
+    let sender = Some (Colombe_emile.to_path email_config.from_email) in
     let streamer =
       let s = Mrmime.Mt.to_stream email in
       fun () -> Lwt.return (s ())

@@ -442,7 +442,7 @@ let render_metric_sources metric_entries unikernel_name =
                 (render_metric_picker ~source:"All metrics" ~value:"allMetrics"
                    (-1)
                 :: List.mapi
-                     (fun i (s, l) ->
+                     (fun i (s, _l) ->
                        render_metric_picker ~source:s
                          ~value:(Printf.sprintf "metrics['%s']" s)
                          i)

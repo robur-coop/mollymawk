@@ -170,7 +170,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         [
           Distinguished_name.(
             Relative_distinguished_name.singleton
-              (CN (Vmm_core.Name.Label.to_string name)));
+              (CN (Common_name.v (Vmm_core.Name.Label.to_string name))));
         ]
       in
       let extensions = Signing_request.Ext.(singleton Extensions exts) in
@@ -394,7 +394,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
               m "albatross stop reading unikernel binary %a: error %s"
                 Vmm_core.Name.pp name s);
           Error ()
-      | Ok (hdr, `Success (`Unikernel_image (_compressed, data))) ->
+      | Ok (_hdr, `Success (`Unikernel_image (_compressed, data))) ->
           let _ = f data in
           Error ()
       | Ok w ->
