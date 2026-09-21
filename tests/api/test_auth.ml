@@ -12,14 +12,11 @@ let make_register_request ?(csrf = "valid-csrf-token-1234") ~name ~email
   make_post_request ~path:"/api/register" ~body:json_body ~csrf_token:csrf ()
 
 let check_valid_registration () =
-  let name = label_of_string_exn "test" in
-  let email = email_of_string_exn "test@robur.coop" in
   let password = "SecretPassword123!" in
-  let created_at = Mirage_ptime.now () in
-  let user, cookie =
-    User_model.create_user ~name ~email ~password ~created_at ~active:true
-      ~super_user:false ~user_agent:(Some "Alcotest")
+  let user =
+    make_mock_user ~name:"test" ~email:"test@robur.coop" ~password ()
   in
+  let cookie = List.hd user.cookies in
   Alcotest.(check string)
     "User name matches" "test"
     (Configuration.name_to_str user.name);
@@ -34,24 +31,15 @@ let check_registration_with_no_name () =
   Alcotest.check_raises "Registration with empty name fails"
     (Failure "invalid label (only [a-zA-Z0-9-.] allowed, 1 to 63 chars)")
     (fun () ->
-      let name = label_of_string_exn "" in
-      let email = email_of_string_exn "test@robur.coop" in
-      let password = "SecretPassword123!" in
-      let created_at = Mirage_ptime.now () in
       ignore
-        (User_model.create_user ~name ~email ~password ~created_at ~active:true
-           ~super_user:false ~user_agent:(Some "Alcotest")))
+        (make_mock_user ~name:"" ~email:"test@robur.coop"
+           ~password:"SecretPassword123!" ()))
 
 let check_registration_with_no_email () =
   Alcotest.check_raises "Registration with empty email fails"
     (Failure "Invalid email address: \"\"") (fun () ->
-      let name = label_of_string_exn "test" in
-      let email = email_of_string_exn "" in
-      let password = "SecretPassword123!" in
-      let created_at = Mirage_ptime.now () in
       ignore
-        (User_model.create_user ~name ~email ~password ~created_at ~active:true
-           ~super_user:false ~user_agent:(Some "Alcotest")))
+        (make_mock_user ~name:"test" ~email:"" ~password:"SecretPassword123!" ()))
 
 let check_duplicate_user () =
   let existing_user = make_mock_user ~name:"test" ~email:"test@robur.coop" () in
@@ -162,7 +150,7 @@ let check_registration_endpoint () =
         make_register_request ~name:"test" ~email:"test@robur.coop"
           ~password:"SecretPassword123!" ()
       in
-      query_endpoint (App.register store) raw_http_request
+      query_endpoint (make_app_request_handler store) raw_http_request
       >>= fun response_str ->
       Printf.printf "Response:\n%s\n%!" response_str;
       Alcotest.(check bool)
@@ -197,7 +185,7 @@ let check_duplicate_registration_endpoint () =
         make_register_request ~name:"test2" ~email:"test2@robur.coop"
           ~password:"SecretPassword123!" ()
       in
-      query_endpoint (App.register store) req1 >>= fun resp1 ->
+      query_endpoint (make_app_request_handler store) req1 >>= fun resp1 ->
       Printf.printf "Response 1:\n%s\n%!" resp1;
       Alcotest.(check bool)
         "First registration succeeds" true
@@ -207,7 +195,7 @@ let check_duplicate_registration_endpoint () =
         make_register_request ~name:"test2" ~email:"test3@robur.coop"
           ~password:"SecretPassword123!" ()
       in
-      query_endpoint (App.register store) req2 >>= fun resp2 ->
+      query_endpoint (make_app_request_handler store) req2 >>= fun resp2 ->
       Printf.printf "Response 2:\n%s\n%!" resp2;
       Alcotest.(check bool)
         "Duplicate name is 400 Bad Request" true
@@ -225,7 +213,7 @@ let check_registration_endpoint_bad_email () =
         make_register_request ~name:"testuser" ~email:"testuser@"
           ~password:"SecretPassword123!" ()
       in
-      query_endpoint (App.register store) req >>= fun resp ->
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Printf.printf "Response:\n%s\n%!" resp;
       Alcotest.(check bool)
         "Response has HTTP 400 Bad Request" true
@@ -242,7 +230,7 @@ let check_registration_endpoint_empty_name () =
         make_register_request ~name:"" ~email:"test@robur.coop"
           ~password:"SecretPassword123!" ()
       in
-      query_endpoint (App.register store) req >>= fun resp ->
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Printf.printf "Response:\n%s\n%!" resp;
       Alcotest.(check bool)
         "Response has HTTP 400 Bad Request" true
@@ -259,7 +247,7 @@ let check_registration_endpoint_bad_name () =
         make_register_request ~name:"test user" ~email:"test@robur.coop"
           ~password:"SecretPassword123!" ()
       in
-      query_endpoint (App.register store) req >>= fun resp ->
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Printf.printf "Response:\n%s\n%!" resp;
       Alcotest.(check bool)
         "Response has HTTP 400 Bad Request" true
