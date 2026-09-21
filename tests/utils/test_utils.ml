@@ -216,9 +216,21 @@ let label_of_string_exn label =
 let name_of_string_exn name = of_string_exn (Vmm_core.Name.of_string name)
 let email_of_string_exn email = of_string_exn (Mrmime.Mailbox.of_string email)
 
-let signing_request_exn pk =
-  match X509.Signing_request.create [] pk with
+let signing_request_exn ?(cn = "mock-ca") pk =
+  let name =
+    [ X509.Distinguished_name.(Relative_distinguished_name.singleton (CN cn)) ]
+  in
+  let key_usage = [ `Digital_signature; `Key_cert_sign ] in
+  let basic_constraints = (true, None) in
+  let exts =
+    X509.Extension.(
+      add Basic_constraints (true, basic_constraints)
+        (singleton Key_usage (true, key_usage)))
+  in
+  let extensions = X509.Signing_request.Ext.(singleton Extensions exts) in
+  match X509.Signing_request.create name ~extensions pk with
   | Ok c -> c
+  | Error (`Msg msg) -> failwith msg
   | Error _ -> failwith "invalid signing request"
 
 let private_key =
@@ -227,13 +239,37 @@ let private_key =
 let second_private_key =
   X509.Private_key.generate ~seed:"robur_is_great_2026" `ED25519
 
-let certificate_exn pk =
+let certificate_exn ?(cn = "mock-ca") pk =
+  let csr = signing_request_exn ~cn pk in
+  let name =
+    [ X509.Distinguished_name.(Relative_distinguished_name.singleton (CN cn)) ]
+  in
+  let key_usage = [ `Digital_signature; `Key_cert_sign ] in
+  let basic_constraints = (true, None) in
+  let exts =
+    X509.Extension.(
+      add Basic_constraints (true, basic_constraints)
+        (singleton Key_usage (true, key_usage)))
+  in
+  let valid_from = Ptime.epoch in
+  let valid_until =
+    match Ptime.of_date_time ((2035, 1, 1), ((0, 0, 0), 0)) with
+    | Some t -> t
+    | None -> failwith "invalid date"
+  in
+  let pub = X509.Private_key.public pk in
+  let extensions =
+    let auth = (Some (X509.Public_key.id pub), X509.General_name.empty, None) in
+    X509.Extension.(
+      add Subject_key_id
+        (false, X509.Public_key.id pub)
+        (add Authority_key_id (false, auth) exts))
+  in
   match
-    X509.Signing_request.sign (signing_request_exn pk) ~valid_from:Ptime.epoch
-      ~valid_until:(Mirage_ptime.now ()) pk []
+    X509.Signing_request.sign csr ~valid_from ~valid_until ~extensions pk name
   with
   | Ok c -> c
-  | Error _ -> failwith "invalid certificate"
+  | Error e -> failwith (Fmt.str "%a" X509.Validation.pp_signature_error e)
 
 (** Alcotest Testables *)
 let msg_t : [ `Msg of string ] Alcotest.testable =
