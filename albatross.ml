@@ -170,7 +170,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
         [
           Distinguished_name.(
             Relative_distinguished_name.singleton
-              (CN (Vmm_core.Name.Label.to_string name)));
+              (CN (Common_name.v (Vmm_core.Name.Label.to_string name))));
         ]
       in
       let extensions = Signing_request.Ext.(singleton Extensions exts) in
