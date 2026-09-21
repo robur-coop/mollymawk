@@ -67,7 +67,40 @@ let make_app_request_handler store =
     }
   in
   let management_domain = Domain_name.of_string_exn "robur.coop" in
+  let config = Lwt_main.run Mock_albatross.albatross_config in
+  let default_policy =
+    Vmm_core.Policy.
+      {
+        unikernels = 10;
+        cpuids = Vmm_core.IS.of_list [ 0; 1; 2; 3 ];
+        memory = 1024;
+        block = Some 10240;
+        bridges = Vmm_core.String_set.of_list [ "service" ];
+      }
+  in
+  let root_path = Vmm_core.Name.root in
+  let admin_path =
+    Vmm_core.Name.make_of_path
+      (Vmm_core.Name.Path.of_label (Test_utils.label_of_string_exn "admin"))
+  in
+  let user_path =
+    Vmm_core.Name.make_of_path
+      (Vmm_core.Name.Path.of_label (Test_utils.label_of_string_exn "user"))
+  in
+  let policies =
+    Vmm_trie.empty
+    |> Vmm_trie.insert root_path default_policy
+    |> fst
+    |> Vmm_trie.insert admin_path default_policy
+    |> fst
+    |> Vmm_trie.insert user_path default_policy
+    |> fst
+  in
+  let instance : Albatross.t =
+    { configuration = config; policies; status = Albatross.Status.Online }
+  in
   let albatross_instances = ref App.Label_map.empty in
+  albatross_instances := App.Label_map.singleton config.name instance;
   let client_addr = (Ipaddr.of_string_exn "127.0.0.1", 8080) in
   let v4 = Ipaddr.V4.Prefix.global in
   let udp =
