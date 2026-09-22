@@ -8,6 +8,7 @@
   mollymawk_libraries
   alcotest
   albatross
+  albatross.tls
   yojson
   mrmime
   uuidm

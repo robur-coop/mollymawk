@@ -216,9 +216,24 @@ let label_of_string_exn label =
 let name_of_string_exn name = of_string_exn (Vmm_core.Name.of_string name)
 let email_of_string_exn email = of_string_exn (Mrmime.Mailbox.of_string email)
 
-let signing_request_exn pk =
-  match X509.Signing_request.create [] pk with
+let signing_request_exn ?(cn = "mock-ca") pk =
+  let name =
+    [
+      X509.Distinguished_name.(
+        Relative_distinguished_name.singleton (CN (Common_name.v cn)));
+    ]
+  in
+  let key_usage = [ `Digital_signature; `Key_cert_sign ] in
+  let basic_constraints = (true, None) in
+  let exts =
+    X509.Extension.(
+      add Basic_constraints (true, basic_constraints)
+        (singleton Key_usage (true, key_usage)))
+  in
+  let extensions = X509.Signing_request.Ext.(singleton Extensions exts) in
+  match X509.Signing_request.create name ~extensions pk with
   | Ok c -> c
+  | Error (`Msg msg) -> failwith msg
   | Error _ -> failwith "invalid signing request"
 
 let private_key =
@@ -227,13 +242,40 @@ let private_key =
 let second_private_key =
   X509.Private_key.generate ~seed:"robur_is_great_2026" `ED25519
 
-let certificate_exn pk =
+let certificate_exn ?(cn = "mock-ca") pk =
+  let csr = signing_request_exn ~cn pk in
+  let name =
+    [
+      X509.Distinguished_name.(
+        Relative_distinguished_name.singleton (CN (Common_name.v cn)));
+    ]
+  in
+  let key_usage = [ `Digital_signature; `Key_cert_sign ] in
+  let basic_constraints = (true, None) in
+  let exts =
+    X509.Extension.(
+      add Basic_constraints (true, basic_constraints)
+        (singleton Key_usage (true, key_usage)))
+  in
+  let valid_from = Ptime.epoch in
+  let valid_until =
+    match Ptime.of_date_time ((2035, 1, 1), ((0, 0, 0), 0)) with
+    | Some t -> t
+    | None -> failwith "invalid date"
+  in
+  let pub = X509.Private_key.public pk in
+  let extensions =
+    let auth = (Some (X509.Public_key.id pub), X509.General_name.empty, None) in
+    X509.Extension.(
+      add Subject_key_id
+        (false, X509.Public_key.id pub)
+        (add Authority_key_id (false, auth) exts))
+  in
   match
-    X509.Signing_request.sign (signing_request_exn pk) ~valid_from:Ptime.epoch
-      ~valid_until:(Mirage_ptime.now ()) pk []
+    X509.Signing_request.sign csr ~valid_from ~valid_until ~extensions pk name
   with
   | Ok c -> c
-  | Error _ -> failwith "invalid certificate"
+  | Error e -> failwith (Fmt.str "%a" X509.Validation.pp_signature_error e)
 
 (** Alcotest Testables *)
 let msg_t : [ `Msg of string ] Alcotest.testable =
@@ -439,17 +481,43 @@ let mock_albatross_config =
   }
 
 (** User Creation Helper *)
+let make_csrf_cookie ?(user_agent = Some "Alcotest-client") uuid =
+  User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid
+    ~created_at:(Mirage_ptime.now ()) ~user_agent ()
+
+let make_mock_token ?(name = "mock-token") ?(expiry = 3600) () =
+  User_model.generate_token ~name ~expiry ~current_time:(Mirage_ptime.now ())
+
 let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
     ?(password = "Password123!") ?(active = true) ?(super_user = false)
-    ?(tokens = []) () =
+    ?(tokens = []) ?(with_csrf = true) () =
   let name_lbl = label_of_string_exn name in
   let email_box = email_of_string_exn email in
   let now = Mirage_ptime.now () in
-  let user, _cookie =
+  let user, session_cookie =
     User_model.create_user ~name:name_lbl ~email:email_box ~password ~active
-      ~super_user ~created_at:now ~user_agent:(Some "Alcotest/1.0")
+      ~super_user ~created_at:now ~user_agent:(Some "Alcotest-client")
   in
-  { user with tokens }
+  let cookies =
+    if with_csrf then
+      let csrf = make_csrf_cookie user.uuid in
+      [ session_cookie; csrf ]
+    else [ session_cookie ]
+  in
+  { user with cookies; tokens }
+
+let user_session_cookie (user : User_model.user) =
+  (List.find
+     (fun (c : User_model.cookie) ->
+       String.equal c.name User_model.session_cookie)
+     user.cookies)
+    .value
+
+let user_csrf_cookie (user : User_model.user) =
+  (List.find
+     (fun (c : User_model.cookie) -> String.equal c.name User_model.csrf_cookie)
+     user.cookies)
+    .value
 
 let make_post_request ~path ~body ?(csrf_token = "") ?(session_cookie = "") () =
   let cookie_hdr =
@@ -468,3 +536,65 @@ let make_post_request ~path ~body ?(csrf_token = "") ?(session_cookie = "") () =
      %s\r\n\
      %s"
     path (String.length body) cookie_hdr body
+
+let default_boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
+
+let make_multipart_request ?(boundary = default_boundary) ~parts ?file_part
+    ?(session_cookie = "") ?(csrf_token = "") ?token path =
+  let body_buf = Buffer.create 1024 in
+  List.iter
+    (fun (key, value) ->
+      Buffer.add_string body_buf (Fmt.str "--%s\r\n" boundary);
+      Buffer.add_string body_buf
+        (Fmt.str "Content-Disposition: form-data; name=\"%s\"\r\n\r\n" key);
+      Buffer.add_string body_buf (Fmt.str "%s\r\n" value))
+    parts;
+  (match file_part with
+  | Some (field_name, filename, content_type, content) ->
+      Buffer.add_string body_buf (Fmt.str "--%s\r\n" boundary);
+      Buffer.add_string body_buf
+        (Fmt.str
+           "Content-Disposition: form-data; name=\"%s\"; filename=\"%s\"\r\n"
+           field_name filename);
+      Buffer.add_string body_buf
+        (Fmt.str "Content-Type: %s\r\n\r\n" content_type);
+      Buffer.add_string body_buf content;
+      Buffer.add_string body_buf "\r\n"
+  | None -> ());
+  Buffer.add_string body_buf (Fmt.str "--%s--\r\n" boundary);
+  let body = Buffer.contents body_buf in
+  let auth_hdr =
+    match token with
+    | Some t -> Fmt.str "Authorization: Bearer %s\r\n" t
+    | None -> ""
+  in
+  let cookie_hdr =
+    match (session_cookie, csrf_token) with
+    | "", "" -> ""
+    | s, "" -> Fmt.str "Cookie: molly_session=%s\r\n" s
+    | "", c -> Fmt.str "Cookie: molly_csrf=%s\r\n" c
+    | s, c -> Fmt.str "Cookie: molly_session=%s; molly_csrf=%s\r\n" s c
+  in
+  Fmt.str
+    "POST %s HTTP/1.1\r\n\
+     Host: localhost\r\n\
+     Content-Type: multipart/form-data; boundary=%s\r\n\
+     Content-Length: %d\r\n\
+     User-Agent: Alcotest-client\r\n\
+     %s%s\r\n\
+     %s"
+    path boundary (String.length body) auth_hdr cookie_hdr body
+
+let setup_admin_user ?user store =
+  let u =
+    Option.value user
+      ~default:(make_mock_user ~name:"admin" ~super_user:true ())
+  in
+  store.Storage.users <- [ u ];
+  (u, user_session_cookie u, user_csrf_cookie u)
+
+let setup_admin_user_with_token ?(super_user = true) store =
+  let token = make_mock_token () in
+  let u = make_mock_user ~name:"admin" ~super_user ~tokens:[ token ] () in
+  store.Storage.users <- [ u ];
+  (u, token.value)

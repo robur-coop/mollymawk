@@ -4,4 +4,5 @@ let () =
       ("Auth & Registration", Test_auth.tests);
       ("User Administration", Test_admin.tests);
       ("API Tokens", Test_tokens.tests);
+      ("Unikernel Operations", Test_unikernel.tests);
     ]

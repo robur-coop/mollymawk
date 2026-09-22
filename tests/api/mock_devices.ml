@@ -67,7 +67,28 @@ let make_app_request_handler store =
     }
   in
   let management_domain = Domain_name.of_string_exn "robur.coop" in
+  let success_config = Lwt_main.run Mock_albatross.success_config in
+  let failure_config = Lwt_main.run Mock_albatross.failure_config in
+  let policies = Vmm_trie.empty in
+  let success_instance : Albatross.t =
+    {
+      configuration = success_config;
+      policies;
+      status = Albatross.Status.Online;
+    }
+  in
+  let failure_instance : Albatross.t =
+    {
+      configuration = failure_config;
+      policies;
+      status = Albatross.Status.Online;
+    }
+  in
   let albatross_instances = ref App.Label_map.empty in
+  albatross_instances :=
+    App.Label_map.empty
+    |> App.Label_map.add success_config.name success_instance
+    |> App.Label_map.add failure_config.name failure_instance;
   let client_addr = (Ipaddr.of_string_exn "127.0.0.1", 8080) in
   let v4 = Ipaddr.V4.Prefix.global in
   let udp =
