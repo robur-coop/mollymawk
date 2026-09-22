@@ -29,16 +29,38 @@ let read_image flow =
   in
   loop []
 
-let make_dummy_unikernel config =
-  Vmm_core.Unikernel.
-    {
-      config;
-      cmd = [||];
-      pid = 1000 + Random.int 50000;
-      taps = [];
-      digest = "";
-      started = Mirage_ptime.now ();
-    }
+let dummy_info (name : Vmm_core.Name.t) =
+  let dummy_cfg =
+    Vmm_core.Unikernel.
+      {
+        typ = `Solo5;
+        compressed = false;
+        image = "";
+        fail_behaviour = `Quit;
+        add_name = true;
+        startup = None;
+        cpuids = Vmm_core.IS.singleton 0;
+        memory = 32;
+        block_devices = [];
+        bridges = [];
+        argv = None;
+        numcpus = 1;
+        linux_boot_partition = None;
+      }
+  in
+  let dummy_u =
+    Vmm_core.Unikernel.
+      {
+        config = dummy_cfg;
+        cmd = [||];
+        pid = 1234;
+        taps = [];
+        digest = String.make 32 'a';
+        started = Mirage_ptime.now ();
+      }
+  in
+  let info = Vmm_core.Unikernel.info (fun _ -> None) dummy_u in
+  (name, info)
 
 let eval_command name cmd =
   match !error_override with
