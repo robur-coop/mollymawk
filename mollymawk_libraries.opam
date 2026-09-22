@@ -47,4 +47,5 @@ depends: [
   "dns-client-mirage" {>= "10.2.5"}
   "happy-eyeballs-mirage" {>= "2.0.1"}
   "tls-mirage" {>= "2.1.2"}
+  "bisect_ppx_ng"
 ]
