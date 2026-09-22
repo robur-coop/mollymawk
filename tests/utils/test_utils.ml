@@ -519,7 +519,33 @@ let user_csrf_cookie (user : User_model.user) =
      user.cookies)
     .value
 
-let make_post_request ~path ~body ?(csrf_token = "") ?(session_cookie = "") () =
+let make_get_request ~path ?(session_cookie = "") ?(csrf_token = "") ?token () =
+  let auth_hdr =
+    match token with
+    | Some t -> Fmt.str "Authorization: Bearer %s\r\n" t
+    | None -> ""
+  in
+  let cookie_hdr =
+    match (session_cookie, csrf_token) with
+    | "", "" -> ""
+    | s, "" -> Fmt.str "Cookie: molly_session=%s\r\n" s
+    | "", c -> Fmt.str "Cookie: molly_csrf=%s\r\n" c
+    | s, c -> Fmt.str "Cookie: molly_session=%s; molly_csrf=%s\r\n" s c
+  in
+  Fmt.str
+    "GET %s HTTP/1.1\r\n\
+     Host: localhost\r\n\
+     User-Agent: Alcotest-client\r\n\
+     %s%s\r\n"
+    path auth_hdr cookie_hdr
+
+let make_post_request ~path ~body ?(csrf_token = "") ?(session_cookie = "")
+    ?token () =
+  let auth_hdr =
+    match token with
+    | Some t -> Fmt.str "Authorization: Bearer %s\r\n" t
+    | None -> ""
+  in
   let cookie_hdr =
     match (session_cookie, csrf_token) with
     | "", "" -> ""
@@ -533,9 +559,9 @@ let make_post_request ~path ~body ?(csrf_token = "") ?(session_cookie = "") () =
      Content-Type: application/json\r\n\
      Content-Length: %d\r\n\
      User-Agent: Alcotest-client\r\n\
-     %s\r\n\
+     %s%s\r\n\
      %s"
-    path (String.length body) cookie_hdr body
+    path (String.length body) auth_hdr cookie_hdr body
 
 let default_boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
 
