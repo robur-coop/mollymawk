@@ -8,7 +8,7 @@ let default_cfg = {|{"typ": "solo5", "cpuids": [0], "memory": 32}|}
 let check_unikernel_create_success () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_mock_user store in
+      let _user, session_cookie, csrf_token = setup_admin_user store in
       let parts =
         [
           ("albatross_instance", "default");

@@ -585,7 +585,7 @@ let make_multipart_request ?(boundary = default_boundary) ~parts ?file_part
      %s"
     path boundary (String.length body) auth_hdr cookie_hdr body
 
-let setup_mock_user ?user store =
+let setup_admin_user ?user store =
   let u =
     Option.value user
       ~default:(make_mock_user ~name:"admin" ~super_user:true ())
@@ -593,7 +593,7 @@ let setup_mock_user ?user store =
   store.Storage.users <- [ u ];
   (u, user_session_cookie u, user_csrf_cookie u)
 
-let setup_mock_user_with_token ?(super_user = true) store =
+let setup_admin_user_with_token ?(super_user = true) store =
   let token = make_mock_token () in
   let u = make_mock_user ~name:"admin" ~super_user ~tokens:[ token ] () in
   store.Storage.users <- [ u ];
