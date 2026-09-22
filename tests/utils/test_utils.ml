@@ -559,9 +559,9 @@ let make_post_request ~path ~body ?(csrf_token = "") ?(session_cookie = "")
      Content-Type: application/json\r\n\
      Content-Length: %d\r\n\
      User-Agent: Alcotest-client\r\n\
-     %s\r\n\
+     %s%s\r\n\
      %s"
-    path (String.length body) cookie_hdr body
+    path (String.length body) auth_hdr cookie_hdr body
 
 let default_boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
 
