@@ -62,116 +62,75 @@ let dummy_info (name : Vmm_core.Name.t) =
   let info = Vmm_core.Unikernel.info (fun _ -> None) dummy_u in
   (name, info)
 
-let eval_command name cmd =
-  match !error_override with
-  | Some err -> err
-  | None -> (
-      match cmd with
-      | `Unikernel_cmd (`Unikernel_create cfg) -> (
-          match Vmm_resources.check_unikernel !resources name cfg with
-          | Error (`Msg err) -> `Failure err
-          | Ok () -> (
-              let u = make_dummy_unikernel cfg in
-              match Vmm_resources.insert_unikernel !resources name u with
-              | Ok r ->
-                  resources := r;
-                  `Success (`String "unikernel created")
-              | Error (`Msg err) -> `Failure err))
-      | `Unikernel_cmd (`Unikernel_force_create cfg) -> (
-          let r_without =
-            match Vmm_resources.remove_unikernel !resources name with
-            | Ok r -> r
-            | Error _ -> !resources
-          in
-          let u = make_dummy_unikernel cfg in
-          match Vmm_resources.insert_unikernel r_without name u with
-          | Ok r ->
-              resources := r;
-              `Success (`String "unikernel force created")
-          | Error (`Msg err) -> `Failure err)
-      | `Unikernel_cmd `Unikernel_info ->
-          let infos =
-            match Vmm_core.Name.name name with
-            | None ->
-                Vmm_trie.fold (Vmm_core.Name.path name)
-                  !resources.Vmm_resources.unikernels
-                  (fun id u acc ->
-                    (id, Vmm_core.Unikernel.info (fun _ -> None) u) :: acc)
-                  []
-            | Some _ ->
-                Option.fold ~none:[]
-                  ~some:(fun u ->
-                    [ (name, Vmm_core.Unikernel.info (fun _ -> None) u) ])
-                  (Vmm_trie.find name !resources.Vmm_resources.unikernels)
-          in
-          `Success (`Unikernel_info infos)
-      | `Unikernel_cmd `Unikernel_destroy -> (
-          match Vmm_resources.remove_unikernel !resources name with
-          | Ok r ->
-              resources := r;
-              `Success `Empty
-          | Error (`Msg err) -> `Failure err)
-      | `Policy_cmd `Policy_info ->
-          let policies =
-            Vmm_trie.fold (Vmm_core.Name.path name)
-              !resources.Vmm_resources.policies
-              (fun name p acc -> (name, p) :: acc)
-              []
-          in
-          `Success (`Policies policies)
-      | _ -> `Success `Empty)
+let eval_success (name : Vmm_core.Name.t) (cmd : Vmm_commands.t) :
+    Vmm_commands.res =
+  match cmd with
+  | `Unikernel_cmd `Unikernel_info ->
+      `Success (`Unikernel_info [ dummy_info name ])
+  | `Unikernel_cmd (`Unikernel_create _) ->
+      `Success (`String "unikernel created")
+  | `Unikernel_cmd (`Unikernel_force_create _) ->
+      `Success (`String "unikernel force created")
+  | `Unikernel_cmd `Unikernel_destroy ->
+      `Success (`String "unikernel destroyed")
+  | `Unikernel_cmd (`Unikernel_restart _) ->
+      `Success (`String "unikernel restarted")
+  | `Block_cmd `Block_info -> `Success (`Block_devices [])
+  | `Block_cmd (`Block_add _) -> `Success (`String "block device added")
+  | `Block_cmd `Block_remove -> `Success (`String "block device removed")
+  | `Policy_cmd `Policy_info -> `Success (`Policies [])
+  | _ -> `Success `Empty
 
-let handle_connection flow =
-  Lwt.catch
-    (fun () ->
-      let epoch = Tls_lwt.Unix.epoch flow in
-      let parsed =
-        match epoch with
-        | Ok e -> Vmm_tls.handle e.peer_certificate_chain
-        | Error () -> Error (`Msg "TLS epoch not available")
-      in
-      match parsed with
-      | Error (`Msg err) ->
-          let wire = (Vmm_commands.header Vmm_core.Name.root, `Failure err) in
-          Vmm_tls_lwt.write_tls flow wire >>= fun _ -> Vmm_tls_lwt.close flow
-      | Ok (name, policies, _version, cmd) ->
-          last_received_cmd := Some cmd;
-          List.iter
-            (fun (path, policy) ->
-              match Vmm_resources.insert_policy !resources path policy with
-              | Ok r -> resources := r
-              | Error _ -> ())
-            policies;
-          (match cmd with
-            | `Unikernel_cmd (`Unikernel_create _ | `Unikernel_force_create _)
-              -> (
-                read_image flow >>= function
-                | Ok bin ->
-                    last_received_binary := Some bin;
-                    Lwt.return_unit
-                | Error _ -> Lwt.return_unit)
-            | _ -> Lwt.return_unit)
-          >>= fun () ->
-          let reply = eval_command name cmd in
-          let wire = (Vmm_commands.header name, reply) in
-          Vmm_tls_lwt.write_tls flow wire >>= fun _ -> Vmm_tls_lwt.close flow)
-    (fun exn ->
-      Logs.err (fun m ->
-          m "Mock Albatross connection error: %s" (Printexc.to_string exn));
-      Lwt.return_unit)
+let eval_failure (_name : Vmm_core.Name.t) (_cmd : Vmm_commands.t) :
+    Vmm_commands.res =
+  `Failure "albatross failure"
 
-let rec server_loop file_descr =
-  Lwt.catch
-    (fun () ->
-      Tls_lwt.Unix.accept tls_server_config file_descr >>= fun (flow, _addr) ->
-      Lwt.async (fun () -> handle_connection flow);
-      server_loop file_descr)
-    (fun exn ->
-      Logs.err (fun m ->
-          m "Mock Albatross accept error: %s" (Printexc.to_string exn));
-      server_loop file_descr)
+type mode = Success | Failure
 
-let mock_server =
+let start_mock_server mode =
+  let eval =
+    match mode with Success -> eval_success | Failure -> eval_failure
+  in
+  let handle_connection flow =
+    Lwt.catch
+      (fun () ->
+        let epoch = Tls_lwt.Unix.epoch flow in
+        let parsed =
+          match epoch with
+          | Ok e -> Vmm_tls.handle e.peer_certificate_chain
+          | Error () -> Error (`Msg "TLS epoch not available")
+        in
+        match parsed with
+        | Error (`Msg err) ->
+            let wire = (Vmm_commands.header Vmm_core.Name.root, `Failure err) in
+            Vmm_tls_lwt.write_tls flow wire >>= fun _ -> Vmm_tls_lwt.close flow
+        | Ok (name, _policies, _version, cmd) ->
+            (match cmd with
+              | `Unikernel_cmd (`Unikernel_create _ | `Unikernel_force_create _)
+                ->
+                  drain_image flow
+              | _ -> Lwt.return_unit)
+            >>= fun () ->
+            let reply = eval name cmd in
+            let wire = (Vmm_commands.header name, reply) in
+            Vmm_tls_lwt.write_tls flow wire >>= fun _ -> Vmm_tls_lwt.close flow)
+      (fun exn ->
+        Logs.err (fun m ->
+            m "Mock Albatross connection error: %s" (Printexc.to_string exn));
+        Lwt.return_unit)
+  in
+  let rec server_loop file_descr =
+    Lwt.catch
+      (fun () ->
+        Tls_lwt.Unix.accept tls_server_config file_descr
+        >>= fun (flow, _addr) ->
+        Lwt.async (fun () -> handle_connection flow);
+        server_loop file_descr)
+      (fun exn ->
+        Logs.err (fun m ->
+            m "Mock Albatross accept error: %s" (Printexc.to_string exn));
+        server_loop file_descr)
+  in
   let file_descr = Lwt_unix.(socket PF_INET SOCK_STREAM 0) in
   let addr = Lwt_unix.ADDR_INET (Unix.inet_addr_loopback, 0) in
   Lwt_unix.bind file_descr addr >>= fun () ->
