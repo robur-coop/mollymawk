@@ -20,14 +20,14 @@ let tls_server_config =
   | Ok conf -> conf
   | Error (`Msg m) -> failwith m
 
-let read_image flow =
-  let rec loop acc =
+let drain_image flow =
+  let rec loop () =
     Vmm_tls_lwt.read_tls_chunk flow >>= function
-    | Ok chunk -> loop (chunk :: acc)
-    | Error `Eof -> Lwt.return (Ok (String.concat "" (List.rev acc)))
-    | Error e -> Lwt.return (Error e)
+    | Ok _ -> loop ()
+    | Error `Eof -> Lwt.return_unit
+    | Error _ -> Lwt.return_unit
   in
-  loop []
+  loop ()
 
 let dummy_info (name : Vmm_core.Name.t) =
   let dummy_cfg =
