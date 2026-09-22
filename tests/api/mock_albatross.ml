@@ -3,21 +3,6 @@ open Test_utils
 
 let ca_cert = mock_albatross_config.certificate
 let ca_key = mock_albatross_config.private_key
-let resources = ref (Vmm_resources.empty None)
-let error_override = ref None
-let last_received_binary = ref None
-let last_received_cmd = ref None
-let set_error_override (r : Vmm_commands.res) = error_override := Some r
-let clear_error_override () = error_override := None
-let get_last_binary () = !last_received_binary
-let get_last_cmd () = !last_received_cmd
-let get_resources () = !resources
-
-let reset () =
-  resources := Vmm_resources.empty None;
-  error_override := None;
-  last_received_binary := None;
-  last_received_cmd := None
 
 let tls_server_config =
   let authenticator =
