@@ -50,7 +50,7 @@ let restart_unikernel_dialog ~unikernel_name ~instance_name info =
 let unikernel_single_layout ~unikernel_name ~instance_name
     ?(last_update_time = None) ~current_time ~max_allowed unikernel
     scaling_policy =
-  let u_name, data = unikernel in
+  let u_name, u_data = unikernel in
   let unikernel_name_str = Configuration.name_to_str unikernel_name in
   Tyxml_html.(
     section
@@ -84,7 +84,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                   ("created "
                                   ^ Utils.TimeHelper.time_ago ~current_time
                                       ~check_time:
-                                        data.Vmm_core.Unikernel.started);
+                                        u_data.Vmm_core.Unikernel.started);
                               ];
                           ];
                         div
@@ -99,14 +99,14 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                             span
                               ~a:
                                 [
-                                  Unsafe.string_attrib "x-data"
+                                  Unsafe.string_attrib "x-u_data"
                                     "{ copied: false }";
                                   Unsafe.string_attrib "x-on:click"
                                     (Fmt.str
                                        "navigator.clipboard.writeText('%s').then(() \
                                         => { copied = true; setTimeout(() => \
                                         copied = false, 2000); })"
-                                       (Ohex.encode data.digest));
+                                       (Ohex.encode u_data.digest));
                                   a_class
                                     [
                                       "font-mono bg-gray-200 px-1.5 py-0.5 \
@@ -117,7 +117,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                   a_title "Click to copy digest";
                                 ]
                               [
-                                txt (Ohex.encode data.digest);
+                                txt (Ohex.encode u_data.digest);
                                 span
                                   ~a:
                                     [
@@ -143,7 +143,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                 [
                                   a_href
                                     ("https://builds.robur.coop/hash?sha256="
-                                   ^ Ohex.encode data.digest);
+                                   ^ Ohex.encode u_data.digest);
                                   a_class [ "text-primary-600"; "font-bold" ];
                                   a_style "text-decoration: underline;";
                                 ]
@@ -162,7 +162,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                             txt
                               (Fmt.str "Startup priority: %s"
                                  (Option.value ~default:"50 (default)"
-                                    (Option.map string_of_int data.startup)));
+                                    (Option.map string_of_int u_data.startup)));
                           ];
                       ];
                     div
@@ -176,7 +176,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                               ~button_content:(txt "Restart")
                               ~content:
                                 (restart_unikernel_dialog ~unikernel_name
-                                   ~instance_name data)
+                                   ~instance_name u_data)
                               ();
                           ];
                         div
@@ -265,7 +265,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                             txt
                               (String.concat ", "
                                  (List.map string_of_int
-                                    (Vmm_core.IS.elements data.cpuids)));
+                                    (Vmm_core.IS.elements u_data.cpuids)));
                           ];
                       ];
                     div
@@ -288,7 +288,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                           ];
                         p
                           ~a:[ a_class [ "text-3xl text-right" ] ]
-                          [ txt (string_of_int data.memory ^ "MB") ];
+                          [ txt (string_of_int u_data.memory ^ "MB") ];
                       ];
                     div
                       ~a:[ a_class [ "p-4 rounded border border-primary-700" ] ]
@@ -312,7 +312,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                           ~a:[ a_class [ "text-3xl text-right" ] ]
                           [
                             txt
-                              (match data.typ with
+                              (match u_data.typ with
                               | `Solo5 -> "Solo5"
                               | `BHyve -> "BHyve");
                           ];
@@ -502,7 +502,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                            ]
                                          [ txt arg ];
                                      ])
-                                 (Option.value data.argv ~default:[]));
+                                 (Option.value u_data.argv ~default:[]));
                           ];
                         div
                           ~a:[ a_class [ "my-4" ] ]
@@ -628,7 +628,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                            ]
                                          [ txt (string_of_int size ^ " MB") ];
                                      ])
-                                 data.block_devices);
+                                 u_data.block_devices);
                           ];
                         div
                           ~a:[ a_class [ "my-4" ] ]
@@ -727,7 +727,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                            ]
                                          [ txt (Macaddr.to_string mac) ];
                                      ])
-                                 data.bridges);
+                                 u_data.bridges);
                           ];
                         div
                           ~a:[ a_class [ "my-4" ] ]
@@ -735,7 +735,7 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                             p
                               ~a:[ a_class [ "text-xl font-semibold" ] ]
                               [ txt "Fail Behaviour" ];
-                            (match data.fail_behaviour with
+                            (match u_data.fail_behaviour with
                             | `Quit -> p [ txt "Quit" ]
                             | `Restart None -> p [ txt "Restart" ]
                             | `Restart (Some codes) ->

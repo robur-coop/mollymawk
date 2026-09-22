@@ -308,7 +308,7 @@ let increment_or_decrement_ui ~max_value ~min_value ?(step = 1)
           ~a:
             [
               a_id id;
-              a_contenteditable true;
+              a_contenteditable `True;
               a_class [ "text-4xl border px-4" ];
               Unsafe.string_attrib "@keydown.enter.prevent" "";
               Unsafe.string_attrib "x-text" "count";

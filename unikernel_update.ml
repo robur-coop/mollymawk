@@ -473,7 +473,7 @@ let opam_diff_table (diffs : Builder_web.o_diff list) =
 
 let unikernel_update_layout ~unikernel_name ~instance_name unikernel
     current_time (build_comparison : Builder_web.compare) =
-  let u_name, data = unikernel in
+  let u_name, u_data = unikernel in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-10 p-4 bg-gray-50 my-1" ] ]
@@ -509,12 +509,12 @@ let unikernel_update_layout ~unikernel_name ~instance_name unikernel
                                   ("created "
                                   ^ Utils.TimeHelper.time_ago ~current_time
                                       ~check_time:
-                                        data.Vmm_core.Unikernel.started);
+                                        u_data.Vmm_core.Unikernel.started);
                               ];
                           ];
                         p
                           ~a:[ a_class [ "text-sm" ] ]
-                          [ txt (Ohex.encode data.digest) ];
+                          [ txt (Ohex.encode u_data.digest) ];
                         p
                           ~a:[ a_class [ "text-sm" ] ]
                           [
