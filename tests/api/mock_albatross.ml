@@ -143,11 +143,26 @@ let start_mock_server mode =
   Lwt.async (fun () -> server_loop file_descr);
   Lwt.return (file_descr, port)
 
-let albatross_config =
-  mock_server >>= fun (_file_descr, port) ->
+let success_server = start_mock_server Success
+let failure_server = start_mock_server Failure
+
+let success_config =
+  success_server >>= fun (_file_descr, port) ->
   Lwt.return
     {
       mock_albatross_config with
       server_ip = Ipaddr.of_string_exn "127.0.0.1";
       server_port = port;
     }
+
+let failure_config =
+  failure_server >>= fun (_file_descr, port) ->
+  Lwt.return
+    {
+      mock_albatross_config with
+      name = label_of_string_exn "failing";
+      server_ip = Ipaddr.of_string_exn "127.0.0.1";
+      server_port = port;
+    }
+
+let albatross_config = success_config
