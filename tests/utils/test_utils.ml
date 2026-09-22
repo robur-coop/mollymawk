@@ -539,8 +539,8 @@ let make_post_request ~path ~body ?(csrf_token = "") ?(session_cookie = "") () =
 
 let default_boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
 
-let make_multipart_request ?(boundary = default_boundary) ~parts ?file_part ?(session_cookie = "")
-    ?(csrf_token = "") ?token path =
+let make_multipart_request ?(boundary = default_boundary) ~parts ?file_part
+    ?(session_cookie = "") ?(csrf_token = "") ?token path =
   let body_buf = Buffer.create 1024 in
   List.iter
     (fun (key, value) ->
