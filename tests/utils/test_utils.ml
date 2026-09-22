@@ -510,3 +510,51 @@ let make_post_request ~path ~body ?(csrf_token = "") ?(session_cookie = "") () =
      %s\r\n\
      %s"
     path (String.length body) cookie_hdr body
+
+let default_boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
+
+let make_multipart_request ~boundary ~parts ?file_part ?(session_cookie = "")
+    ?(csrf_token = "") ?token path =
+  let body_buf = Buffer.create 1024 in
+  List.iter
+    (fun (key, value) ->
+      Buffer.add_string body_buf (Fmt.str "--%s\r\n" boundary);
+      Buffer.add_string body_buf
+        (Fmt.str "Content-Disposition: form-data; name=\"%s\"\r\n\r\n" key);
+      Buffer.add_string body_buf (Fmt.str "%s\r\n" value))
+    parts;
+  (match file_part with
+  | Some (field_name, filename, content_type, content) ->
+      Buffer.add_string body_buf (Fmt.str "--%s\r\n" boundary);
+      Buffer.add_string body_buf
+        (Fmt.str
+           "Content-Disposition: form-data; name=\"%s\"; filename=\"%s\"\r\n"
+           field_name filename);
+      Buffer.add_string body_buf
+        (Fmt.str "Content-Type: %s\r\n\r\n" content_type);
+      Buffer.add_string body_buf content;
+      Buffer.add_string body_buf "\r\n"
+  | None -> ());
+  Buffer.add_string body_buf (Fmt.str "--%s--\r\n" boundary);
+  let body = Buffer.contents body_buf in
+  let auth_hdr =
+    match token with
+    | Some t -> Fmt.str "Authorization: Bearer %s\r\n" t
+    | None -> ""
+  in
+  let cookie_hdr =
+    match (session_cookie, csrf_token) with
+    | "", "" -> ""
+    | s, "" -> Fmt.str "Cookie: molly_session=%s\r\n" s
+    | "", c -> Fmt.str "Cookie: molly_csrf=%s\r\n" c
+    | s, c -> Fmt.str "Cookie: molly_session=%s; molly_csrf=%s\r\n" s c
+  in
+  Fmt.str
+    "POST %s HTTP/1.1\r\n\
+     Host: localhost\r\n\
+     Content-Type: multipart/form-data; boundary=%s\r\n\
+     Content-Length: %d\r\n\
+     User-Agent: Alcotest-client\r\n\
+     %s%s\r\n\
+     %s"
+    path boundary (String.length body) auth_hdr cookie_hdr body
