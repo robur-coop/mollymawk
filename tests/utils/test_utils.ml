@@ -481,17 +481,43 @@ let mock_albatross_config =
   }
 
 (** User Creation Helper *)
+let make_csrf_cookie ?(user_agent = Some "Alcotest-client") uuid =
+  User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid
+    ~created_at:(Mirage_ptime.now ()) ~user_agent ()
+
+let make_mock_token ?(name = "mock-token") ?(expiry = 3600) () =
+  User_model.generate_token ~name ~expiry ~current_time:(Mirage_ptime.now ())
+
 let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
     ?(password = "Password123!") ?(active = true) ?(super_user = false)
-    ?(tokens = []) () =
+    ?(tokens = []) ?(with_csrf = true) () =
   let name_lbl = label_of_string_exn name in
   let email_box = email_of_string_exn email in
   let now = Mirage_ptime.now () in
-  let user, _cookie =
+  let user, session_cookie =
     User_model.create_user ~name:name_lbl ~email:email_box ~password ~active
-      ~super_user ~created_at:now ~user_agent:(Some "Alcotest/1.0")
+      ~super_user ~created_at:now ~user_agent:(Some "Alcotest-client")
   in
-  { user with tokens }
+  let cookies =
+    if with_csrf then
+      let csrf = make_csrf_cookie user.uuid in
+      [ session_cookie; csrf ]
+    else [ session_cookie ]
+  in
+  { user with cookies; tokens }
+
+let user_session_cookie (user : User_model.user) =
+  (List.find
+     (fun (c : User_model.cookie) ->
+       String.equal c.name User_model.session_cookie)
+     user.cookies)
+    .value
+
+let user_csrf_cookie (user : User_model.user) =
+  (List.find
+     (fun (c : User_model.cookie) -> String.equal c.name User_model.csrf_cookie)
+     user.cookies)
+    .value
 
 let make_post_request ~path ~body ?(csrf_token = "") ?(session_cookie = "") () =
   let cookie_hdr =
@@ -558,3 +584,17 @@ let make_multipart_request ~boundary ~parts ?file_part ?(session_cookie = "")
      %s%s\r\n\
      %s"
     path boundary (String.length body) auth_hdr cookie_hdr body
+
+let setup_mock_user ?user store =
+  let u =
+    Option.value user
+      ~default:(make_mock_user ~name:"admin" ~super_user:true ())
+  in
+  store.Storage.users <- [ u ];
+  (u, user_session_cookie u, user_csrf_cookie u)
+
+let setup_mock_user_with_token ?(super_user = true) store =
+  let token = make_mock_token () in
+  let u = make_mock_user ~name:"admin" ~super_user ~tokens:[ token ] () in
+  store.Storage.users <- [ u ];
+  (u, token.value)
