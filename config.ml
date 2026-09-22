@@ -42,7 +42,7 @@ let mollymawk =
       package ~min:"2.8.1" "albatross";
       package "yojson";
       package "uri";
-      package "tyxml";
+      package "tyxml" ~min:"5.0.0";
       package "multipart_form";
       package "mirage-crypto-rng";
       package "uuidm";

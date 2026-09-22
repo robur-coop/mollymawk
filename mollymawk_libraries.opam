@@ -26,7 +26,7 @@ depends: [
   "mrmime" {>= "0.7.2"}
   "lwt" {>= "6.1.2"}
   "http-mirage-client" {>= "0.0.10"}
-  "tyxml" {>= "4.6.0"}
+  "tyxml" {>= "5.0.0"}
   "alcotest" {>= "1.9.1"}
   "multipart_form-lwt" {>= "0.8.0"}
   "sendmail-mirage" {>= "0.13.0"}
