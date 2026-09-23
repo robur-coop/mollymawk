@@ -161,8 +161,7 @@ let add_user_token ?(name = "test-token") ?(expiry = 86400) store
   Storage.update_user store user;
   (user, token.value)
 
-let setup_user ?(admin = true) ?name ?email ?(password = "Password123!") store =
-  let _ = admin in
+let setup_user ?name ?email ?(password = "Password123!") store =
   let name = Option.value ~default:"test" name in
   let email = Option.value ~default:"test@robur.coop" email in
   let handler = make_app_request_handler store in
@@ -182,13 +181,9 @@ let setup_user ?(admin = true) ?name ?email ?(password = "Password123!") store =
   let user, csrf_token = add_user_csrf store user in
   Lwt.return (user, session_cookie, csrf_token)
 
-let setup_admin_user = setup_user ~admin:true
-
-let setup_user_with_token ?(admin = true) ?name ?email ?password
-    ?(token_name = "test-token") ?(expiry = 86400) store =
-  setup_user ~admin ?name ?email ?password store
+let setup_user_with_token ?name ?email ?password ?(token_name = "test-token")
+    ?(expiry = 86400) store =
+  setup_user ?name ?email ?password store
   >>= fun (user, _session_cookie, _csrf_token) ->
   let user, token_value = add_user_token ~name:token_name ~expiry store user in
   Lwt.return (user, token_value)
-
-let setup_admin_user_with_token = setup_user_with_token ~admin:true
