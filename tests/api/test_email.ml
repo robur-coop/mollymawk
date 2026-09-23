@@ -474,6 +474,149 @@ let check_test_email_invalid_method () =
         (String.includes ~affix:"Bad HTTP request method" resp);
       Lwt.return_unit )
 
+let check_auth_verify_success () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      setup_user store >>= fun (user, session_cookie, csrf_token) ->
+      let req_page =
+        make_get_request ~path:"/verify-email" ~session_cookie ~csrf_token ()
+      in
+      query_endpoint (make_app_request_handler store) req_page >>= fun _ ->
+      let updated_user =
+        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
+      in
+      let token_uuid = Option.get updated_user.email_verification_uuid in
+      let token_str = Uuidm.to_string token_uuid in
+      let req =
+        make_get_request
+          ~path:(Fmt.str "/auth/verify?token=%s" token_str)
+          ~session_cookie ~csrf_token ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool) "Response is a redirect" true (is_redirect resp);
+      Alcotest.(check bool)
+        "Redirects to /dashboard" true
+        (String.includes ~affix:"location: /dashboard"
+           (String.lowercase_ascii resp));
+      Lwt.return_unit )
+
+let check_auth_verify_missing_token () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
+      let req =
+        make_get_request ~path:"/auth/verify" ~session_cookie ~csrf_token ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 400 Bad Request" true
+        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+      Alcotest.(check bool)
+        "Missing token error message" true
+        (String.includes ~affix:"Couldn't find token in query params" resp);
+      Lwt.return_unit )
+
+let check_auth_verify_invalid_uuid () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
+      let req =
+        make_get_request ~path:"/auth/verify?token=not-a-valid-uuid"
+          ~session_cookie ~csrf_token ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool) "Response is a redirect" true (is_redirect resp);
+      Alcotest.(check bool)
+        "Redirects to /sign-in" true
+        (String.includes ~affix:"location: /sign-in"
+           (String.lowercase_ascii resp));
+      Lwt.return_unit )
+
+let check_auth_verify_unknown_token () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
+      let fake_uuid = User_model.generate_uuid () |> Uuidm.to_string in
+      let req =
+        make_get_request
+          ~path:(Fmt.str "/auth/verify?token=%s" fake_uuid)
+          ~session_cookie ~csrf_token ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool) "Response is a redirect" true (is_redirect resp);
+      Alcotest.(check bool)
+        "Redirects to /sign-in" true
+        (String.includes ~affix:"location: /sign-in"
+           (String.lowercase_ascii resp));
+      Lwt.return_unit )
+
+let check_auth_verify_different_user () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      setup_user ~name:"user2" ~email:"user2@robur.coop" store
+      >>= fun (user2, user2_cookie, user2_csrf) ->
+      setup_user ~name:"user1" ~email:"user1@robur.coop" store
+      >>= fun (user1, user1_cookie, user1_csrf) ->
+      let user1_active = User_model.update_user user1 ~active:true () in
+      Storage.update_user store user1_active;
+      let req_page =
+        make_get_request ~path:"/verify-email" ~session_cookie:user2_cookie
+          ~csrf_token:user2_csrf ()
+      in
+      query_endpoint (make_app_request_handler store) req_page >>= fun _ ->
+      let updated_user2 =
+        Option.get (Storage.find_by_uuid store.Storage.users user2.uuid)
+      in
+      let token_uuid = Option.get updated_user2.email_verification_uuid in
+      let token_str = Uuidm.to_string token_uuid in
+      (* user1 tries to verify using user2's token *)
+      let req =
+        make_get_request
+          ~path:(Fmt.str "/auth/verify?token=%s" token_str)
+          ~session_cookie:user1_cookie ~csrf_token:user1_csrf ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 400 Bad Request" true
+        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+      Alcotest.(check bool)
+        "Different user error message" true
+        (String.includes ~affix:"Logged in user is not the to-be-verified one"
+           resp);
+      Lwt.return_unit )
+
+let check_auth_verify_unauthenticated () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let fake_uuid = User_model.generate_uuid () |> Uuidm.to_string in
+      let req =
+        make_get_request ~path:(Fmt.str "/auth/verify?token=%s" fake_uuid) ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool) "Response is a redirect" true (is_redirect resp);
+      Alcotest.(check bool)
+        "Redirects to /sign-in" true
+        (String.includes ~affix:"location: /sign-in"
+           (String.lowercase_ascii resp));
+      Lwt.return_unit )
+
+let check_auth_verify_invalid_method () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
+      let req =
+        make_post_request ~path:"/auth/verify?token=dummy" ~body:""
+          ~session_cookie ~csrf_token ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 400 Bad Request" true
+        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+      Alcotest.(check bool)
+        "Bad HTTP request method message" true
+        (String.includes ~affix:"Bad HTTP request method" resp);
+      Lwt.return_unit )
+
 let tests =
   [
     ("Email update settings success", `Quick, check_update_email_success);
@@ -528,4 +671,19 @@ let tests =
       check_test_email_non_admin_forbidden );
     ("Email test send unauthenticated", `Quick, check_test_email_unauthenticated);
     ("Email test send invalid method", `Quick, check_test_email_invalid_method);
+    ("Email auth verify success", `Quick, check_auth_verify_success);
+    ("Email auth verify missing token", `Quick, check_auth_verify_missing_token);
+    ( "Email auth verify invalid UUID token",
+      `Quick,
+      check_auth_verify_invalid_uuid );
+    ("Email auth verify unknown token", `Quick, check_auth_verify_unknown_token);
+    ( "Email auth verify different user",
+      `Quick,
+      check_auth_verify_different_user );
+    ( "Email auth verify unauthenticated",
+      `Quick,
+      check_auth_verify_unauthenticated );
+    ( "Email auth verify invalid method",
+      `Quick,
+      check_auth_verify_invalid_method );
   ]

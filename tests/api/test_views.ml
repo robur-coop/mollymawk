@@ -755,6 +755,63 @@ let check_admin_albatross_errors_missing_instance () =
         (is_redirect resp && String.includes ~affix:"/select/instance" resp);
       Lwt.return_unit )
 
+let check_verify_email_page () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      setup_user store >>= fun (user, session_cookie, csrf_token) ->
+      let req =
+        make_get_request ~path:"/verify-email" ~session_cookie ~csrf_token ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+      Alcotest.(check bool)
+        "Content-Type is text/html" true
+        (String.includes ~affix:"text/html" resp);
+      Alcotest.(check bool)
+        "Contains X-MOLLY-CSRF header" true
+        (String.includes ~affix:"X-MOLLY-CSRF" resp);
+      Alcotest.(check bool)
+        "Contains verify email title" true
+        (String.includes ~affix:"Verify Email" resp);
+      let updated_user =
+        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
+      in
+      Alcotest.(check bool)
+        "User has email_verification_uuid assigned" true
+        (Option.is_some updated_user.email_verification_uuid);
+      Lwt.return_unit )
+
+let check_verify_email_unauthenticated () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req = make_get_request ~path:"/verify-email" () in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool) "Response is a redirect" true (is_redirect resp);
+      Alcotest.(check bool)
+        "Redirects to /sign-in" true
+        (String.includes ~affix:"location: /sign-in"
+           (String.lowercase_ascii resp));
+      Lwt.return_unit )
+
+let check_verify_email_invalid_method () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
+      let req =
+        make_post_request ~path:"/verify-email" ~body:"" ~session_cookie
+          ~csrf_token ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 400 Bad Request" true
+        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+      Alcotest.(check bool)
+        "Bad HTTP request method message" true
+        (String.includes ~affix:"Bad HTTP request method" resp);
+      Lwt.return_unit )
+
 let check_page_not_found () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
@@ -912,5 +969,12 @@ let tests =
        redirects",
       `Quick,
       check_admin_albatross_errors_missing_instance );
+    ("Verify email page (/verify-email)", `Quick, check_verify_email_page);
+    ( "Verify email page unauthenticated redirects",
+      `Quick,
+      check_verify_email_unauthenticated );
+    ( "Verify email page invalid method",
+      `Quick,
+      check_verify_email_invalid_method );
     ("Page not found (unknown path)", `Quick, check_page_not_found);
   ]
