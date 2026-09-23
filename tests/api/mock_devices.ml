@@ -53,7 +53,33 @@ module App =
     (Mock_Block)
     (Client)
 
-let make_app_request_handler store =
+let make_default_policies ~domain ?(unikernels = 10) ?(memory = 1024) () =
+  let path = Vmm_core.Name.Path.of_label domain in
+  let name = Vmm_core.Name.make_of_path path in
+  let root_policy : Vmm_core.Policy.t =
+    {
+      unikernels = unikernels * 2;
+      cpuids = Vmm_core.IS.empty;
+      memory = memory * 2;
+      block = None;
+      bridges = Vmm_core.String_set.empty;
+    }
+  in
+  let policy : Vmm_core.Policy.t =
+    {
+      unikernels;
+      cpuids = Vmm_core.IS.empty;
+      memory;
+      block = None;
+      bridges = Vmm_core.String_set.empty;
+    }
+  in
+  let trie =
+    fst (Vmm_trie.insert Vmm_core.Name.root root_policy Vmm_trie.empty)
+  in
+  fst (Vmm_trie.insert name policy trie)
+
+let make_app_request_handler ?policies store =
   let js_file = "/* some js */" in
   let css_file = "/* some css */" in
   let grafana_file = "{}" in
@@ -69,7 +95,7 @@ let make_app_request_handler store =
   let management_domain = Domain_name.of_string_exn "robur.coop" in
   let success_config = Lwt_main.run Mock_albatross.success_config in
   let failure_config = Lwt_main.run Mock_albatross.failure_config in
-  let policies = Vmm_trie.empty in
+  let policies = Option.value ~default:Vmm_trie.empty policies in
   let success_instance : Albatross.t =
     {
       configuration = success_config;
