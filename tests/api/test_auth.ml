@@ -260,11 +260,7 @@ let check_registration_endpoint_bad_name () =
 let check_login_endpoint () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let user =
-        make_mock_user ~name:"test" ~email:"test@robur.coop"
-          ~password:"Password123!" ()
-      in
-      store.Storage.users <- [ user ];
+      setup_user store >>= fun (user, _session, _csrf) ->
       let body =
         {|{ "email": "test@robur.coop", "password": "Password123!" }|}
       in
@@ -297,22 +293,10 @@ let check_login_endpoint () =
 let check_logout_endpoint () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let now = Mirage_ptime.now () in
-      let user =
-        make_mock_user ~name:"test" ~email:"test@robur.coop"
-          ~password:"Password123!" ()
-      in
-      let session_cookie = List.hd user.cookies in
-      let csrf_cookie =
-        User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid:user.uuid
-          ~created_at:now ~user_agent:(Some "Alcotest-client") ()
-      in
-      let user = { user with cookies = [ session_cookie; csrf_cookie ] } in
-      store.Storage.users <- [ user ];
-      let body = Fmt.str {|{ "molly_csrf": "%s" }|} csrf_cookie.value in
+      setup_user store >>= fun (user, session_cookie, csrf_token) ->
+      let body = Fmt.str {|{ "molly_csrf": "%s" }|} csrf_token in
       let req =
-        make_post_request ~path:"/logout" ~body
-          ~session_cookie:session_cookie.value ~csrf_token:csrf_cookie.value ()
+        make_post_request ~path:"/logout" ~body ~session_cookie ~csrf_token ()
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
@@ -327,34 +311,23 @@ let check_logout_endpoint () =
       Alcotest.(check bool)
         "Session cookie removed after logout" false
         (List.exists
-           (fun (c : User_model.cookie) ->
-             String.equal c.value session_cookie.value)
+           (fun (c : User_model.cookie) -> String.equal c.value session_cookie)
            updated_user.cookies);
       Lwt.return_unit )
 
 let check_update_password_endpoint () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let now = Mirage_ptime.now () in
-      let user =
-        make_mock_user ~name:"test" ~email:"test@robur.coop"
-          ~password:"OldPassword123!" ()
-      in
-      let session_cookie = List.hd user.cookies in
-      let csrf_cookie =
-        User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid:user.uuid
-          ~created_at:now ~user_agent:(Some "Alcotest-client") ()
-      in
-      let user = { user with cookies = [ session_cookie; csrf_cookie ] } in
-      store.Storage.users <- [ user ];
+      setup_user ~password:"OldPassword123!" store
+      >>= fun (user, session_cookie, csrf_token) ->
       let body =
         Fmt.str
           {|{ "current_password": "OldPassword123!", "new_password": "NewSecretPassword123!", "confirm_password": "NewSecretPassword123!", "molly_csrf": "%s" }|}
-          csrf_cookie.value
+          csrf_token
       in
       let req =
-        make_post_request ~path:"/account/password/update" ~body
-          ~session_cookie:session_cookie.value ~csrf_token:csrf_cookie.value ()
+        make_post_request ~path:"/account/password/update" ~body ~session_cookie
+          ~csrf_token ()
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
@@ -378,34 +351,33 @@ let check_update_password_endpoint () =
 let check_close_sessions_endpoint () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let now = Mirage_ptime.now () in
-      let user =
-        make_mock_user ~name:"test" ~email:"test@robur.coop"
-          ~password:"Password123!" ()
+      let handler = make_app_request_handler store in
+      setup_user store >>= fun (user, session_cookie_1, _csrf) ->
+      let login_body =
+        {|{ "email": "test@robur.coop", "password": "Password123!" }|}
       in
-      let session_cookie_1 = List.hd user.cookies in
+      let login_req =
+        make_post_request ~path:"/api/login" ~body:login_body ()
+      in
+      query_endpoint handler login_req >>= fun _login_resp ->
+      let user_after_login =
+        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
+      in
       let session_cookie_2 =
-        User_model.generate_cookie ~name:User_model.session_cookie
-          ~uuid:user.uuid ~created_at:now ~user_agent:(Some "Second-client") ()
+        (List.find
+           (fun (c : User_model.cookie) ->
+             String.equal c.name User_model.session_cookie
+             && not (String.equal c.value session_cookie_1))
+           user_after_login.cookies)
+          .value
       in
-      let csrf_cookie =
-        User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid:user.uuid
-          ~created_at:now ~user_agent:(Some "Alcotest-client") ()
-      in
-      let user =
-        {
-          user with
-          cookies = [ session_cookie_1; session_cookie_2; csrf_cookie ];
-        }
-      in
-      store.Storage.users <- [ user ];
-      let body = Fmt.str {|{ "molly_csrf": "%s" }|} csrf_cookie.value in
+      let _user, csrf_token = add_user_csrf store user_after_login in
+      let body = Fmt.str {|{ "molly_csrf": "%s" }|} csrf_token in
       let req =
         make_post_request ~path:"/api/account/sessions/close" ~body
-          ~session_cookie:session_cookie_1.value ~csrf_token:csrf_cookie.value
-          ()
+          ~session_cookie:session_cookie_1 ~csrf_token ()
       in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      query_endpoint handler req >>= fun resp ->
       Alcotest.(check bool)
         "Response has HTTP 200 OK" true
         (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
@@ -419,50 +391,49 @@ let check_close_sessions_endpoint () =
         "Current session still active" true
         (List.exists
            (fun (c : User_model.cookie) ->
-             String.equal c.value session_cookie_1.value)
+             String.equal c.value session_cookie_1)
            updated_user.cookies);
       Alcotest.(check bool)
         "Other session closed" false
         (List.exists
            (fun (c : User_model.cookie) ->
-             String.equal c.value session_cookie_2.value)
+             String.equal c.value session_cookie_2)
            updated_user.cookies);
       Lwt.return_unit )
 
 let check_close_session_endpoint () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let now = Mirage_ptime.now () in
-      let user =
-        make_mock_user ~name:"test" ~email:"test@robur.coop"
-          ~password:"Password123!" ()
+      let handler = make_app_request_handler store in
+      setup_user store >>= fun (user, session_cookie_1, _csrf) ->
+      let login_body =
+        {|{ "email": "test@robur.coop", "password": "Password123!" }|}
       in
-      let session_cookie_1 = List.hd user.cookies in
+      let login_req =
+        make_post_request ~path:"/api/login" ~body:login_body ()
+      in
+      query_endpoint handler login_req >>= fun _login_resp ->
+      let user_after_login =
+        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
+      in
       let session_cookie_2 =
-        User_model.generate_cookie ~name:User_model.session_cookie
-          ~uuid:user.uuid ~created_at:now ~user_agent:(Some "Second-client") ()
+        (List.find
+           (fun (c : User_model.cookie) ->
+             String.equal c.name User_model.session_cookie
+             && not (String.equal c.value session_cookie_1))
+           user_after_login.cookies)
+          .value
       in
-      let csrf_cookie =
-        User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid:user.uuid
-          ~created_at:now ~user_agent:(Some "Alcotest-client") ()
-      in
-      let user =
-        {
-          user with
-          cookies = [ session_cookie_1; session_cookie_2; csrf_cookie ];
-        }
-      in
-      store.Storage.users <- [ user ];
+      let _user, csrf_token = add_user_csrf store user_after_login in
       let body =
         Fmt.str {|{ "session_value": "%s", "molly_csrf": "%s" }|}
-          session_cookie_2.value csrf_cookie.value
+          session_cookie_2 csrf_token
       in
       let req =
         make_post_request ~path:"/api/account/session/close" ~body
-          ~session_cookie:session_cookie_1.value ~csrf_token:csrf_cookie.value
-          ()
+          ~session_cookie:session_cookie_1 ~csrf_token ()
       in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      query_endpoint handler req >>= fun resp ->
       Alcotest.(check bool)
         "Response has HTTP 200 OK" true
         (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
@@ -476,13 +447,13 @@ let check_close_session_endpoint () =
         "Current session still active" true
         (List.exists
            (fun (c : User_model.cookie) ->
-             String.equal c.value session_cookie_1.value)
+             String.equal c.value session_cookie_1)
            updated_user.cookies);
       Alcotest.(check bool)
         "Targeted session closed" false
         (List.exists
            (fun (c : User_model.cookie) ->
-             String.equal c.value session_cookie_2.value)
+             String.equal c.value session_cookie_2)
            updated_user.cookies);
       Lwt.return_unit )
 

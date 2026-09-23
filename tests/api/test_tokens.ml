@@ -2,31 +2,10 @@ open Test_utils
 open Mock_devices
 open Lwt.Infix
 
-let now = Mirage_ptime.now ()
-
-let setup_user_and_cookies ?(tokens = []) store =
-  let base_user = make_mock_user ~tokens () in
-  let session_cookie =
-    List.find
-      (fun (c : User_model.cookie) ->
-        String.equal c.name User_model.session_cookie)
-      base_user.cookies
-  in
-  let csrf_cookie =
-    User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid:base_user.uuid
-      ~created_at:now ~user_agent:(Some "Alcotest-client") ()
-  in
-  let user = { base_user with cookies = [ session_cookie; csrf_cookie ] } in
-  store.Storage.users <- [ user ];
-  (user, session_cookie.value, csrf_cookie.value)
-
-let make_test_token ?(name = "test-token") ?(expiry = 3600) () =
-  User_model.generate_token ~name ~expiry ~current_time:now
-
 let check_create_token_success () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_user_and_cookies store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let body =
         Fmt.str
           {|{ "token_name": "ci-token", "token_expiry": 86400, "molly_csrf": "%s" }|}
@@ -61,7 +40,7 @@ let check_create_token_success () =
 let check_create_token_missing_fields () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_user_and_cookies store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let body =
         Fmt.str {|{ "token_name": "ci-token", "molly_csrf": "%s" }|} csrf_token
       in
@@ -81,7 +60,7 @@ let check_create_token_missing_fields () =
 let check_create_token_invalid_csrf () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, _csrf_token = setup_user_and_cookies store in
+      setup_user store >>= fun (_user, session_cookie, _csrf_token) ->
       let body =
         {|{ "token_name": "ci-token", "token_expiry": 86400, "molly_csrf": "invalid-csrf-token" }|}
       in
@@ -101,7 +80,7 @@ let check_create_token_invalid_csrf () =
 let check_create_token_unauthenticated () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, _session_cookie, csrf_token = setup_user_and_cookies store in
+      setup_user store >>= fun (_user, _session_cookie, csrf_token) ->
       let body =
         Fmt.str
           {|{ "token_name": "ci-token", "token_expiry": 86400, "molly_csrf": "%s" }|}
@@ -122,16 +101,14 @@ let check_create_token_unauthenticated () =
 let check_update_token_success () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let initial_token =
-        make_test_token ~name:"initial-token" ~expiry:3600 ()
-      in
-      let _user, session_cookie, csrf_token =
-        setup_user_and_cookies ~tokens:[ initial_token ] store
+      setup_user store >>= fun (user, session_cookie, csrf_token) ->
+      let _user, initial_token_value =
+        add_user_token ~name:"initial-token" ~expiry:3600 store user
       in
       let body =
         Fmt.str
           {|{ "token_name": "updated-token", "token_expiry": 7200, "token_value": "%s", "molly_csrf": "%s" }|}
-          initial_token.value csrf_token
+          initial_token_value csrf_token
       in
       let req =
         make_post_request ~path:"/api/tokens/update" ~body ~session_cookie
@@ -155,13 +132,13 @@ let check_update_token_success () =
       Alcotest.(check int)
         "Store token expiry updated" 7200 updated_token.expires_in;
       Alcotest.(check string)
-        "Store token value retained" initial_token.value updated_token.value;
+        "Store token value retained" initial_token_value updated_token.value;
       Lwt.return_unit )
 
 let check_update_token_not_found () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_user_and_cookies store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let body =
         Fmt.str
           {|{ "token_name": "updated-token", "token_expiry": 7200, "token_value": "missing-uuid", "molly_csrf": "%s" }|}
@@ -183,7 +160,7 @@ let check_update_token_not_found () =
 let check_update_token_missing_fields () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_user_and_cookies store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let body =
         Fmt.str
           {|{ "token_name": "updated-token", "token_expiry": 7200, "molly_csrf": "%s" }|}
@@ -205,12 +182,12 @@ let check_update_token_missing_fields () =
 let check_delete_token_success () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let token = make_test_token ~name:"token-to-delete" () in
-      let _user, session_cookie, csrf_token =
-        setup_user_and_cookies ~tokens:[ token ] store
+      setup_user store >>= fun (user, session_cookie, csrf_token) ->
+      let _user, token_value =
+        add_user_token ~name:"token-to-delete" store user
       in
       let body =
-        Fmt.str {|{ "token_value": "%s", "molly_csrf": "%s" }|} token.value
+        Fmt.str {|{ "token_value": "%s", "molly_csrf": "%s" }|} token_value
           csrf_token
       in
       let req =
@@ -234,7 +211,7 @@ let check_delete_token_success () =
 let check_delete_token_missing_fields () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_user_and_cookies store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let body = Fmt.str {|{ "molly_csrf": "%s" }|} csrf_token in
       let req =
         make_post_request ~path:"/api/tokens/delete" ~body ~session_cookie
@@ -253,7 +230,7 @@ let check_delete_token_missing_fields () =
 let check_delete_token_not_found () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_user_and_cookies store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let body =
         Fmt.str
           {|{ "token_name": "not-found-token", "token_expiry": 7200, "token_value": "this-token-is-not-found", "molly_csrf": "%s" }|}

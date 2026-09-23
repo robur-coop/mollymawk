@@ -147,3 +147,48 @@ let init_mock_store () =
   App.Store.connect block >>= function
   | Error (`Msg msg) -> failwith msg
   | Ok store -> Lwt.return store
+
+let add_user_csrf store (user : User_model.user) =
+  let csrf = Test_utils.make_csrf_cookie user.uuid in
+  let user = User_model.update_user user ~cookies:(csrf :: user.cookies) () in
+  Storage.update_user store user;
+  (user, csrf.value)
+
+let add_user_token ?(name = "test-token") ?(expiry = 86400) store
+    (user : User_model.user) =
+  let token = Test_utils.make_mock_token ~name ~expiry () in
+  let user = User_model.update_user user ~tokens:(token :: user.tokens) () in
+  Storage.update_user store user;
+  (user, token.value)
+
+let setup_user ?(admin = true) ?name ?email ?(password = "Password123!") store =
+  let _ = admin in
+  let name = Option.value ~default:"test" name in
+  let email = Option.value ~default:"test@robur.coop" email in
+  let handler = make_app_request_handler store in
+  let body =
+    Fmt.str
+      {|{ "name": "%s", "email": "%s", "password": "%s", "form_csrf": "test-csrf" }|}
+      name email password
+  in
+  let req =
+    Test_utils.make_post_request ~path:"/api/register" ~body
+      ~csrf_token:"test-csrf" ()
+  in
+  query_endpoint handler req >>= fun _raw_resp ->
+  let name_lbl = Test_utils.label_of_string_exn name in
+  let user = Option.get (Storage.find_by_name (Storage.users store) name_lbl) in
+  let session_cookie = Test_utils.user_session_cookie user in
+  let user, csrf_token = add_user_csrf store user in
+  Lwt.return (user, session_cookie, csrf_token)
+
+let setup_admin_user = setup_user ~admin:true
+
+let setup_user_with_token ?(admin = true) ?name ?email ?password
+    ?(token_name = "test-token") ?(expiry = 86400) store =
+  setup_user ~admin ?name ?email ?password store
+  >>= fun (user, _session_cookie, _csrf_token) ->
+  let user, token_value = add_user_token ~name:token_name ~expiry store user in
+  Lwt.return (user, token_value)
+
+let setup_admin_user_with_token = setup_user_with_token ~admin:true
