@@ -42,6 +42,34 @@ end = struct
   let create () = ()
 end
 
+module Mock_smtp = struct
+  let start () =
+    let fd = Lwt_unix.(socket PF_INET SOCK_STREAM 0) in
+    Lwt_unix.bind fd (Lwt_unix.ADDR_INET (Unix.inet_addr_loopback, 0))
+    >>= fun () ->
+    let port =
+      match Lwt_unix.getsockname fd with
+      | Lwt_unix.ADDR_INET (_, p) -> p
+      | _ -> failwith "port not assigned"
+    in
+    Lwt_unix.listen fd 10;
+    let handle client =
+      let out_ch = Lwt_io.of_fd ~mode:Lwt_io.Output client in
+      Lwt_io.write out_ch "ok\r\n" >>= fun () ->
+      Lwt_io.flush out_ch >>= fun () ->
+      Lwt.catch (fun () -> Lwt_io.close out_ch) (fun _ -> Lwt.return_unit)
+    in
+    let rec accept_loop () =
+      Lwt_unix.accept fd >>= fun (client, _addr) ->
+      Lwt.async (fun () -> handle client);
+      accept_loop ()
+    in
+    Lwt.async accept_loop;
+    Lwt.return port
+
+  let port = Lwt_main.run (start ())
+end
+
 module HE = Happy_eyeballs_mirage.Make (Tcpip_stack_socket.V4V6)
 module DNS = Dns_client_mirage.Make (Tcpip_stack_socket.V4V6) (HE)
 module Mimic_HE = Mimic_happy_eyeballs.Make (Tcpip_stack_socket.V4V6) (HE) (DNS)
