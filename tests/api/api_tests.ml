@@ -6,4 +6,5 @@ let () =
       ("API Tokens", Test_tokens.tests);
       ("Unikernel Operations", Test_unikernel.tests);
       ("Layouts and Views", Test_views.tests);
+      ("Block Operations", Test_block.tests);
     ]

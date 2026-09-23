@@ -53,6 +53,8 @@ module App =
     (Mock_Block)
     (Client)
 
+type mock_paf_flow = { flow : unit; mutable no_close : bool }
+
 let make_default_policies ~domain ?(unikernels = 10) ?(memory = 1024) () =
   let path = Vmm_core.Name.Path.of_label domain in
   let name = Vmm_core.Name.make_of_path path in
@@ -129,7 +131,8 @@ let make_app_request_handler ?policies store =
   let happy_eyeballs = HE.create stack in
   let management_happy_eyeballs = happy_eyeballs in
   let http_client = Lwt_main.run (Client.connect Mimic.empty) in
-  let flow : App.Paf.TCP.flow = Obj.magic () in
+  let flow_type : mock_paf_flow = { flow = (); no_close = true } in
+  let flow : App.Paf.TCP.flow = Obj.magic flow_type in
   App.request_handler stack management_happy_eyeballs management_domain
     albatross_instances js_file css_file imgs grafana_file store http_client
     happy_eyeballs flow client_addr
@@ -156,11 +159,22 @@ let query_endpoint handler raw_request_str =
             Buffer.add_string output_buffer s;
             H1.Server_connection.report_write_result conn (`Ok len))
           iovecs;
-        if Buffer.length output_buffer > 0 then (
+        if
+          String.includes ~affix:"application/octet-stream"
+            (Buffer.contents output_buffer)
+        then drain ()
+        else if Buffer.length output_buffer > 0 then (
           if Lwt.is_sleeping finished_promise then
             Lwt.wakeup_later notify_finished ())
         else drain ()
-    | `Yield -> H1.Server_connection.yield_writer conn (fun () -> drain ())
+    | `Yield ->
+        if
+          String.includes ~affix:"t\n\r\n\rEOF\n\r"
+            (Buffer.contents output_buffer)
+        then (
+          if Lwt.is_sleeping finished_promise then
+            Lwt.wakeup_later notify_finished ())
+        else H1.Server_connection.yield_writer conn (fun () -> drain ())
     | `Close _ | `Upgrade ->
         if Lwt.is_sleeping finished_promise then
           Lwt.wakeup_later notify_finished ()
