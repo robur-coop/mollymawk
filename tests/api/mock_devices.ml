@@ -42,6 +42,34 @@ end = struct
   let create () = ()
 end
 
+module Mock_smtp = struct
+  let start () =
+    let fd = Lwt_unix.(socket PF_INET SOCK_STREAM 0) in
+    Lwt_unix.bind fd (Lwt_unix.ADDR_INET (Unix.inet_addr_loopback, 0))
+    >>= fun () ->
+    let port =
+      match Lwt_unix.getsockname fd with
+      | Lwt_unix.ADDR_INET (_, p) -> p
+      | _ -> failwith "port not assigned"
+    in
+    Lwt_unix.listen fd 10;
+    let handle client =
+      let out_ch = Lwt_io.of_fd ~mode:Lwt_io.Output client in
+      Lwt_io.write out_ch "ok\r\n" >>= fun () ->
+      Lwt_io.flush out_ch >>= fun () ->
+      Lwt.catch (fun () -> Lwt_io.close out_ch) (fun _ -> Lwt.return_unit)
+    in
+    let rec accept_loop () =
+      Lwt_unix.accept fd >>= fun (client, _addr) ->
+      Lwt.async (fun () -> handle client);
+      accept_loop ()
+    in
+    Lwt.async accept_loop;
+    Lwt.return port
+
+  let port = Lwt_main.run (start ())
+end
+
 module HE = Happy_eyeballs_mirage.Make (Tcpip_stack_socket.V4V6)
 module DNS = Dns_client_mirage.Make (Tcpip_stack_socket.V4V6) (HE)
 module Mimic_HE = Mimic_happy_eyeballs.Make (Tcpip_stack_socket.V4V6) (HE) (DNS)
@@ -55,25 +83,26 @@ module App =
 
 type mock_paf_flow = { flow : unit; mutable no_close : bool }
 
-let make_default_policies ~domain ?(unikernels = 10) ?(memory = 1024) () =
+let make_default_policies ~domain ?(unikernels = 10) ?(memory = 1024)
+    ?(block = Some 2048) ?(bridges = [ "service" ]) ?(cpuids = [ 0; 1 ]) () =
   let path = Vmm_core.Name.Path.of_label domain in
   let name = Vmm_core.Name.make_of_path path in
   let root_policy : Vmm_core.Policy.t =
     {
       unikernels = unikernels * 2;
-      cpuids = Vmm_core.IS.empty;
+      cpuids = Vmm_core.IS.of_list cpuids;
       memory = memory * 2;
-      block = None;
-      bridges = Vmm_core.String_set.empty;
+      block;
+      bridges = Vmm_core.String_set.of_list bridges;
     }
   in
   let policy : Vmm_core.Policy.t =
     {
       unikernels;
-      cpuids = Vmm_core.IS.empty;
+      cpuids = Vmm_core.IS.of_list cpuids;
       memory;
-      block = None;
-      bridges = Vmm_core.String_set.empty;
+      block = Option.map (fun b -> b / 2) block;
+      bridges = Vmm_core.String_set.of_list bridges;
     }
   in
   let trie =
@@ -81,7 +110,7 @@ let make_default_policies ~domain ?(unikernels = 10) ?(memory = 1024) () =
   in
   fst (Vmm_trie.insert name policy trie)
 
-let make_app_request_handler ?policies store =
+let make_app_request_handler ?policies ?instances store =
   let js_file = "/* some js */" in
   let css_file = "/* some css */" in
   let grafana_file = "{}" in
@@ -113,10 +142,13 @@ let make_app_request_handler ?policies store =
     }
   in
   let albatross_instances = ref App.Label_map.empty in
-  albatross_instances :=
-    App.Label_map.empty
-    |> App.Label_map.add success_config.name success_instance
-    |> App.Label_map.add failure_config.name failure_instance;
+  (albatross_instances :=
+     match instances with
+     | Some insts -> insts
+     | None ->
+         App.Label_map.empty
+         |> App.Label_map.add success_config.name success_instance
+         |> App.Label_map.add failure_config.name failure_instance);
   let client_addr = (Ipaddr.of_string_exn "127.0.0.1", 8080) in
   let v4 = Ipaddr.V4.Prefix.global in
   let udp =
