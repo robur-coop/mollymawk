@@ -519,19 +519,21 @@ let user_csrf_cookie (user : User_model.user) =
      user.cookies)
     .value
 
+let auth_hdr token =
+  match token with
+  | Some t -> Fmt.str "Authorization: Bearer %s\r\n" t
+  | None -> ""
+
+let cookie_hdr session_cookie csrf_token =
+  match (session_cookie, csrf_token) with
+  | "", "" -> ""
+  | s, "" -> Fmt.str "Cookie: molly_session=%s\r\n" s
+  | "", c -> Fmt.str "Cookie: molly_csrf=%s\r\n" c
+  | s, c -> Fmt.str "Cookie: molly_session=%s; molly_csrf=%s\r\n" s c
+
 let make_get_request ~path ?(session_cookie = "") ?(csrf_token = "") ?token () =
-  let auth_hdr =
-    match token with
-    | Some t -> Fmt.str "Authorization: Bearer %s\r\n" t
-    | None -> ""
-  in
-  let cookie_hdr =
-    match (session_cookie, csrf_token) with
-    | "", "" -> ""
-    | s, "" -> Fmt.str "Cookie: molly_session=%s\r\n" s
-    | "", c -> Fmt.str "Cookie: molly_csrf=%s\r\n" c
-    | s, c -> Fmt.str "Cookie: molly_session=%s; molly_csrf=%s\r\n" s c
-  in
+  let auth_hdr = auth_hdr token in
+  let cookie_hdr = cookie_hdr session_cookie csrf_token in
   Fmt.str
     "GET %s HTTP/1.1\r\n\
      Host: localhost\r\n\
@@ -541,18 +543,8 @@ let make_get_request ~path ?(session_cookie = "") ?(csrf_token = "") ?token () =
 
 let make_post_request ~path ~body ?(csrf_token = "") ?(session_cookie = "")
     ?token () =
-  let auth_hdr =
-    match token with
-    | Some t -> Fmt.str "Authorization: Bearer %s\r\n" t
-    | None -> ""
-  in
-  let cookie_hdr =
-    match (session_cookie, csrf_token) with
-    | "", "" -> ""
-    | s, "" -> Fmt.str "Cookie: molly_session=%s\r\n" s
-    | "", c -> Fmt.str "Cookie: molly_csrf=%s\r\n" c
-    | s, c -> Fmt.str "Cookie: molly_session=%s; molly_csrf=%s\r\n" s c
-  in
+  let auth_hdr = auth_hdr token in
+  let cookie_hdr = cookie_hdr session_cookie csrf_token in
   Fmt.str
     "POST %s HTTP/1.1\r\n\
      Host: localhost\r\n\
@@ -589,18 +581,8 @@ let make_multipart_request ?(boundary = default_boundary) ~parts ?file_part
   | None -> ());
   Buffer.add_string body_buf (Fmt.str "--%s--\r\n" boundary);
   let body = Buffer.contents body_buf in
-  let auth_hdr =
-    match token with
-    | Some t -> Fmt.str "Authorization: Bearer %s\r\n" t
-    | None -> ""
-  in
-  let cookie_hdr =
-    match (session_cookie, csrf_token) with
-    | "", "" -> ""
-    | s, "" -> Fmt.str "Cookie: molly_session=%s\r\n" s
-    | "", c -> Fmt.str "Cookie: molly_csrf=%s\r\n" c
-    | s, c -> Fmt.str "Cookie: molly_session=%s; molly_csrf=%s\r\n" s c
-  in
+  let auth_hdr = auth_hdr token in
+  let cookie_hdr = cookie_hdr session_cookie csrf_token in
   Fmt.str
     "POST %s HTTP/1.1\r\n\
      Host: localhost\r\n\
@@ -610,17 +592,3 @@ let make_multipart_request ?(boundary = default_boundary) ~parts ?file_part
      %s%s\r\n\
      %s"
     path boundary (String.length body) auth_hdr cookie_hdr body
-
-let setup_admin_user ?user store =
-  let u =
-    Option.value user
-      ~default:(make_mock_user ~name:"admin" ~super_user:true ())
-  in
-  store.Storage.users <- [ u ];
-  (u, user_session_cookie u, user_csrf_cookie u)
-
-let setup_admin_user_with_token ?(super_user = true) store =
-  let token = make_mock_token () in
-  let u = make_mock_user ~name:"admin" ~super_user ~tokens:[ token ] () in
-  store.Storage.users <- [ u ];
-  (u, token.value)

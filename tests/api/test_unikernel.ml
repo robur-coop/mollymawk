@@ -8,7 +8,7 @@ let default_cfg = {|{"typ": "solo5", "cpuids": [0], "memory": 32}|}
 let check_unikernels_info_success () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_admin_user store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let req =
         make_get_request ~path:"/api/unikernels" ~session_cookie ~csrf_token ()
       in
@@ -27,7 +27,7 @@ let check_unikernels_info_success () =
 let check_unikernels_info_with_token () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, token = setup_admin_user_with_token store in
+      setup_user_with_token store >>= fun (_user, token) ->
       let req = make_get_request ~path:"/api/unikernels" ~token () in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
@@ -54,7 +54,7 @@ let check_unikernels_info_unauthenticated () =
 let check_unikernel_create_success () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_admin_user store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let parts =
         [
           ("albatross_instance", "default");
@@ -84,7 +84,7 @@ let check_unikernel_create_success () =
 let check_unikernel_force_create_success () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_admin_user store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let parts =
         [
           ("albatross_instance", "default");
@@ -114,7 +114,7 @@ let check_unikernel_force_create_success () =
 let check_unikernel_create_with_token () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, token = setup_admin_user_with_token store in
+      setup_user_with_token store >>= fun (_user, token) ->
       let parts =
         [
           ("albatross_instance", "default");
@@ -144,7 +144,7 @@ let check_unikernel_create_with_token () =
 let check_unikernel_create_missing_fields () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_admin_user store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let parts =
         [
           ("albatross_instance", "default");
@@ -173,7 +173,7 @@ let check_unikernel_create_missing_fields () =
 let check_unikernel_create_unknown_instance () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_admin_user store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let parts =
         [
           ("albatross_instance", "nonexistent-instance");
@@ -203,7 +203,7 @@ let check_unikernel_create_unknown_instance () =
 let check_unikernel_create_invalid_config () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_admin_user store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let parts =
         [
           ("albatross_instance", "default");
@@ -233,7 +233,7 @@ let check_unikernel_create_invalid_config () =
 let check_unikernel_create_invalid_csrf () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, _csrf_token = setup_admin_user store in
+      setup_user store >>= fun (_user, session_cookie, _csrf_token) ->
       let parts =
         [
           ("albatross_instance", "default");
@@ -293,7 +293,7 @@ let check_unikernel_create_unauthenticated () =
 let check_unikernel_create_albatross_failure () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_admin_user store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let parts =
         [
           ("albatross_instance", "failing");
@@ -323,7 +323,7 @@ let check_unikernel_create_albatross_failure () =
 let check_unikernel_destroy_success () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_admin_user store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let body =
         Fmt.str
           {|{"name": "hello", "albatross_instance": "default", "molly_csrf": "%s"}|}
@@ -342,7 +342,7 @@ let check_unikernel_destroy_success () =
 let check_unikernel_destroy_failure () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_admin_user store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let body =
         Fmt.str
           {|{"name": "hello", "albatross_instance": "failing", "molly_csrf": "%s"}|}
@@ -364,7 +364,7 @@ let check_unikernel_destroy_failure () =
 let check_unikernel_restart_success () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_admin_user store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let body = Fmt.str {|{"molly_csrf": "%s"}|} csrf_token in
       let req =
         make_post_request
@@ -380,7 +380,7 @@ let check_unikernel_restart_success () =
 let check_unikernel_restart_failure () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let _user, session_cookie, csrf_token = setup_admin_user store in
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let body = Fmt.str {|{"molly_csrf": "%s"}|} csrf_token in
       let req =
         make_post_request
