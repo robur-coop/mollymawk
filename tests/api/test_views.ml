@@ -2,10 +2,6 @@ open Test_utils
 open Mock_devices
 open Lwt.Infix
 
-let is_redirect resp =
-  String.starts_with ~prefix:"HTTP/1.1 302" resp
-  || String.starts_with ~prefix:"HTTP/1.1 303" resp
-
 let check_landing_page () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->

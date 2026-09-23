@@ -227,3 +227,22 @@ let setup_user_with_token ?name ?email ?password ?(token_name = "test-token")
   >>= fun (user, _session_cookie, _csrf_token) ->
   let user, token_value = add_user_token ~name:token_name ~expiry store user in
   Lwt.return (user, token_value)
+
+let setup_non_admin_user ?name ?email ?password store =
+  setup_user ~name:"admin" ~email:"admin@robur.coop" store
+  >>= fun (_admin, admin_session, admin_csrf) ->
+  setup_user ?name ?email ?password store
+  >>= fun (user, session_cookie, csrf_token) ->
+  let handler = make_app_request_handler store in
+  let body =
+    Fmt.str {|{ "uuid": "%s", "molly_csrf": "%s" }|} user.uuid admin_csrf
+  in
+  let req =
+    Test_utils.make_post_request ~path:"/api/admin/user/activate/toggle" ~body
+      ~session_cookie:admin_session ~csrf_token:admin_csrf ()
+  in
+  query_endpoint handler req >>= fun _ ->
+  let user =
+    Option.get (Storage.find_by_uuid (Storage.users store) user.uuid)
+  in
+  Lwt.return (user, session_cookie, csrf_token)

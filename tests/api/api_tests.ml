@@ -7,4 +7,5 @@ let () =
       ("Unikernel Operations", Test_unikernel.tests);
       ("Layouts and Views", Test_views.tests);
       ("Block Operations", Test_block.tests);
+      ("Albatross Operations", Test_albatross.tests);
     ]
