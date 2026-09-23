@@ -8,26 +8,26 @@ let block_json ~name ~size ~compressed =
   Fmt.str {|{"block_name": "%s", "block_size": %d, "block_compressed": %b}|}
     name size compressed
 
+let default_file_part =
+  ("block_data", "data-vol.img", "application/octet-stream", sample_block_data)
+
+let default_block_parts ?(instance = "default") ?(csrf = "dummy_csrf")
+    ?(name = "data-vol") ?(size = 1024) ?(compressed = false) () =
+  [
+    ("albatross_instance", instance);
+    ("molly_csrf", csrf);
+    ("json_data", block_json ~name ~size ~compressed);
+  ]
+
 let check_block_create_success () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
       setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let parts =
-        [
-          ("albatross_instance", "default");
-          ("molly_csrf", csrf_token);
-          ("json_data", block_json ~name:"data-vol" ~size:1024 ~compressed:false);
-        ]
-      in
-      let file_part =
-        ( "block_data",
-          "data-vol.img",
-          "application/octet-stream",
-          sample_block_data )
-      in
+      let parts = default_block_parts ~csrf:csrf_token () in
       let req =
-        make_multipart_request ~boundary:default_boundary ~parts ~file_part
-          ~session_cookie ~csrf_token "/api/block/create"
+        make_multipart_request ~boundary:default_boundary ~parts
+          ~file_part:default_file_part ~session_cookie ~csrf_token
+          "/api/block/create"
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
@@ -39,22 +39,10 @@ let check_block_create_with_token () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
       setup_user_with_token store >>= fun (_user, token) ->
-      let parts =
-        [
-          ("albatross_instance", "default");
-          ("molly_csrf", "dummy_csrf");
-          ("json_data", block_json ~name:"data-vol" ~size:1024 ~compressed:false);
-        ]
-      in
-      let file_part =
-        ( "block_data",
-          "data-vol.img",
-          "application/octet-stream",
-          sample_block_data )
-      in
+      let parts = default_block_parts () in
       let req =
-        make_multipart_request ~boundary:default_boundary ~parts ~file_part
-          ~token "/api/block/create"
+        make_multipart_request ~boundary:default_boundary ~parts
+          ~file_part:default_file_part ~token "/api/block/create"
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
@@ -66,22 +54,11 @@ let check_block_create_albatross_failure () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
       setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let parts =
-        [
-          ("albatross_instance", "failing");
-          ("molly_csrf", csrf_token);
-          ("json_data", block_json ~name:"data-vol" ~size:1024 ~compressed:false);
-        ]
-      in
-      let file_part =
-        ( "block_data",
-          "data-vol.img",
-          "application/octet-stream",
-          sample_block_data )
-      in
+      let parts = default_block_parts ~instance:"failing" ~csrf:csrf_token () in
       let req =
-        make_multipart_request ~boundary:default_boundary ~parts ~file_part
-          ~session_cookie ~csrf_token "/api/block/create"
+        make_multipart_request ~boundary:default_boundary ~parts
+          ~file_part:default_file_part ~session_cookie ~csrf_token
+          "/api/block/create"
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
@@ -99,15 +76,10 @@ let check_block_create_missing_fields () =
       let parts =
         [ ("albatross_instance", "default"); ("molly_csrf", csrf_token) ]
       in
-      let file_part =
-        ( "block_data",
-          "data-vol.img",
-          "application/octet-stream",
-          sample_block_data )
-      in
       let req =
-        make_multipart_request ~boundary:default_boundary ~parts ~file_part
-          ~session_cookie ~csrf_token "/api/block/create"
+        make_multipart_request ~boundary:default_boundary ~parts
+          ~file_part:default_file_part ~session_cookie ~csrf_token
+          "/api/block/create"
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
@@ -123,21 +95,12 @@ let check_block_create_unknown_instance () =
     ( init_mock_store () >>= fun store ->
       setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let parts =
-        [
-          ("albatross_instance", "nonexistent-instance");
-          ("molly_csrf", csrf_token);
-          ("json_data", block_json ~name:"data-vol" ~size:1024 ~compressed:false);
-        ]
-      in
-      let file_part =
-        ( "block_data",
-          "data-vol.img",
-          "application/octet-stream",
-          sample_block_data )
+        default_block_parts ~instance:"nonexistent-instance" ~csrf:csrf_token ()
       in
       let req =
-        make_multipart_request ~boundary:default_boundary ~parts ~file_part
-          ~session_cookie ~csrf_token "/api/block/create"
+        make_multipart_request ~boundary:default_boundary ~parts
+          ~file_part:default_file_part ~session_cookie ~csrf_token
+          "/api/block/create"
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
@@ -152,22 +115,11 @@ let check_block_create_invalid_csrf () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
       setup_user store >>= fun (_user, session_cookie, _csrf_token) ->
-      let parts =
-        [
-          ("albatross_instance", "default");
-          ("molly_csrf", "wrong_csrf_token");
-          ("json_data", block_json ~name:"data-vol" ~size:1024 ~compressed:false);
-        ]
-      in
-      let file_part =
-        ( "block_data",
-          "data-vol.img",
-          "application/octet-stream",
-          sample_block_data )
-      in
+      let parts = default_block_parts ~csrf:"wrong_csrf_token" () in
       let req =
-        make_multipart_request ~boundary:default_boundary ~parts ~file_part
-          ~session_cookie ~csrf_token:"different_csrf_token" "/api/block/create"
+        make_multipart_request ~boundary:default_boundary ~parts
+          ~file_part:default_file_part ~session_cookie
+          ~csrf_token:"different_csrf_token" "/api/block/create"
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
@@ -181,22 +133,10 @@ let check_block_create_invalid_csrf () =
 let check_block_create_unauthenticated () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
-      let parts =
-        [
-          ("albatross_instance", "default");
-          ("molly_csrf", "any_csrf");
-          ("json_data", block_json ~name:"data-vol" ~size:1024 ~compressed:false);
-        ]
-      in
-      let file_part =
-        ( "block_data",
-          "data-vol.img",
-          "application/octet-stream",
-          sample_block_data )
-      in
+      let parts = default_block_parts ~csrf:"any_csrf" () in
       let req =
-        make_multipart_request ~boundary:default_boundary ~parts ~file_part
-          "/api/block/create"
+        make_multipart_request ~boundary:default_boundary ~parts
+          ~file_part:default_file_part "/api/block/create"
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
@@ -211,22 +151,11 @@ let check_block_upload_success () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
       setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let parts =
-        [
-          ("albatross_instance", "default");
-          ("molly_csrf", csrf_token);
-          ("json_data", block_json ~name:"data-vol" ~size:1024 ~compressed:false);
-        ]
-      in
-      let file_part =
-        ( "block_data",
-          "data-vol.img",
-          "application/octet-stream",
-          sample_block_data )
-      in
+      let parts = default_block_parts ~csrf:csrf_token () in
       let req =
-        make_multipart_request ~boundary:default_boundary ~parts ~file_part
-          ~session_cookie ~csrf_token "/api/block/upload"
+        make_multipart_request ~boundary:default_boundary ~parts
+          ~file_part:default_file_part ~session_cookie ~csrf_token
+          "/api/block/upload"
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
@@ -238,22 +167,10 @@ let check_block_upload_with_token () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
       setup_user_with_token store >>= fun (_user, token) ->
-      let parts =
-        [
-          ("albatross_instance", "default");
-          ("molly_csrf", "dummy_csrf");
-          ("json_data", block_json ~name:"data-vol" ~size:1024 ~compressed:false);
-        ]
-      in
-      let file_part =
-        ( "block_data",
-          "data-vol.img",
-          "application/octet-stream",
-          sample_block_data )
-      in
+      let parts = default_block_parts () in
       let req =
-        make_multipart_request ~boundary:default_boundary ~parts ~file_part
-          ~token "/api/block/upload"
+        make_multipart_request ~boundary:default_boundary ~parts
+          ~file_part:default_file_part ~token "/api/block/upload"
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
@@ -265,22 +182,11 @@ let check_block_upload_albatross_failure () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
       setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let parts =
-        [
-          ("albatross_instance", "failing");
-          ("molly_csrf", csrf_token);
-          ("json_data", block_json ~name:"data-vol" ~size:1024 ~compressed:false);
-        ]
-      in
-      let file_part =
-        ( "block_data",
-          "data-vol.img",
-          "application/octet-stream",
-          sample_block_data )
-      in
+      let parts = default_block_parts ~instance:"failing" ~csrf:csrf_token () in
       let req =
-        make_multipart_request ~boundary:default_boundary ~parts ~file_part
-          ~session_cookie ~csrf_token "/api/block/upload"
+        make_multipart_request ~boundary:default_boundary ~parts
+          ~file_part:default_file_part ~session_cookie ~csrf_token
+          "/api/block/upload"
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
       Alcotest.(check bool)
