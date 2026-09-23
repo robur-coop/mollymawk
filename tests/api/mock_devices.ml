@@ -83,25 +83,26 @@ module App =
 
 type mock_paf_flow = { flow : unit; mutable no_close : bool }
 
-let make_default_policies ~domain ?(unikernels = 10) ?(memory = 1024) () =
+let make_default_policies ~domain ?(unikernels = 10) ?(memory = 1024)
+    ?(block = Some 2048) ?(bridges = [ "service" ]) ?(cpuids = [ 0; 1 ]) () =
   let path = Vmm_core.Name.Path.of_label domain in
   let name = Vmm_core.Name.make_of_path path in
   let root_policy : Vmm_core.Policy.t =
     {
       unikernels = unikernels * 2;
-      cpuids = Vmm_core.IS.empty;
+      cpuids = Vmm_core.IS.of_list cpuids;
       memory = memory * 2;
-      block = None;
-      bridges = Vmm_core.String_set.empty;
+      block;
+      bridges = Vmm_core.String_set.of_list bridges;
     }
   in
   let policy : Vmm_core.Policy.t =
     {
       unikernels;
-      cpuids = Vmm_core.IS.empty;
+      cpuids = Vmm_core.IS.of_list cpuids;
       memory;
-      block = None;
-      bridges = Vmm_core.String_set.empty;
+      block = Option.map (fun b -> b / 2) block;
+      bridges = Vmm_core.String_set.of_list bridges;
     }
   in
   let trie =
@@ -109,7 +110,7 @@ let make_default_policies ~domain ?(unikernels = 10) ?(memory = 1024) () =
   in
   fst (Vmm_trie.insert name policy trie)
 
-let make_app_request_handler ?policies store =
+let make_app_request_handler ?policies ?instances store =
   let js_file = "/* some js */" in
   let css_file = "/* some css */" in
   let grafana_file = "{}" in
@@ -141,10 +142,13 @@ let make_app_request_handler ?policies store =
     }
   in
   let albatross_instances = ref App.Label_map.empty in
-  albatross_instances :=
-    App.Label_map.empty
-    |> App.Label_map.add success_config.name success_instance
-    |> App.Label_map.add failure_config.name failure_instance;
+  (albatross_instances :=
+     match instances with
+     | Some insts -> insts
+     | None ->
+         App.Label_map.empty
+         |> App.Label_map.add success_config.name success_instance
+         |> App.Label_map.add failure_config.name failure_instance);
   let client_addr = (Ipaddr.of_string_exn "127.0.0.1", 8080) in
   let v4 = Ipaddr.V4.Prefix.global in
   let udp =
