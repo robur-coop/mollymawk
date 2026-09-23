@@ -8,4 +8,5 @@ let () =
       ("Layouts and Views", Test_views.tests);
       ("Block Operations", Test_block.tests);
       ("Albatross Operations", Test_albatross.tests);
+      ("Monitoring & Scaling", Test_scaling.tests);
     ]
