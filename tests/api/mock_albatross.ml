@@ -77,6 +77,7 @@ let eval_success (name : Vmm_core.Name.t) (cmd : Vmm_commands.t) :
       `Success (`String "unikernel restarted")
   | `Block_cmd `Block_info -> `Success (`Block_devices [])
   | `Block_cmd (`Block_add _) -> `Success (`String "block device added")
+  | `Block_cmd (`Block_set _) -> `Success (`String "block device set")
   | `Block_cmd `Block_remove -> `Success (`String "block device removed")
   | `Policy_cmd `Policy_info -> `Success (`Policies [])
   | _ -> `Success `Empty
@@ -104,16 +105,32 @@ let start_mock_server mode =
         | Error (`Msg err) ->
             let wire = (Vmm_commands.header Vmm_core.Name.root, `Failure err) in
             Vmm_tls_lwt.write_tls flow wire >>= fun _ -> Vmm_tls_lwt.close flow
-        | Ok (name, _policies, _version, cmd) ->
+        | Ok (name, _policies, _version, cmd) -> (
             (match cmd with
               | `Unikernel_cmd (`Unikernel_create _ | `Unikernel_force_create _)
-                ->
+              | `Block_cmd (`Block_set _) ->
                   drain_image flow
               | _ -> Lwt.return_unit)
             >>= fun () ->
-            let reply = eval name cmd in
-            let wire = (Vmm_commands.header name, reply) in
-            Vmm_tls_lwt.write_tls flow wire >>= fun _ -> Vmm_tls_lwt.close flow)
+            match (mode, cmd) with
+            | Success, `Block_cmd (`Block_dump _) ->
+                let wire_data =
+                  ( Vmm_commands.header name,
+                    `Data
+                      (`Block_data
+                         (Some "mock block dump content\n\r\n\rEOF\n\r")) )
+                in
+                Vmm_tls_lwt.write_tls flow wire_data >>= fun _ ->
+                let wire_eof =
+                  (Vmm_commands.header name, `Data (`Block_data None))
+                in
+                Vmm_tls_lwt.write_tls flow wire_eof >>= fun _ ->
+                Vmm_tls_lwt.close flow
+            | _ ->
+                let reply = eval name cmd in
+                let wire = (Vmm_commands.header name, reply) in
+                Vmm_tls_lwt.write_tls flow wire >>= fun _ ->
+                Vmm_tls_lwt.close flow))
       (fun exn ->
         Logs.err (fun m ->
             m "Mock Albatross connection error: %s" (Printexc.to_string exn));
