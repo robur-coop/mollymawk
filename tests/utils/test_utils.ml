@@ -592,3 +592,7 @@ let make_multipart_request ?(boundary = default_boundary) ~parts ?file_part
      %s%s\r\n\
      %s"
     path boundary (String.length body) auth_hdr cookie_hdr body
+
+let is_redirect resp =
+  String.starts_with ~prefix:"HTTP/1.1 302" resp
+  || String.starts_with ~prefix:"HTTP/1.1 303" resp
