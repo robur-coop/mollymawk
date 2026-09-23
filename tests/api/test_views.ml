@@ -459,6 +459,67 @@ let check_unikernel_update_unauthenticated () =
         (is_redirect resp || String.includes ~affix:"/sign-in" resp);
       Lwt.return_unit )
 
+let check_unikernel_update_compare_changes_unauthenticated () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req =
+        make_get_request
+          ~path:
+            "/unikernel/update/compare-changes?instance=default&unikernel=hello"
+          ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Redirects to sign-in" true
+        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
+      Lwt.return_unit )
+
+let check_unikernel_update_compare_changes_missing_instance () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
+      let req =
+        make_get_request
+          ~path:"/unikernel/update/compare-changes?unikernel=hello"
+          ~session_cookie ~csrf_token ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Redirects to select instance" true
+        (is_redirect resp || String.includes ~affix:"/select/instance" resp);
+      Lwt.return_unit )
+
+let check_unikernel_update_compare_changes_missing_unikernel () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
+      let req =
+        make_get_request
+          ~path:"/unikernel/update/compare-changes?instance=default"
+          ~session_cookie ~csrf_token ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 400 Bad Request" true
+        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+      Lwt.return_unit )
+
+let check_unikernel_update_compare_changes_bad_method () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
+      let req =
+        make_post_request
+          ~path:
+            "/unikernel/update/compare-changes?instance=default&unikernel=hello"
+          ~body:"" ~session_cookie ~csrf_token ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 400 Bad Request" true
+        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+      Lwt.return_unit )
+
 let check_admin_users_superuser () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
@@ -911,6 +972,18 @@ let tests =
     ( "Unikernel update (/unikernel/update) unauthenticated redirects",
       `Quick,
       check_unikernel_update_unauthenticated );
+    ( "Unikernel compare changes unauthenticated redirects",
+      `Quick,
+      check_unikernel_update_compare_changes_unauthenticated );
+    ( "Unikernel compare changes missing instance redirects",
+      `Quick,
+      check_unikernel_update_compare_changes_missing_instance );
+    ( "Unikernel compare changes missing unikernel",
+      `Quick,
+      check_unikernel_update_compare_changes_missing_unikernel );
+    ( "Unikernel compare changes bad method",
+      `Quick,
+      check_unikernel_update_compare_changes_bad_method );
     ( "Admin users (/admin/users) as superuser",
       `Quick,
       check_admin_users_superuser );
