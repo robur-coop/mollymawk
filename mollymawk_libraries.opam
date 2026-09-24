@@ -48,4 +48,6 @@ depends: [
   "happy-eyeballs-mirage" {>= "2.0.1"}
   "tls-mirage" {>= "2.1.2"}
   "bisect_ppx_ng"
+  "ocamlformat" {= "0.29.0"}
+  "mirage-runtime"
 ]

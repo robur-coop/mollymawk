@@ -1,0 +1,36 @@
+name: Mollymawk Test Suite
+on: [pull_request]
+
+jobs:
+  test:
+    name: Run Mollymawk Tests
+    runs-on: ["FreeBSD"]
+    steps:
+      - name: Setup opam
+        run: |
+          opam init -a default http://192.168.0.16 || true
+          opam update
+          opam switch set 5.5.1 || opam switch create --confirm-level=unsafe-yes 5.5.1 ocaml-base-compiler.5.5.1
+
+      - name: Checkout
+        run: |
+          set -eu
+          git init --quiet --initial-branch main
+          git remote add origin "https://git.robur.coop/${GITHUB_REPOSITORY}.git"
+          git fetch --quiet --no-tags --depth=1 origin "$GITHUB_SHA"
+          git checkout --quiet "$GITHUB_SHA"
+
+      - name: Install dependencies
+        run: |
+          eval `opam env --switch=5.5.1 --set-switch`
+          opam install --confirm-level=unsafe-yes --deps-only --with-test .
+
+      - name: Run tests
+        run: |
+          eval `opam env --switch=5.5.1 --set-switch`
+          dune runtest
+
+      - name: Check code formatting
+        run: |
+          eval `opam env --switch=5.5.1 --set-switch`
+          dune build @fmt
