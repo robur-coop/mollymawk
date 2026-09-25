@@ -111,6 +111,70 @@ let check_static_image () =
         (String.includes ~affix:"robur" resp);
       Lwt.return_unit )
 
+let check_static_image_molly_bird () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req = make_get_request ~path:"/images/molly_bird.jpeg" () in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+      Alcotest.(check bool)
+        "Content-Type is image/jpeg" true
+        (String.includes ~affix:"image/jpeg" resp);
+      Alcotest.(check bool)
+        "Contains image content" true
+        (String.includes ~affix:"molly" resp);
+      Lwt.return_unit )
+
+let check_static_image_albatross () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req = make_get_request ~path:"/images/albatross_1.png" () in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+      Alcotest.(check bool)
+        "Content-Type is image/jpeg" true
+        (String.includes ~affix:"image/jpeg" resp);
+      Alcotest.(check bool)
+        "Contains image content" true
+        (String.includes ~affix:"albatross" resp);
+      Lwt.return_unit )
+
+let check_static_image_dashboard () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req = make_get_request ~path:"/images/dashboard_1.png" () in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+      Alcotest.(check bool)
+        "Content-Type is image/png" true
+        (String.includes ~affix:"image/png" resp);
+      Alcotest.(check bool)
+        "Contains image content" true
+        (String.includes ~affix:"dashboard" resp);
+      Lwt.return_unit )
+
+let check_static_image_mirage () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req = make_get_request ~path:"/images/mirage_os_1.png" () in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+      Alcotest.(check bool)
+        "Content-Type is image/jpeg" true
+        (String.includes ~affix:"image/jpeg" resp);
+      Alcotest.(check bool)
+        "Contains image content" true
+        (String.includes ~affix:"mirage" resp);
+      Lwt.return_unit )
+
 let check_dashboard_authenticated () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
@@ -897,6 +961,16 @@ let tests =
       `Quick,
       check_grafana_dashboard_json );
     ("Static image (/images/robur.png)", `Quick, check_static_image);
+    ( "Static image (/images/molly_bird.jpeg)",
+      `Quick,
+      check_static_image_molly_bird );
+    ( "Static image (/images/albatross_1.png)",
+      `Quick,
+      check_static_image_albatross );
+    ( "Static image (/images/dashboard_1.png)",
+      `Quick,
+      check_static_image_dashboard );
+    ("Static image (/images/mirage_os_1.png)", `Quick, check_static_image_mirage);
     ( "Dashboard (/dashboard) authenticated",
       `Quick,
       check_dashboard_authenticated );
