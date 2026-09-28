@@ -201,9 +201,7 @@ async function saveAlbatrossConfig() {
 	formButton.disabled = true;
 	if (nameInput === '' || ipInput === '' || portInput === '' || certificateInput === '' || pkeyInput === '') {
 		showError(formAlert, "Please fill all fields");
-	} else if (!isValidName(nameInput)) {
-		showError(formAlert, "Please use alphanumeric characters, dashes or underscores for the name");
-	} else {
+	} else if (isValidName(nameInput, formAlert)) {
 		try {
 			const response = await fetch(newConfig ? "/api/admin/settings/albatross/create" : "/api/admin/settings/albatross/update", {
 				method: 'POST',
@@ -452,9 +450,8 @@ async function deployUnikernel(albatross_instance) {
 		const deploy_mode = deployModeNode ? deployModeNode.value : 'manual';
 		const binaryInput = document.getElementById("unikernel-binary");
 		const binary = (binaryInput && binaryInput.files) ? binaryInput.files[0] : null;
-		if (!isValidName(name)) {
-			document.getElementById("unikernel-name").classList.add("border-secondary-500", "ring-secondary-500");
-			showError(formAlert, "Please provide a valid name (alphanumeric, no spaces or special symbols, must not start with a hyphen, max 64 chars).");
+		if (!isValidName(name, formAlert, "unikernel-name")) {
+			buttonLoading(deployButton, false, "Deploy");
 			return;
 		}
 
@@ -911,25 +908,8 @@ async function createBlock(albatross_instance) {
 	const block_compressed = document.getElementById("block_compressed").checked;
 	const block_data = document.getElementById("block_data").files[0];
 
-	if (!block_name || block_name === '') {
-		showError(formAlert, "Please enter a name");
-		buttonLoading(createButton, false, "Create Block device")
-		return;
-	}
-	if (!isLengthValid(block_name)) {
-		showError(formAlert, "The name must have at least 1 character and must not exceed 63 characters.");
-		buttonLoading(createButton, false, "Create Block device")
-		return;
-	}
-	if (!isStartingCharacterValid(block_name)) {
-		showError(formAlert, "The name cannot start with a hyphen (-).");
-		buttonLoading(createButton, false, "Create Block device")
-		return;
-	}
-	if (!areCharactersValid(block_name)) {
-		showError(formAlert, "Only letters (a-z, A-Z), digits (0-9), hyphens (-), and periods (.) are permitted.\
-		 Special characters, spaces, and symbols other than the specified ones are not allowed");
-		buttonLoading(createButton, false, "Create Block device")
+	if (!isValidName(block_name, formAlert)) {
+		buttonLoading(createButton, false, "Create Block device");
 		return;
 	}
 	if (Number(block_size) < 1) {
@@ -1304,34 +1284,32 @@ async function rollbackUnikernel(unikernel_name, instance_name) {
 	}
 }
 
-function isValidName(s) {
-	const length = s.length;
-	if (length === 0 || length >= 64) return false;
-	if (s[0] === '-') return false;
-	for (let i = 0; i < length; i++) {
-		const char = s[i];
-		if (!(/[a-zA-Z0-9.-]/).test(char)) {
-			return false;
+function isValidName(s, formAlert = null, inputElement = null) {
+	let error = null;
+	if (!s || s === '') {
+		error = "Please enter a name";
+	} else if (s.length >= 64) {
+		error = "The name must have at least 1 character and must not exceed 63 characters.";
+	} else if (s[0] === '-') {
+		error = "The name cannot start with a hyphen (-).";
+	} else {
+		for (let i = 0; i < s.length; i++) {
+			if (!(/[a-zA-Z0-9.-]/).test(s[i])) {
+				error = "Only letters (a-z, A-Z), digits (0-9), hyphens (-), and periods (.) are permitted. Special characters, spaces, and symbols other than the specified ones are not allowed.";
+				break;
+			}
 		}
 	}
-	return true;
-}
 
-function isLengthValid(s) {
-	const length = s.length;
-	return length > 0 && length < 64;
-}
-
-function isStartingCharacterValid(s) {
-	return s[0] !== '-';
-}
-
-function areCharactersValid(s) {
-	for (let i = 0; i < s.length; i++) {
-		const char = s[i];
-		if (!(/[a-zA-Z0-9.-]/).test(char)) {
-			return false;
+	if (error) {
+		const inputEl = typeof inputElement === 'string' ? document.getElementById(inputElement) : inputElement;
+		if (inputEl) {
+			inputEl.classList.add("border-secondary-500", "ring-secondary-500");
 		}
+		if (formAlert) {
+			showError(formAlert, error);
+		}
+		return false;
 	}
 	return true;
 }
