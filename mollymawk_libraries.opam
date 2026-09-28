@@ -16,7 +16,8 @@ build: [
 
 depends: [
   "dune"
-  "ocaml" {>= "5.5.0"}
+  "ocaml" {with-test & >= "5.5.0"}
+  "ocaml"
   "logs"
   "uuidm" {>= "0.9.10"}
   "ptime" {>= "1.2.0"}
