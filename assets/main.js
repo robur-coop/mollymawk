@@ -1254,7 +1254,9 @@ async function updateUnikernel(job, to_be_updated_unikernel, currently_running_u
 		const data = await response.json();
 		if (data.status === 200) {
 			postAlert("bg-primary-300", "Unikernel updated successfully");
-			setTimeout(() => window.location.reload(), 1000);
+			setTimeout(() => {
+				window.location.href = `/unikernel/info?unikernel=${unikernel_name}&instance=${albatross_instance}`;
+			}, 1000);
 			buttonLoading(updateButton, false, "Proceed to update")
 		} else {
 			postAlert("bg-secondary-300", data.data);
