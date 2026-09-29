@@ -176,31 +176,41 @@ module Email = struct
       []
       (String.split_on_char ' ' xs)
 
-  let construct_email ~from_email ~to_email ~subject ~body () =
-    let header =
-      Header.of_list
-        Field.
-          [
-            Field
-              ( Field_name.subject,
-                Unstructured,
-                Unstructured.Craft.(compile (subject_of_strings subject)) );
-            Field (Field_name.v "From", Addresses, [ `Mailbox from_email ]);
-            Field (Field_name.v "To", Addresses, [ `Mailbox to_email ]);
-            Field
-              ( Field_name.date,
-                Date,
-                Date.of_ptime ~zone:GMT (Mirage_ptime.now ()) );
-            Field
-              ( Field_name.content_type,
-                Content,
-                Content_type.(
-                  make `Text (Subtype.v `Text "html")
-                    (Parameters.singleton (Parameters.k "charset")
-                       (Parameters.v "utf-8"))) );
-            Field (Field_name.content_encoding, Encoding, `Quoted_printable);
-          ]
+  let construct_email ?references ~from_email ~to_email ~subject ~body () =
+    let fields =
+      Field.
+        [
+          Field
+            ( Field_name.subject,
+              Unstructured,
+              Unstructured.Craft.(compile (subject_of_strings subject)) );
+          Field (Field_name.v "From", Addresses, [ `Mailbox from_email ]);
+          Field (Field_name.v "To", Addresses, [ `Mailbox to_email ]);
+          Field
+            ( Field_name.date,
+              Date,
+              Date.of_ptime ~zone:GMT (Mirage_ptime.now ()) );
+          Field
+            ( Field_name.content_type,
+              Content,
+              Content_type.(
+                make `Text (Subtype.v `Text "html")
+                  (Parameters.singleton (Parameters.k "charset")
+                     (Parameters.v "utf-8"))) );
+          Field (Field_name.content_encoding, Encoding, `Quoted_printable);
+        ]
     in
+    let fields =
+      match references with
+      | None -> fields
+      | Some r ->
+          Field.Field
+            ( Field_name.references,
+              Field.Unstructured,
+              Unstructured.Craft.(compile [ v ("<" ^ r ^ ">") ]) )
+          :: fields
+    in
+    let header = Header.of_list fields in
     let body_stream =
       let sent = ref false in
       fun () ->
