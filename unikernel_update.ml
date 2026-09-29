@@ -654,16 +654,4 @@ let unikernel_update_layout ~unikernel_name ~instance_name unikernel
                   ];
               ];
           ];
-        (if build_comparison.right.main_binary then
-           Modal_dialog.modal_dialog ~modal_title:"Unikernel Configuration"
-             ~button_content:(txt "Update to Latest")
-             ~content:
-               (arg_modal ~unikernel_name ~instance_name
-                  ~to_be_updated_unikernel:build_comparison.right
-                  ~currently_running_unikernel:build_comparison.left unikernel)
-             ()
-         else
-           p
-             ~a:[ a_class [ "text-secondary-500 font-semibold" ] ]
-             [ txt "Can't update. No binary in latest build." ]);
       ])
