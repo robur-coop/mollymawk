@@ -195,7 +195,9 @@ module Email = struct
               ( Field_name.content_type,
                 Content,
                 Content_type.(
-                  make `Text (Subtype.v `Text "html") Parameters.empty) );
+                  make `Text (Subtype.v `Text "html")
+                    (Parameters.singleton (Parameters.k "charset")
+                       (Parameters.v "utf-8"))) );
             Field (Field_name.content_encoding, Encoding, `Quoted_printable);
           ]
     in
