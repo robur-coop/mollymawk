@@ -738,8 +738,6 @@ struct
             Error (`Msg "All fields must be filled.")
           else if not (Utils.Email.validate_email email) then
             Error (`Msg "Invalid email address.")
-          else if String.length password < 8 then
-            Error (`Msg "Password must be at least 8 characters long.")
           else Mrmime.Mailbox.of_string email
         in
         match Utils.Json.(get "email" json_dict, get "password" json_dict) with

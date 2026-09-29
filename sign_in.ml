@@ -225,14 +225,6 @@ let login_page ~icon () =
                 required'\n\
                \                      return;\n\
                \                    }\n\
-               \                    if (password.length < 8) {\n\
-               \                      password_alert.classList.remove('hidden')\n\
-               \                      \
-                password_alert.classList.add('text-secondary-500', 'block')\n\
-               \                      password_alert.textContent = 'Password \
-                must be at least 8 characters long.'\n\
-               \                      return;\n\
-               \                    }\n\
                \                    try {\n\
                \                      const response = await \
                 fetch('/api/login', {\n\

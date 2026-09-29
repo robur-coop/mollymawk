@@ -675,7 +675,7 @@ let keep_session_cookies user =
 
 let login_user ~email ~password ~user_agent user now =
   match user with
-  | None -> Error (`Msg "This account does not exist.")
+  | None -> Error (`Msg "Invalid email or password.")
   | Some u -> (
       if not u.active then
         (* TODO move to a middleware, provide instructions how to reactive an account *)
