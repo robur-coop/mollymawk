@@ -1738,6 +1738,18 @@ struct
             user store http_client `Rollback albatross
           >>= function
           | Ok _res ->
+              let updated_unikernel_updates =
+                List.filter
+                  (fun (u : User_model.unikernel_update) ->
+                    not (Vmm_core.Name.Label.equal u.name unikernel_name))
+                  user.unikernel_updates
+              in
+              let user =
+                User_model.update_user user
+                  ~unikernel_updates:updated_unikernel_updates ()
+              in
+              Storage.update_user store user;
+              Store.write_data store >>= fun _ ->
               Middleware.http_response reqd ~title:"Rollback Successful"
                 ~data:
                   (`String
