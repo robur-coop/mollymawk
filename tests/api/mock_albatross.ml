@@ -62,11 +62,24 @@ let dummy_info (name : Vmm_core.Name.t) =
   let info = Vmm_core.Unikernel.info (fun _ -> None) dummy_u in
   (name, info)
 
+let known_unikernel_label =
+  match Vmm_core.Name.Label.of_string "hello" with
+  | Ok l -> l
+  | Error (`Msg m) -> failwith m
+
 let eval_success (name : Vmm_core.Name.t) (cmd : Vmm_commands.t) :
     Vmm_commands.res =
   match cmd with
-  | `Unikernel_cmd `Unikernel_info ->
-      `Success (`Unikernel_info [ dummy_info name ])
+  | `Unikernel_cmd `Unikernel_info -> (
+      let hello_name =
+        Vmm_core.Name.make (Vmm_core.Name.path name) known_unikernel_label
+      in
+      match Vmm_core.Name.name name with
+      | None -> `Success (`Unikernel_info [ dummy_info hello_name ])
+      | Some label ->
+          if Vmm_core.Name.Label.equal label known_unikernel_label then
+            `Success (`Unikernel_info [ dummy_info hello_name ])
+          else `Success (`Unikernel_info []))
   | `Unikernel_cmd (`Unikernel_create _) ->
       `Success (`String "unikernel created")
   | `Unikernel_cmd (`Unikernel_force_create _) ->
