@@ -1,4 +1,7 @@
 let error_layout (error : Utils.Status.t) =
+  let err_msg =
+    match error.data with `String s -> s | other -> Utils.Json.to_string other
+  in
   Tyxml_html.(
     section
       ~a:[ a_class [ "text-center" ] ]
@@ -14,7 +17,5 @@ let error_layout (error : Utils.Status.t) =
               ~a:[ a_class [ "uppercase font-bold text-xl" ] ]
               [ txt error.title ];
           ];
-        p
-          ~a:[ a_class [ "text-xl my-6" ] ]
-          [ txt (Utils.Json.to_string error.data) ];
+        p ~a:[ a_class [ "text-xl my-6" ] ] [ txt err_msg ];
       ])
