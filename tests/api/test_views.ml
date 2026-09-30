@@ -950,6 +950,109 @@ let check_page_not_found () =
         (String.includes ~affix:"This page cannot be found" resp);
       Lwt.return_unit )
 
+let check_error_layout_html_escaping () =
+  let status =
+    {
+      Utils.Status.code = 400;
+      title = "Bad Request";
+      data =
+        `String "<script>alert('xss')</script> <img src=x onerror=alert(1)>";
+      success = false;
+    }
+  in
+  let rendered_html =
+    Format.asprintf "%a" (Tyxml_html.pp_elt ()) (Error_page.error_layout status)
+  in
+  Alcotest.(check bool)
+    "HTML does not contain unescaped script tag" false
+    (String.includes ~affix:"<script>" rendered_html);
+  Alcotest.(check bool)
+    "HTML does not contain unescaped img tag" false
+    (String.includes ~affix:"<img" rendered_html);
+  Alcotest.(check bool)
+    "HTML contains escaped script entity" true
+    (String.includes ~affix:"&lt;script&gt;alert('xss')&lt;/script&gt;"
+       rendered_html);
+  Alcotest.(check bool)
+    "HTML contains escaped img entity" true
+    (String.includes ~affix:"&lt;img src=x onerror=alert(1)&gt;" rendered_html)
+
+let check_status_to_json_escaping () =
+  let injection_payload =
+    "<script>alert(\"xss\")</script>\n\r\t\" \"><img src=x onerror=alert(1)>"
+  in
+  let status =
+    {
+      Utils.Status.code = 400;
+      title = "Bad Request";
+      data = `String injection_payload;
+      success = false;
+    }
+  in
+  let json_str = Utils.Status.to_json status in
+  let parsed =
+    match Utils.Json.from_string json_str with
+    | Ok j -> j
+    | Error (`Msg e) -> Alcotest.fail ("Failed to parse JSON: " ^ e)
+  in
+  let data_str =
+    match parsed with
+    | `Assoc kvs -> (
+        match List.assoc_opt "data" kvs with
+        | Some (`String s) -> s
+        | _ -> Alcotest.fail "Missing data field")
+    | _ -> Alcotest.fail "Expected Assoc"
+  in
+  Alcotest.(check string)
+    "Decoded data string matches original injection payload exactly"
+    injection_payload data_str;
+  Alcotest.(check bool)
+    "No stray backslashes in data" false
+    (String.includes ~affix:"\\\"" data_str)
+
+let check_api_error_injection_handling () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let injection_name = "<script>alert('xss')</script>\"" in
+      let json_body =
+        Fmt.str
+          {|{ "name": %s, "email": "test@robur.coop", "password": "Password123!", "form_csrf": "test" }|}
+          (Yojson.Basic.to_string (`String injection_name))
+      in
+      let req =
+        make_post_request ~path:"/api/register" ~body:json_body
+          ~csrf_token:"test" ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response is HTTP 400" true
+        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+      Alcotest.(check bool)
+        "Response content-type is application/json" true
+        (String.includes ~affix:"content-type: application/json"
+           (String.lowercase_ascii resp));
+      Alcotest.(check bool)
+        "Response body does not contain unescaped script tag" false
+        (String.includes ~affix:"<script>" resp);
+      Lwt.return_unit )
+
+let check_api_malformed_json_error_escaping () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req =
+        make_post_request ~path:"/api/register"
+          ~body:"{ \"invalid\": \"<script>alert(1)</script>\", broken: }"
+          ~csrf_token:"test" ()
+      in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response is HTTP 400" true
+        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+      Alcotest.(check bool)
+        "Response body does not contain unescaped script tag" false
+        (String.includes ~affix:"<script>" resp);
+      Lwt.return_unit )
+
 let tests =
   [
     ("Landing page (/)", `Quick, check_landing_page);
@@ -1124,4 +1227,14 @@ let tests =
       `Quick,
       check_verify_email_invalid_method );
     ("Page not found (unknown path)", `Quick, check_page_not_found);
+    ( "Error layout HTML escaping against injection",
+      `Quick,
+      check_error_layout_html_escaping );
+    ( "Status JSON escaping against injection",
+      `Quick,
+      check_status_to_json_escaping );
+    ("API error injection handling", `Quick, check_api_error_injection_handling);
+    ( "API malformed JSON error escaping",
+      `Quick,
+      check_api_malformed_json_error_escaping );
   ]

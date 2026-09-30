@@ -6,11 +6,11 @@ module Json = struct
   let get key assoc =
     Option.map snd (List.find_opt (fun (k, _) -> String.equal k key) assoc)
 
-  let to_string t = Yojson.Basic.to_string t |> String.escaped
+  let to_string t = Yojson.Basic.to_string t
 
   let from_string data =
     try Ok (Yojson.Basic.from_string data)
-    with Yojson.Json_error s -> Error (`Msg (String.escaped s))
+    with Yojson.Json_error s -> Error (`Msg s)
 
   let string_or_none field = function
     | None | Some `Null -> Ok None

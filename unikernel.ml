@@ -654,9 +654,7 @@ struct
             Some (`String form_csrf) ) -> (
             match validate_user_input ~name ~email ~password ~form_csrf with
             | Error (`Msg err) ->
-                Middleware.http_response reqd
-                  ~data:(`String (String.escaped err))
-                  `Bad_request
+                Middleware.http_response reqd ~data:(`String err) `Bad_request
             | Ok (name, email) ->
                 if Middleware.csrf_cookie_verification form_csrf reqd then
                   let existing_email =
@@ -906,8 +904,7 @@ struct
                   ~data:(`String "Deleted user successfully") `OK
             | Error (`Msg msg) ->
                 Logs.warn (fun m -> m "delete-user : Storage error with %s" msg);
-                Middleware.http_response reqd
-                  ~data:(`String (String.escaped msg))
+                Middleware.http_response reqd ~data:(`String msg)
                   `Internal_server_error))
     | _ ->
         Logs.warn (fun m ->
@@ -1167,9 +1164,7 @@ struct
                 update_or_create
             with
             | Error err ->
-                Middleware.http_response
-                  ~data:(`String (String.escaped err))
-                  reqd `Bad_request
+                Middleware.http_response ~data:(`String err) reqd `Bad_request
             | Ok () -> (
                 Store.write_data store >>= function
                 | Ok () ->
@@ -1186,9 +1181,7 @@ struct
             Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error)
     | Error (`Msg err) ->
-        Middleware.http_response
-          ~data:(`String (String.escaped err))
-          reqd `Bad_request
+        Middleware.http_response ~data:(`String err) reqd `Bad_request
 
   let delete_albatross_config store albatross_instances _user json_dict reqd =
     match Utils.Json.get "name" json_dict with
@@ -3005,9 +2998,7 @@ struct
     match Utils.Email.t_of_json json_dict with
     | Ok email_settings -> f email_settings
     | Error (`Msg err) ->
-        Middleware.http_response reqd
-          ~data:(`String (String.escaped err))
-          `Bad_request
+        Middleware.http_response reqd ~data:(`String err) `Bad_request
     | Error (`Invalid (ms1, ms2)) ->
         Middleware.http_response reqd
           ~data:
@@ -3025,7 +3016,7 @@ struct
               `OK
         | Error (`Msg err) ->
             Middleware.http_response reqd
-              ~data:(`String (Fmt.str "Save failed: %s" (String.escaped err)))
+              ~data:(`String (Fmt.str "Save failed: %s" err))
               `Internal_server_error)
 
   let test_email_configuration happy_eyeballs _user json_dict reqd =
@@ -3044,7 +3035,7 @@ struct
               ~data:(`String "Test email sent successfully") `OK
         | Error err ->
             Middleware.http_response reqd
-              ~data:(`String (Fmt.str "Test failed: %s" (String.escaped err)))
+              ~data:(`String (Fmt.str "Test failed: %s" err))
               `Bad_request)
 
   module Label_map = Albatross.Albatross_map
