@@ -448,8 +448,14 @@ struct
         if api_meth || v = `Token then
           Middleware.http_response reqd ~data:(`String msg) `Bad_request
         else
-          Middleware.redirect_to_page ~path:"/sign-in" ~clear_session:true
-            ~with_error:true ~msg reqd ()
+          let target = (H1.Reqd.request reqd).target in
+          let path =
+            match target with
+            | "" | "/" | "/dashboard" | "/sign-in" | "/sign-up" -> "/sign-in"
+            | _ -> "/sign-in?redirect=" ^ Uri.pct_encode target
+          in
+          Middleware.redirect_to_page ~path ~clear_session:true ~with_error:true
+            ~msg reqd ()
     | Ok (`Token (user, token)) -> (
         Storage.update_user store (Storage.increment_token_usage token user);
         Store.write_data store >>= function

@@ -238,7 +238,11 @@ let login_page ~icon () =
                \                                        })\n\
                \                      const data = await response.json();\n\
                \                      if (data.status === 200) {\n\
-               \                        window.location.replace('/dashboard')\n\
+               \                        const urlParams = new \
+                URLSearchParams(window.location.search);\n\
+               \                        const redirectUrl = \
+                urlParams.get('redirect') || '/dashboard';\n\
+               \                        window.location.replace(redirectUrl)\n\
                \                      } else {\n\
                \                        form_alert.classList.remove('hidden')\n\
                \                        \

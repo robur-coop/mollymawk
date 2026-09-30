@@ -1105,6 +1105,84 @@ let check_api_malformed_json_error_escaping () =
         (String.includes ~affix:"<script>" resp);
       Lwt.return_unit )
 
+let check_unauthenticated_redirect_with_target () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let target1 = "/account" in
+      let req1 = make_get_request ~path:target1 () in
+      query_endpoint (make_app_request_handler store) req1 >>= fun resp1 ->
+      Alcotest.(check bool) "Response is redirect" true (is_redirect resp1);
+      Alcotest.(check bool)
+        "Redirects to sign-in with encoded redirect param" true
+        (String.includes
+           ~affix:("location: /sign-in?redirect=" ^ Uri.pct_encode target1)
+           resp1);
+
+      let target2 = "/tokens" in
+      let req2 = make_get_request ~path:target2 () in
+      query_endpoint (make_app_request_handler store) req2 >>= fun resp2 ->
+      Alcotest.(check bool) "Response is redirect" true (is_redirect resp2);
+      Alcotest.(check bool)
+        "Redirects to sign-in with encoded tokens path" true
+        (String.includes
+           ~affix:("location: /sign-in?redirect=" ^ Uri.pct_encode target2)
+           resp2);
+
+      let target3 = "/usage?instance=default" in
+      let req3 = make_get_request ~path:target3 () in
+      query_endpoint (make_app_request_handler store) req3 >>= fun resp3 ->
+      Alcotest.(check bool) "Response is redirect" true (is_redirect resp3);
+      Alcotest.(check bool)
+        "Redirects to sign-in with encoded query parameters" true
+        (String.includes
+           ~affix:("location: /sign-in?redirect=" ^ Uri.pct_encode target3)
+           resp3);
+
+      let target4 = "/unikernel/info?instance=default&unikernel=hello" in
+      let req4 = make_get_request ~path:target4 () in
+      query_endpoint (make_app_request_handler store) req4 >>= fun resp4 ->
+      Alcotest.(check bool) "Response is redirect" true (is_redirect resp4);
+      Alcotest.(check bool)
+        "Redirects to sign-in with encoded multi-param query" true
+        (String.includes
+           ~affix:("location: /sign-in?redirect=" ^ Uri.pct_encode target4)
+           resp4);
+      Lwt.return_unit )
+
+let check_unauthenticated_redirect_excluded_routes () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req = make_get_request ~path:"/dashboard" () in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool) "Response is redirect" true (is_redirect resp);
+      Alcotest.(check bool)
+        "Redirect location is exactly /sign-in" true
+        (String.includes ~affix:"location: /sign-in\r\n" resp
+        || String.includes ~affix:"location: /sign-in\n" resp);
+      Alcotest.(check bool)
+        "Does not include redirect query param" false
+        (String.includes ~affix:"redirect=" resp);
+      Lwt.return_unit )
+
+let check_sign_in_page_redirect_handling () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      let req = make_get_request ~path:"/sign-in?redirect=%2Faccount" () in
+      query_endpoint (make_app_request_handler store) req >>= fun resp ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+      Alcotest.(check bool)
+        "Contains URLSearchParams search query extraction" true
+        (String.includes ~affix:"URLSearchParams(window.location.search)" resp);
+      Alcotest.(check bool)
+        "Contains redirect URL extraction with fallback" true
+        (String.includes ~affix:"urlParams.get('redirect') || '/dashboard'" resp);
+      Alcotest.(check bool)
+        "Contains window.location.replace" true
+        (String.includes ~affix:"window.location.replace(redirectUrl)" resp);
+      Lwt.return_unit )
+
 let tests =
   [
     ("Landing page (/)", `Quick, check_landing_page);
@@ -1290,4 +1368,13 @@ let tests =
     ( "API malformed JSON error escaping",
       `Quick,
       check_api_malformed_json_error_escaping );
+    ( "Unauthenticated redirect includes encoded target",
+      `Quick,
+      check_unauthenticated_redirect_with_target );
+    ( "Unauthenticated redirect for excluded routes omits target",
+      `Quick,
+      check_unauthenticated_redirect_excluded_routes );
+    ( "Sign-in page contains client redirect handling script",
+      `Quick,
+      check_sign_in_page_redirect_handling );
   ]
