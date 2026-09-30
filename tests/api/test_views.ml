@@ -351,6 +351,58 @@ let check_unikernel_info_authenticated () =
         (String.includes ~affix:"text/html" resp);
       Lwt.return_unit )
 
+let check_unikernel_info_name_casing () =
+  Lwt_main.run
+    ( init_mock_store () >>= fun store ->
+      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
+      let handler = make_app_request_handler store in
+      let req_lower =
+        make_get_request
+          ~path:"/unikernel/info?instance=default&unikernel=hello"
+          ~session_cookie ~csrf_token ()
+      in
+      query_endpoint handler req_lower >>= fun resp_lower ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK for lowercase unikernel name" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp_lower);
+      Alcotest.(check bool)
+        "Response references unikernel hello" true
+        (String.includes ~affix:"unikernel=hello" resp_lower);
+      let req_cap =
+        make_get_request
+          ~path:"/unikernel/info?instance=default&unikernel=Hello"
+          ~session_cookie ~csrf_token ()
+      in
+      query_endpoint handler req_cap >>= fun resp_cap ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK for capitalized unikernel name" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp_cap);
+      Alcotest.(check bool)
+        "Hello references the same unikernel hello" true
+        (String.includes ~affix:"unikernel=hello" resp_cap);
+      let req_upper =
+        make_get_request
+          ~path:"/unikernel/info?instance=default&unikernel=HELLO"
+          ~session_cookie ~csrf_token ()
+      in
+      query_endpoint handler req_upper >>= fun resp_upper ->
+      Alcotest.(check bool)
+        "Response has HTTP 200 OK for uppercase unikernel name" true
+        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp_upper);
+      Alcotest.(check bool)
+        "HELLO references the same unikernel hello" true
+        (String.includes ~affix:"unikernel=hello" resp_upper);
+      let req_nonexistent =
+        make_get_request
+          ~path:"/unikernel/info?instance=default&unikernel=other"
+          ~session_cookie ~csrf_token ()
+      in
+      query_endpoint handler req_nonexistent >>= fun resp_nonexistent ->
+      Alcotest.(check bool)
+        "Response has HTTP 404 Not Found for non-matching unikernel name" true
+        (String.starts_with ~prefix:"HTTP/1.1 404 Not Found" resp_nonexistent);
+      Lwt.return_unit )
+
 let check_unikernel_info_missing_unikernel () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
@@ -1010,6 +1062,7 @@ let tests =
     ( "Unikernel info (/unikernel/info) authenticated",
       `Quick,
       check_unikernel_info_authenticated );
+    ("Unikernel name casing", `Quick, check_unikernel_info_name_casing);
     ( "Unikernel info (/unikernel/info) missing unikernel",
       `Quick,
       check_unikernel_info_missing_unikernel );

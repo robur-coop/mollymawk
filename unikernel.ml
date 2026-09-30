@@ -1508,12 +1508,14 @@ struct
     >>= function
     | Error err ->
         let data =
-          "An error occured trying to fetch "
+          "Couldn't find unikernel "
           ^ Configuration.name_to_str unikernel_name
-          ^ "from albatross: " ^ err
+          ^ " on albatross instance "
+          ^ Configuration.name_to_str albatross.configuration.name
+          ^ ": " ^ err
         in
-        Middleware.http_response ~api_meth:false reqd ~data:(`String data)
-          `Internal_server_error
+        Middleware.http_response ~api_meth:false reqd
+          ~title:"Unikernel Not Found" ~data:(`String data) `Not_found
     | Ok unikernel -> (
         let now = Mirage_ptime.now () in
         generate_csrf_token store user now reqd >>= function
