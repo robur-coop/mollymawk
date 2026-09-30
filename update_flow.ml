@@ -12,6 +12,7 @@ type error =
   | Albatross_err of string
   | Builder_req_err of string
   | Builder_parse_err of string
+  | Builder_not_found of string
 
 type success =
   | Update_available of
@@ -21,8 +22,13 @@ type success =
 let fetch_json http_client ~base_url ~path parser ctx_msg =
   let* body =
     Utils.Http.send_http_request ~path ~base_url http_client
-    |> Lwt_result.map_error (fun (`Msg e) ->
-        Builder_req_err (Printf.sprintf "Network error during %s: %s" ctx_msg e))
+    |> Lwt_result.map_error (function
+      | `Not_found ->
+          Builder_not_found
+            (Printf.sprintf "Build not found during %s: %s" ctx_msg path)
+      | `Msg e ->
+          Builder_req_err
+            (Printf.sprintf "Network error during %s: %s" ctx_msg e))
   in
   match Utils.Json.from_string body with
   | Error (`Msg e) ->
@@ -49,6 +55,10 @@ let error_response_params unikernel_name = function
   | Builder_parse_err e ->
       ( Printf.sprintf "Builder data error for %s: %s" unikernel_name e,
         "Received unexpected data format from the build server." )
+  | Builder_not_found e ->
+      ( Printf.sprintf "Builder not found for %s: %s" unikernel_name e,
+        Printf.sprintf "No build found on builds.robur.coop for %s."
+          unikernel_name )
 
 let check_for_update name unikernel http_client =
   let base_url = Builder_web.base_url in
