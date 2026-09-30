@@ -3414,18 +3414,9 @@ struct
 
   let seconds_until_next_midnight () =
     let now = Mirage_ptime.now () in
-    let date, _ = Ptime.to_date_time now in
-    match Ptime.of_date_time (date, ((0, 0, 0), 0)) with
-    | None ->
-        Logs.err (fun m -> m "Failed to construct midnight time");
-        3600.0
-    | Some midnight_today -> (
-        let one_day = Ptime.Span.of_int_s 86_400 in
-        match Ptime.add_span midnight_today one_day with
-        | None -> 3600.0
-        | Some midnight_tomorrow ->
-            let span = Ptime.diff midnight_tomorrow now in
-            Ptime.Span.to_float_s span)
+    let _, ((hour, min, sec), _) = Ptime.to_date_time now in
+    let passed = (hour * 3600) + (min * 60) + sec in
+    86_400 - passed
 
   let check_user_unikernel_updates stack albatross_instances user http_client =
     user_unikernels stack albatross_instances user.User_model.name
@@ -3499,8 +3490,8 @@ struct
       albatross_instances_ref http_client =
     let rec loop () =
       let delay = seconds_until_next_midnight () in
-      Logs.info (fun m -> m "Next background update in %.0f seconds" delay);
-      Mirage_sleep.ns (Duration.of_f delay) >>= fun () ->
+      Logs.info (fun m -> m "Next background update in %d seconds" delay);
+      Mirage_sleep.ns (Duration.of_sec delay) >>= fun () ->
       Lwt.catch
         (fun () ->
           Logs.info (fun m -> m "Starting background update...");
