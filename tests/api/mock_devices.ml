@@ -224,7 +224,7 @@ let add_user_csrf store (user : User_model.user) =
   let csrf = Test_utils.make_csrf_cookie user.uuid in
   let user =
     User_model.update_user user
-      ~cookies:(User_model.SM.add csrf.value csrf user.cookies)
+      ~cookies:(Utils.SM.add csrf.value csrf user.cookies)
       ()
   in
   Storage.update_user store user;

@@ -2,6 +2,8 @@ open Mrmime
 
 let ( let* ) = Result.bind
 
+module SM = Map.Make (String)
+
 module Json = struct
   let get key assoc =
     Option.map snd (List.find_opt (fun (k, _) -> String.equal k key) assoc)

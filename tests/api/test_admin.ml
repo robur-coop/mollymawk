@@ -30,9 +30,9 @@ let setup_admin_and_user ?(user_active = true) store =
     {
       admin with
       cookies =
-        User_model.SM.empty
-        |> User_model.SM.add session_cookie.value session_cookie
-        |> User_model.SM.add csrf_cookie.value csrf_cookie;
+        Utils.SM.empty
+        |> Utils.SM.add session_cookie.value session_cookie
+        |> Utils.SM.add csrf_cookie.value csrf_cookie;
     }
   in
 
@@ -46,9 +46,9 @@ let setup_admin_only store =
     {
       admin with
       cookies =
-        User_model.SM.empty
-        |> User_model.SM.add session_cookie.value session_cookie
-        |> User_model.SM.add csrf_cookie.value csrf_cookie;
+        Utils.SM.empty
+        |> Utils.SM.add session_cookie.value session_cookie
+        |> Utils.SM.add csrf_cookie.value csrf_cookie;
     }
   in
   store.Storage.users <- [ admin ];

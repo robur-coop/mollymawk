@@ -169,7 +169,6 @@ struct
     | _ -> failwith "Unexpected number of images"
 
   module Store = Store.Make (BLOCK)
-  module Map = Map.Make (String)
 
   let csrf_verification f user csrf reqd =
     let now = Mirage_ptime.now () in
@@ -277,19 +276,19 @@ struct
               Content_disposition.name
           with
           | Some name ->
-              (Map.add name (filename, List.assoc body assoc) map, rest)
+              (Utils.SM.add name (filename, List.assoc body assoc) map, rest)
           | None -> (map, (body, (filename, List.assoc body assoc)) :: rest))
       | Multipart { body; _ } ->
           let fold acc = function Some elt -> go acc elt | None -> acc in
           List.fold_left fold (map, rest) body
     in
-    go (Map.empty, []) m
+    go (Utils.SM.empty, []) m
 
   let generate_csrf_token store user now reqd =
     let csrf = Middleware.generate_csrf_cookie now reqd in
     let updated_user =
       User_model.update_user user ~updated_at:now
-        ~cookies:(User_model.SM.add csrf.value csrf user.cookies)
+        ~cookies:(Utils.SM.add csrf.value csrf user.cookies)
         ()
     in
     Storage.update_user store updated_user;
@@ -374,7 +373,7 @@ struct
             match token_or_cookie with
             | `Token -> f user multipart_body reqd
             | `Cookie -> (
-                match Map.find_opt "molly_csrf" multipart_body with
+                match Utils.SM.find_opt "molly_csrf" multipart_body with
                 | None ->
                     Logs.warn (fun m -> m "No csrf token in multipart request");
                     Middleware.http_response reqd
@@ -1016,7 +1015,7 @@ struct
 
   let new_user_cookies ~user ~filter ~redirect store reqd =
     let now = Mirage_ptime.now () in
-    let cookies = User_model.SM.filter filter user.User_model.cookies in
+    let cookies = Utils.SM.filter filter user.User_model.cookies in
     let updated_user =
       User_model.update_user user ~cookies ~updated_at:now ()
     in
@@ -1068,7 +1067,7 @@ struct
     match Utils.Json.(get "session_value" json_dict) with
     | Some (`String session_value) -> (
         let now = Mirage_ptime.now () in
-        let cookies = User_model.SM.remove session_value user.cookies in
+        let cookies = Utils.SM.remove session_value user.cookies in
         let updated_user =
           User_model.update_user user ~cookies ~updated_at:now ()
         in
@@ -1361,8 +1360,8 @@ struct
   let unikernel_monitoring_update happy_eyeballs management_domain _user
       multipart_body reqd =
     match
-      ( Map.find_opt "command" multipart_body,
-        Map.find_opt "unikernel_name" multipart_body )
+      ( Utils.SM.find_opt "command" multipart_body,
+        Utils.SM.find_opt "unikernel_name" multipart_body )
     with
     | Some (_, command), Some (_, unikernel_name) -> (
         let open Lwt.Infix in
@@ -1430,8 +1429,8 @@ struct
         user.scaling_policies
     in
     match
-      ( Map.find_opt "should_scale" multipart_body,
-        Map.find_opt "max_instances" multipart_body )
+      ( Utils.SM.find_opt "should_scale" multipart_body,
+        Utils.SM.find_opt "max_instances" multipart_body )
     with
     | Some _, Some (_, max_instances_str) -> (
         match int_of_string_opt max_instances_str with
@@ -3508,7 +3507,7 @@ struct
     Lwt.async loop
 
   let start_background_scaler_scheduler stack store albatross_instances_ref =
-    let active_streams = ref Map.empty in
+    let active_streams = ref Utils.SM.empty in
     let spawn_stats_stream instance =
       let rec stream_loop () =
         Lwt.catch
@@ -3540,15 +3539,15 @@ struct
       Lwt.pause () >>= fun () ->
       let current_instances = !albatross_instances_ref in
       active_streams :=
-        Map.filter (fun _key p -> Lwt.state p = Lwt.Sleep) !active_streams;
+        Utils.SM.filter (fun _key p -> Lwt.state p = Lwt.Sleep) !active_streams;
       Albatross.Albatross_map.iter
         (fun instance_name instance ->
           let key = Configuration.name_to_str instance_name in
-          if not (Map.mem key !active_streams) then (
+          if not (Utils.SM.mem key !active_streams) then (
             Log.debug (fun m ->
                 m "Spawning new stats stream for albatross instance %s" key);
             let p = spawn_stats_stream instance in
-            active_streams := Map.add key p !active_streams))
+            active_streams := Utils.SM.add key p !active_streams))
         current_instances;
       Mirage_sleep.ns (Duration.of_sec 30) >>= loop
     in

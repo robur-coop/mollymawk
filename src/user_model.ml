@@ -21,8 +21,6 @@ type cookie = {
   user_agent : string option;
 }
 
-module SM = Map.Make (String)
-
 type unikernel_update = {
   name : Vmm_core.Name.Label.t;
   job : string;
@@ -44,7 +42,7 @@ type user = {
   password : string;
   uuid : string;
   tokens : token list;
-  cookies : cookie SM.t;
+  cookies : cookie Utils.SM.t;
   created_at : Ptime.t;
   updated_at : Ptime.t;
   email_verification_uuid : Uuidm.t option;
@@ -290,7 +288,9 @@ let user_to_json (u : user) =
       ("uuid", `String u.uuid);
       ("tokens", `List (List.map token_to_json u.tokens));
       ( "cookies",
-        `List (SM.fold (fun _ c acc -> cookie_to_json c :: acc) u.cookies []) );
+        `List
+          (Utils.SM.fold (fun _ c acc -> cookie_to_json c :: acc) u.cookies [])
+      );
       ("created_at", `String (Utils.TimeHelper.string_of_ptime u.created_at));
       ("updated_at", `String (Utils.TimeHelper.string_of_ptime u.updated_at));
       ( "email_verification_uuid",
@@ -360,8 +360,8 @@ let user_v9_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* cookie = cookie_fn js in
-                Ok (SM.add cookie.value cookie acc))
-              (Ok SM.empty) cookies
+                Ok (Utils.SM.add cookie.value cookie acc))
+              (Ok Utils.SM.empty) cookies
           in
           let* email_verification_uuid =
             match email_verification_uuid with
@@ -473,8 +473,8 @@ let user_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* cookie = cookie_fn js in
-                Ok (SM.add cookie.value cookie acc))
-              (Ok SM.empty) cookies
+                Ok (Utils.SM.add cookie.value cookie acc))
+              (Ok Utils.SM.empty) cookies
           in
           let* email_verification_uuid =
             match email_verification_uuid with
@@ -587,7 +587,7 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
       password;
       uuid;
       tokens = [];
-      cookies = SM.singleton session.value session;
+      cookies = Utils.SM.singleton session.value session;
       created_at;
       updated_at = created_at;
       email_verification_uuid = None;
@@ -658,17 +658,17 @@ let verify_email_token u _uuid timestamp =
                 verification link."))
 
 let user_session_cookie (user : user) cookie_value =
-  match SM.find_opt cookie_value user.cookies with
+  match Utils.SM.find_opt cookie_value user.cookies with
   | Some cookie when String.equal cookie.name session_cookie -> Some cookie
   | _ -> None
 
 let user_csrf_token (user : user) cookie_value =
-  match SM.find_opt cookie_value user.cookies with
+  match Utils.SM.find_opt cookie_value user.cookies with
   | Some cookie when String.equal cookie.name csrf_cookie -> Some cookie
   | _ -> None
 
 let keep_session_cookies user =
-  SM.filter
+  Utils.SM.filter
     (fun _ (cookie : cookie) -> String.equal cookie.name session_cookie)
     user.cookies
 
@@ -690,7 +690,8 @@ let login_user ~email ~password ~user_agent user now =
                 ~created_at:now ~user_agent ()
             in
             let cookies =
-              SM.add new_session.value new_session (keep_session_cookies u)
+              Utils.SM.add new_session.value new_session
+                (keep_session_cookies u)
             in
             let updated_user = update_user u ~cookies () in
             Ok (updated_user, new_session)

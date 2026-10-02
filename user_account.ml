@@ -209,7 +209,7 @@ let user_account_layout (user : User_model.user) ~active_cookie_value
                           ];
                       ];
                     div
-                      (User_model.SM.fold
+                      (Utils.SM.fold
                          (fun _ (cookie : User_model.cookie) acc ->
                            if String.equal cookie.name User_model.session_cookie
                            then

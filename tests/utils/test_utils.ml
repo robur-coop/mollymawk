@@ -499,16 +499,16 @@ let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
       ~super_user ~created_at:now ~user_agent:(Some "Alcotest-client")
   in
   let cookies =
-    let base = User_model.SM.singleton session_cookie.value session_cookie in
+    let base = Utils.SM.singleton session_cookie.value session_cookie in
     if with_csrf then
       let csrf = make_csrf_cookie user.uuid in
-      User_model.SM.add csrf.value csrf base
+      Utils.SM.add csrf.value csrf base
     else base
   in
   { user with cookies; tokens }
 
 let user_session_cookie (user : User_model.user) =
-  User_model.SM.fold
+  Utils.SM.fold
     (fun _ (c : User_model.cookie) acc ->
       if String.equal c.name User_model.session_cookie then Some c.value
       else acc)
@@ -516,7 +516,7 @@ let user_session_cookie (user : User_model.user) =
   |> Option.get
 
 let user_csrf_cookie (user : User_model.user) =
-  User_model.SM.fold
+  Utils.SM.fold
     (fun _ (c : User_model.cookie) acc ->
       if String.equal c.name User_model.csrf_cookie then Some c.value else acc)
     user.cookies None

@@ -123,7 +123,7 @@ let increment_token_usage (token : User_model.token) (user : User_model.user) =
 let update_cookie_usage (cookie : User_model.cookie) user_agent
     (user : User_model.user) =
   let cookie = { cookie with user_agent } in
-  let cookies = User_model.SM.add cookie.value cookie user.cookies in
+  let cookies = Utils.SM.add cookie.value cookie user.cookies in
   User_model.update_user user ~cookies ()
 
 let update_user_unikernel_updates (new_update : User_model.unikernel_update)
