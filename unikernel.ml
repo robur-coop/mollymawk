@@ -289,7 +289,7 @@ struct
     let csrf = Middleware.generate_csrf_cookie now reqd in
     let updated_user =
       User_model.update_user user ~updated_at:now
-        ~cookies:(User_model.Cookie_map.add csrf.value csrf user.cookies)
+        ~cookies:(User_model.SM.add csrf.value csrf user.cookies)
         ()
     in
     Storage.update_user store updated_user;
@@ -1016,7 +1016,7 @@ struct
 
   let new_user_cookies ~user ~filter ~redirect store reqd =
     let now = Mirage_ptime.now () in
-    let cookies = User_model.Cookie_map.filter filter user.User_model.cookies in
+    let cookies = User_model.SM.filter filter user.User_model.cookies in
     let updated_user =
       User_model.update_user user ~cookies ~updated_at:now ()
     in
@@ -1068,7 +1068,7 @@ struct
     match Utils.Json.(get "session_value" json_dict) with
     | Some (`String session_value) -> (
         let now = Mirage_ptime.now () in
-        let cookies = User_model.Cookie_map.remove session_value user.cookies in
+        let cookies = User_model.SM.remove session_value user.cookies in
         let updated_user =
           User_model.update_user user ~cookies ~updated_at:now ()
         in

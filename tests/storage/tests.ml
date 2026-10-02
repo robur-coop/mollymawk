@@ -285,13 +285,13 @@ let check_cookies_roundtrip () =
   | Ok ([ loaded_user ], _, _) ->
       Alcotest.(
         check int "2 cookies loaded into map" 2
-          (User_model.Cookie_map.cardinal loaded_user.cookies));
+          (User_model.SM.cardinal loaded_user.cookies));
       Alcotest.(
         check bool "Session cookie present in map" true
-          (User_model.Cookie_map.mem session_val loaded_user.cookies));
+          (User_model.SM.mem session_val loaded_user.cookies));
       Alcotest.(
         check bool "CSRF cookie present in map" true
-          (User_model.Cookie_map.mem csrf_val loaded_user.cookies))
+          (User_model.SM.mem csrf_val loaded_user.cookies))
   | Ok _ -> Alcotest.fail "Expected 1 user"
   | Error (`Msg err) -> Alcotest.fail err
 
@@ -304,13 +304,13 @@ let check_cookies_load_v9 () =
   | Ok ([ loaded_user ], _, _) ->
       Alcotest.(
         check int "2 cookies loaded into map from v9" 2
-          (User_model.Cookie_map.cardinal loaded_user.cookies));
+          (User_model.SM.cardinal loaded_user.cookies));
       Alcotest.(
         check bool "Session cookie present in map" true
-          (User_model.Cookie_map.mem session_val loaded_user.cookies));
+          (User_model.SM.mem session_val loaded_user.cookies));
       Alcotest.(
         check bool "CSRF cookie present in map" true
-          (User_model.Cookie_map.mem csrf_val loaded_user.cookies))
+          (User_model.SM.mem csrf_val loaded_user.cookies))
   | Ok _ -> Alcotest.fail "Expected 1 user"
   | Error (`Msg err) -> Alcotest.fail err
 

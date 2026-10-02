@@ -17,7 +17,7 @@ let check_valid_registration () =
     make_mock_user ~name:"test" ~email:"test@robur.coop" ~password ()
   in
   let cookie =
-    User_model.Cookie_map.fold
+    User_model.SM.fold
       (fun _ (c : User_model.cookie) acc ->
         if String.equal c.name User_model.session_cookie then Some c else acc)
       user.cookies None
@@ -115,7 +115,7 @@ let check_successful_login () =
         "Session cookie name" User_model.session_cookie cookie.name;
       Alcotest.(check bool)
         "Cookie is recorded on user" true
-        (User_model.Cookie_map.mem cookie.value updated_user.cookies)
+        (User_model.SM.mem cookie.value updated_user.cookies)
   | Error (`Msg err) -> failwith err
 
 let check_failed_login_wrong_password () =
@@ -288,7 +288,7 @@ let check_login_endpoint () =
       in
       Alcotest.(check bool)
         "User has session cookie" true
-        (User_model.Cookie_map.exists
+        (User_model.SM.exists
            (fun _ (c : User_model.cookie) ->
              String.equal c.name User_model.session_cookie)
            updated_user.cookies);
@@ -314,7 +314,7 @@ let check_logout_endpoint () =
       in
       Alcotest.(check bool)
         "Session cookie removed after logout" false
-        (User_model.Cookie_map.mem session_cookie updated_user.cookies);
+        (User_model.SM.mem session_cookie updated_user.cookies);
       Lwt.return_unit )
 
 let check_update_password_endpoint () =
@@ -366,7 +366,7 @@ let check_close_sessions_endpoint () =
         Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
       in
       let session_cookie_2 =
-        (User_model.Cookie_map.fold
+        (User_model.SM.fold
            (fun _ (c : User_model.cookie) acc ->
              if
                String.equal c.name User_model.session_cookie
@@ -395,10 +395,10 @@ let check_close_sessions_endpoint () =
       in
       Alcotest.(check bool)
         "Current session still active" true
-        (User_model.Cookie_map.mem session_cookie_1 updated_user.cookies);
+        (User_model.SM.mem session_cookie_1 updated_user.cookies);
       Alcotest.(check bool)
         "Other session closed" false
-        (User_model.Cookie_map.mem session_cookie_2 updated_user.cookies);
+        (User_model.SM.mem session_cookie_2 updated_user.cookies);
       Lwt.return_unit )
 
 let check_close_session_endpoint () =
@@ -417,7 +417,7 @@ let check_close_session_endpoint () =
         Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
       in
       let session_cookie_2 =
-        (User_model.Cookie_map.fold
+        (User_model.SM.fold
            (fun _ (c : User_model.cookie) acc ->
              if
                String.equal c.name User_model.session_cookie
@@ -449,10 +449,10 @@ let check_close_session_endpoint () =
       in
       Alcotest.(check bool)
         "Current session still active" true
-        (User_model.Cookie_map.mem session_cookie_1 updated_user.cookies);
+        (User_model.SM.mem session_cookie_1 updated_user.cookies);
       Alcotest.(check bool)
         "Targeted session closed" false
-        (User_model.Cookie_map.mem session_cookie_2 updated_user.cookies);
+        (User_model.SM.mem session_cookie_2 updated_user.cookies);
       Lwt.return_unit )
 
 let tests =
