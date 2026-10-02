@@ -499,25 +499,30 @@ let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
       ~super_user ~created_at:now ~user_agent:(Some "Alcotest-client")
   in
   let cookies =
+    let base =
+      User_model.Cookie_map.singleton session_cookie.value session_cookie
+    in
     if with_csrf then
       let csrf = make_csrf_cookie user.uuid in
-      [ session_cookie; csrf ]
-    else [ session_cookie ]
+      User_model.Cookie_map.add csrf.value csrf base
+    else base
   in
   { user with cookies; tokens }
 
 let user_session_cookie (user : User_model.user) =
-  (List.find
-     (fun (c : User_model.cookie) ->
-       String.equal c.name User_model.session_cookie)
-     user.cookies)
-    .value
+  User_model.Cookie_map.fold
+    (fun _ (c : User_model.cookie) acc ->
+      if String.equal c.name User_model.session_cookie then Some c.value
+      else acc)
+    user.cookies None
+  |> Option.get
 
 let user_csrf_cookie (user : User_model.user) =
-  (List.find
-     (fun (c : User_model.cookie) -> String.equal c.name User_model.csrf_cookie)
-     user.cookies)
-    .value
+  User_model.Cookie_map.fold
+    (fun _ (c : User_model.cookie) acc ->
+      if String.equal c.name User_model.csrf_cookie then Some c.value else acc)
+    user.cookies None
+  |> Option.get
 
 let auth_hdr token =
   match token with

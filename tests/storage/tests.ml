@@ -276,11 +276,56 @@ let albatross_config_tests =
       check_multiple_valid_albatross_configs_with_different_names );
   ]
 
+let check_cookies_roundtrip () =
+  let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in
+  let session_val = user_session_cookie user in
+  let csrf_val = user_csrf_cookie user in
+  let json = Storage.t_to_json [ user ] [] None in
+  match Storage.t_of_json json with
+  | Ok ([ loaded_user ], _, _) ->
+      Alcotest.(
+        check int "2 cookies loaded into map" 2
+          (User_model.Cookie_map.cardinal loaded_user.cookies));
+      Alcotest.(
+        check bool "Session cookie present in map" true
+          (User_model.Cookie_map.mem session_val loaded_user.cookies));
+      Alcotest.(
+        check bool "CSRF cookie present in map" true
+          (User_model.Cookie_map.mem csrf_val loaded_user.cookies))
+  | Ok _ -> Alcotest.fail "Expected 1 user"
+  | Error (`Msg err) -> Alcotest.fail err
+
+let check_cookies_load_v9 () =
+  let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in
+  let session_val = user_session_cookie user in
+  let csrf_val = user_csrf_cookie user in
+  let json = Storage.t_to_json ~version:9 [ user ] [] None in
+  match Storage.t_of_json json with
+  | Ok ([ loaded_user ], _, _) ->
+      Alcotest.(
+        check int "2 cookies loaded into map from v9" 2
+          (User_model.Cookie_map.cardinal loaded_user.cookies));
+      Alcotest.(
+        check bool "Session cookie present in map" true
+          (User_model.Cookie_map.mem session_val loaded_user.cookies));
+      Alcotest.(
+        check bool "CSRF cookie present in map" true
+          (User_model.Cookie_map.mem csrf_val loaded_user.cookies))
+  | Ok _ -> Alcotest.fail "Expected 1 user"
+  | Error (`Msg err) -> Alcotest.fail err
+
+let cookie_tests =
+  [
+    ("Cookies roundtrip", `Quick, check_cookies_roundtrip);
+    ("Cookies load from v9", `Quick, check_cookies_load_v9);
+  ]
+
 let tests =
   [
     ("Version tests", version_tests);
     ("Email config tests", email_config_tests);
     ("Albatross config tests", albatross_config_tests);
+    ("Cookie map migration tests", cookie_tests);
     ("Disk dump tests", disk_dump_tests);
   ]
 
