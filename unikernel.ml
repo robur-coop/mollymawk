@@ -1516,7 +1516,7 @@ struct
             let last_update_time =
               Option.map
                 (fun (u : User_model.unikernel_update) -> u.timestamp)
-                (User_model.Unikernel_update_map.find_opt unikernel_name
+                (Utils.LM.find_opt unikernel_name
                    user.unikernel_updates)
             in
             let scaling_policy =
@@ -1712,7 +1712,7 @@ struct
       http_client reqd (user : User_model.user) =
     let unikernel_name_str = Configuration.name_to_str unikernel_name in
     match
-      User_model.Unikernel_update_map.find_opt unikernel_name
+      Utils.LM.find_opt unikernel_name
         user.unikernel_updates
     with
     | Some old_unikernel ->
@@ -1728,7 +1728,7 @@ struct
           >>= function
           | Ok _res ->
               let updated_unikernel_updates =
-                User_model.Unikernel_update_map.remove unikernel_name
+                Utils.LM.remove unikernel_name
                   user.unikernel_updates
               in
               let user =
