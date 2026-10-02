@@ -289,7 +289,8 @@ struct
     let csrf = Middleware.generate_csrf_cookie now reqd in
     let updated_user =
       User_model.update_user user ~updated_at:now
-        ~cookies:(csrf :: user.cookies) ()
+        ~cookies:(User_model.Cookie_map.add csrf.value csrf user.cookies)
+        ()
     in
     Storage.update_user store updated_user;
     Store.write_data store >>= function
@@ -1015,7 +1016,7 @@ struct
 
   let new_user_cookies ~user ~filter ~redirect store reqd =
     let now = Mirage_ptime.now () in
-    let cookies = List.filter filter user.User_model.cookies in
+    let cookies = User_model.Cookie_map.filter filter user.User_model.cookies in
     let updated_user =
       User_model.update_user user ~cookies ~updated_at:now ()
     in
@@ -1035,19 +1036,19 @@ struct
             let filter, redirect =
               match (to_logout_cookie, logout) with
               | None, false ->
-                  ( (fun (c : User_model.cookie) ->
+                  ( (fun _ (c : User_model.cookie) ->
                       not
                         (String.equal c.name User_model.session_cookie
                         && c.value <> cookie.value)),
                     Middleware.http_response reqd
                       ~data:(`String "Closed all sessions successfully") `OK )
               | _, true ->
-                  ( (fun (c : User_model.cookie) ->
+                  ( (fun _ (c : User_model.cookie) ->
                       not (String.equal c.value cookie.value)),
                     Middleware.http_response reqd
                       ~data:(`String "Logout successful") `OK )
               | Some to_logout_cookie_value, false ->
-                  ( (fun (c : User_model.cookie) ->
+                  ( (fun _ (c : User_model.cookie) ->
                       not (String.equal to_logout_cookie_value c.value)),
                     Middleware.redirect_to_page ~path:"/account"
                       ~msg:"Closed session successfully" reqd () )
@@ -1067,12 +1068,7 @@ struct
     match Utils.Json.(get "session_value" json_dict) with
     | Some (`String session_value) -> (
         let now = Mirage_ptime.now () in
-        let cookies =
-          List.filter
-            (fun (cookie : User_model.cookie) ->
-              not (String.equal cookie.value session_value))
-            user.cookies
-        in
+        let cookies = User_model.Cookie_map.remove session_value user.cookies in
         let updated_user =
           User_model.update_user user ~cookies ~updated_at:now ()
         in
