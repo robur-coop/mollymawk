@@ -29,6 +29,8 @@ type unikernel_update = {
   timestamp : Ptime.t;
 }
 
+module Unikernel_update_map = Map.Make (Vmm_core.Name.Label)
+
 type unikernel_scaling_policy = {
   name : Vmm_core.Name.Label.t;
   primary_albatross_instance : Vmm_core.Name.Label.t;
@@ -48,7 +50,7 @@ type user = {
   email_verification_uuid : Uuidm.t option;
   active : bool;
   super_user : bool;
-  unikernel_updates : unikernel_update list;
+  unikernel_updates : unikernel_update Unikernel_update_map.t;
   scaling_policies : unikernel_scaling_policy list;
 }
 
@@ -302,7 +304,10 @@ let user_to_json (u : user) =
       ("active", `Bool u.active);
       ("super_user", `Bool u.super_user);
       ( "unikernel_updates",
-        `List (List.map unikernel_update_to_json u.unikernel_updates) );
+        `List
+          (Unikernel_update_map.fold
+             (fun _ uu acc -> unikernel_update_to_json uu :: acc)
+             u.unikernel_updates []) );
       ( "scaling_policies",
         `List (List.map scaling_policy_to_json u.scaling_policies) );
     ]
@@ -387,8 +392,10 @@ let user_v9_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* unikernel_update = unikernel_update_of_json js in
-                Ok (unikernel_update :: acc))
-              (Ok []) unikernel_updates
+                Ok
+                  (Unikernel_update_map.add unikernel_update.name
+                     unikernel_update acc))
+              (Ok Unikernel_update_map.empty) unikernel_updates
           in
           let* name = Configuration.name_of_str name in
           let* email = Mrmime.Mailbox.of_string email in
@@ -500,8 +507,10 @@ let user_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* unikernel_update = unikernel_update_of_json js in
-                Ok (unikernel_update :: acc))
-              (Ok []) unikernel_updates
+                Ok
+                  (Unikernel_update_map.add unikernel_update.name
+                     unikernel_update acc))
+              (Ok Unikernel_update_map.empty) unikernel_updates
           in
           let* name = Configuration.name_of_str name in
           let* email = Mrmime.Mailbox.of_string email in
@@ -595,7 +604,7 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
       email_verification_uuid = None;
       active;
       super_user;
-      unikernel_updates = [];
+      unikernel_updates = Unikernel_update_map.empty;
       scaling_policies = [];
     },
     session )

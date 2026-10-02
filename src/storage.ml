@@ -119,13 +119,11 @@ let update_cookie_usage (cookie : User_model.cookie) user_agent
 
 let update_user_unikernel_updates (new_update : User_model.unikernel_update)
     (user : User_model.user) =
-  let is_unique (u : User_model.unikernel_update) =
-    not (Vmm_core.Name.Label.equal u.name new_update.name)
+  let unikernel_updates =
+    User_model.Unikernel_update_map.add new_update.name new_update
+      user.unikernel_updates
   in
-  let updated_list =
-    new_update :: List.filter is_unique user.unikernel_updates
-  in
-  User_model.update_user user ~unikernel_updates:updated_list ()
+  User_model.update_user user ~unikernel_updates ()
 
 let count_users users = List.length users
 

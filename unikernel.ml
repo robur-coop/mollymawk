@@ -1514,14 +1514,10 @@ struct
         generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
             let last_update_time =
-              match
-                List.find_opt
-                  (fun (u : User_model.unikernel_update) ->
-                    Vmm_core.Name.Label.equal u.name unikernel_name)
-                  user.unikernel_updates
-              with
-              | Some unikernel_update -> Some unikernel_update.timestamp
-              | None -> None
+              Option.map
+                (fun (u : User_model.unikernel_update) -> u.timestamp)
+                (User_model.Unikernel_update_map.find_opt unikernel_name
+                   user.unikernel_updates)
             in
             let scaling_policy =
               List.find_opt
@@ -1716,9 +1712,7 @@ struct
       http_client reqd (user : User_model.user) =
     let unikernel_name_str = Configuration.name_to_str unikernel_name in
     match
-      List.find_opt
-        (fun (u : User_model.unikernel_update) ->
-          Vmm_core.Name.Label.equal u.name unikernel_name)
+      User_model.Unikernel_update_map.find_opt unikernel_name
         user.unikernel_updates
     with
     | Some old_unikernel ->
@@ -1734,9 +1728,7 @@ struct
           >>= function
           | Ok _res ->
               let updated_unikernel_updates =
-                List.filter
-                  (fun (u : User_model.unikernel_update) ->
-                    not (Vmm_core.Name.Label.equal u.name unikernel_name))
+                User_model.Unikernel_update_map.remove unikernel_name
                   user.unikernel_updates
               in
               let user =
