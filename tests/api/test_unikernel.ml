@@ -776,7 +776,14 @@ let check_unikernel_rollback_expired_window () =
           timestamp = Ptime.epoch;
         }
       in
-      let user = { user with unikernel_updates = [ expired_update ] } in
+      let user =
+        {
+          user with
+          unikernel_updates =
+            User_model.Unikernel_update_map.singleton expired_update.name
+              expired_update;
+        }
+      in
       Storage.update_user store user;
       let body =
         Fmt.str
