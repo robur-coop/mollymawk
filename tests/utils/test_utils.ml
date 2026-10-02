@@ -499,9 +499,7 @@ let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
       ~super_user ~created_at:now ~user_agent:(Some "Alcotest-client")
   in
   let cookies =
-    let base =
-      User_model.SM.singleton session_cookie.value session_cookie
-    in
+    let base = User_model.SM.singleton session_cookie.value session_cookie in
     if with_csrf then
       let csrf = make_csrf_cookie user.uuid in
       User_model.SM.add csrf.value csrf base

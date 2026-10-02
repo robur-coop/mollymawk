@@ -290,10 +290,7 @@ let user_to_json (u : user) =
       ("uuid", `String u.uuid);
       ("tokens", `List (List.map token_to_json u.tokens));
       ( "cookies",
-        `List
-          (SM.fold
-             (fun _ c acc -> cookie_to_json c :: acc)
-             u.cookies []) );
+        `List (SM.fold (fun _ c acc -> cookie_to_json c :: acc) u.cookies []) );
       ("created_at", `String (Utils.TimeHelper.string_of_ptime u.created_at));
       ("updated_at", `String (Utils.TimeHelper.string_of_ptime u.updated_at));
       ( "email_verification_uuid",
@@ -693,8 +690,7 @@ let login_user ~email ~password ~user_agent user now =
                 ~created_at:now ~user_agent ()
             in
             let cookies =
-              SM.add new_session.value new_session
-                (keep_session_cookies u)
+              SM.add new_session.value new_session (keep_session_cookies u)
             in
             let updated_user = update_user u ~cookies () in
             Ok (updated_user, new_session)
