@@ -255,8 +255,10 @@ let check_scaling_update_success () =
       | Some u ->
           Alcotest.(check int)
             "User scaling policies count is 1" 1
-            (List.length u.scaling_policies);
-          let p = List.hd u.scaling_policies in
+            (User_model.Scaling_policy_map.cardinal u.scaling_policies);
+          let p =
+            snd (User_model.Scaling_policy_map.choose u.scaling_policies)
+          in
           Alcotest.(check int) "Max instances is 3" 3 p.max_instances;
           Lwt.return_unit )
 
@@ -280,8 +282,10 @@ let check_scaling_update_with_token () =
       | Some u ->
           Alcotest.(check int)
             "User scaling policies count is 1" 1
-            (List.length u.scaling_policies);
-          let p = List.hd u.scaling_policies in
+            (User_model.Scaling_policy_map.cardinal u.scaling_policies);
+          let p =
+            snd (User_model.Scaling_policy_map.choose u.scaling_policies)
+          in
           Alcotest.(check int) "Max instances is 2" 2 p.max_instances;
           Lwt.return_unit )
 
@@ -323,7 +327,15 @@ let check_scaling_update_remove_when_max_instances_is_one () =
           max_instances = 3;
         }
       in
-      let user = { user with scaling_policies = [ initial_policy ] } in
+      let user =
+        {
+          user with
+          scaling_policies =
+            User_model.Scaling_policy_map.singleton
+              (initial_policy.name, initial_policy.primary_albatross_instance)
+              initial_policy;
+        }
+      in
       Storage.update_user store user;
       let parts =
         [
@@ -345,7 +357,7 @@ let check_scaling_update_remove_when_max_instances_is_one () =
       | Some u ->
           Alcotest.(check int)
             "Scaling policies list is now empty" 0
-            (List.length u.scaling_policies);
+            (User_model.Scaling_policy_map.cardinal u.scaling_policies);
           Lwt.return_unit )
 
 let check_scaling_update_remove_when_should_scale_unchecked () =
@@ -359,7 +371,15 @@ let check_scaling_update_remove_when_should_scale_unchecked () =
           max_instances = 3;
         }
       in
-      let user = { user with scaling_policies = [ initial_policy ] } in
+      let user =
+        {
+          user with
+          scaling_policies =
+            User_model.Scaling_policy_map.singleton
+              (initial_policy.name, initial_policy.primary_albatross_instance)
+              initial_policy;
+        }
+      in
       Storage.update_user store user;
       let parts = [ ("molly_csrf", csrf_token) ] in
       let req =
@@ -375,7 +395,7 @@ let check_scaling_update_remove_when_should_scale_unchecked () =
       | Some u ->
           Alcotest.(check int)
             "Scaling policies list is now empty" 0
-            (List.length u.scaling_policies);
+            (User_model.Scaling_policy_map.cardinal u.scaling_policies);
           Lwt.return_unit )
 
 let check_scaling_update_noop_when_no_existing_policy () =
