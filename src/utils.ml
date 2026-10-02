@@ -1,5 +1,7 @@
 let ( let* ) = Result.bind
 
+module LM = Map.Make (Vmm_core.Name.Label)
+
 module SM = Map.Make (String)
 
 module Json = struct

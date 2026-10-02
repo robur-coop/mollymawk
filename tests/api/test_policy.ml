@@ -367,7 +367,7 @@ let check_update_policy_albatross_failure () =
         }
       in
       let instances =
-        App.Label_map.singleton failing_lbl unreachable_instance
+        Utils.LM.singleton failing_lbl unreachable_instance
       in
       let handler = make_app_request_handler ~policies ~instances store in
       let body =

@@ -531,7 +531,7 @@ struct
             update_albatross_status instance
               (`Incompatible, reply, "console list inactive");
             (instance.configuration.name, []))
-      (Albatross.Albatross_map.bindings albatross_instances)
+      (Utils.LM.bindings albatross_instances)
 
   let user_unikernels stack (albatross_instances : Albatross_state.a_map)
       user_name =
@@ -550,7 +550,7 @@ struct
             update_albatross_status instance
               (`Incompatible, reply, "unikernel info");
             (instance.configuration.name, []))
-      (Albatross.Albatross_map.bindings albatross_instances)
+      (Utils.LM.bindings albatross_instances)
 
   let user_max_allowed_unikernel_instances _stack albatross user_name =
     let res =
@@ -1141,7 +1141,7 @@ struct
     Albatross_state.init stack albatross.configuration >>= function
     | Ok new_albatross_instance ->
         albatross_instances :=
-          Albatross.Albatross_map.update albatross.configuration.name
+          Utils.LM.update albatross.configuration.name
             (fun _prev -> Some new_albatross_instance)
             !albatross_instances;
         Middleware.http_response reqd
@@ -1169,7 +1169,7 @@ struct
                 Store.write_data store >>= function
                 | Ok () ->
                     albatross_instances :=
-                      Albatross.Albatross_map.update configuration_settings.name
+                      Utils.LM.update configuration_settings.name
                         (fun _prev -> Some new_albatross_instance)
                         !albatross_instances;
                     Middleware.http_response reqd
@@ -1192,7 +1192,7 @@ struct
             Store.write_data store >>= function
             | Ok _new_configurations ->
                 albatross_instances :=
-                  Albatross.Albatross_map.remove name !albatross_instances;
+                  Utils.LM.remove name !albatross_instances;
                 Middleware.http_response reqd
                   ~data:(`String "Configuration delete successfully") `OK
             | Error (`Msg err) ->
@@ -1278,7 +1278,7 @@ struct
                 Lwt.return (successes, failure :: failures)
             | Ok parsed -> Lwt.return (parsed :: successes, failures)))
       ([], [])
-      (Albatross.Albatross_map.bindings albatross_instances)
+      (Utils.LM.bindings albatross_instances)
     >>= fun (successes, failures) ->
     let response_data =
       `Assoc [ ("data", `List successes); ("errors", `List failures) ]
@@ -2827,9 +2827,9 @@ struct
   let choose_instance store (albatross_instances : Albatross_state.a_map)
       callback _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    if Albatross.Albatross_map.cardinal albatross_instances = 1 then
+    if Utils.LM.cardinal albatross_instances = 1 then
       let instance_name, _ =
-        Albatross.Albatross_map.min_binding albatross_instances
+        Utils.LM.min_binding albatross_instances
       in
       Middleware.redirect_to_page
         ~path:
@@ -2842,7 +2842,7 @@ struct
             (Dashboard.dashboard_layout ~csrf user ~page_title:"Choose instance"
                ~content:
                  (Albatross_instances.select_instance user
-                    (Albatross.Albatross_map.bindings albatross_instances)
+                    (Utils.LM.bindings albatross_instances)
                     callback)
                ~icon:"/images/robur.png" ())
             ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
@@ -3015,11 +3015,9 @@ struct
               ~data:(`String (Fmt.str "Test failed: %s" err))
               `Bad_request)
 
-  module Label_map = Albatross.Albatross_map
-
   let scaling_groups :
-      Autoscaler.Cluster_manager.group Label_map.t Label_map.t ref =
-    ref Label_map.empty
+      Autoscaler.Cluster_manager.group Utils.LM.t Utils.LM.t ref =
+    ref Utils.LM.empty
 
   module Log = (val Logs.src_log Autoscaler.a_logs : Logs.LOG)
 
@@ -3041,12 +3039,12 @@ struct
   let put_group ~(user_name : Vmm_core.Name.Label.t)
       ~(unikernel_name : Vmm_core.Name.Label.t) group =
     let unikernel_map =
-      Option.value ~default:Label_map.empty
-        (Label_map.find_opt user_name !scaling_groups)
+      Option.value ~default:Utils.LM.empty
+        (Utils.LM.find_opt user_name !scaling_groups)
     in
     scaling_groups :=
-      Label_map.add user_name
-        (Label_map.add unikernel_name group unikernel_map)
+      Utils.LM.add user_name
+        (Utils.LM.add unikernel_name group unikernel_map)
         !scaling_groups
 
   let spawn_clone stack store albatross ~unikernel_name ~clone_name ~user_name
@@ -3302,10 +3300,10 @@ struct
                   (* Get the group for this user's unikernel (user -> unikernel -> group). *)
                   let group =
                     let unikernel_map =
-                      Option.value ~default:Label_map.empty
-                        (Label_map.find_opt user.name !scaling_groups)
+                      Option.value ~default:Utils.LM.empty
+                        (Utils.LM.find_opt user.name !scaling_groups)
                     in
-                    match Label_map.find_opt primary_name unikernel_map with
+                    match Utils.LM.find_opt primary_name unikernel_map with
                     | Some g -> g
                     | None ->
                         let primary_vm =
@@ -3519,7 +3517,7 @@ struct
       let current_instances = !albatross_instances_ref in
       active_streams :=
         Utils.SM.filter (fun _key p -> Lwt.state p = Lwt.Sleep) !active_streams;
-      Albatross.Albatross_map.iter
+      Utils.LM.iter
         (fun instance_name instance ->
           let key = Configuration.name_to_str instance_name in
           if not (Utils.SM.mem key !active_streams) then (
@@ -3547,7 +3545,7 @@ struct
           ( Lwt.catch
               (fun () ->
                 Log.debug (fun m -> m "Starting background pruning...");
-                Label_map.bindings !scaling_groups
+                Utils.LM.bindings !scaling_groups
                 |> Lwt_list.iter_p (fun (user_name, unikernel_map) ->
                     user_unikernels stack albatross_instances user_name
                     >|= fun results ->
@@ -3562,7 +3560,7 @@ struct
                           acc @ names)
                         [] results
                     in
-                    Label_map.iter
+                    Utils.LM.iter
                       (fun unikernel_name group ->
                         match
                           Autoscaler.Cluster_manager.sync_group group
@@ -3576,14 +3574,14 @@ struct
                                   (Configuration.name_to_str user_name)
                                   (Configuration.name_to_str unikernel_name));
                             let updated_unikernel_map =
-                              Label_map.remove unikernel_name unikernel_map
+                              Utils.LM.remove unikernel_name unikernel_map
                             in
-                            if Label_map.is_empty updated_unikernel_map then
+                            if Utils.LM.is_empty updated_unikernel_map then
                               scaling_groups :=
-                                Label_map.remove user_name !scaling_groups
+                                Utils.LM.remove user_name !scaling_groups
                             else
                               scaling_groups :=
-                                Label_map.add user_name updated_unikernel_map
+                                Utils.LM.add user_name updated_unikernel_map
                                   !scaling_groups)
                       unikernel_map))
               (fun exn ->

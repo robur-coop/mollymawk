@@ -442,7 +442,7 @@ let albatross_config_layout albatross_instances =
                                    ];
                                ])
                           (List.map albatross_table_row
-                             (Albatross.Albatross_map.bindings
+                             (Utils.LM.bindings
                                 albatross_instances));
                       ];
                   ];
