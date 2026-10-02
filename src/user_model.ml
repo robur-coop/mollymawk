@@ -388,9 +388,7 @@ let user_v9_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* unikernel_update = unikernel_update_of_json js in
-                Ok
-                  (Utils.LM.add unikernel_update.name
-                     unikernel_update acc))
+                Ok (Utils.LM.add unikernel_update.name unikernel_update acc))
               (Ok Utils.LM.empty) unikernel_updates
           in
           let* name = Configuration.name_of_str name in
@@ -503,9 +501,7 @@ let user_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* unikernel_update = unikernel_update_of_json js in
-                Ok
-                  (Utils.LM.add unikernel_update.name
-                     unikernel_update acc))
+                Ok (Utils.LM.add unikernel_update.name unikernel_update acc))
               (Ok Utils.LM.empty) unikernel_updates
           in
           let* name = Configuration.name_of_str name in

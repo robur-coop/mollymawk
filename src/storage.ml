@@ -120,8 +120,7 @@ let update_cookie_usage (cookie : User_model.cookie) user_agent
 let update_user_unikernel_updates (new_update : User_model.unikernel_update)
     (user : User_model.user) =
   let unikernel_updates =
-    Utils.LM.add new_update.name new_update
-      user.unikernel_updates
+    Utils.LM.add new_update.name new_update user.unikernel_updates
   in
   User_model.update_user user ~unikernel_updates ()
 

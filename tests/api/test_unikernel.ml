@@ -780,8 +780,7 @@ let check_unikernel_rollback_expired_window () =
         {
           user with
           unikernel_updates =
-            Utils.LM.singleton expired_update.name
-              expired_update;
+            Utils.LM.singleton expired_update.name expired_update;
         }
       in
       Storage.update_user store user;

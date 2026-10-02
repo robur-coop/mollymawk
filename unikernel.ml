@@ -1191,8 +1191,7 @@ struct
             Storage.delete_configuration store name;
             Store.write_data store >>= function
             | Ok _new_configurations ->
-                albatross_instances :=
-                  Utils.LM.remove name !albatross_instances;
+                albatross_instances := Utils.LM.remove name !albatross_instances;
                 Middleware.http_response reqd
                   ~data:(`String "Configuration delete successfully") `OK
             | Error (`Msg err) ->
@@ -1516,8 +1515,7 @@ struct
             let last_update_time =
               Option.map
                 (fun (u : User_model.unikernel_update) -> u.timestamp)
-                (Utils.LM.find_opt unikernel_name
-                   user.unikernel_updates)
+                (Utils.LM.find_opt unikernel_name user.unikernel_updates)
             in
             let scaling_policy =
               List.find_opt
@@ -1711,10 +1709,7 @@ struct
   let process_rollback stack albatross ~unikernel_name current_time store
       http_client reqd (user : User_model.user) =
     let unikernel_name_str = Configuration.name_to_str unikernel_name in
-    match
-      Utils.LM.find_opt unikernel_name
-        user.unikernel_updates
-    with
+    match Utils.LM.find_opt unikernel_name user.unikernel_updates with
     | Some old_unikernel ->
         if
           Utils.TimeHelper.diff_in_seconds ~current_time
@@ -1728,8 +1723,7 @@ struct
           >>= function
           | Ok _res ->
               let updated_unikernel_updates =
-                Utils.LM.remove unikernel_name
-                  user.unikernel_updates
+                Utils.LM.remove unikernel_name user.unikernel_updates
               in
               let user =
                 User_model.update_user user
@@ -2828,9 +2822,7 @@ struct
       callback _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     if Utils.LM.cardinal albatross_instances = 1 then
-      let instance_name, _ =
-        Utils.LM.min_binding albatross_instances
-      in
+      let instance_name, _ = Utils.LM.min_binding albatross_instances in
       Middleware.redirect_to_page
         ~path:
           (Middleware.construct_instance_redirect_url callback instance_name)
