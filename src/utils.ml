@@ -1,5 +1,3 @@
-open Mrmime
-
 let ( let* ) = Result.bind
 
 module Json = struct
@@ -172,11 +170,12 @@ module Email = struct
 
   let subject_of_strings xs =
     List.fold_left
-      (fun acc s -> acc @ Unstructured.Craft.[ sp 1; v s ])
+      (fun acc s -> acc @ Mrmime.Unstructured.Craft.[ sp 1; v s ])
       []
       (String.split_on_char ' ' xs)
 
   let construct_email ?references ~from_email ~to_email ~subject ~body () =
+    let open Mrmime in
     let fields =
       Field.
         [
