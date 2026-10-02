@@ -1395,13 +1395,9 @@ struct
 
   let unikernel_scaling_policy_update stack store albatross unikernel_name
       (user : User_model.user) multipart_body reqd =
+    let policy_key = (unikernel_name, albatross.Albatross.configuration.name) in
     let current_scaling_policy =
-      List.find_opt
-        (fun (scaling_policy : User_model.unikernel_scaling_policy) ->
-          Vmm_core.Name.Label.equal unikernel_name scaling_policy.name
-          && Vmm_core.Name.Label.equal albatross.Albatross.configuration.name
-               scaling_policy.primary_albatross_instance)
-        user.scaling_policies
+      User_model.Scaling_policy_map.find_opt policy_key user.scaling_policies
     in
     let update_unikernel_scaling scaling_policies =
       let user = User_model.update_user user ~scaling_policies () in
@@ -1420,13 +1416,7 @@ struct
             `Internal_server_error
     in
     let remove_scaling_policy () =
-      List.filter
-        (fun (p : User_model.unikernel_scaling_policy) ->
-          not
-            (Vmm_core.Name.Label.equal unikernel_name p.name
-            && Vmm_core.Name.Label.equal albatross.Albatross.configuration.name
-                 p.primary_albatross_instance))
-        user.scaling_policies
+      User_model.Scaling_policy_map.remove policy_key user.scaling_policies
     in
     match
       ( Utils.SM.find_opt "should_scale" multipart_body,
@@ -1468,7 +1458,8 @@ struct
                           }
                     in
                     let scaling_policies =
-                      new_policy :: remove_scaling_policy ()
+                      User_model.Scaling_policy_map.add policy_key new_policy
+                        user.scaling_policies
                     in
                     update_unikernel_scaling scaling_policies)
         | None | Some _ ->
@@ -1518,11 +1509,8 @@ struct
                 (Utils.LM.find_opt unikernel_name user.unikernel_updates)
             in
             let scaling_policy =
-              List.find_opt
-                (fun (scaling_policy : User_model.unikernel_scaling_policy) ->
-                  Vmm_core.Name.Label.equal scaling_policy.name unikernel_name
-                  && Vmm_core.Name.Label.equal albatross.configuration.name
-                       scaling_policy.primary_albatross_instance)
+              User_model.Scaling_policy_map.find_opt
+                (unikernel_name, albatross.configuration.name)
                 user.scaling_policies
             in
             user_max_allowed_unikernel_instances stack albatross user.name
@@ -3277,9 +3265,9 @@ struct
                           unikernel_name))
                 in
                 let is_scaling_enabled =
-                  List.exists
-                    (fun (p : User_model.unikernel_scaling_policy) ->
-                      Vmm_core.Name.Label.equal p.name primary_name)
+                  User_model.Scaling_policy_map.exists
+                    (fun (p_name, _) _ ->
+                      Vmm_core.Name.Label.equal p_name primary_name)
                     user.scaling_policies
                 in
                 if is_scaling_enabled then (
