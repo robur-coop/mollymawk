@@ -89,17 +89,11 @@ let find_by_uuid users uuid =
 
 let find_by_cookie users cookie_value =
   List.fold_left
-    (fun acc user ->
+    (fun acc (user : User_model.user) ->
       match acc with
       | Some _ as s -> s
       | None -> (
-          match
-            List.find_opt
-              (fun (cookie : User_model.cookie) ->
-                String.equal User_model.session_cookie cookie.User_model.name
-                && String.equal cookie_value cookie.value)
-              user.User_model.cookies
-          with
+          match User_model.user_session_cookie user cookie_value with
           | None -> None
           | Some c -> Some (user, c)))
     None users
@@ -129,12 +123,7 @@ let increment_token_usage (token : User_model.token) (user : User_model.user) =
 let update_cookie_usage (cookie : User_model.cookie) user_agent
     (user : User_model.user) =
   let cookie = { cookie with user_agent } in
-  let cookies =
-    List.map
-      (fun (cookie' : User_model.cookie) ->
-        if String.equal cookie.value cookie'.value then cookie else cookie')
-      user.cookies
-  in
+  let cookies = Utils.SM.add cookie.value cookie user.cookies in
   User_model.update_user user ~cookies ()
 
 let update_user_unikernel_updates (new_update : User_model.unikernel_update)

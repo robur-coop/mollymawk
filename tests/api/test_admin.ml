@@ -26,7 +26,15 @@ let setup_admin_and_user ?(user_active = true) store =
   let admin, session_cookie = make_admin in
   let target_user, _ = make_user ~active:user_active () in
   let csrf_cookie = csrf_cookie admin.uuid in
-  let admin = { admin with cookies = [ session_cookie; csrf_cookie ] } in
+  let admin =
+    {
+      admin with
+      cookies =
+        Utils.SM.empty
+        |> Utils.SM.add session_cookie.value session_cookie
+        |> Utils.SM.add csrf_cookie.value csrf_cookie;
+    }
+  in
 
   store.Storage.users <- [ admin; target_user ];
   (admin, session_cookie.value, csrf_cookie.value, target_user)
@@ -34,7 +42,15 @@ let setup_admin_and_user ?(user_active = true) store =
 let setup_admin_only store =
   let admin, session_cookie = make_admin in
   let csrf_cookie = csrf_cookie admin.uuid in
-  let admin = { admin with cookies = [ session_cookie; csrf_cookie ] } in
+  let admin =
+    {
+      admin with
+      cookies =
+        Utils.SM.empty
+        |> Utils.SM.add session_cookie.value session_cookie
+        |> Utils.SM.add csrf_cookie.value csrf_cookie;
+    }
+  in
   store.Storage.users <- [ admin ];
   (admin, session_cookie.value, csrf_cookie.value)
 

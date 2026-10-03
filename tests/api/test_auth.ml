@@ -16,7 +16,13 @@ let check_valid_registration () =
   let user =
     make_mock_user ~name:"test" ~email:"test@robur.coop" ~password ()
   in
-  let cookie = List.hd user.cookies in
+  let cookie =
+    Utils.SM.fold
+      (fun _ (c : User_model.cookie) acc ->
+        if String.equal c.name User_model.session_cookie then Some c else acc)
+      user.cookies None
+    |> Option.get
+  in
   Alcotest.(check string)
     "User name matches" "test"
     (Configuration.name_to_str user.name);
@@ -109,9 +115,7 @@ let check_successful_login () =
         "Session cookie name" User_model.session_cookie cookie.name;
       Alcotest.(check bool)
         "Cookie is recorded on user" true
-        (List.exists
-           (fun (c : User_model.cookie) -> String.equal c.value cookie.value)
-           updated_user.cookies)
+        (Utils.SM.mem cookie.value updated_user.cookies)
   | Error (`Msg err) -> failwith err
 
 let check_failed_login_wrong_password () =
@@ -284,8 +288,8 @@ let check_login_endpoint () =
       in
       Alcotest.(check bool)
         "User has session cookie" true
-        (List.exists
-           (fun (c : User_model.cookie) ->
+        (Utils.SM.exists
+           (fun _ (c : User_model.cookie) ->
              String.equal c.name User_model.session_cookie)
            updated_user.cookies);
       Lwt.return_unit )
@@ -310,9 +314,7 @@ let check_logout_endpoint () =
       in
       Alcotest.(check bool)
         "Session cookie removed after logout" false
-        (List.exists
-           (fun (c : User_model.cookie) -> String.equal c.value session_cookie)
-           updated_user.cookies);
+        (Utils.SM.mem session_cookie updated_user.cookies);
       Lwt.return_unit )
 
 let check_update_password_endpoint () =
@@ -364,11 +366,15 @@ let check_close_sessions_endpoint () =
         Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
       in
       let session_cookie_2 =
-        (List.find
-           (fun (c : User_model.cookie) ->
-             String.equal c.name User_model.session_cookie
-             && not (String.equal c.value session_cookie_1))
-           user_after_login.cookies)
+        (Utils.SM.fold
+           (fun _ (c : User_model.cookie) acc ->
+             if
+               String.equal c.name User_model.session_cookie
+               && not (String.equal c.value session_cookie_1)
+             then Some c
+             else acc)
+           user_after_login.cookies None
+        |> Option.get)
           .value
       in
       let _user, csrf_token = add_user_csrf store user_after_login in
@@ -389,16 +395,10 @@ let check_close_sessions_endpoint () =
       in
       Alcotest.(check bool)
         "Current session still active" true
-        (List.exists
-           (fun (c : User_model.cookie) ->
-             String.equal c.value session_cookie_1)
-           updated_user.cookies);
+        (Utils.SM.mem session_cookie_1 updated_user.cookies);
       Alcotest.(check bool)
         "Other session closed" false
-        (List.exists
-           (fun (c : User_model.cookie) ->
-             String.equal c.value session_cookie_2)
-           updated_user.cookies);
+        (Utils.SM.mem session_cookie_2 updated_user.cookies);
       Lwt.return_unit )
 
 let check_close_session_endpoint () =
@@ -417,11 +417,15 @@ let check_close_session_endpoint () =
         Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
       in
       let session_cookie_2 =
-        (List.find
-           (fun (c : User_model.cookie) ->
-             String.equal c.name User_model.session_cookie
-             && not (String.equal c.value session_cookie_1))
-           user_after_login.cookies)
+        (Utils.SM.fold
+           (fun _ (c : User_model.cookie) acc ->
+             if
+               String.equal c.name User_model.session_cookie
+               && not (String.equal c.value session_cookie_1)
+             then Some c
+             else acc)
+           user_after_login.cookies None
+        |> Option.get)
           .value
       in
       let _user, csrf_token = add_user_csrf store user_after_login in
@@ -445,16 +449,10 @@ let check_close_session_endpoint () =
       in
       Alcotest.(check bool)
         "Current session still active" true
-        (List.exists
-           (fun (c : User_model.cookie) ->
-             String.equal c.value session_cookie_1)
-           updated_user.cookies);
+        (Utils.SM.mem session_cookie_1 updated_user.cookies);
       Alcotest.(check bool)
         "Targeted session closed" false
-        (List.exists
-           (fun (c : User_model.cookie) ->
-             String.equal c.value session_cookie_2)
-           updated_user.cookies);
+        (Utils.SM.mem session_cookie_2 updated_user.cookies);
       Lwt.return_unit )
 
 let tests =
