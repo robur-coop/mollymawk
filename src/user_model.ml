@@ -33,6 +33,17 @@ type unikernel_scaling_policy = {
   max_instances : int;
 }
 
+module Scaling_policy_key = struct
+  type t = Vmm_core.Name.Label.t * Vmm_core.Name.Label.t
+  (* the unikernel name and the instance name to which the primary unikernel has been deployed on. *)
+
+  let compare (n1, i1) (n2, i2) =
+    let c = Vmm_core.Name.Label.compare n1 n2 in
+    if c <> 0 then c else Vmm_core.Name.Label.compare i1 i2
+end
+
+module Scaling_policy_map = Map.Make (Scaling_policy_key)
+
 type user = {
   name : Vmm_core.Name.Label.t;
   email : Mrmime.Mailbox.t;
@@ -47,7 +58,7 @@ type user = {
   active : bool;
   super_user : bool;
   unikernel_updates : unikernel_update Utils.LM.t;
-  scaling_policies : unikernel_scaling_policy list;
+  scaling_policies : unikernel_scaling_policy Scaling_policy_map.t;
 }
 
 let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
@@ -305,7 +316,10 @@ let user_to_json (u : user) =
              (fun _ uu acc -> unikernel_update_to_json uu :: acc)
              u.unikernel_updates []) );
       ( "scaling_policies",
-        `List (List.map scaling_policy_to_json u.scaling_policies) );
+        `List
+          (Scaling_policy_map.fold
+             (fun _ sp acc -> scaling_policy_to_json sp :: acc)
+             u.scaling_policies []) );
     ]
 
 let user_v9_of_json cookie_fn = function
@@ -408,7 +422,7 @@ let user_v9_of_json cookie_fn = function
               active;
               super_user;
               unikernel_updates;
-              scaling_policies = [];
+              scaling_policies = Scaling_policy_map.empty;
             }
       | _ ->
           Error
@@ -511,8 +525,12 @@ let user_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* scaling_policy = scaling_policy_of_json js in
-                Ok (scaling_policy :: acc))
-              (Ok []) scaling_policies
+                Ok
+                  (Scaling_policy_map.add
+                     ( scaling_policy.name,
+                       scaling_policy.primary_albatross_instance )
+                     scaling_policy acc))
+              (Ok Scaling_policy_map.empty) scaling_policies
           in
           Ok
             {
@@ -597,7 +615,7 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
       active;
       super_user;
       unikernel_updates = Utils.LM.empty;
-      scaling_policies = [];
+      scaling_policies = Scaling_policy_map.empty;
     },
     session )
 
