@@ -490,7 +490,7 @@ let make_mock_token ?(name = "mock-token") ?(expiry = 3600) () =
 
 let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
     ?(password = "Password123!") ?(active = true) ?(super_user = false)
-    ?(tokens = []) ?(with_csrf = true) () =
+    ?(tokens = Utils.SM.empty) ?(with_csrf = true) () =
   let name_lbl = label_of_string_exn name in
   let email_box = email_of_string_exn email in
   let now = Mirage_ptime.now () in

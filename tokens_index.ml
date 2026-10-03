@@ -1,4 +1,4 @@
-let tokens_index_layout tokens current_time =
+let tokens_index_layout (tokens : User_model.token Utils.SM.t) current_time =
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -11,7 +11,10 @@ let tokens_index_layout tokens current_time =
                 p
                   ~a:[ a_class [ "font-bold text-gray-700" ] ]
                   [
-                    txt ("API Keys (" ^ string_of_int (List.length tokens) ^ ")");
+                    txt
+                      ("API Keys ("
+                      ^ string_of_int (Utils.SM.cardinal tokens)
+                      ^ ")");
                   ];
               ];
             div
@@ -320,8 +323,8 @@ let tokens_index_layout tokens current_time =
                                        [ txt "Action" ];
                                    ];
                                ])
-                          (List.map
-                             (fun (token : User_model.token) ->
+                          (Utils.SM.fold
+                             (fun _ (token : User_model.token) acc ->
                                tr
                                  ~a:[ a_class [ "border-b border-gray-200" ] ]
                                  [
@@ -444,8 +447,9 @@ let tokens_index_layout tokens current_time =
                                          ~content:(txt "Delete")
                                          ~btn_type:`Danger_outlined ();
                                      ];
-                                 ])
-                             tokens);
+                                 ]
+                               :: acc)
+                             tokens []);
                       ];
                   ];
               ];

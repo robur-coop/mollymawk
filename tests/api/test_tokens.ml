@@ -29,8 +29,8 @@ let check_create_token_success () =
       let updated_user = List.hd store.Storage.users in
       Alcotest.(check int)
         "User has 1 token in store" 1
-        (List.length updated_user.tokens);
-      let created_token = List.hd updated_user.tokens in
+        (Utils.SM.cardinal updated_user.tokens);
+      let created_token = snd (Utils.SM.choose updated_user.tokens) in
       Alcotest.(check string)
         "Token name matches in store" "ci-token" created_token.name;
       Alcotest.(check int)
@@ -126,7 +126,7 @@ let check_update_token_success () =
         (String.includes ~affix:"\"expires_in\":7200" resp);
 
       let updated_user = List.hd store.Storage.users in
-      let updated_token = List.hd updated_user.tokens in
+      let updated_token = snd (Utils.SM.choose updated_user.tokens) in
       Alcotest.(check string)
         "Store token name updated" "updated-token" updated_token.name;
       Alcotest.(check int)
@@ -205,7 +205,7 @@ let check_delete_token_success () =
       let updated_user = List.hd store.Storage.users in
       Alcotest.(check int)
         "Tokens list in store is now empty" 0
-        (List.length updated_user.tokens);
+        (Utils.SM.cardinal updated_user.tokens);
       Lwt.return_unit )
 
 let check_delete_token_missing_fields () =

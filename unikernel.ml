@@ -2880,9 +2880,9 @@ struct
     | Some (`String name), Some (`Int expiry) -> (
         let now = Mirage_ptime.now () in
         let token = User_model.generate_token ~name ~expiry ~current_time:now in
+        let tokens = Utils.SM.add token.value token user.tokens in
         let updated_user =
-          User_model.update_user user ~tokens:(token :: user.tokens)
-            ~updated_at:now ()
+          User_model.update_user user ~tokens ~updated_at:now ()
         in
         Storage.update_user store updated_user;
         Store.write_data store >>= function
@@ -2906,12 +2906,7 @@ struct
     match Utils.Json.(get "token_value" json_dict) with
     | Some (`String value) -> (
         let now = Mirage_ptime.now () in
-        let tokens =
-          List.filter
-            (fun (token : User_model.token) ->
-              not (String.equal token.value value))
-            user.tokens
-        in
+        let tokens = Utils.SM.remove value user.tokens in
         let updated_user =
           User_model.update_user user ~tokens ~updated_at:now ()
         in
@@ -2941,24 +2936,12 @@ struct
     with
     | Some (`String name), Some (`Int expiry), Some (`String value) -> (
         let now = Mirage_ptime.now () in
-        let token =
-          List.find_opt
-            (fun (token : User_model.token) -> String.equal token.value value)
-            user.tokens
-        in
-        match token with
+        match Utils.SM.find_opt value user.tokens with
         | Some token_ -> (
             let updated_token = { token_ with name; expires_in = expiry } in
-            let user_tokens =
-              List.filter
-                (fun (token : User_model.token) ->
-                  not (String.equal token.value value))
-                user.tokens
-            in
+            let tokens = Utils.SM.add value updated_token user.tokens in
             let updated_user =
-              User_model.update_user user
-                ~tokens:(updated_token :: user_tokens)
-                ~updated_at:now ()
+              User_model.update_user user ~tokens ~updated_at:now ()
             in
             Storage.update_user store updated_user;
             Store.write_data store >>= function

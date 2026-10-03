@@ -101,23 +101,14 @@ let find_by_cookie users cookie_value =
 let find_by_api_token users token =
   List.find_map
     (fun (user : User_model.user) ->
-      match
-        List.find_opt
-          (fun (token_ : User_model.token) -> String.equal token token_.value)
-          user.tokens
-      with
+      match Utils.SM.find_opt token user.tokens with
       | Some token_ -> Some (user, token_)
       | None -> None)
     users
 
 let increment_token_usage (token : User_model.token) (user : User_model.user) =
   let token = { token with usage_count = token.usage_count + 1 } in
-  let tokens =
-    List.map
-      (fun (token' : User_model.token) ->
-        if String.equal token.value token'.value then token else token')
-      user.tokens
-  in
+  let tokens = Utils.SM.add token.value token user.tokens in
   User_model.update_user user ~tokens ()
 
 let update_cookie_usage (cookie : User_model.cookie) user_agent

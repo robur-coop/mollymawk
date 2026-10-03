@@ -41,7 +41,7 @@ type user = {
   email_verified : Ptime.t option;
   password : string;
   uuid : string;
-  tokens : token list;
+  tokens : token Utils.SM.t;
   cookies : cookie Utils.SM.t;
   created_at : Ptime.t;
   updated_at : Ptime.t;
@@ -286,7 +286,9 @@ let user_to_json (u : user) =
       ("email_verified", Utils.TimeHelper.ptime_to_json u.email_verified);
       ("password", `String u.password);
       ("uuid", `String u.uuid);
-      ("tokens", `List (List.map token_to_json u.tokens));
+      ( "tokens",
+        `List
+          (Utils.SM.fold (fun _ t acc -> token_to_json t :: acc) u.tokens []) );
       ( "cookies",
         `List
           (Utils.SM.fold (fun _ c acc -> cookie_to_json c :: acc) u.cookies [])
@@ -352,8 +354,8 @@ let user_v9_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* token = token_of_json js in
-                Ok (token :: acc))
-              (Ok []) tokens
+                Ok (Utils.SM.add token.value token acc))
+              (Ok Utils.SM.empty) tokens
           in
           let* cookies =
             List.fold_left
@@ -465,8 +467,8 @@ let user_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* token = token_of_json js in
-                Ok (token :: acc))
-              (Ok []) tokens
+                Ok (Utils.SM.add token.value token acc))
+              (Ok Utils.SM.empty) tokens
           in
           let* cookies =
             List.fold_left
@@ -586,7 +588,7 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
       email_verified = None;
       password;
       uuid;
-      tokens = [];
+      tokens = Utils.SM.empty;
       cookies = Utils.SM.singleton session.value session;
       created_at;
       updated_at = created_at;

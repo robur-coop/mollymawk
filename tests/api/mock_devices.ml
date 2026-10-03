@@ -233,7 +233,11 @@ let add_user_csrf store (user : User_model.user) =
 let add_user_token ?(name = "test-token") ?(expiry = 86400) store
     (user : User_model.user) =
   let token = Test_utils.make_mock_token ~name ~expiry () in
-  let user = User_model.update_user user ~tokens:(token :: user.tokens) () in
+  let user =
+    User_model.update_user user
+      ~tokens:(Utils.SM.add token.value token user.tokens)
+      ()
+  in
   Storage.update_user store user;
   (user, token.value)
 
