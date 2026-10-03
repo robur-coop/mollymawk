@@ -1415,9 +1415,6 @@ struct
                `Error)
             `Internal_server_error
     in
-    let remove_scaling_policy () =
-      User_model.Scaling_policy_map.remove policy_key user.scaling_policies
-    in
     match
       ( Utils.SM.find_opt "should_scale" multipart_body,
         Utils.SM.find_opt "max_instances" multipart_body )
@@ -1426,7 +1423,10 @@ struct
         match int_of_string_opt max_instances_str with
         | Some max_instances when max_instances >= 1 -> (
             if max_instances = 1 then
-              let scaling_policies = remove_scaling_policy () in
+              let scaling_policies =
+                User_model.Scaling_policy_map.remove policy_key
+                  user.scaling_policies
+              in
               update_unikernel_scaling scaling_policies
             else
               user_max_allowed_unikernel_instances stack albatross user.name
@@ -1477,7 +1477,10 @@ struct
                  `Success)
               `OK
         | Some _ ->
-            let scaling_policies = remove_scaling_policy () in
+            let scaling_policies =
+              User_model.Scaling_policy_map.remove policy_key
+                user.scaling_policies
+            in
             update_unikernel_scaling scaling_policies)
     | _ ->
         reply reqd
