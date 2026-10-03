@@ -6,7 +6,8 @@
   (backend bisect_ppx_ng))
  (libraries
   test_utils
-  mollymawk_libraries
+  mollymawk_core
+  mollymawk_views
   alcotest
   albatross
   albatross.tls

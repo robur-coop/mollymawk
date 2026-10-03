@@ -74,10 +74,8 @@ let redirect_to_page ~path ?(clear_session = false) ?(with_error = false) reqd
   http_response ~api_meth:false ~title:"Redirecting" ~data:(`String "")
     ~header_list reqd `Found
 
-let construct_instance_redirect_url callback instance_name =
-  let separator = if String.contains callback '?' then "&" else "?" in
-  Fmt.str "%s%sinstance=%s" callback separator
-    (Configuration.name_to_str instance_name)
+let construct_instance_redirect_url =
+  Configuration.construct_instance_redirect_url
 
 let redirect_to_instance_selector callback_link reqd ?(msg = "") () =
   redirect_to_page

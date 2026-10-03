@@ -31,8 +31,8 @@ let select_instance (user : User_model.user) albatross_instances
                      ~a:
                        [
                          a_href
-                           (Middleware.construct_instance_redirect_url callback
-                              instance);
+                           (Configuration.construct_instance_redirect_url
+                              callback instance);
                        ]
                      [
                        div

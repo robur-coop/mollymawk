@@ -1,7 +1,7 @@
 (library
  (name test_utils)
  (libraries
-  mollymawk_libraries
+  mollymawk_core
   alcotest
   albatross
   yojson

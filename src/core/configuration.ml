@@ -12,6 +12,10 @@ type t = {
 let name_to_str name = Vmm_core.Name.Label.to_string name
 let name_of_str name = Vmm_core.Name.Label.of_string name
 
+let construct_instance_redirect_url callback instance_name =
+  let separator = if String.contains callback '?' then "&" else "?" in
+  Fmt.str "%s%sinstance=%s" callback separator (name_to_str instance_name)
+
 let to_json t =
   let one_to_json c =
     `Assoc

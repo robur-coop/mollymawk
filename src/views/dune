@@ -1,0 +1,4 @@
+(library
+ (name mollymawk_views)
+ (libraries mollymawk_core)
+ (wrapped false))

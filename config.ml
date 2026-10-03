@@ -2,7 +2,7 @@
 open Mirage
 
 let assets = crunch "assets"
-let local_libs = [ "mollymawk_libraries" ]
+let local_libs = [ "mollymawk_core"; "mollymawk_views" ]
 let dhcp_requests = make_dhcp_requests ()
 
 let management_stack, lease =

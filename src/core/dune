@@ -1,0 +1,24 @@
+(library
+ (name mollymawk_core)
+ (libraries
+  uuidm
+  ptime
+  mirage-ptime
+  albatross
+  mirage-crypto-rng
+  yojson
+  mrmime
+  lwt
+  http-mirage-client
+  ohex
+  tyxml
+  tcpip
+  tls-mirage
+  x509
+  duration
+  dns-client-mirage
+  happy-eyeballs-mirage
+  mirage-sleep
+  fmt
+  logs)
+ (wrapped false))
