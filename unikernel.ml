@@ -80,9 +80,10 @@ struct
             Ipaddr.Set.of_list [ Ipaddr.V6 addr ] |> Lwt.return_ok
         | Error e -> Lwt.return_error e)
 
-  let send_email happy_eyeballs email_config user_email ~subject ~body =
+  let send_email ?references happy_eyeballs email_config user_email ~subject
+      ~body =
     let email =
-      Utils.Email.construct_email
+      Utils.Email.construct_email ?references
         ~from_email:email_config.Utils.Email.from_email ~to_email:user_email
         ~subject ~body ()
     in
@@ -3460,8 +3461,11 @@ struct
             >>= fun reports ->
             Lwt_list.iter_s
               (fun (report : Update_flow.user_unikernel_available_updates) ->
-                send_email happy_eyeballs email_config report.user.email
-                  ~subject:"Unikernel updates available"
+                let references =
+                  Fmt.str "updates-%s@robur.coop" report.user.uuid
+                in
+                send_email ~references happy_eyeballs email_config
+                  report.user.email ~subject:"Unikernel updates available"
                   ~body:(Email_templates.updated_unikernels report email_config)
                 >>= function
                 | Ok () ->
