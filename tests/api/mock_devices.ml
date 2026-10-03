@@ -141,14 +141,14 @@ let make_app_request_handler ?policies ?instances store =
       status = Albatross.Status.Online;
     }
   in
-  let albatross_instances = ref App.Label_map.empty in
+  let albatross_instances = ref Utils.LM.empty in
   (albatross_instances :=
      match instances with
      | Some insts -> insts
      | None ->
-         App.Label_map.empty
-         |> App.Label_map.add success_config.name success_instance
-         |> App.Label_map.add failure_config.name failure_instance);
+         Utils.LM.empty
+         |> Utils.LM.add success_config.name success_instance
+         |> Utils.LM.add failure_config.name failure_instance);
   let client_addr = (Ipaddr.of_string_exn "127.0.0.1", 8080) in
   let v4 = Ipaddr.V4.Prefix.global in
   let udp =

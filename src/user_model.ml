@@ -1,5 +1,3 @@
-module Rng = Mirage_crypto_rng
-
 type token = {
   name : string;
   token_type : string;
@@ -48,7 +46,7 @@ type user = {
   email_verification_uuid : Uuidm.t option;
   active : bool;
   super_user : bool;
-  unikernel_updates : unikernel_update list;
+  unikernel_updates : unikernel_update Utils.LM.t;
   scaling_policies : unikernel_scaling_policy list;
 }
 
@@ -302,7 +300,10 @@ let user_to_json (u : user) =
       ("active", `Bool u.active);
       ("super_user", `Bool u.super_user);
       ( "unikernel_updates",
-        `List (List.map unikernel_update_to_json u.unikernel_updates) );
+        `List
+          (Utils.LM.fold
+             (fun _ uu acc -> unikernel_update_to_json uu :: acc)
+             u.unikernel_updates []) );
       ( "scaling_policies",
         `List (List.map scaling_policy_to_json u.scaling_policies) );
     ]
@@ -387,8 +388,8 @@ let user_v9_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* unikernel_update = unikernel_update_of_json js in
-                Ok (unikernel_update :: acc))
-              (Ok []) unikernel_updates
+                Ok (Utils.LM.add unikernel_update.name unikernel_update acc))
+              (Ok Utils.LM.empty) unikernel_updates
           in
           let* name = Configuration.name_of_str name in
           let* email = Mrmime.Mailbox.of_string email in
@@ -500,8 +501,8 @@ let user_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* unikernel_update = unikernel_update_of_json js in
-                Ok (unikernel_update :: acc))
-              (Ok []) unikernel_updates
+                Ok (Utils.LM.add unikernel_update.name unikernel_update acc))
+              (Ok Utils.LM.empty) unikernel_updates
           in
           let* name = Configuration.name_of_str name in
           let* email = Mrmime.Mailbox.of_string email in
@@ -546,7 +547,7 @@ let hash_password ~password ~uuid =
   Base64.encode_string hash
 
 let generate_uuid () =
-  let data = Rng.generate 16 in
+  let data = Mirage_crypto_rng.generate 16 in
   Uuidm.v4 (Bytes.unsafe_of_string data)
 
 let generate_cookie ~name ~uuid ?(expires_in = 3600) ~created_at ~user_agent ()
@@ -595,7 +596,7 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
       email_verification_uuid = None;
       active;
       super_user;
-      unikernel_updates = [];
+      unikernel_updates = Utils.LM.empty;
       scaling_policies = [];
     },
     session )

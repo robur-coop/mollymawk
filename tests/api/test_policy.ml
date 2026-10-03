@@ -366,9 +366,7 @@ let check_update_policy_albatross_failure () =
           status = Albatross.Status.Online;
         }
       in
-      let instances =
-        App.Label_map.singleton failing_lbl unreachable_instance
-      in
+      let instances = Utils.LM.singleton failing_lbl unreachable_instance in
       let handler = make_app_request_handler ~policies ~instances store in
       let body =
         make_policy_body ~user_uuid:qtest.uuid ~instance:"failing" ~unikernels:2
