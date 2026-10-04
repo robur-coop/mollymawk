@@ -197,10 +197,7 @@ let check_create_success () =
       let sec_name = label_of_string_exn "secondary" in
       Alcotest.(check bool)
         "Store now has secondary configuration" true
-        (List.exists
-           (fun (c : Configuration.t) ->
-             Vmm_core.Name.Label.equal c.name sec_name)
-           store.Storage.configurations);
+        (Utils.LM.mem sec_name store.Storage.configurations);
       Lwt.return_unit )
 
 let check_create_duplicate_rejected () =
@@ -208,7 +205,8 @@ let check_create_duplicate_rejected () =
     ( init_mock_store () >>= fun store ->
       setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let success_cfg = Lwt_main.run Mock_albatross.success_config in
-      store.Storage.configurations <- [ success_cfg ];
+      store.Storage.configurations <-
+        Utils.LM.singleton success_cfg.name success_cfg;
       let body =
         make_albatross_body
           ~name:(Configuration.name_to_str success_cfg.name)
@@ -434,7 +432,8 @@ let check_update_success () =
     ( init_mock_store () >>= fun store ->
       setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let success_cfg = Lwt_main.run Mock_albatross.success_config in
-      store.Storage.configurations <- [ success_cfg ];
+      store.Storage.configurations <-
+        Utils.LM.singleton success_cfg.name success_cfg;
       let body =
         make_albatross_body
           ~name:(Configuration.name_to_str success_cfg.name)
@@ -476,7 +475,8 @@ let check_update_mismatched_cert_and_key () =
     ( init_mock_store () >>= fun store ->
       setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let success_cfg = Lwt_main.run Mock_albatross.success_config in
-      store.Storage.configurations <- [ success_cfg ];
+      store.Storage.configurations <-
+        Utils.LM.singleton success_cfg.name success_cfg;
       let body =
         make_albatross_body
           ~name:(Configuration.name_to_str success_cfg.name)
@@ -523,7 +523,8 @@ let check_update_connection_failure () =
       setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let success_cfg = Lwt_main.run Mock_albatross.success_config in
       let failure_cfg = Lwt_main.run Mock_albatross.failure_config in
-      store.Storage.configurations <- [ success_cfg ];
+      store.Storage.configurations <-
+        Utils.LM.singleton success_cfg.name success_cfg;
       let body =
         make_albatross_body
           ~name:(Configuration.name_to_str success_cfg.name)
@@ -547,7 +548,8 @@ let check_update_invalid_csrf () =
     ( init_mock_store () >>= fun store ->
       setup_user store >>= fun (_user, session_cookie, _csrf_token) ->
       let success_cfg = Lwt_main.run Mock_albatross.success_config in
-      store.Storage.configurations <- [ success_cfg ];
+      store.Storage.configurations <-
+        Utils.LM.singleton success_cfg.name success_cfg;
       let body =
         make_albatross_body
           ~name:(Configuration.name_to_str success_cfg.name)
@@ -568,7 +570,8 @@ let check_update_non_admin_forbidden () =
     ( init_mock_store () >>= fun store ->
       setup_non_admin_user store >>= fun (_user, session_cookie, csrf_token) ->
       let success_cfg = Lwt_main.run Mock_albatross.success_config in
-      store.Storage.configurations <- [ success_cfg ];
+      store.Storage.configurations <-
+        Utils.LM.singleton success_cfg.name success_cfg;
       let body =
         make_albatross_body
           ~name:(Configuration.name_to_str success_cfg.name)
@@ -591,7 +594,8 @@ let check_update_unauthenticated () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
       let success_cfg = Lwt_main.run Mock_albatross.success_config in
-      store.Storage.configurations <- [ success_cfg ];
+      store.Storage.configurations <-
+        Utils.LM.singleton success_cfg.name success_cfg;
       let body =
         make_albatross_body
           ~name:(Configuration.name_to_str success_cfg.name)
@@ -631,7 +635,8 @@ let check_delete_success () =
     ( init_mock_store () >>= fun store ->
       setup_user store >>= fun (_user, session_cookie, csrf_token) ->
       let success_cfg = Lwt_main.run Mock_albatross.success_config in
-      store.Storage.configurations <- [ success_cfg ];
+      store.Storage.configurations <-
+        Utils.LM.singleton success_cfg.name success_cfg;
       let name_str = Configuration.name_to_str success_cfg.name in
       let body = make_delete_body ~name:name_str ~csrf_token () in
       let req =
@@ -647,10 +652,7 @@ let check_delete_success () =
         (String.includes ~affix:"Configuration delete successfully" resp);
       Alcotest.(check bool)
         "Store configurations no longer contains deleted instance" false
-        (List.exists
-           (fun (c : Configuration.t) ->
-             Vmm_core.Name.Label.equal c.name success_cfg.name)
-           store.Storage.configurations);
+        (Utils.LM.mem success_cfg.name store.Storage.configurations);
       Lwt.return_unit )
 
 let check_delete_missing_name_field () =
