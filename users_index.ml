@@ -1,4 +1,4 @@
-let users_index_layout (users : User_model.user list) current_time =
+let users_index_layout (users : User_model.user Utils.SM.t) current_time =
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -10,7 +10,10 @@ let users_index_layout (users : User_model.user list) current_time =
               [
                 p
                   ~a:[ a_class [ "font-bold text-gray-700" ] ]
-                  [ txt ("Users (" ^ string_of_int (List.length users) ^ ")") ];
+                  [
+                    txt
+                      ("Users (" ^ string_of_int (Utils.SM.cardinal users) ^ ")");
+                  ];
               ];
             div
               [
@@ -209,8 +212,8 @@ let users_index_layout (users : User_model.user list) current_time =
                                        [ txt "Action" ];
                                    ];
                                ])
-                          (List.map
-                             (fun (user : User_model.user) ->
+                          (Utils.SM.fold
+                             (fun _ (user : User_model.user) acc ->
                                tr
                                  ~a:[ a_class [ "border-b border-gray-200" ] ]
                                  [
@@ -386,8 +389,9 @@ let users_index_layout (users : User_model.user list) current_time =
                                            ]
                                          [ txt "View" ];
                                      ];
-                                 ])
-                             users);
+                                 ]
+                               :: acc)
+                             users []);
                       ];
                   ];
               ];

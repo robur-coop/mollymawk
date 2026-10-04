@@ -8,20 +8,82 @@ let current_version = 10
 *)
 
 type t = {
-  mutable users : User_model.user list;
+  mutable users : User_model.user Utils.SM.t;
   mutable configurations : Configuration.t list;
   mutable email : Utils.Email.t option;
+  mutable by_name : string Utils.LM.t;
+  mutable by_email : string Utils.SM.t;
+  mutable by_cookie : string Utils.SM.t;
+  mutable by_token : string Utils.SM.t;
+  mutable by_verification_token : string Utils.SM.t;
 }
 
 let configurations { configurations; _ } = configurations
 let email { email; _ } = email
 let users { users; _ } = users
 
+let email_to_key (email : Mrmime.Mailbox.t) =
+  String.lowercase_ascii (Emile.to_string email)
+
+let register_user_indexes t (u : User_model.user) =
+  t.by_name <- Utils.LM.add u.name u.uuid t.by_name;
+  t.by_email <- Utils.SM.add (email_to_key u.email) u.uuid t.by_email;
+  t.by_cookie <-
+    Utils.SM.fold
+      (fun _ (c : User_model.cookie) acc -> Utils.SM.add c.value u.uuid acc)
+      u.cookies t.by_cookie;
+  t.by_token <-
+    Utils.SM.fold
+      (fun _ (tok : User_model.token) acc -> Utils.SM.add tok.value u.uuid acc)
+      u.tokens t.by_token;
+  match u.email_verification_uuid with
+  | Some ev ->
+      t.by_verification_token <-
+        Utils.SM.add (Uuidm.to_string ev) u.uuid t.by_verification_token
+  | None -> ()
+
+let unregister_user_indexes t (u : User_model.user) =
+  t.by_name <- Utils.LM.remove u.name t.by_name;
+  t.by_email <- Utils.SM.remove (email_to_key u.email) t.by_email;
+  t.by_cookie <-
+    Utils.SM.fold
+      (fun _ (c : User_model.cookie) acc -> Utils.SM.remove c.value acc)
+      u.cookies t.by_cookie;
+  t.by_token <-
+    Utils.SM.fold
+      (fun _ (tok : User_model.token) acc -> Utils.SM.remove tok.value acc)
+      u.tokens t.by_token;
+  match u.email_verification_uuid with
+  | Some ev ->
+      t.by_verification_token <-
+        Utils.SM.remove (Uuidm.to_string ev) t.by_verification_token
+  | None -> ()
+
+let create ?(users = Utils.SM.empty) ?(configurations = []) ?email () =
+  let t =
+    {
+      users;
+      configurations;
+      email;
+      by_name = Utils.LM.empty;
+      by_email = Utils.SM.empty;
+      by_cookie = Utils.SM.empty;
+      by_token = Utils.SM.empty;
+      by_verification_token = Utils.SM.empty;
+    }
+  in
+  Utils.SM.iter (fun _ u -> register_user_indexes t u) users;
+  t
+
 let t_to_json ?(version = current_version) users configurations email =
   `Assoc
     [
       ("version", `Int version);
-      ("users", `List (List.map User_model.user_to_json users));
+      ( "users",
+        `List
+          (Utils.SM.fold
+             (fun _ u acc -> User_model.user_to_json u :: acc)
+             users []) );
       ("configuration", Configuration.to_json configurations);
       ("email", Utils.Email.to_json email);
     ]
@@ -56,8 +118,8 @@ let t_of_json json =
                   if v = 9 then User_model.(user_v9_of_json cookie_of_json) js
                   else User_model.(user_of_json cookie_of_json) js
                 in
-                Ok (user :: acc))
-              (Ok []) users
+                Ok (Utils.SM.add user.uuid user acc))
+              (Ok Utils.SM.empty) users
           in
           let* configurations = Configuration.of_json configuration in
           let* email =
@@ -74,37 +136,39 @@ let t_of_json json =
 
 let error_msgf fmt = Fmt.kstr (fun msg -> Error (`Msg msg)) fmt
 
-let find_by_email users email =
-  List.find_opt
-    (fun user -> Mrmime.Mailbox.equal user.User_model.email email)
-    users
+let find_by_email t email =
+  match Utils.SM.find_opt (email_to_key email) t.by_email with
+  | Some uuid -> Utils.SM.find_opt uuid t.users
+  | None -> None
 
-let find_by_name users name =
-  List.find_opt
-    (fun user -> Vmm_core.Name.Label.compare user.User_model.name name = 0)
-    users
+let find_by_name t name =
+  match Utils.LM.find_opt name t.by_name with
+  | Some uuid -> Utils.SM.find_opt uuid t.users
+  | None -> None
 
-let find_by_uuid users uuid =
-  List.find_opt (fun user -> String.equal user.User_model.uuid uuid) users
+let find_by_uuid t uuid = Utils.SM.find_opt uuid t.users
 
-let find_by_cookie users cookie_value =
-  List.fold_left
-    (fun acc (user : User_model.user) ->
-      match acc with
-      | Some _ as s -> s
-      | None -> (
+let find_by_cookie t cookie_value =
+  match Utils.SM.find_opt cookie_value t.by_cookie with
+  | Some uuid -> (
+      match Utils.SM.find_opt uuid t.users with
+      | Some user -> (
           match User_model.user_session_cookie user cookie_value with
-          | None -> None
-          | Some c -> Some (user, c)))
-    None users
-
-let find_by_api_token users token =
-  List.find_map
-    (fun (user : User_model.user) ->
-      match Utils.SM.find_opt token user.tokens with
-      | Some token_ -> Some (user, token_)
+          | Some c -> Some (user, c)
+          | None -> None)
       | None -> None)
-    users
+  | None -> None
+
+let find_by_api_token t token =
+  match Utils.SM.find_opt token t.by_token with
+  | Some uuid -> (
+      match Utils.SM.find_opt uuid t.users with
+      | Some user -> (
+          match Utils.SM.find_opt token user.tokens with
+          | Some token_ -> Some (user, token_)
+          | None -> None)
+      | None -> None)
+  | None -> None
 
 let increment_token_usage (token : User_model.token) (user : User_model.user) =
   let token = { token with usage_count = token.usage_count + 1 } in
@@ -124,21 +188,24 @@ let update_user_unikernel_updates (new_update : User_model.unikernel_update)
   in
   User_model.update_user user ~unikernel_updates ()
 
-let count_users users = List.length users
+let count_users t = Utils.SM.cardinal t.users
 
-let find_email_verification_token users uuid =
-  List.find_opt
-    (fun user ->
-      Option.fold ~none:false
-        ~some:(fun uu -> Uuidm.equal uu uuid)
-        user.User_model.email_verification_uuid)
-    users
+let find_email_verification_token t uuid =
+  match Utils.SM.find_opt (Uuidm.to_string uuid) t.by_verification_token with
+  | Some user_uuid -> Utils.SM.find_opt user_uuid t.users
+  | None -> None
 
-let count_active users =
-  List.length (List.filter (fun u -> u.User_model.active) users)
+let count_active t =
+  Utils.SM.fold
+    (fun _ (u : User_model.user) acc ->
+      if u.User_model.active then acc + 1 else acc)
+    t.users 0
 
-let count_superusers users =
-  List.length (List.filter (fun u -> u.User_model.super_user) users)
+let count_superusers t =
+  Utils.SM.fold
+    (fun _ (u : User_model.user) acc ->
+      if u.User_model.super_user then acc + 1 else acc)
+    t.users 0
 
 let configuration_name_eq (c1 : Configuration.t) (c2 : Configuration.t) =
   Vmm_core.Name.Label.equal c1.name c2.name
@@ -182,21 +249,17 @@ let delete_configuration t name =
   in
   t.configurations <- configurations
 
-let add_user t user = t.users <- user :: t.users
+let add_user t (user : User_model.user) =
+  t.users <- Utils.SM.add user.uuid user t.users;
+  register_user_indexes t user
 
 let delete_user t (user : User_model.user) =
-  let users =
-    List.fold_left
-      (fun acc u -> if u.User_model.uuid <> user.uuid then u :: acc else acc)
-      [] t.users
-  in
-  t.users <- users
+  t.users <- Utils.SM.remove user.uuid t.users;
+  unregister_user_indexes t user
 
 let update_user t (user : User_model.user) =
-  let users =
-    List.map
-      (fun (u : User_model.user) ->
-        match u.uuid = user.uuid with true -> user | false -> u)
-      t.users
-  in
-  t.users <- users
+  (match Utils.SM.find_opt user.uuid t.users with
+  | Some old_user -> unregister_user_indexes t old_user
+  | None -> ());
+  t.users <- Utils.SM.add user.uuid user t.users;
+  register_user_indexes t user
