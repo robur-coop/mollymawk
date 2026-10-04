@@ -612,10 +612,11 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                   err);
             Lwt.return (Error (state, err)))
 
-  let init_all stack (configs : Configuration.t list) =
+  let init_all stack (configs : Configuration.t Utils.LM.t) =
     let open Lwt.Infix in
-    Lwt_list.fold_left_s
-      (fun acc_map (configuration : Configuration.t) ->
+    Utils.LM.fold
+      (fun _ (configuration : Configuration.t) acc_p ->
+        acc_p >>= fun acc_map ->
         init stack configuration >|= function
         | Error (state, msg) ->
             Logs.err (fun m ->
@@ -624,7 +625,8 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                   msg);
             Utils.LM.add configuration.name state acc_map
         | Ok state -> Utils.LM.add configuration.name state acc_map)
-      Utils.LM.empty configs
+      configs
+      (Lwt.return Utils.LM.empty)
 
   let find_instance_by_name (albatross_map : a_map) name =
     match Utils.LM.find_opt name albatross_map with

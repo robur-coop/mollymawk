@@ -10,7 +10,7 @@ let current_version = 10
 type t = {
   (* these fields are persisted to disk *)
   mutable users : User_model.user Utils.SM.t;
-  mutable configurations : Configuration.t list;
+  mutable configurations : Configuration.t Utils.LM.t;
   mutable email : Utils.Email.t option;
   (* these fields below are not persisted to disk*)
   mutable by_name : string Utils.LM.t;
@@ -61,7 +61,7 @@ let unregister_user_indexes t (u : User_model.user) =
         Utils.SM.remove (Uuidm.to_string ev) t.by_verification_token
   | None -> ()
 
-let create ?(users = Utils.SM.empty) ?(configurations = []) ?email () =
+let create ?(users = Utils.SM.empty) ?(configurations = Utils.LM.empty) ?email () =
   let t =
     {
       users;
@@ -209,34 +209,27 @@ let count_superusers t =
       if u.User_model.super_user then acc + 1 else acc)
     t.users 0
 
-let configuration_name_eq (c1 : Configuration.t) (c2 : Configuration.t) =
-  Vmm_core.Name.Label.equal c1.name c2.name
-
-let exists (configurations : Configuration.t list)
-    (configuration : Configuration.t) =
-  List.exists (configuration_name_eq configuration) configurations
-
 let store_email t email = t.email <- email
 
 let insert_configuration t (configuration : Configuration.t) =
-  if exists t.configurations configuration then
+  if Utils.LM.mem configuration.name t.configurations then
     Error
       (Fmt.str "configuration %s already exists"
          (Configuration.name_to_str configuration.name))
-  else Ok (t.configurations <- t.configurations @ [ configuration ])
+  else
+    Ok
+      (t.configurations <-
+        Utils.LM.add configuration.name configuration t.configurations)
 
 let update_configuration t (configuration : Configuration.t) =
-  if not (exists t.configurations configuration) then
+  if not (Utils.LM.mem configuration.name t.configurations) then
     Error
       (Fmt.str "configuration %s not found"
          (Configuration.name_to_str configuration.name))
   else
     Ok
       (t.configurations <-
-        List.map
-          (fun c ->
-            if configuration_name_eq c configuration then configuration else c)
-          t.configurations)
+        Utils.LM.add configuration.name configuration t.configurations)
 
 let upsert_configuration t (configuration : Configuration.t) mode =
   match mode with
@@ -244,12 +237,7 @@ let upsert_configuration t (configuration : Configuration.t) mode =
   | `Update -> update_configuration t configuration
 
 let delete_configuration t name =
-  let configurations =
-    List.filter
-      (fun (c : Configuration.t) -> not (Vmm_core.Name.Label.equal c.name name))
-      t.configurations
-  in
-  t.configurations <- configurations
+  t.configurations <- Utils.LM.remove name t.configurations
 
 let add_user t (user : User_model.user) =
   t.users <- Utils.SM.add user.uuid user t.users;
