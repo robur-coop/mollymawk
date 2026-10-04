@@ -49,7 +49,11 @@ let check_registration_with_no_email () =
 
 let check_duplicate_user () =
   let existing_user = make_mock_user ~name:"test" ~email:"test@robur.coop" () in
-  let users = [ existing_user ] in
+  let store =
+    Storage.create
+      ~users:(Utils.SM.singleton existing_user.uuid existing_user)
+      ()
+  in
 
   let dup_name = label_of_string_exn "test" in
   let dup_email = email_of_string_exn "test@robur.coop" in
@@ -58,18 +62,18 @@ let check_duplicate_user () =
 
   Alcotest.(check bool)
     "Existing user with name found" true
-    (Option.is_some (Storage.find_by_name users dup_name));
+    (Option.is_some (Storage.find_by_name store dup_name));
 
   Alcotest.(check bool)
     "Existing user with email found" true
-    (Option.is_some (Storage.find_by_email users dup_email));
+    (Option.is_some (Storage.find_by_email store dup_email));
 
   Alcotest.(check bool)
     "Unique name not found" true
-    (Option.is_none (Storage.find_by_name users new_name));
+    (Option.is_none (Storage.find_by_name store new_name));
   Alcotest.(check bool)
     "Unique email not found" true
-    (Option.is_none (Storage.find_by_email users new_email))
+    (Option.is_none (Storage.find_by_email store new_email))
 
 let check_email_validation () =
   Alcotest.(check bool)
@@ -172,8 +176,8 @@ let check_registration_endpoint () =
 
       Alcotest.(check int)
         "User stored in database" 1
-        (List.length store.Storage.users);
-      let saved_user = List.hd store.Storage.users in
+        (Utils.SM.cardinal store.Storage.users);
+      let saved_user = snd (Utils.SM.choose store.Storage.users) in
       Alcotest.(check string)
         "Saved user name matches" "test"
         (Configuration.name_to_str saved_user.name);
@@ -283,9 +287,7 @@ let check_login_endpoint () =
       Alcotest.(check bool)
         "Response body contains test" true
         (String.includes ~affix:"\"name\":\"test\"" resp);
-      let updated_user =
-        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
-      in
+      let updated_user = Option.get (Storage.find_by_uuid store user.uuid) in
       Alcotest.(check bool)
         "User has session cookie" true
         (Utils.SM.exists
@@ -309,9 +311,7 @@ let check_logout_endpoint () =
       Alcotest.(check bool)
         "Logout success message" true
         (String.includes ~affix:"Logout successful" resp);
-      let updated_user =
-        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
-      in
+      let updated_user = Option.get (Storage.find_by_uuid store user.uuid) in
       Alcotest.(check bool)
         "Session cookie removed after logout" false
         (Utils.SM.mem session_cookie updated_user.cookies);
@@ -338,9 +338,7 @@ let check_update_password_endpoint () =
       Alcotest.(check bool)
         "Password updated message" true
         (String.includes ~affix:"Updated password successfully" resp);
-      let updated_user =
-        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
-      in
+      let updated_user = Option.get (Storage.find_by_uuid store user.uuid) in
       let expected_hash =
         User_model.hash_password ~password:"NewSecretPassword123!"
           ~uuid:user.uuid
@@ -363,7 +361,7 @@ let check_close_sessions_endpoint () =
       in
       query_endpoint handler login_req >>= fun _login_resp ->
       let user_after_login =
-        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
+        Option.get (Storage.find_by_uuid store user.uuid)
       in
       let session_cookie_2 =
         (Utils.SM.fold
@@ -390,9 +388,7 @@ let check_close_sessions_endpoint () =
       Alcotest.(check bool)
         "Closed all sessions message" true
         (String.includes ~affix:"Closed all sessions successfully" resp);
-      let updated_user =
-        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
-      in
+      let updated_user = Option.get (Storage.find_by_uuid store user.uuid) in
       Alcotest.(check bool)
         "Current session still active" true
         (Utils.SM.mem session_cookie_1 updated_user.cookies);
@@ -414,7 +410,7 @@ let check_close_session_endpoint () =
       in
       query_endpoint handler login_req >>= fun _login_resp ->
       let user_after_login =
-        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
+        Option.get (Storage.find_by_uuid store user.uuid)
       in
       let session_cookie_2 =
         (Utils.SM.fold
@@ -444,9 +440,7 @@ let check_close_session_endpoint () =
       Alcotest.(check bool)
         "Session closed message" true
         (String.includes ~affix:"Session closed successfully" resp);
-      let updated_user =
-        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
-      in
+      let updated_user = Option.get (Storage.find_by_uuid store user.uuid) in
       Alcotest.(check bool)
         "Current session still active" true
         (Utils.SM.mem session_cookie_1 updated_user.cookies);

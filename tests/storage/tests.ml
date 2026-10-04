@@ -13,7 +13,7 @@ let check_deprecated_version () =
       (Storage.t_of_json (mock_storage ~version:8 ())))
 
 let check_valid_version () =
-  let expected = ([], [], None) in
+  let expected = (Utils.SM.empty, [], None) in
   Alcotest.(
     check (result storage_t msg_t) "mollymawk should start for a valid version"
       (Ok expected)
@@ -31,42 +31,42 @@ let check_invalid_version () =
       (Storage.t_of_json (mock_storage ~version:1000 ())))
 
 let check_email_config_in_v9 () =
-  let expected = ([], [], Some mock_email) in
+  let expected = (Utils.SM.empty, [], Some mock_email) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start with email config in v9" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:9 ~email:(Some mock_email) ())))
 
 let check_no_email_config_in_v9 () =
-  let expected = ([], [], None) in
+  let expected = (Utils.SM.empty, [], None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start even with no email config in v9" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:9 ())))
 
 let check_email_config_in_v10 () =
-  let expected = ([], [], Some mock_email) in
+  let expected = (Utils.SM.empty, [], Some mock_email) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start with email config in v10" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:10 ~email:(Some mock_email) ())))
 
 let check_no_email_config_in_v10 () =
-  let expected = ([], [], None) in
+  let expected = (Utils.SM.empty, [], None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start even with no email config in v10" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:10 ())))
 
 let check_no_albatross_config_in_v9 () =
-  let expected = ([], [], None) in
+  let expected = (Utils.SM.empty, [], None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start even with no albatross config in v9" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:9 ())))
 
 let check_no_albatross_config_in_v10 () =
-  let expected = ([], [], None) in
+  let expected = (Utils.SM.empty, [], None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start even with no albatross config in v10"
@@ -74,7 +74,7 @@ let check_no_albatross_config_in_v10 () =
       (Storage.t_of_json (mock_storage ~version:10 ())))
 
 let check_valid_albatross_config_in_v9 () =
-  let expected = ([], [ mock_albatross_config ], None) in
+  let expected = (Utils.SM.empty, [ mock_albatross_config ], None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start with a valid albatross config in v9" (Ok expected)
@@ -82,7 +82,7 @@ let check_valid_albatross_config_in_v9 () =
          (mock_storage ~version:9 ~configuration:[ mock_albatross_config ] ())))
 
 let check_valid_albatross_config_in_v10 () =
-  let expected = ([], [ mock_albatross_config ], None) in
+  let expected = (Utils.SM.empty, [ mock_albatross_config ], None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start with a valid albatross config in v10"
@@ -190,7 +190,7 @@ let check_multiple_valid_albatross_configs_with_same_name () =
 
 let check_multiple_valid_albatross_configs_with_different_names () =
   let expected =
-    ( [],
+    ( Utils.SM.empty,
       [
         mock_albatross_config;
         {
@@ -221,7 +221,7 @@ let check_disk_dump () =
   let json = Utils.Json.from_string raw_dump in
   match Storage.t_of_json (json_of_string_exn json) with
   | Ok (users, configs, email) ->
-      Alcotest.(check int "3 users in dump" 3 (List.length users));
+      Alcotest.(check int "3 users in dump" 3 (Utils.SM.cardinal users));
       Alcotest.(check int "1 configuration in dump" 1 (List.length configs));
       Alcotest.(check bool "Email config present" true (Option.is_some email));
       let _serialized = Storage.t_to_json users configs email in
@@ -280,9 +280,10 @@ let check_cookies_roundtrip () =
   let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in
   let session_val = user_session_cookie user in
   let csrf_val = user_csrf_cookie user in
-  let json = Storage.t_to_json [ user ] [] None in
+  let json = Storage.t_to_json (Utils.SM.singleton user.uuid user) [] None in
   match Storage.t_of_json json with
-  | Ok ([ loaded_user ], _, _) ->
+  | Ok (users, _, _) when Utils.SM.cardinal users = 1 ->
+      let loaded_user = snd (Utils.SM.choose users) in
       Alcotest.(
         check int "2 cookies loaded into map" 2
           (Utils.SM.cardinal loaded_user.cookies));
@@ -299,9 +300,12 @@ let check_cookies_load_v9 () =
   let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in
   let session_val = user_session_cookie user in
   let csrf_val = user_csrf_cookie user in
-  let json = Storage.t_to_json ~version:9 [ user ] [] None in
+  let json =
+    Storage.t_to_json ~version:9 (Utils.SM.singleton user.uuid user) [] None
+  in
   match Storage.t_of_json json with
-  | Ok ([ loaded_user ], _, _) ->
+  | Ok (users, _, _) when Utils.SM.cardinal users = 1 ->
+      let loaded_user = snd (Utils.SM.choose users) in
       Alcotest.(
         check int "2 cookies loaded into map from v9" 2
           (Utils.SM.cardinal loaded_user.cookies));
