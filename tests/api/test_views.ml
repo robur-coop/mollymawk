@@ -683,7 +683,7 @@ let check_admin_user_profile_superuser () =
       setup_user store >>= fun (user, session_cookie, csrf_token) ->
       let req =
         make_get_request
-          ~path:("/admin/user/profile?uuid=" ^ user.uuid)
+          ~path:("/admin/user/profile?uuid=" ^ Uuidm.to_string user.uuid)
           ~session_cookie ~csrf_token ()
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
@@ -730,7 +730,7 @@ let check_admin_user_unikernels_superuser () =
       setup_user store >>= fun (user, session_cookie, csrf_token) ->
       let req =
         make_get_request
-          ~path:("/admin/user/unikernels?uuid=" ^ user.uuid)
+          ~path:("/admin/user/unikernels?uuid=" ^ Uuidm.to_string user.uuid)
           ~session_cookie ~csrf_token ()
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
@@ -762,7 +762,7 @@ let check_admin_user_policy_superuser () =
       setup_user store >>= fun (user, session_cookie, csrf_token) ->
       let req =
         make_get_request
-          ~path:("/admin/user/policy?uuid=" ^ user.uuid)
+          ~path:("/admin/user/policy?uuid=" ^ Uuidm.to_string user.uuid)
           ~session_cookie ~csrf_token ()
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->
@@ -795,7 +795,9 @@ let check_admin_user_policy_edit_superuser () =
       let policies = make_default_policies ~domain:user.name () in
       let req =
         make_get_request
-          ~path:("/admin/u/policy/edit?uuid=" ^ user.uuid ^ "&instance=default")
+          ~path:
+            ("/admin/u/policy/edit?uuid=" ^ Uuidm.to_string user.uuid
+           ^ "&instance=default")
           ~session_cookie ~csrf_token ()
       in
       query_endpoint (make_app_request_handler ~policies store) req
@@ -828,7 +830,7 @@ let check_admin_user_policy_edit_missing_instance () =
       setup_user store >>= fun (user, session_cookie, csrf_token) ->
       let req =
         make_get_request
-          ~path:("/admin/u/policy/edit?uuid=" ^ user.uuid)
+          ~path:("/admin/u/policy/edit?uuid=" ^ Uuidm.to_string user.uuid)
           ~session_cookie ~csrf_token ()
       in
       query_endpoint (make_app_request_handler store) req >>= fun resp ->

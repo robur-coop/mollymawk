@@ -51,7 +51,7 @@ let check_duplicate_user () =
   let existing_user = make_mock_user ~name:"test" ~email:"test@robur.coop" () in
   let store =
     Storage.create
-      ~users:(Utils.SM.singleton existing_user.uuid existing_user)
+      ~users:(Utils.UM.singleton existing_user.uuid existing_user)
       ()
   in
 
@@ -176,8 +176,8 @@ let check_registration_endpoint () =
 
       Alcotest.(check int)
         "User stored in database" 1
-        (Utils.SM.cardinal store.Storage.users);
-      let saved_user = snd (Utils.SM.choose store.Storage.users) in
+        (Utils.UM.cardinal store.Storage.users);
+      let saved_user = snd (Utils.UM.choose store.Storage.users) in
       Alcotest.(check string)
         "Saved user name matches" "test"
         (Configuration.name_to_str saved_user.name);

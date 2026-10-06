@@ -275,7 +275,9 @@ let setup_non_admin_user ?name ?email ?password store =
   >>= fun (user, session_cookie, csrf_token) ->
   let handler = make_app_request_handler store in
   let body =
-    Fmt.str {|{ "uuid": "%s", "molly_csrf": "%s" }|} user.uuid admin_csrf
+    Fmt.str {|{ "uuid": "%s", "molly_csrf": "%s" }|}
+      (Uuidm.to_string user.uuid)
+      admin_csrf
   in
   let req =
     Test_utils.make_post_request ~path:"/api/admin/user/activate/toggle" ~body
