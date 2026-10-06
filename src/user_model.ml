@@ -13,7 +13,7 @@ type cookie = {
   name : string;
   value : string;
   expires_in : int;
-  uuid : string option;
+  uuid : Uuidm.t option;
   created_at : Ptime.t;
   last_access : Ptime.t;
   user_agent : string option;
@@ -49,7 +49,7 @@ type user = {
   email : Mrmime.Mailbox.t;
   email_verified : Ptime.t option;
   password : string;
-  uuid : string;
+  uuid : Uuidm.t;
   tokens : token Utils.SM.t;
   cookies : cookie Utils.SM.t;
   created_at : Ptime.t;
@@ -155,7 +155,9 @@ let cookie_to_json (cookie : cookie) =
       ("value", `String cookie.value);
       ("expires_in", `Int cookie.expires_in);
       ( "uuid",
-        match cookie.uuid with Some uuid -> `String uuid | None -> `Null );
+        match cookie.uuid with
+        | Some uuid -> `String (Uuidm.to_string uuid)
+        | None -> `Null );
       ( "last_access",
         `String (Utils.TimeHelper.string_of_ptime cookie.last_access) );
       ( "user_agent",
@@ -201,7 +203,18 @@ let cookie_of_json = function
                       last_access_str);
                 created_at
           in
-          let* uuid = Utils.Json.string_or_none "uuid" uuid in
+          let* uuid =
+            match uuid with
+            | None | Some `Null -> Ok None
+            | Some (`String s) -> (
+                match Uuidm.of_string s with
+                | Some u -> Ok (Some u)
+                | None -> Error (`Msg ("invalid cookie UUID: " ^ s)))
+            | Some js ->
+                Error
+                  (`Msg
+                     ("invalid json for cookie uuid: " ^ Utils.Json.to_string js))
+          in
           let* user_agent = Utils.Json.string_or_none "user-agent" user_agent in
           Ok
             {
@@ -294,7 +307,7 @@ let user_to_json (u : user) =
       ("email", `String (Emile.to_string u.email));
       ("email_verified", Utils.TimeHelper.ptime_to_json u.email_verified);
       ("password", `String u.password);
-      ("uuid", `String u.uuid);
+      ("uuid", `String (Uuidm.to_string u.uuid));
       ( "tokens",
         `List
           (Utils.SM.fold (fun _ t acc -> token_to_json t :: acc) u.tokens []) );
@@ -353,6 +366,11 @@ let user_v9_of_json cookie_fn = function
           Some (`Bool active),
           Some (`Bool super_user),
           Some (`List unikernel_updates) ) ->
+          let* uuid =
+            Option.to_result
+              ~none:(`Msg ("invalid UUID for user: " ^ uuid))
+              (Uuidm.of_string uuid)
+          in
           let created_at =
             match Utils.TimeHelper.ptime_of_string created_at_str with
             | Ok ptime -> Some ptime
@@ -466,6 +484,11 @@ let user_of_json cookie_fn = function
           Some (`Bool super_user),
           Some (`List unikernel_updates),
           Some (`List scaling_policies) ) ->
+          let* uuid =
+            Option.to_result
+              ~none:(`Msg ("invalid UUID for user: " ^ uuid))
+              (Uuidm.of_string uuid)
+          in
           let created_at =
             match Utils.TimeHelper.ptime_of_string created_at_str with
             | Ok ptime -> Some ptime
@@ -560,7 +583,8 @@ let user_of_json cookie_fn = function
 
 let hash_password ~password ~uuid =
   let hash =
-    Digestif.SHA256.(to_raw_string (digestv_string [ uuid; "-"; password ]))
+    Digestif.SHA256.(
+      to_raw_string (digestv_string [ Uuidm.to_string uuid; "-"; password ]))
   in
   Base64.encode_string hash
 
@@ -595,7 +619,7 @@ let generate_token ~name ~expiry ~current_time =
 
 let create_user ~name ~email ~password ~created_at ~active ~super_user
     ~user_agent =
-  let uuid = Uuidm.to_string (generate_uuid ()) in
+  let uuid = generate_uuid () in
   let password = hash_password ~password ~uuid in
   let session =
     generate_cookie ~name:session_cookie ~expires_in:week ~uuid ~created_at

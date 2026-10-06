@@ -828,7 +828,7 @@ struct
       User_model.verify_email_token u verification_token (Mirage_ptime.now ())
     with
     | Ok user' ->
-        if String.equal user.uuid user'.uuid then (
+        if Uuidm.equal user.uuid user'.uuid then (
           Storage.update_user store user;
           Store.write_data store >>= function
           | Ok () -> Middleware.redirect_to_page ~path:"/dashboard" reqd ()
@@ -846,8 +846,12 @@ struct
   let toggle_account_attribute json_dict store reqd ~key update_fn error_on_last
       ~error_message =
     match Utils.Json.get "uuid" json_dict with
-    | Some (`String uuid) -> (
-        match Storage.find_by_uuid store uuid with
+    | Some (`String uuid_str) -> (
+        match
+          Option.fold ~none:None
+            ~some:(fun uuid -> Storage.find_by_uuid store uuid)
+            (Uuidm.of_string uuid_str)
+        with
         | None ->
             Logs.warn (fun m -> m "%s : Account not found" key);
             Middleware.http_response reqd ~data:(`String "Account not found")
@@ -891,8 +895,12 @@ struct
 
   let delete_account store _user json_dict reqd =
     match Utils.Json.get "uuid" json_dict with
-    | Some (`String uuid) -> (
-        match Storage.find_by_uuid store uuid with
+    | Some (`String uuid_str) -> (
+        match
+          Option.fold ~none:None
+            ~some:(fun uuid -> Storage.find_by_uuid store uuid)
+            (Uuidm.of_string uuid_str)
+        with
         | None ->
             Logs.warn (fun m -> m "delete-account : Account not found");
             Middleware.http_response reqd ~data:(`String "Account not found")
@@ -2264,9 +2272,9 @@ struct
          (Configuration.name_to_str unikernel_name))
       `OK
 
-  let view_user stack albatross_instances store uuid
-      (page : [> `Profile | `Unikernels | `Policy ]) _ (user : User_model.user)
-      reqd =
+  let view_user stack albatross_instances store
+      (page : [> `Profile | `Unikernels | `Policy ]) uuid _
+      (user : User_model.user) reqd =
     match Storage.find_by_uuid store uuid with
     | Some u -> (
         user_unikernels stack albatross_instances u.name >>= fun unikernels ->
@@ -2290,13 +2298,13 @@ struct
                 reply
                   (User_single.user_single_layout ~active_tab:Profile
                      (User_single.user_profile u)
-                     u.uuid)
+                     (Uuidm.to_string u.uuid))
             | `Unikernels ->
                 reply
                   (User_single.user_single_layout ~active_tab:Unikernels
                      (Unikernel_index.unikernel_index_layout unikernels
                         deceased_unikernels now)
-                     u.uuid)
+                     (Uuidm.to_string u.uuid))
             | `Policy ->
                 reply
                   (User_single.user_single_layout ~active_tab:Policy
@@ -2304,13 +2312,14 @@ struct
                         ~empty_policy:Albatross_state.empty_policy
                         (Albatross_state.all_policies ~domain:u.name
                            albatross_instances))
-                     u.uuid))
+                     (Uuidm.to_string u.uuid)))
         | Error err ->
             Middleware.http_response ~api_meth:false ~title:err.title
               ~data:err.data reqd `Internal_server_error)
     | None ->
         Middleware.http_response ~api_meth:false
-          ~data:(`String ("Couldn't find account with uuid: " ^ uuid))
+          ~data:
+            (`String ("Couldn't find account with uuid: " ^ Uuidm.to_string uuid))
           reqd `Not_found
 
   let edit_policy store uuid albatross _ (user : User_model.user) reqd =
@@ -2348,15 +2357,20 @@ struct
               reqd `Bad_request)
     | None ->
         Middleware.http_response ~api_meth:false
-          ~data:(`String ("Couldn't find account with uuid: " ^ uuid))
+          ~data:
+            (`String ("Couldn't find account with uuid: " ^ Uuidm.to_string uuid))
           reqd `Not_found
 
   let update_policy stack albatross_instances store _user json_dict reqd =
     match
       Utils.Json.(get "user_uuid" json_dict, get "albatross_instance" json_dict)
     with
-    | Some (`String user_uuid), Some (`String instance_name) -> (
-        match Storage.find_by_uuid store user_uuid with
+    | Some (`String user_uuid_str), Some (`String instance_name) -> (
+        match
+          Option.fold ~none:None
+            ~some:(fun uuid -> Storage.find_by_uuid store uuid)
+            (Uuidm.of_string user_uuid_str)
+        with
         | Some u -> (
             match Configuration.name_of_str instance_name with
             | Ok instance_name -> (
@@ -3387,8 +3401,8 @@ struct
     Lwt.return { Update_flow.user; available_updates }
 
   let check_available_unikernel_updates stack albatross_instances
-      (users : User_model.user Utils.SM.t) http_client =
-    Utils.SM.fold
+      (users : User_model.user Utils.UM.t) http_client =
+    Utils.UM.fold
       (fun _ user acc_p ->
         acc_p >>= fun acc ->
         check_user_unikernel_updates stack albatross_instances user http_client
@@ -3415,7 +3429,8 @@ struct
             Lwt_list.iter_s
               (fun (report : Update_flow.user_unikernel_available_updates) ->
                 let references =
-                  Fmt.str "updates-%s@robur.coop" report.user.uuid
+                  Fmt.str "updates-%s@robur.coop"
+                    (Uuidm.to_string report.user.uuid)
                 in
                 send_email ~references happy_eyeballs email_config
                   report.user.email ~subject:"Unikernel updates available"
@@ -3637,6 +3652,18 @@ struct
                     reqd `Bad_request)
           | Error _ -> Middleware.redirect_to_instance_selector endpoint reqd ()
         in
+        let get_uuid_admin_page fn =
+          match get_query_parameter "uuid" with
+          | Ok uuid_str -> (
+              match Uuidm.of_string uuid_str with
+              | Some uuid -> authenticate ~check_admin:true store reqd (fn uuid)
+              | None ->
+                  Middleware.http_response ~api_meth:false
+                    ~data:(`String "Invalid UUID") reqd `Bad_request)
+          | Error err ->
+              Middleware.http_response ~api_meth:false ~data:(`String err) reqd
+                `Bad_request
+        in
         match path with
         | "/" ->
             check_meth `GET (fun () ->
@@ -3776,39 +3803,28 @@ struct
                   (choose_instance store !albatross_instances callback_link))
         | "/admin/user/profile" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "uuid" with
-                | Ok uuid ->
-                    authenticate ~check_admin:true store reqd
-                      (view_user stack !albatross_instances store uuid `Profile)
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                get_uuid_admin_page
+                  (view_user stack !albatross_instances store `Profile))
         | "/admin/user/unikernels" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "uuid" with
-                | Ok uuid ->
-                    authenticate ~check_admin:true store reqd
-                      (view_user stack !albatross_instances store uuid
-                         `Unikernels)
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                get_uuid_admin_page
+                  (view_user stack !albatross_instances store `Unikernels))
         | "/admin/user/policy" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "uuid" with
-                | Ok uuid ->
-                    authenticate ~check_admin:true store reqd
-                      (view_user stack !albatross_instances store uuid `Policy)
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                get_uuid_admin_page
+                  (view_user stack !albatross_instances store `Policy))
         | "/admin/u/policy/edit" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "uuid" with
-                | Ok uuid ->
-                    authenticate ~check_admin:true store reqd
-                      (albatross_instance req.H1.Request.target
-                         (edit_policy store uuid))
+                | Ok uuid_str -> (
+                    match Uuidm.of_string uuid_str with
+                    | Some uuid ->
+                        authenticate ~check_admin:true store reqd
+                          (albatross_instance req.H1.Request.target
+                             (edit_policy store uuid))
+                    | None ->
+                        Middleware.http_response ~api_meth:false
+                          ~data:(`String "Invalid UUID") reqd `Bad_request)
                 | Error err ->
                     Middleware.http_response ~api_meth:false ~data:(`String err)
                       reqd `Bad_request)
