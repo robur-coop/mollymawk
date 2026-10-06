@@ -8,9 +8,11 @@ let current_version = 10
 *)
 
 type t = {
+  (* these fields are persisted to disk *)
   mutable users : User_model.user Utils.SM.t;
   mutable configurations : Configuration.t list;
   mutable email : Utils.Email.t option;
+  (* these fields below are not persisted to disk*)
   mutable by_name : string Utils.LM.t;
   mutable by_email : string Utils.SM.t;
   mutable by_cookie : string Utils.SM.t;
