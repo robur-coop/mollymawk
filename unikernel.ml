@@ -1712,7 +1712,7 @@ struct
           < Utils.rollback_seconds_limit
         then
           process_change stack ~unikernel_name ~job:old_unikernel.job
-            ~to_be_updated_unikernel:old_unikernel.uuid
+            ~to_be_updated_unikernel:(Uuidm.to_string old_unikernel.uuid)
             ~currently_running_unikernel:old_unikernel.uuid old_unikernel.config
             user store http_client `Rollback albatross
           >>= function
@@ -1730,15 +1730,17 @@ struct
                 ~data:
                   (`String
                      ("Rollback successful. " ^ unikernel_name_str
-                    ^ " is now running on build " ^ old_unikernel.uuid))
+                    ^ " is now running on build "
+                     ^ Uuidm.to_string old_unikernel.uuid))
                 `OK
           | Error (`Msg err, http_status) ->
               Middleware.http_response reqd ~title:"Rollback Error"
                 ~data:
                   (`String
                      ("Rollback failed. " ^ unikernel_name_str
-                    ^ " failed to revert to build " ^ old_unikernel.uuid
-                    ^ " with error " ^ err))
+                    ^ " failed to revert to build "
+                     ^ Uuidm.to_string old_unikernel.uuid
+                     ^ " with error " ^ err))
                 http_status
         else
           Middleware.http_response reqd ~title:"Rollback Failed"
@@ -1849,68 +1851,86 @@ struct
                                ("Could not get the unikernel arguments json: "
                               ^ err))
                           `Bad_request
-                    | Ok None -> (
-                        user_unikernel stack albatross ~user_name:user.name
-                          ~unikernel_name
-                        >>= function
-                        | Error err ->
+                    | Ok cfg_opt -> (
+                        match Uuidm.of_string currently_running_unikernel with
+                        | None ->
                             Middleware.http_response reqd
+                              ~title:
+                                "Error: Bad currently running unikernel UUID"
                               ~data:
                                 (`String
-                                   ("Couldn't find albatross instance, "
-                                   ^ Configuration.name_to_str instance_name
-                                   ^ " with error: " ^ err))
-                              `Bad_request
-                        | Ok (_n, (info : Vmm_core.Unikernel.info)) ->
-                            let (cfg : Vmm_core.Unikernel.config) =
-                              {
-                                Vmm_core.Unikernel.typ = info.typ;
-                                compressed = false;
-                                image = "";
-                                add_name = true;
-                                startup = info.startup;
-                                fail_behaviour = info.fail_behaviour;
-                                cpuids = info.cpuids;
-                                memory = info.memory;
-                                block_devices =
-                                  List.map
-                                    (fun {
-                                           Vmm_core.Unikernel.unikernel_device;
-                                           host_device;
-                                           sector_size;
-                                           _;
-                                         } ->
-                                      ( unikernel_device,
-                                        Some host_device,
-                                        Some sector_size ))
-                                    info.block_devices;
-                                bridges =
-                                  List.map
-                                    (fun {
-                                           Vmm_core.Unikernel.unikernel_device;
-                                           host_device;
-                                           mac;
-                                         } ->
-                                      ( unikernel_device,
-                                        Some host_device,
-                                        Some mac ))
-                                    info.bridges;
-                                argv = info.argv;
-                                (* ADDED: New required fields for BHyve support *)
-                                numcpus = info.numcpus;
-                                linux_boot_partition = info.linux_boot_partition;
-                              }
-                            in
-                            process_unikernel_update ~unikernel_name ~job
-                              ~to_be_updated_unikernel
-                              ~currently_running_unikernel
-                              ~http_liveliness_address ~dns_liveliness stack cfg
-                              user store http_client albatross reqd)
-                    | Ok (Some cfg) ->
-                        process_unikernel_update ~unikernel_name ~job
-                          ~to_be_updated_unikernel ~currently_running_unikernel
-                          ~http_liveliness_address ~dns_liveliness stack cfg
-                          user store http_client albatross reqd)
+                                   "Couldn't convert the currently running \
+                                    unikernel build UUID") `Bad_request
+                        | Some currently_running_unikernel -> (
+                            match cfg_opt with
+                            | None -> (
+                                user_unikernel stack albatross
+                                  ~user_name:user.name ~unikernel_name
+                                >>= function
+                                | Error err ->
+                                    Middleware.http_response reqd
+                                      ~data:
+                                        (`String
+                                           ("Couldn't find albatross instance, "
+                                           ^ Configuration.name_to_str
+                                               instance_name
+                                           ^ " with error: " ^ err))
+                                      `Bad_request
+                                | Ok (_n, (info : Vmm_core.Unikernel.info)) ->
+                                    let (cfg : Vmm_core.Unikernel.config) =
+                                      {
+                                        Vmm_core.Unikernel.typ = info.typ;
+                                        compressed = false;
+                                        image = "";
+                                        add_name = true;
+                                        startup = info.startup;
+                                        fail_behaviour = info.fail_behaviour;
+                                        cpuids = info.cpuids;
+                                        memory = info.memory;
+                                        block_devices =
+                                          List.map
+                                            (fun {
+                                                   Vmm_core.Unikernel
+                                                   .unikernel_device;
+                                                   host_device;
+                                                   sector_size;
+                                                   _;
+                                                 } ->
+                                              ( unikernel_device,
+                                                Some host_device,
+                                                Some sector_size ))
+                                            info.block_devices;
+                                        bridges =
+                                          List.map
+                                            (fun {
+                                                   Vmm_core.Unikernel
+                                                   .unikernel_device;
+                                                   host_device;
+                                                   mac;
+                                                 } ->
+                                              ( unikernel_device,
+                                                Some host_device,
+                                                Some mac ))
+                                            info.bridges;
+                                        argv = info.argv;
+                                        (* ADDED: New required fields for BHyve support *)
+                                        numcpus = info.numcpus;
+                                        linux_boot_partition =
+                                          info.linux_boot_partition;
+                                      }
+                                    in
+                                    process_unikernel_update ~unikernel_name
+                                      ~job ~to_be_updated_unikernel
+                                      ~currently_running_unikernel
+                                      ~http_liveliness_address ~dns_liveliness
+                                      stack cfg user store http_client albatross
+                                      reqd)
+                            | Some cfg ->
+                                process_unikernel_update ~unikernel_name ~job
+                                  ~to_be_updated_unikernel
+                                  ~currently_running_unikernel
+                                  ~http_liveliness_address ~dns_liveliness stack
+                                  cfg user store http_client albatross reqd)))
                 | _ ->
                     Middleware.http_response
                       ~data:

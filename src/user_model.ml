@@ -13,6 +13,7 @@ type cookie = {
   name : string;
   value : string;
   expires_in : int;
+  (* TODO: remove this uuid as its no longer relevant for cookies. *)
   uuid : Uuidm.t option;
   created_at : Ptime.t;
   last_access : Ptime.t;
@@ -22,7 +23,7 @@ type cookie = {
 type unikernel_update = {
   name : Vmm_core.Name.Label.t;
   job : string;
-  uuid : string;
+  uuid : Uuidm.t;
   config : Vmm_core.Unikernel.config;
   timestamp : Ptime.t;
 }
@@ -70,7 +71,7 @@ let unikernel_update_to_json (u : unikernel_update) : Yojson.Basic.t =
     [
       ("name", `String (Configuration.name_to_str u.name));
       ("job", `String u.job);
-      ("uuid", `String u.uuid);
+      ("uuid", `String (Uuidm.to_string u.uuid));
       ("config", Albatross_json.config_to_json u.config);
       ("timestamp", `String (Utils.TimeHelper.string_of_ptime u.timestamp));
     ]
@@ -133,6 +134,11 @@ let unikernel_update_of_json = function
             Albatross_json.config_of_json (Yojson.Basic.to_string config)
           in
           let* name = Configuration.name_of_str name in
+          let* uuid =
+            Option.to_result
+              ~none:(`Msg ("invalid UUID for unikernel_update: " ^ uuid))
+              (Uuidm.of_string uuid)
+          in
           Ok { name; job; uuid; config; timestamp }
       | _ ->
           Error
