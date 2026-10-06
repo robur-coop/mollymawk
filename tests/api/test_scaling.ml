@@ -250,7 +250,7 @@ let check_scaling_update_success () =
         "Scaling update message indicates success" true
         (String.includes ~affix:"Unikernel scaling policy updated successfully."
            resp);
-      match Storage.find_by_uuid store.Storage.users user.uuid with
+      match Storage.find_by_uuid store user.uuid with
       | None -> Alcotest.fail "User not found in storage"
       | Some u ->
           Alcotest.(check int)
@@ -277,7 +277,7 @@ let check_scaling_update_with_token () =
       Alcotest.(check bool)
         "Scaling update with token has HTTP 200 OK" true
         (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      match Storage.find_by_uuid store.Storage.users user.uuid with
+      match Storage.find_by_uuid store user.uuid with
       | None -> Alcotest.fail "User not found in storage"
       | Some u ->
           Alcotest.(check int)
@@ -352,7 +352,7 @@ let check_scaling_update_remove_when_max_instances_is_one () =
       Alcotest.(check bool)
         "Scaling update max_instances=1 has HTTP 200 OK" true
         (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      match Storage.find_by_uuid store.Storage.users user.uuid with
+      match Storage.find_by_uuid store user.uuid with
       | None -> Alcotest.fail "User not found in storage"
       | Some u ->
           Alcotest.(check int)
@@ -390,7 +390,7 @@ let check_scaling_update_remove_when_should_scale_unchecked () =
       Alcotest.(check bool)
         "Scaling update should_scale unchecked has HTTP 200 OK" true
         (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      match Storage.find_by_uuid store.Storage.users user.uuid with
+      match Storage.find_by_uuid store user.uuid with
       | None -> Alcotest.fail "User not found in storage"
       | Some u ->
           Alcotest.(check int)

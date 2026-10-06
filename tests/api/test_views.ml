@@ -952,9 +952,7 @@ let check_verify_email_page () =
       Alcotest.(check bool)
         "Contains verify email title" true
         (String.includes ~affix:"Verify Email" resp);
-      let updated_user =
-        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
-      in
+      let updated_user = Option.get (Storage.find_by_uuid store user.uuid) in
       Alcotest.(check bool)
         "User has email_verification_uuid assigned" true
         (Option.is_some updated_user.email_verification_uuid);

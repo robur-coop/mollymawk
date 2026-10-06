@@ -256,7 +256,7 @@ let setup_user ?name ?email ?(password = "Password123!") store =
   in
   query_endpoint handler req >>= fun _raw_resp ->
   let name_lbl = Test_utils.label_of_string_exn name in
-  let user = Option.get (Storage.find_by_name (Storage.users store) name_lbl) in
+  let user = Option.get (Storage.find_by_name store name_lbl) in
   let session_cookie = Test_utils.user_session_cookie user in
   let user, csrf_token = add_user_csrf store user in
   Lwt.return (user, session_cookie, csrf_token)
@@ -282,7 +282,5 @@ let setup_non_admin_user ?name ?email ?password store =
       ~session_cookie:admin_session ~csrf_token:admin_csrf ()
   in
   query_endpoint handler req >>= fun _ ->
-  let user =
-    Option.get (Storage.find_by_uuid (Storage.users store) user.uuid)
-  in
+  let user = Option.get (Storage.find_by_uuid store user.uuid) in
   Lwt.return (user, session_cookie, csrf_token)

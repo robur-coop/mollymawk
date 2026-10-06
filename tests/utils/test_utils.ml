@@ -425,8 +425,9 @@ let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
   && Option.equal Ptime.equal ev1 ev2
   && Option.equal Uuidm.equal evu1 evu2
 
-let eq_users (users_1 : User_model.user list) (users_2 : User_model.user list) =
-  List.equal eq_user_pair users_1 users_2
+let eq_users (users_1 : User_model.user Utils.SM.t)
+    (users_2 : User_model.user Utils.SM.t) =
+  Utils.SM.equal eq_user_pair users_1 users_2
 
 let eq_emails (e1 : Utils.Email.t) (e2 : Utils.Email.t) =
   let {
@@ -456,7 +457,7 @@ let eq_storage (u1, c1, e1) (u2, c2, e2) =
 
 let storage_t = Alcotest.testable pp_storage eq_storage
 
-let mock_storage ?(version = 10) ?(users = []) ?(configuration = [])
+let mock_storage ?(version = 10) ?(users = Utils.SM.empty) ?(configuration = [])
     ?(email = None) () =
   Storage.t_to_json ~version users configuration email
 

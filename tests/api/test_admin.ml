@@ -36,7 +36,8 @@ let setup_admin_and_user ?(user_active = true) store =
     }
   in
 
-  store.Storage.users <- [ admin; target_user ];
+  Storage.add_user store admin;
+  Storage.add_user store target_user;
   (admin, session_cookie.value, csrf_cookie.value, target_user)
 
 let setup_admin_only store =
@@ -51,7 +52,7 @@ let setup_admin_only store =
         |> Utils.SM.add csrf_cookie.value csrf_cookie;
     }
   in
-  store.Storage.users <- [ admin ];
+  Storage.add_user store admin;
   (admin, session_cookie.value, csrf_cookie.value)
 
 let make_admin_body ~uuid ~csrf_token =
@@ -76,7 +77,7 @@ let check_toggle_account_active () =
         "Updated user successfully message" true
         (String.includes ~affix:"Updated user successfully" resp);
       let updated_test_user =
-        Option.get (Storage.find_by_uuid store.Storage.users test.uuid)
+        Option.get (Storage.find_by_uuid store test.uuid)
       in
       Alcotest.(check bool)
         "Target user active becomes false" false updated_test_user.active;
@@ -98,9 +99,7 @@ let check_guard_last_active_user () =
       Alcotest.(check bool)
         "Cannot deactivate last active user message" true
         (String.includes ~affix:"Cannot deactivate last active user" resp);
-      let updated_admin =
-        Option.get (Storage.find_by_uuid store.Storage.users admin.uuid)
-      in
+      let updated_admin = Option.get (Storage.find_by_uuid store admin.uuid) in
       Alcotest.(check bool)
         "Admin user remains active" true updated_admin.active;
       Lwt.return_unit )
@@ -124,7 +123,7 @@ let check_toggle_admin_superuser () =
         "Updated user successfully message" true
         (String.includes ~affix:"Updated user successfully" resp);
       let updated_test_user =
-        Option.get (Storage.find_by_uuid store.Storage.users test.uuid)
+        Option.get (Storage.find_by_uuid store test.uuid)
       in
       Alcotest.(check bool)
         "Target user becomes super_user" true updated_test_user.super_user;
@@ -148,9 +147,7 @@ let check_guard_last_administrator () =
       Alcotest.(check bool)
         "Cannot remove last administrator message" true
         (String.includes ~affix:"Cannot remove last administrator" resp);
-      let updated_admin =
-        Option.get (Storage.find_by_uuid store.Storage.users admin.uuid)
-      in
+      let updated_admin = Option.get (Storage.find_by_uuid store admin.uuid) in
       Alcotest.(check bool)
         "Admin remains super_user" true updated_admin.super_user;
       Lwt.return_unit )
@@ -173,7 +170,7 @@ let check_delete_account_success () =
       Alcotest.(check bool)
         "Deleted user successfully message" true
         (String.includes ~affix:"Deleted user successfully" resp);
-      let test_in_store = Storage.find_by_uuid store.Storage.users test.uuid in
+      let test_in_store = Storage.find_by_uuid store test.uuid in
       Alcotest.(check bool)
         "Target user removed from store" true
         (Option.is_none test_in_store);

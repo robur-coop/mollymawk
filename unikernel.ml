@@ -409,7 +409,7 @@ struct
       | Error (`Msg err) ->
           Error (`Cookie, "No molly-session in cookie header. " ^ err)
       | Ok cookie_value -> (
-          match Storage.find_by_cookie store.Storage.users cookie_value with
+          match Storage.find_by_cookie store cookie_value with
           | None -> Error (`Cookie, "Failed to find user with cookie")
           | Some (user, cookie) ->
               if User_model.is_valid_cookie cookie current_time then
@@ -422,7 +422,7 @@ struct
               else Error (`Cookie, "Session value doesn't match user session"))
     in
     let valid_token token_value =
-      match Storage.find_by_api_token store.users token_value with
+      match Storage.find_by_api_token store token_value with
       | Some (user, token) ->
           if User_model.is_valid_token token current_time then Ok (user, token)
           else Error (`Token, "Token value is not valid " ^ token_value)
@@ -664,10 +664,8 @@ struct
                 Middleware.http_response reqd ~data:(`String err) `Bad_request
             | Ok (name, email) ->
                 if Middleware.csrf_cookie_verification form_csrf reqd then
-                  let existing_email =
-                    Storage.find_by_email store.Storage.users email
-                  in
-                  let existing_name = Storage.find_by_name store.users name in
+                  let existing_email = Storage.find_by_email store email in
+                  let existing_name = Storage.find_by_name store name in
                   match (existing_name, existing_email) with
                   | Some _, None ->
                       Middleware.http_response reqd
@@ -681,8 +679,7 @@ struct
                       let created_at = Mirage_ptime.now () in
                       let user, cookie =
                         let active, super_user =
-                          if Storage.count_users store.users = 0 then
-                            (true, true)
+                          if Storage.count_users store = 0 then (true, true)
                           else (false, false)
                         in
                         User_model.create_user ~name ~email ~password
@@ -752,7 +749,7 @@ struct
                 Middleware.http_response reqd ~data:(`String err) `Bad_request
             | Ok email -> (
                 let now = Mirage_ptime.now () in
-                let user = Storage.find_by_email store.Storage.users email in
+                let user = Storage.find_by_email store email in
                 match
                   User_model.login_user ~email ~password
                     ~user_agent:(Middleware.user_agent reqd)
@@ -827,7 +824,7 @@ struct
         Option.to_result ~none:(`Msg "invalid UUID")
           (Uuidm.of_string verification_token)
       in
-      let u = Storage.find_email_verification_token store.Storage.users uuid in
+      let u = Storage.find_email_verification_token store uuid in
       User_model.verify_email_token u verification_token (Mirage_ptime.now ())
     with
     | Ok user' ->
@@ -850,7 +847,7 @@ struct
       ~error_message =
     match Utils.Json.get "uuid" json_dict with
     | Some (`String uuid) -> (
-        match Storage.find_by_uuid store.Storage.users uuid with
+        match Storage.find_by_uuid store uuid with
         | None ->
             Logs.warn (fun m -> m "%s : Account not found" key);
             Middleware.http_response reqd ~data:(`String "Account not found")
@@ -881,7 +878,7 @@ struct
       (fun user ->
         User_model.update_user user ~active:(not user.active)
           ~updated_at:(Mirage_ptime.now ()) ())
-      (fun user -> user.active && Storage.count_active store.users <= 1)
+      (fun user -> user.active && Storage.count_active store <= 1)
       ~error_message:(`String "Cannot deactivate last active user")
 
   let toggle_admin_activation store _user json_dict reqd =
@@ -889,14 +886,13 @@ struct
       (fun user ->
         User_model.update_user user ~super_user:(not user.super_user)
           ~updated_at:(Mirage_ptime.now ()) ())
-      (fun user ->
-        user.super_user && Storage.count_superusers store.Storage.users <= 1)
+      (fun user -> user.super_user && Storage.count_superusers store <= 1)
       ~error_message:(`String "Cannot remove last administrator")
 
   let delete_account store _user json_dict reqd =
     match Utils.Json.get "uuid" json_dict with
     | Some (`String uuid) -> (
-        match Storage.find_by_uuid store.Storage.users uuid with
+        match Storage.find_by_uuid store uuid with
         | None ->
             Logs.warn (fun m -> m "delete-account : Account not found");
             Middleware.http_response reqd ~data:(`String "Account not found")
@@ -2271,7 +2267,7 @@ struct
   let view_user stack albatross_instances store uuid
       (page : [> `Profile | `Unikernels | `Policy ]) _ (user : User_model.user)
       reqd =
-    match Storage.find_by_uuid store.Storage.users uuid with
+    match Storage.find_by_uuid store uuid with
     | Some u -> (
         user_unikernels stack albatross_instances u.name >>= fun unikernels ->
         user_deceased_by_instance stack albatross_instances u.name
@@ -2318,7 +2314,7 @@ struct
           reqd `Not_found
 
   let edit_policy store uuid albatross _ (user : User_model.user) reqd =
-    match Storage.find_by_uuid store.Storage.users uuid with
+    match Storage.find_by_uuid store uuid with
     | Some u -> (
         let user_policy =
           Option.value ~default:Albatross_state.empty_policy
@@ -2360,7 +2356,7 @@ struct
       Utils.Json.(get "user_uuid" json_dict, get "albatross_instance" json_dict)
     with
     | Some (`String user_uuid), Some (`String instance_name) -> (
-        match Storage.find_by_uuid store.Storage.users user_uuid with
+        match Storage.find_by_uuid store user_uuid with
         | Some u -> (
             match Configuration.name_of_str instance_name with
             | Ok instance_name -> (
@@ -3032,7 +3028,7 @@ struct
 
   let spawn_clone stack store albatross ~unikernel_name ~clone_name ~user_name
       group scaler =
-    match Storage.find_by_name store.Storage.users user_name with
+    match Storage.find_by_name store user_name with
     | None -> Lwt.return_error "User not found"
     | Some user -> (
         user_unikernel stack albatross ~user_name ~unikernel_name >>= function
@@ -3255,7 +3251,7 @@ struct
         let unikernel_name = label in
         match Vmm_core.Name.Path.to_labels (Vmm_core.Name.path name) with
         | [ user_label ] -> (
-            match Storage.find_by_name store.Storage.users user_label with
+            match Storage.find_by_name store user_label with
             | None ->
                 Lwt.return_error
                   (Fmt.str "User %s not found."
@@ -3390,15 +3386,16 @@ struct
     in
     Lwt.return { Update_flow.user; available_updates }
 
-  let check_available_unikernel_updates stack albatross_instances users
-      http_client =
-    Lwt_list.fold_left_s
-      (fun acc user ->
+  let check_available_unikernel_updates stack albatross_instances
+      (users : User_model.user Utils.SM.t) http_client =
+    Utils.SM.fold
+      (fun _ user acc_p ->
+        acc_p >>= fun acc ->
         check_user_unikernel_updates stack albatross_instances user http_client
         >>= fun update_report ->
         if update_report.available_updates = [] then Lwt.return acc
         else Lwt.return (update_report :: acc))
-      [] users
+      users Lwt.return_nil
 
   let run_background_update_check happy_eyeballs users stack email_config
       albatross_instances http_client =
