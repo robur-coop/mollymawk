@@ -848,9 +848,7 @@ struct
     match Utils.Json.get "uuid" json_dict with
     | Some (`String uuid_str) -> (
         match
-          Option.fold ~none:None
-            ~some:(fun uuid -> Storage.find_by_uuid store uuid)
-            (Uuidm.of_string uuid_str)
+          Option.bind (Uuidm.of_string uuid_str) (Storage.find_by_uuid store)
         with
         | None ->
             Logs.warn (fun m -> m "%s : Account not found" key);
@@ -897,9 +895,7 @@ struct
     match Utils.Json.get "uuid" json_dict with
     | Some (`String uuid_str) -> (
         match
-          Option.fold ~none:None
-            ~some:(fun uuid -> Storage.find_by_uuid store uuid)
-            (Uuidm.of_string uuid_str)
+          Option.bind (Uuidm.of_string uuid_str) (Storage.find_by_uuid store)
         with
         | None ->
             Logs.warn (fun m -> m "delete-account : Account not found");
@@ -2387,9 +2383,9 @@ struct
     with
     | Some (`String user_uuid_str), Some (`String instance_name) -> (
         match
-          Option.fold ~none:None
-            ~some:(fun uuid -> Storage.find_by_uuid store uuid)
+          Option.bind
             (Uuidm.of_string user_uuid_str)
+            (Storage.find_by_uuid store)
         with
         | Some u -> (
             match Configuration.name_of_str instance_name with
