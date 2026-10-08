@@ -375,7 +375,9 @@ let check_discard_malformed_unikernel_update () =
       unikernel_updates = Utils.LM.singleton valid_update.name valid_update;
     }
   in
-  let json = Storage.t_to_json (Utils.UM.singleton user.uuid user) [] None in
+  let json =
+    Storage.t_to_json (Utils.UM.singleton user.uuid user) Utils.LM.empty None
+  in
   let malformed_update_json =
     `Assoc
       [
