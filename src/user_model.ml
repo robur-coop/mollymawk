@@ -13,8 +13,6 @@ type cookie = {
   name : string;
   value : string;
   expires_in : int;
-  (* TODO: remove this uuid as its no longer relevant for cookies. *)
-  uuid : Uuidm.t option;
   created_at : Ptime.t;
   last_access : Ptime.t;
   user_agent : string option;
@@ -160,10 +158,6 @@ let cookie_to_json (cookie : cookie) =
         `String (Utils.TimeHelper.string_of_ptime cookie.created_at) );
       ("value", `String cookie.value);
       ("expires_in", `Int cookie.expires_in);
-      ( "uuid",
-        match cookie.uuid with
-        | Some uuid -> `String (Uuidm.to_string uuid)
-        | None -> `Null );
       ( "last_access",
         `String (Utils.TimeHelper.string_of_ptime cookie.last_access) );
       ( "user_agent",
@@ -179,7 +173,6 @@ let cookie_of_json = function
           ( get "name" xs,
             get "value" xs,
             get "expires_in" xs,
-            get "uuid" xs,
             get "created_at" xs,
             get "last_access" xs,
             get "user_agent" xs )
@@ -187,7 +180,6 @@ let cookie_of_json = function
       | ( Some (`String name),
           Some (`String value),
           Some (`Int expires_in),
-          uuid,
           Some (`String created_at_str),
           Some (`String last_access_str),
           user_agent ) ->
@@ -209,29 +201,8 @@ let cookie_of_json = function
                       last_access_str);
                 created_at
           in
-          let* uuid =
-            match uuid with
-            | None | Some `Null -> Ok None
-            | Some (`String s) -> (
-                match Uuidm.of_string s with
-                | Some u -> Ok (Some u)
-                | None -> Error (`Msg ("invalid cookie UUID: " ^ s)))
-            | Some js ->
-                Error
-                  (`Msg
-                     ("invalid json for cookie uuid: " ^ Utils.Json.to_string js))
-          in
           let* user_agent = Utils.Json.string_or_none "user-agent" user_agent in
-          Ok
-            {
-              name;
-              value;
-              expires_in;
-              uuid;
-              created_at;
-              last_access;
-              user_agent;
-            }
+          Ok { name; value; expires_in; created_at; last_access; user_agent }
       | _ ->
           Error
             (`Msg
@@ -606,14 +577,12 @@ let generate_uuid () =
   let data = Mirage_crypto_rng.generate 16 in
   Uuidm.v4 (Bytes.unsafe_of_string data)
 
-let generate_cookie ~name ~uuid ?(expires_in = 3600) ~created_at ~user_agent ()
-    =
+let generate_cookie ~name ?(expires_in = 3600) ~created_at ~user_agent () =
   let id = generate_uuid () in
   {
     name;
     value = Base64.encode_string (Uuidm.to_string id);
     expires_in;
-    uuid = Some uuid;
     created_at;
     last_access = created_at;
     user_agent;
@@ -636,7 +605,7 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
   let uuid = generate_uuid () in
   let password = hash_password ~password ~uuid in
   let session =
-    generate_cookie ~name:session_cookie ~expires_in:week ~uuid ~created_at
+    generate_cookie ~name:session_cookie ~expires_in:week ~created_at
       ~user_agent ()
   in
   ( {
@@ -745,7 +714,7 @@ let login_user ~email ~password ~user_agent user now =
         with
         | true ->
             let new_session =
-              generate_cookie ~name:session_cookie ~expires_in:week ~uuid:u.uuid
+              generate_cookie ~name:session_cookie ~expires_in:week
                 ~created_at:now ~user_agent ()
             in
             let cookies =

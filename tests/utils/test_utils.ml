@@ -482,8 +482,8 @@ let mock_albatross_config =
   }
 
 (** User Creation Helper *)
-let make_csrf_cookie ?(user_agent = Some "Alcotest-client") uuid =
-  User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid
+let make_csrf_cookie ?(user_agent = Some "Alcotest-client") () =
+  User_model.generate_cookie ~name:User_model.csrf_cookie
     ~created_at:(Mirage_ptime.now ()) ~user_agent ()
 
 let make_mock_token ?(name = "mock-token") ?(expiry = 3600) () =
@@ -502,7 +502,7 @@ let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
   let cookies =
     let base = Utils.SM.singleton session_cookie.value session_cookie in
     if with_csrf then
-      let csrf = make_csrf_cookie user.uuid in
+      let csrf = make_csrf_cookie () in
       Utils.SM.add csrf.value csrf base
     else base
   in

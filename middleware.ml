@@ -9,9 +9,7 @@ let user_agent reqd = header "User-Agent" reqd
 
 let generate_csrf_cookie now reqd =
   User_model.generate_cookie ~name:User_model.csrf_cookie
-    ~user_agent:(user_agent reqd)
-    ~uuid:(User_model.generate_uuid ())
-    ~created_at:now ~expires_in:3600 ()
+    ~user_agent:(user_agent reqd) ~created_at:now ~expires_in:3600 ()
 
 let cookie cookie_name (reqd : H1.Reqd.t) =
   match header "Cookie" reqd with

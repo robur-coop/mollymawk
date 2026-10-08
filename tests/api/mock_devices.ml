@@ -221,7 +221,7 @@ let init_mock_store () =
   | Ok store -> Lwt.return store
 
 let add_user_csrf store (user : User_model.user) =
-  let csrf = Test_utils.make_csrf_cookie user.uuid in
+  let csrf = Test_utils.make_csrf_cookie () in
   let user =
     User_model.update_user user
       ~cookies:(Utils.SM.add csrf.value csrf user.cookies)
