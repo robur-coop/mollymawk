@@ -1758,6 +1758,7 @@ struct
   let process_unikernel_update ~unikernel_name ~job ~to_be_updated_unikernel
       ~currently_running_unikernel ~http_liveliness_address ~dns_liveliness
       stack cfg user store http_client albatross reqd =
+    let to_be_updated_unikernel_str = Uuidm.to_string to_be_updated_unikernel in
     process_change stack ~unikernel_name ~job ~to_be_updated_unikernel
       ~currently_running_unikernel cfg user store http_client `Update albatross
     >>= function
@@ -1771,7 +1772,7 @@ struct
                 m
                   "liveliness-checks for %s and build %s failed with error(s) \
                    %s. now performing a rollback"
-                  unikernel_name_str to_be_updated_unikernel err);
+                  unikernel_name_str to_be_updated_unikernel_str err);
             process_rollback stack albatross ~unikernel_name
               (Mirage_ptime.now ()) store http_client reqd user
         | Ok () ->
@@ -1779,7 +1780,7 @@ struct
               ~data:
                 (`String
                    ("Update successful. " ^ unikernel_name_str
-                  ^ " is now running on build " ^ to_be_updated_unikernel))
+                  ^ " is now running on build " ^ to_be_updated_unikernel_str))
               `OK)
     | Error (`Msg err, http_status) ->
         Middleware.http_response reqd ~title:"Update Error"
@@ -1787,7 +1788,7 @@ struct
             (`String
                ("Update failed. "
                ^ Configuration.name_to_str unikernel_name
-               ^ " failed to update to build " ^ to_be_updated_unikernel
+               ^ " failed to update to build " ^ to_be_updated_unikernel_str
                ^ " with error " ^ err))
           http_status
 
