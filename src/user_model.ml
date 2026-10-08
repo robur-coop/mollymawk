@@ -134,10 +134,13 @@ let unikernel_update_of_json = function
             Albatross_json.config_of_json (Yojson.Basic.to_string config)
           in
           let* name = Configuration.name_of_str name in
+          (*TODO: refactor this when we prune old updates from disk *)
           let* uuid =
-            Option.to_result
-              ~none:(`Msg ("invalid UUID for unikernel_update: " ^ uuid))
-              (Uuidm.of_string uuid)
+            match Uuidm.of_string uuid with
+            | Some u -> Ok u
+            | None when String.equal uuid "" -> Ok Uuidm.nil
+            | None ->
+                Error (`Msg ("invalid UUID for unikernel_update: " ^ uuid))
           in
           Ok { name; job; uuid; config; timestamp }
       | _ ->
