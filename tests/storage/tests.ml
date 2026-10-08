@@ -342,10 +342,93 @@ let check_cookies_load_v9 () =
   | Ok _ -> Alcotest.fail "Expected 1 user"
   | Error (`Msg err) -> Alcotest.fail err
 
+let check_discard_malformed_unikernel_update () =
+  let valid_uk_uuid = User_model.generate_uuid () in
+  let valid_update : User_model.unikernel_update =
+    {
+      name = label_of_string_exn "my-app";
+      job = "my-job";
+      uuid = valid_uk_uuid;
+      config =
+        {
+          typ = `Solo5;
+          compressed = false;
+          image = "";
+          fail_behaviour = `Quit;
+          add_name = true;
+          startup = None;
+          cpuids = Vmm_core.IS.singleton 0;
+          memory = 32;
+          block_devices = [];
+          bridges = [];
+          argv = None;
+          numcpus = 1;
+          linux_boot_partition = None;
+        };
+      timestamp = Mirage_ptime.now ();
+    }
+  in
+  let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in
+  let user =
+    {
+      user with
+      unikernel_updates = Utils.LM.singleton valid_update.name valid_update;
+    }
+  in
+  let json = Storage.t_to_json (Utils.UM.singleton user.uuid user) [] None in
+  let malformed_update_json =
+    `Assoc
+      [
+        ("name", `String "malformed-app");
+        ("job", `String "bad-job");
+        ("uuid", `String "");
+        ("config", Albatross_json.config_to_json valid_update.config);
+        ( "timestamp",
+          `String (Utils.TimeHelper.string_of_ptime valid_update.timestamp) );
+      ]
+  in
+  let injected_json =
+    match json with
+    | `Assoc fields ->
+        let updated_fields =
+          List.map
+            (function
+              | "users", `List [ `Assoc u_fields ] ->
+                  let u_fields' =
+                    List.map
+                      (function
+                        | "unikernel_updates", `List updates ->
+                            ( "unikernel_updates",
+                              `List (malformed_update_json :: updates) )
+                        | other -> other)
+                      u_fields
+                  in
+                  ("users", `List [ `Assoc u_fields' ])
+              | other -> other)
+            fields
+        in
+        `Assoc updated_fields
+    | _ -> Alcotest.fail "Unexpected json structure"
+  in
+  match Storage.t_of_json injected_json with
+  | Ok (users, _, _) when Utils.UM.cardinal users = 1 ->
+      let loaded_user = snd (Utils.UM.choose users) in
+      Alcotest.(
+        check int "Malformed update discarded, only 1 valid update loaded" 1
+          (Utils.LM.cardinal loaded_user.unikernel_updates));
+      Alcotest.(
+        check bool "Valid update present" true
+          (Utils.LM.mem valid_update.name loaded_user.unikernel_updates))
+  | Ok _ -> Alcotest.fail "Expected 1 user"
+  | Error (`Msg err) -> Alcotest.fail err
+
 let cookie_tests =
   [
     ("Cookies roundtrip", `Quick, check_cookies_roundtrip);
     ("Cookies load from v9", `Quick, check_cookies_load_v9);
+    ( "Discard malformed unikernel updates",
+      `Quick,
+      check_discard_malformed_unikernel_update );
   ]
 
 let tests =

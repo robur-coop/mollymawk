@@ -134,13 +134,10 @@ let unikernel_update_of_json = function
             Albatross_json.config_of_json (Yojson.Basic.to_string config)
           in
           let* name = Configuration.name_of_str name in
-          (*TODO: refactor this when we prune old updates from disk *)
           let* uuid =
-            match Uuidm.of_string uuid with
-            | Some u -> Ok u
-            | None when String.equal uuid "" -> Ok Uuidm.nil
-            | None ->
-                Error (`Msg ("invalid UUID for unikernel_update: " ^ uuid))
+            Option.to_result
+              ~none:(`Msg ("invalid UUID for unikernel_update: " ^ uuid))
+              (Uuidm.of_string uuid)
           in
           Ok { name; job; uuid; config; timestamp }
       | _ ->
@@ -424,13 +421,17 @@ let user_v9_of_json cookie_fn = function
                      ("invalid json data for email verification UUID, expected \
                        a string: " ^ Utils.Json.to_string js))
           in
-          let* unikernel_updates =
+          let unikernel_updates =
             List.fold_left
               (fun acc js ->
-                let* acc = acc in
-                let* unikernel_update = unikernel_update_of_json js in
-                Ok (Utils.LM.add unikernel_update.name unikernel_update acc))
-              (Ok Utils.LM.empty) unikernel_updates
+                match unikernel_update_of_json js with
+                | Ok unikernel_update ->
+                    Utils.LM.add unikernel_update.name unikernel_update acc
+                | Error (`Msg err) ->
+                    Logs.warn (fun m ->
+                        m "discarding malformed unikernel_update: %s" err);
+                    acc)
+              Utils.LM.empty unikernel_updates
           in
           let* name = Configuration.name_of_str name in
           let* email = Mrmime.Mailbox.of_string email in
@@ -542,13 +543,17 @@ let user_of_json cookie_fn = function
                      ("invalid json data for email verification UUID, expected \
                        a string: " ^ Utils.Json.to_string js))
           in
-          let* unikernel_updates =
+          let unikernel_updates =
             List.fold_left
               (fun acc js ->
-                let* acc = acc in
-                let* unikernel_update = unikernel_update_of_json js in
-                Ok (Utils.LM.add unikernel_update.name unikernel_update acc))
-              (Ok Utils.LM.empty) unikernel_updates
+                match unikernel_update_of_json js with
+                | Ok unikernel_update ->
+                    Utils.LM.add unikernel_update.name unikernel_update acc
+                | Error (`Msg err) ->
+                    Logs.warn (fun m ->
+                        m "discarding malformed unikernel_update: %s" err);
+                    acc)
+              Utils.LM.empty unikernel_updates
           in
           let* name = Configuration.name_of_str name in
           let* email = Mrmime.Mailbox.of_string email in
