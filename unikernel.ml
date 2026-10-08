@@ -1662,7 +1662,8 @@ struct
         let data_stream, push_chunks = Lwt_stream.create () in
         let push () = Lwt_stream.get data_stream in
         Builder_web.fetch_unikernel_binary_image http_client ~job
-          ~version:to_be_updated_unikernel push_chunks
+          ~version:(Uuidm.to_string to_be_updated_unikernel)
+          push_chunks
           (force_create_unikernel stack albatross ~unikernel_name ~push
              unikernel_cfg user)
         >>= function
@@ -1708,7 +1709,7 @@ struct
           < Utils.rollback_seconds_limit
         then
           process_change stack ~unikernel_name ~job:old_unikernel.job
-            ~to_be_updated_unikernel:(Uuidm.to_string old_unikernel.uuid)
+            ~to_be_updated_unikernel:old_unikernel.uuid
             ~currently_running_unikernel:old_unikernel.uuid old_unikernel.config
             user store http_client `Rollback albatross
           >>= function
