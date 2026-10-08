@@ -1850,8 +1850,18 @@ struct
                               ^ err))
                           `Bad_request
                     | Ok cfg_opt -> (
-                        match Uuidm.of_string currently_running_unikernel with
-                        | None ->
+                        match
+                          ( Uuidm.of_string to_be_updated_unikernel,
+                            Uuidm.of_string currently_running_unikernel )
+                        with
+                        | None, _ ->
+                            Middleware.http_response reqd
+                              ~title:"Error: Bad to-be-updated unikernel UUID"
+                              ~data:
+                                (`String
+                                   "Couldn't convert the to-be-updated \
+                                    unikernel build UUID") `Bad_request
+                        | _, None ->
                             Middleware.http_response reqd
                               ~title:
                                 "Error: Bad currently running unikernel UUID"
@@ -1859,7 +1869,8 @@ struct
                                 (`String
                                    "Couldn't convert the currently running \
                                     unikernel build UUID") `Bad_request
-                        | Some currently_running_unikernel -> (
+                        | ( Some to_be_updated_unikernel,
+                            Some currently_running_unikernel ) -> (
                             match cfg_opt with
                             | None -> (
                                 user_unikernel stack albatross
