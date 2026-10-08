@@ -325,7 +325,8 @@ let user_policy ~empty_policy (user : User_model.user) policies =
                  policy));
       ])
 
-let user_single_layout ~active_tab content uuid =
+let user_single_layout ~active_tab content (uuid : Uuidm.t) =
+  let uuid = Uuidm.to_string uuid in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]

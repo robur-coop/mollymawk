@@ -2314,13 +2314,13 @@ struct
                 reply
                   (User_single.user_single_layout ~active_tab:Profile
                      (User_single.user_profile u)
-                     (Uuidm.to_string u.uuid))
+                     u.uuid)
             | `Unikernels ->
                 reply
                   (User_single.user_single_layout ~active_tab:Unikernels
                      (Unikernel_index.unikernel_index_layout unikernels
                         deceased_unikernels now)
-                     (Uuidm.to_string u.uuid))
+                     u.uuid)
             | `Policy ->
                 reply
                   (User_single.user_single_layout ~active_tab:Policy
@@ -2328,7 +2328,7 @@ struct
                         ~empty_policy:Albatross_state.empty_policy
                         (Albatross_state.all_policies ~domain:u.name
                            albatross_instances))
-                     (Uuidm.to_string u.uuid)))
+                     u.uuid))
         | Error err ->
             Middleware.http_response ~api_meth:false ~title:err.title
               ~data:err.data reqd `Internal_server_error)
