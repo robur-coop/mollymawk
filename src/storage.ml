@@ -61,7 +61,8 @@ let unregister_user_indexes t (u : User_model.user) =
         Utils.SM.remove (Uuidm.to_string ev) t.by_verification_token
   | None -> ()
 
-let create ?(users = Utils.SM.empty) ?(configurations = Utils.LM.empty) ?email () =
+let create ?(users = Utils.SM.empty) ?(configurations = Utils.LM.empty) ?email
+    () =
   let t =
     {
       users;
@@ -216,20 +217,22 @@ let insert_configuration t (configuration : Configuration.t) =
     Error
       (Fmt.str "configuration %s already exists"
          (Configuration.name_to_str configuration.name))
-  else
-    Ok
-      (t.configurations <-
-        Utils.LM.add configuration.name configuration t.configurations)
+  else begin
+    t.configurations <-
+      Utils.LM.add configuration.name configuration t.configurations;
+    Ok ()
+  end
 
 let update_configuration t (configuration : Configuration.t) =
   if not (Utils.LM.mem configuration.name t.configurations) then
     Error
       (Fmt.str "configuration %s not found"
          (Configuration.name_to_str configuration.name))
-  else
-    Ok
-      (t.configurations <-
-        Utils.LM.add configuration.name configuration t.configurations)
+  else begin
+    t.configurations <-
+      Utils.LM.add configuration.name configuration t.configurations;
+    Ok ()
+  end
 
 let upsert_configuration t (configuration : Configuration.t) mode =
   match mode with
