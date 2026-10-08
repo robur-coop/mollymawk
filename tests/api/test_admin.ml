@@ -11,8 +11,8 @@ let make_admin =
     ~password:"AdminPassword123!" ~created_at:now ~active:true ~super_user:true
     ~user_agent:(Some "Alcotest-client")
 
-let csrf_cookie uuid =
-  User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid ~created_at:now
+let csrf_cookie () =
+  User_model.generate_cookie ~name:User_model.csrf_cookie ~created_at:now
     ~user_agent:(Some "Alcotest-client") ()
 
 let make_user ?(active = false) ?(super_user = false) () =
@@ -25,7 +25,7 @@ let make_user ?(active = false) ?(super_user = false) () =
 let setup_admin_and_user ?(user_active = true) store =
   let admin, session_cookie = make_admin in
   let target_user, _ = make_user ~active:user_active () in
-  let csrf_cookie = csrf_cookie admin.uuid in
+  let csrf_cookie = csrf_cookie () in
   let admin =
     {
       admin with
@@ -42,7 +42,7 @@ let setup_admin_and_user ?(user_active = true) store =
 
 let setup_admin_only store =
   let admin, session_cookie = make_admin in
-  let csrf_cookie = csrf_cookie admin.uuid in
+  let csrf_cookie = csrf_cookie () in
   let admin =
     {
       admin with
