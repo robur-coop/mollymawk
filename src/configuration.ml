@@ -12,7 +12,7 @@ type t = {
 let name_to_str name = Vmm_core.Name.Label.to_string name
 let name_of_str name = Vmm_core.Name.Label.of_string name
 
-let to_json t =
+let to_json (t : t Utils.LM.t) =
   let one_to_json c =
     `Assoc
       [
@@ -24,7 +24,7 @@ let to_json t =
         ("updated_at", `String (Utils.TimeHelper.string_of_ptime c.updated_at));
       ]
   in
-  `List (List.map one_to_json t)
+  `List (Utils.LM.fold (fun _ c acc -> one_to_json c :: acc) t [])
 
 let of_json_from_http json_dict now =
   match
@@ -128,14 +128,10 @@ let of_json json =
           (fun acc cfg ->
             let* acc = acc in
             let* c = one_of_json cfg in
-            if
-              List.exists
-                (fun (existing : t) ->
-                  Vmm_core.Name.Label.equal existing.name c.name)
-                acc
-            then Error (`Msg "Duplicated albatross configurations")
-            else Ok (c :: acc))
-          (Ok []) cfgs
+            if Utils.LM.mem c.name acc then
+              Error (`Msg "Duplicated albatross configurations")
+            else Ok (Utils.LM.add c.name c acc))
+          (Ok Utils.LM.empty) cfgs
       in
-      Ok (List.rev cfgs)
+      Ok cfgs
   | _ -> Error (`Msg "configuration: expected a list")

@@ -378,9 +378,9 @@ let eq_config_pair (c1 : Configuration.t) (c2 : Configuration.t) =
        (X509.Private_key.encode_der pk1)
        (X509.Private_key.encode_der pk2)
 
-let eq_config (config_1 : Configuration.t list)
-    (config_2 : Configuration.t list) =
-  List.equal eq_config_pair config_1 config_2
+let eq_config (config_1 : Configuration.t Utils.LM.t)
+    (config_2 : Configuration.t Utils.LM.t) =
+  Utils.LM.equal eq_config_pair config_1 config_2
 
 let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
   let {
@@ -457,8 +457,8 @@ let eq_storage (u1, c1, e1) (u2, c2, e2) =
 
 let storage_t = Alcotest.testable pp_storage eq_storage
 
-let mock_storage ?(version = 10) ?(users = Utils.SM.empty) ?(configuration = [])
-    ?(email = None) () =
+let mock_storage ?(version = 10) ?(users = Utils.SM.empty)
+    ?(configuration = Utils.LM.empty) ?(email = None) () =
   Storage.t_to_json ~version users configuration email
 
 let mock_email =

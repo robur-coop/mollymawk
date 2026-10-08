@@ -13,7 +13,7 @@ let check_deprecated_version () =
       (Storage.t_of_json (mock_storage ~version:8 ())))
 
 let check_valid_version () =
-  let expected = (Utils.SM.empty, [], None) in
+  let expected = (Utils.SM.empty, Utils.LM.empty, None) in
   Alcotest.(
     check (result storage_t msg_t) "mollymawk should start for a valid version"
       (Ok expected)
@@ -31,42 +31,42 @@ let check_invalid_version () =
       (Storage.t_of_json (mock_storage ~version:1000 ())))
 
 let check_email_config_in_v9 () =
-  let expected = (Utils.SM.empty, [], Some mock_email) in
+  let expected = (Utils.SM.empty, Utils.LM.empty, Some mock_email) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start with email config in v9" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:9 ~email:(Some mock_email) ())))
 
 let check_no_email_config_in_v9 () =
-  let expected = (Utils.SM.empty, [], None) in
+  let expected = (Utils.SM.empty, Utils.LM.empty, None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start even with no email config in v9" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:9 ())))
 
 let check_email_config_in_v10 () =
-  let expected = (Utils.SM.empty, [], Some mock_email) in
+  let expected = (Utils.SM.empty, Utils.LM.empty, Some mock_email) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start with email config in v10" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:10 ~email:(Some mock_email) ())))
 
 let check_no_email_config_in_v10 () =
-  let expected = (Utils.SM.empty, [], None) in
+  let expected = (Utils.SM.empty, Utils.LM.empty, None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start even with no email config in v10" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:10 ())))
 
 let check_no_albatross_config_in_v9 () =
-  let expected = (Utils.SM.empty, [], None) in
+  let expected = (Utils.SM.empty, Utils.LM.empty, None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start even with no albatross config in v9" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:9 ())))
 
 let check_no_albatross_config_in_v10 () =
-  let expected = (Utils.SM.empty, [], None) in
+  let expected = (Utils.SM.empty, Utils.LM.empty, None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start even with no albatross config in v10"
@@ -74,24 +74,46 @@ let check_no_albatross_config_in_v10 () =
       (Storage.t_of_json (mock_storage ~version:10 ())))
 
 let check_valid_albatross_config_in_v9 () =
-  let expected = (Utils.SM.empty, [ mock_albatross_config ], None) in
+  let expected =
+    ( Utils.SM.empty,
+      Utils.LM.singleton mock_albatross_config.name mock_albatross_config,
+      None )
+  in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start with a valid albatross config in v9" (Ok expected)
       (Storage.t_of_json
-         (mock_storage ~version:9 ~configuration:[ mock_albatross_config ] ())))
+         (mock_storage ~version:9
+            ~configuration:
+              (Utils.LM.singleton mock_albatross_config.name
+                 mock_albatross_config)
+            ())))
 
 let check_valid_albatross_config_in_v10 () =
-  let expected = (Utils.SM.empty, [ mock_albatross_config ], None) in
+  let expected =
+    ( Utils.SM.empty,
+      Utils.LM.singleton mock_albatross_config.name mock_albatross_config,
+      None )
+  in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start with a valid albatross config in v10"
       (Ok expected)
       (Storage.t_of_json
-         (mock_storage ~version:10 ~configuration:[ mock_albatross_config ] ())))
+         (mock_storage ~version:10
+            ~configuration:
+              (Utils.LM.singleton mock_albatross_config.name
+                 mock_albatross_config)
+            ())))
 
 let check_invalid_private_key_in_albatross_config () =
   let expected = `Msg "certificate and private key do not match" in
+  let bad_cfg =
+    {
+      mock_albatross_config with
+      certificate = certificate_exn second_private_key;
+    }
+  in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should not start if the certificate and private key in the \
@@ -99,13 +121,7 @@ let check_invalid_private_key_in_albatross_config () =
       (Error expected)
       (Storage.t_of_json
          (mock_storage ~version:10
-            ~configuration:
-              [
-                {
-                  mock_albatross_config with
-                  certificate = certificate_exn second_private_key;
-                };
-              ]
+            ~configuration:(Utils.LM.singleton bad_cfg.name bad_cfg)
             ())))
 
 let check_missing_certificate_in_albatross_config () =
@@ -178,51 +194,55 @@ let check_missing_private_key_in_albatross_config () =
 (** This test currently will not pass.*)
 let check_multiple_valid_albatross_configs_with_same_name () =
   let expected = `Msg "Duplicated albatross configurations" in
+  let one_cfg_json =
+    match
+      Configuration.to_json
+        (Utils.LM.singleton mock_albatross_config.name mock_albatross_config)
+    with
+    | `List [ c ] -> c
+    | _ -> failwith "unexpected json"
+  in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should fail to start if two albatross configs have the same \
        name"
       (Error expected)
       (Storage.t_of_json
-         (mock_storage ~version:10
-            ~configuration:[ mock_albatross_config; mock_albatross_config ]
-            ())))
+         (`Assoc
+            [
+              ("version", `Int 10);
+              ("users", `List []);
+              ("configuration", `List [ one_cfg_json; one_cfg_json ]);
+              ("email", `Null);
+            ])))
 
 let check_multiple_valid_albatross_configs_with_different_names () =
-  let expected =
-    ( Utils.SM.empty,
-      [
-        mock_albatross_config;
-        {
-          mock_albatross_config with
-          Configuration.name = label_of_string_exn "default-2";
-        };
-      ],
-      None )
+  let cfg2 =
+    {
+      mock_albatross_config with
+      Configuration.name = label_of_string_exn "default-2";
+    }
   in
+  let configs =
+    Utils.LM.empty
+    |> Utils.LM.add mock_albatross_config.name mock_albatross_config
+    |> Utils.LM.add cfg2.name cfg2
+  in
+  let expected = (Utils.SM.empty, configs, None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should fail to start if two albatross configs have the same \
        name"
       (Ok expected)
-      (Storage.t_of_json
-         (mock_storage ~version:10
-            ~configuration:
-              [
-                mock_albatross_config;
-                {
-                  mock_albatross_config with
-                  Configuration.name = label_of_string_exn "default-2";
-                };
-              ]
-            ())))
+      (Storage.t_of_json (mock_storage ~version:10 ~configuration:configs ())))
 
 let check_disk_dump () =
   let json = Utils.Json.from_string raw_dump in
   match Storage.t_of_json (json_of_string_exn json) with
   | Ok (users, configs, email) ->
       Alcotest.(check int "3 users in dump" 3 (Utils.SM.cardinal users));
-      Alcotest.(check int "1 configuration in dump" 1 (List.length configs));
+      Alcotest.(
+        check int "1 configuration in dump" 1 (Utils.LM.cardinal configs));
       Alcotest.(check bool "Email config present" true (Option.is_some email));
       let _serialized = Storage.t_to_json users configs email in
       ()
@@ -280,7 +300,9 @@ let check_cookies_roundtrip () =
   let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in
   let session_val = user_session_cookie user in
   let csrf_val = user_csrf_cookie user in
-  let json = Storage.t_to_json (Utils.SM.singleton user.uuid user) [] None in
+  let json =
+    Storage.t_to_json (Utils.SM.singleton user.uuid user) Utils.LM.empty None
+  in
   match Storage.t_of_json json with
   | Ok (users, _, _) when Utils.SM.cardinal users = 1 ->
       let loaded_user = snd (Utils.SM.choose users) in
@@ -301,7 +323,9 @@ let check_cookies_load_v9 () =
   let session_val = user_session_cookie user in
   let csrf_val = user_csrf_cookie user in
   let json =
-    Storage.t_to_json ~version:9 (Utils.SM.singleton user.uuid user) [] None
+    Storage.t_to_json ~version:9
+      (Utils.SM.singleton user.uuid user)
+      Utils.LM.empty None
   in
   match Storage.t_of_json json with
   | Ok (users, _, _) when Utils.SM.cardinal users = 1 ->
