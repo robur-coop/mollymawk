@@ -1,4 +1,4 @@
-let users_index_layout (users : User_model.user Utils.SM.t) current_time =
+let users_index_layout (users : User_model.user Utils.UM.t) current_time =
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
@@ -12,7 +12,7 @@ let users_index_layout (users : User_model.user Utils.SM.t) current_time =
                   ~a:[ a_class [ "font-bold text-gray-700" ] ]
                   [
                     txt
-                      ("Users (" ^ string_of_int (Utils.SM.cardinal users) ^ ")");
+                      ("Users (" ^ string_of_int (Utils.UM.cardinal users) ^ ")");
                   ];
               ];
             div
@@ -212,7 +212,7 @@ let users_index_layout (users : User_model.user Utils.SM.t) current_time =
                                        [ txt "Action" ];
                                    ];
                                ])
-                          (Utils.SM.fold
+                          (Utils.UM.fold
                              (fun _ (user : User_model.user) acc ->
                                tr
                                  ~a:[ a_class [ "border-b border-gray-200" ] ]
@@ -377,7 +377,7 @@ let users_index_layout (users : User_model.user Utils.SM.t) current_time =
                                            [
                                              a_href
                                                ("/admin/user/profile?uuid="
-                                              ^ user.uuid);
+                                              ^ Uuidm.to_string user.uuid);
                                              a_class
                                                [
                                                  "border border-primary-500 \

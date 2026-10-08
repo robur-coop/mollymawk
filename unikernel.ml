@@ -828,7 +828,7 @@ struct
       User_model.verify_email_token u verification_token (Mirage_ptime.now ())
     with
     | Ok user' ->
-        if String.equal user.uuid user'.uuid then (
+        if Uuidm.equal user.uuid user'.uuid then (
           Storage.update_user store user;
           Store.write_data store >>= function
           | Ok () -> Middleware.redirect_to_page ~path:"/dashboard" reqd ()
@@ -846,8 +846,10 @@ struct
   let toggle_account_attribute json_dict store reqd ~key update_fn error_on_last
       ~error_message =
     match Utils.Json.get "uuid" json_dict with
-    | Some (`String uuid) -> (
-        match Storage.find_by_uuid store uuid with
+    | Some (`String uuid_str) -> (
+        match
+          Option.bind (Uuidm.of_string uuid_str) (Storage.find_by_uuid store)
+        with
         | None ->
             Logs.warn (fun m -> m "%s : Account not found" key);
             Middleware.http_response reqd ~data:(`String "Account not found")
@@ -891,8 +893,10 @@ struct
 
   let delete_account store _user json_dict reqd =
     match Utils.Json.get "uuid" json_dict with
-    | Some (`String uuid) -> (
-        match Storage.find_by_uuid store uuid with
+    | Some (`String uuid_str) -> (
+        match
+          Option.bind (Uuidm.of_string uuid_str) (Storage.find_by_uuid store)
+        with
         | None ->
             Logs.warn (fun m -> m "delete-account : Account not found");
             Middleware.http_response reqd ~data:(`String "Account not found")
@@ -1658,7 +1662,8 @@ struct
         let data_stream, push_chunks = Lwt_stream.create () in
         let push () = Lwt_stream.get data_stream in
         Builder_web.fetch_unikernel_binary_image http_client ~job
-          ~version:to_be_updated_unikernel push_chunks
+          ~version:(Uuidm.to_string to_be_updated_unikernel)
+          push_chunks
           (force_create_unikernel stack albatross ~unikernel_name ~push
              unikernel_cfg user)
         >>= function
@@ -1722,15 +1727,17 @@ struct
                 ~data:
                   (`String
                      ("Rollback successful. " ^ unikernel_name_str
-                    ^ " is now running on build " ^ old_unikernel.uuid))
+                    ^ " is now running on build "
+                     ^ Uuidm.to_string old_unikernel.uuid))
                 `OK
           | Error (`Msg err, http_status) ->
               Middleware.http_response reqd ~title:"Rollback Error"
                 ~data:
                   (`String
                      ("Rollback failed. " ^ unikernel_name_str
-                    ^ " failed to revert to build " ^ old_unikernel.uuid
-                    ^ " with error " ^ err))
+                    ^ " failed to revert to build "
+                     ^ Uuidm.to_string old_unikernel.uuid
+                     ^ " with error " ^ err))
                 http_status
         else
           Middleware.http_response reqd ~title:"Rollback Failed"
@@ -1751,6 +1758,7 @@ struct
   let process_unikernel_update ~unikernel_name ~job ~to_be_updated_unikernel
       ~currently_running_unikernel ~http_liveliness_address ~dns_liveliness
       stack cfg user store http_client albatross reqd =
+    let to_be_updated_unikernel_str = Uuidm.to_string to_be_updated_unikernel in
     process_change stack ~unikernel_name ~job ~to_be_updated_unikernel
       ~currently_running_unikernel cfg user store http_client `Update albatross
     >>= function
@@ -1764,7 +1772,7 @@ struct
                 m
                   "liveliness-checks for %s and build %s failed with error(s) \
                    %s. now performing a rollback"
-                  unikernel_name_str to_be_updated_unikernel err);
+                  unikernel_name_str to_be_updated_unikernel_str err);
             process_rollback stack albatross ~unikernel_name
               (Mirage_ptime.now ()) store http_client reqd user
         | Ok () ->
@@ -1772,7 +1780,7 @@ struct
               ~data:
                 (`String
                    ("Update successful. " ^ unikernel_name_str
-                  ^ " is now running on build " ^ to_be_updated_unikernel))
+                  ^ " is now running on build " ^ to_be_updated_unikernel_str))
               `OK)
     | Error (`Msg err, http_status) ->
         Middleware.http_response reqd ~title:"Update Error"
@@ -1780,7 +1788,7 @@ struct
             (`String
                ("Update failed. "
                ^ Configuration.name_to_str unikernel_name
-               ^ " failed to update to build " ^ to_be_updated_unikernel
+               ^ " failed to update to build " ^ to_be_updated_unikernel_str
                ^ " with error " ^ err))
           http_status
 
@@ -1841,68 +1849,97 @@ struct
                                ("Could not get the unikernel arguments json: "
                               ^ err))
                           `Bad_request
-                    | Ok None -> (
-                        user_unikernel stack albatross ~user_name:user.name
-                          ~unikernel_name
-                        >>= function
-                        | Error err ->
+                    | Ok cfg_opt -> (
+                        match
+                          ( Uuidm.of_string to_be_updated_unikernel,
+                            Uuidm.of_string currently_running_unikernel )
+                        with
+                        | None, _ ->
                             Middleware.http_response reqd
+                              ~title:"Error: Bad to-be-updated unikernel UUID"
                               ~data:
                                 (`String
-                                   ("Couldn't find albatross instance, "
-                                   ^ Configuration.name_to_str instance_name
-                                   ^ " with error: " ^ err))
-                              `Bad_request
-                        | Ok (_n, (info : Vmm_core.Unikernel.info)) ->
-                            let (cfg : Vmm_core.Unikernel.config) =
-                              {
-                                Vmm_core.Unikernel.typ = info.typ;
-                                compressed = false;
-                                image = "";
-                                add_name = true;
-                                startup = info.startup;
-                                fail_behaviour = info.fail_behaviour;
-                                cpuids = info.cpuids;
-                                memory = info.memory;
-                                block_devices =
-                                  List.map
-                                    (fun {
-                                           Vmm_core.Unikernel.unikernel_device;
-                                           host_device;
-                                           sector_size;
-                                           _;
-                                         } ->
-                                      ( unikernel_device,
-                                        Some host_device,
-                                        Some sector_size ))
-                                    info.block_devices;
-                                bridges =
-                                  List.map
-                                    (fun {
-                                           Vmm_core.Unikernel.unikernel_device;
-                                           host_device;
-                                           mac;
-                                         } ->
-                                      ( unikernel_device,
-                                        Some host_device,
-                                        Some mac ))
-                                    info.bridges;
-                                argv = info.argv;
-                                (* ADDED: New required fields for BHyve support *)
-                                numcpus = info.numcpus;
-                                linux_boot_partition = info.linux_boot_partition;
-                              }
-                            in
-                            process_unikernel_update ~unikernel_name ~job
-                              ~to_be_updated_unikernel
-                              ~currently_running_unikernel
-                              ~http_liveliness_address ~dns_liveliness stack cfg
-                              user store http_client albatross reqd)
-                    | Ok (Some cfg) ->
-                        process_unikernel_update ~unikernel_name ~job
-                          ~to_be_updated_unikernel ~currently_running_unikernel
-                          ~http_liveliness_address ~dns_liveliness stack cfg
-                          user store http_client albatross reqd)
+                                   "Couldn't convert the to-be-updated \
+                                    unikernel build UUID") `Bad_request
+                        | _, None ->
+                            Middleware.http_response reqd
+                              ~title:
+                                "Error: Bad currently running unikernel UUID"
+                              ~data:
+                                (`String
+                                   "Couldn't convert the currently running \
+                                    unikernel build UUID") `Bad_request
+                        | ( Some to_be_updated_unikernel,
+                            Some currently_running_unikernel ) -> (
+                            match cfg_opt with
+                            | None -> (
+                                user_unikernel stack albatross
+                                  ~user_name:user.name ~unikernel_name
+                                >>= function
+                                | Error err ->
+                                    Middleware.http_response reqd
+                                      ~data:
+                                        (`String
+                                           ("Couldn't find albatross instance, "
+                                           ^ Configuration.name_to_str
+                                               instance_name
+                                           ^ " with error: " ^ err))
+                                      `Bad_request
+                                | Ok (_n, (info : Vmm_core.Unikernel.info)) ->
+                                    let (cfg : Vmm_core.Unikernel.config) =
+                                      {
+                                        Vmm_core.Unikernel.typ = info.typ;
+                                        compressed = false;
+                                        image = "";
+                                        add_name = true;
+                                        startup = info.startup;
+                                        fail_behaviour = info.fail_behaviour;
+                                        cpuids = info.cpuids;
+                                        memory = info.memory;
+                                        block_devices =
+                                          List.map
+                                            (fun {
+                                                   Vmm_core.Unikernel
+                                                   .unikernel_device;
+                                                   host_device;
+                                                   sector_size;
+                                                   _;
+                                                 } ->
+                                              ( unikernel_device,
+                                                Some host_device,
+                                                Some sector_size ))
+                                            info.block_devices;
+                                        bridges =
+                                          List.map
+                                            (fun {
+                                                   Vmm_core.Unikernel
+                                                   .unikernel_device;
+                                                   host_device;
+                                                   mac;
+                                                 } ->
+                                              ( unikernel_device,
+                                                Some host_device,
+                                                Some mac ))
+                                            info.bridges;
+                                        argv = info.argv;
+                                        (* ADDED: New required fields for BHyve support *)
+                                        numcpus = info.numcpus;
+                                        linux_boot_partition =
+                                          info.linux_boot_partition;
+                                      }
+                                    in
+                                    process_unikernel_update ~unikernel_name
+                                      ~job ~to_be_updated_unikernel
+                                      ~currently_running_unikernel
+                                      ~http_liveliness_address ~dns_liveliness
+                                      stack cfg user store http_client albatross
+                                      reqd)
+                            | Some cfg ->
+                                process_unikernel_update ~unikernel_name ~job
+                                  ~to_be_updated_unikernel
+                                  ~currently_running_unikernel
+                                  ~http_liveliness_address ~dns_liveliness stack
+                                  cfg user store http_client albatross reqd)))
                 | _ ->
                     Middleware.http_response
                       ~data:
@@ -2264,9 +2301,9 @@ struct
          (Configuration.name_to_str unikernel_name))
       `OK
 
-  let view_user stack albatross_instances store uuid
-      (page : [> `Profile | `Unikernels | `Policy ]) _ (user : User_model.user)
-      reqd =
+  let view_user stack albatross_instances store
+      (page : [> `Profile | `Unikernels | `Policy ]) uuid _
+      (user : User_model.user) reqd =
     match Storage.find_by_uuid store uuid with
     | Some u -> (
         user_unikernels stack albatross_instances u.name >>= fun unikernels ->
@@ -2310,7 +2347,8 @@ struct
               ~data:err.data reqd `Internal_server_error)
     | None ->
         Middleware.http_response ~api_meth:false
-          ~data:(`String ("Couldn't find account with uuid: " ^ uuid))
+          ~data:
+            (`String ("Couldn't find account with uuid: " ^ Uuidm.to_string uuid))
           reqd `Not_found
 
   let edit_policy store uuid albatross _ (user : User_model.user) reqd =
@@ -2348,15 +2386,20 @@ struct
               reqd `Bad_request)
     | None ->
         Middleware.http_response ~api_meth:false
-          ~data:(`String ("Couldn't find account with uuid: " ^ uuid))
+          ~data:
+            (`String ("Couldn't find account with uuid: " ^ Uuidm.to_string uuid))
           reqd `Not_found
 
   let update_policy stack albatross_instances store _user json_dict reqd =
     match
       Utils.Json.(get "user_uuid" json_dict, get "albatross_instance" json_dict)
     with
-    | Some (`String user_uuid), Some (`String instance_name) -> (
-        match Storage.find_by_uuid store user_uuid with
+    | Some (`String user_uuid_str), Some (`String instance_name) -> (
+        match
+          Option.bind
+            (Uuidm.of_string user_uuid_str)
+            (Storage.find_by_uuid store)
+        with
         | Some u -> (
             match Configuration.name_of_str instance_name with
             | Ok instance_name -> (
@@ -3387,8 +3430,8 @@ struct
     Lwt.return { Update_flow.user; available_updates }
 
   let check_available_unikernel_updates stack albatross_instances
-      (users : User_model.user Utils.SM.t) http_client =
-    Utils.SM.fold
+      (users : User_model.user Utils.UM.t) http_client =
+    Utils.UM.fold
       (fun _ user acc_p ->
         acc_p >>= fun acc ->
         check_user_unikernel_updates stack albatross_instances user http_client
@@ -3415,7 +3458,8 @@ struct
             Lwt_list.iter_s
               (fun (report : Update_flow.user_unikernel_available_updates) ->
                 let references =
-                  Fmt.str "updates-%s@robur.coop" report.user.uuid
+                  Fmt.str "updates-%s@robur.coop"
+                    (Uuidm.to_string report.user.uuid)
                 in
                 send_email ~references happy_eyeballs email_config
                   report.user.email ~subject:"Unikernel updates available"
@@ -3637,6 +3681,18 @@ struct
                     reqd `Bad_request)
           | Error _ -> Middleware.redirect_to_instance_selector endpoint reqd ()
         in
+        let get_uuid_admin_page fn =
+          match get_query_parameter "uuid" with
+          | Ok uuid_str -> (
+              match Uuidm.of_string uuid_str with
+              | Some uuid -> authenticate ~check_admin:true store reqd (fn uuid)
+              | None ->
+                  Middleware.http_response ~api_meth:false
+                    ~data:(`String "Invalid UUID") reqd `Bad_request)
+          | Error err ->
+              Middleware.http_response ~api_meth:false ~data:(`String err) reqd
+                `Bad_request
+        in
         match path with
         | "/" ->
             check_meth `GET (fun () ->
@@ -3776,39 +3832,28 @@ struct
                   (choose_instance store !albatross_instances callback_link))
         | "/admin/user/profile" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "uuid" with
-                | Ok uuid ->
-                    authenticate ~check_admin:true store reqd
-                      (view_user stack !albatross_instances store uuid `Profile)
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                get_uuid_admin_page
+                  (view_user stack !albatross_instances store `Profile))
         | "/admin/user/unikernels" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "uuid" with
-                | Ok uuid ->
-                    authenticate ~check_admin:true store reqd
-                      (view_user stack !albatross_instances store uuid
-                         `Unikernels)
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                get_uuid_admin_page
+                  (view_user stack !albatross_instances store `Unikernels))
         | "/admin/user/policy" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "uuid" with
-                | Ok uuid ->
-                    authenticate ~check_admin:true store reqd
-                      (view_user stack !albatross_instances store uuid `Policy)
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                get_uuid_admin_page
+                  (view_user stack !albatross_instances store `Policy))
         | "/admin/u/policy/edit" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "uuid" with
-                | Ok uuid ->
-                    authenticate ~check_admin:true store reqd
-                      (albatross_instance req.H1.Request.target
-                         (edit_policy store uuid))
+                | Ok uuid_str -> (
+                    match Uuidm.of_string uuid_str with
+                    | Some uuid ->
+                        authenticate ~check_admin:true store reqd
+                          (albatross_instance req.H1.Request.target
+                             (edit_policy store uuid))
+                    | None ->
+                        Middleware.http_response ~api_meth:false
+                          ~data:(`String "Invalid UUID") reqd `Bad_request)
                 | Error err ->
                     Middleware.http_response ~api_meth:false ~data:(`String err)
                       reqd `Bad_request)

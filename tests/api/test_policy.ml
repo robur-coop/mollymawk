@@ -37,8 +37,10 @@ let check_update_policy_success () =
       let policies = make_default_policies ~domain:test.name () in
       let handler = make_app_request_handler ~policies store in
       let body =
-        make_policy_body ~user_uuid:test.uuid ~instance:"default" ~unikernels:5
-          ~memory:512 ~block:0 ~cpuids:"0" ~bridges:"service" ~csrf_token ()
+        make_policy_body
+          ~user_uuid:(Uuidm.to_string test.uuid)
+          ~instance:"default" ~unikernels:5 ~memory:512 ~block:0 ~cpuids:"0"
+          ~bridges:"service" ~csrf_token ()
       in
       let req =
         make_post_request ~path:"/api/admin/u/policy/update" ~body
@@ -71,9 +73,10 @@ let check_update_policy_with_block_size_success () =
       in
       let handler = make_app_request_handler ~policies store in
       let body =
-        make_policy_body ~user_uuid:test.uuid ~instance:"default" ~unikernels:4
-          ~memory:1024 ~block:2048 ~cpuids:"0,1" ~bridges:"service" ~csrf_token
-          ()
+        make_policy_body
+          ~user_uuid:(Uuidm.to_string test.uuid)
+          ~instance:"default" ~unikernels:4 ~memory:1024 ~block:2048
+          ~cpuids:"0,1" ~bridges:"service" ~csrf_token ()
       in
       let req =
         make_post_request ~path:"/api/admin/u/policy/update" ~body
@@ -100,9 +103,10 @@ let check_update_policy_exceeds_root_unikernels () =
       in
       let handler = make_app_request_handler ~policies store in
       let body =
-        make_policy_body ~user_uuid:ctest.uuid ~instance:"default"
-          ~unikernels:50 ~memory:512 ~block:0 ~cpuids:"0" ~bridges:"service"
-          ~csrf_token ()
+        make_policy_body
+          ~user_uuid:(Uuidm.to_string ctest.uuid)
+          ~instance:"default" ~unikernels:50 ~memory:512 ~block:0 ~cpuids:"0"
+          ~bridges:"service" ~csrf_token ()
       in
       let req =
         make_post_request ~path:"/api/admin/u/policy/update" ~body
@@ -127,8 +131,10 @@ let check_update_policy_exceeds_root_memory () =
       let policies = make_default_policies ~domain:btest.name ~memory:1024 () in
       let handler = make_app_request_handler ~policies store in
       let body =
-        make_policy_body ~user_uuid:btest.uuid ~instance:"default" ~unikernels:5
-          ~memory:4096 ~block:0 ~cpuids:"0" ~bridges:"service" ~csrf_token ()
+        make_policy_body
+          ~user_uuid:(Uuidm.to_string btest.uuid)
+          ~instance:"default" ~unikernels:5 ~memory:4096 ~block:0 ~cpuids:"0"
+          ~bridges:"service" ~csrf_token ()
       in
       let req =
         make_post_request ~path:"/api/admin/u/policy/update" ~body
@@ -155,9 +161,10 @@ let check_update_policy_unauthorized_bridge () =
       in
       let handler = make_app_request_handler ~policies store in
       let body =
-        make_policy_body ~user_uuid:etest.uuid ~instance:"default" ~unikernels:2
-          ~memory:256 ~block:0 ~cpuids:"0" ~bridges:"unauthorized" ~csrf_token
-          ()
+        make_policy_body
+          ~user_uuid:(Uuidm.to_string etest.uuid)
+          ~instance:"default" ~unikernels:2 ~memory:256 ~block:0 ~cpuids:"0"
+          ~bridges:"unauthorized" ~csrf_token ()
       in
       let req =
         make_post_request ~path:"/api/admin/u/policy/update" ~body
@@ -184,8 +191,10 @@ let check_update_policy_unauthorized_cpuid () =
       in
       let handler = make_app_request_handler ~policies store in
       let body =
-        make_policy_body ~user_uuid:itest.uuid ~instance:"default" ~unikernels:2
-          ~memory:256 ~block:0 ~cpuids:"99" ~bridges:"service" ~csrf_token ()
+        make_policy_body
+          ~user_uuid:(Uuidm.to_string itest.uuid)
+          ~instance:"default" ~unikernels:2 ~memory:256 ~block:0 ~cpuids:"99"
+          ~bridges:"service" ~csrf_token ()
       in
       let req =
         make_post_request ~path:"/api/admin/u/policy/update" ~body
@@ -231,8 +240,9 @@ let check_update_policy_unknown_instance () =
       setup_user ~name:"ktest" ~email:"ktest@robur.coop" store
       >>= fun (ktest, _, _) ->
       let body =
-        make_policy_body ~user_uuid:ktest.uuid ~instance:"nonexistent"
-          ~csrf_token ()
+        make_policy_body
+          ~user_uuid:(Uuidm.to_string ktest.uuid)
+          ~instance:"nonexistent" ~csrf_token ()
       in
       let req =
         make_post_request ~path:"/api/admin/u/policy/update" ~body
@@ -256,8 +266,9 @@ let check_update_policy_invalid_instance_name () =
       setup_user ~name:"htest" ~email:"htest@robur.coop" store
       >>= fun (htest, _, _) ->
       let body =
-        make_policy_body ~user_uuid:htest.uuid ~instance:"invalid label!"
-          ~csrf_token ()
+        make_policy_body
+          ~user_uuid:(Uuidm.to_string htest.uuid)
+          ~instance:"invalid label!" ~csrf_token ()
       in
       let req =
         make_post_request ~path:"/api/admin/u/policy/update" ~body
@@ -302,7 +313,8 @@ let check_update_policy_missing_policy_fields () =
       let body =
         Fmt.str
           {|{ "user_uuid": "%s", "albatross_instance": "default", "molly_csrf": "%s" }|}
-          ktest.uuid csrf_token
+          (Uuidm.to_string ktest.uuid)
+          csrf_token
       in
       let req =
         make_post_request ~path:"/api/admin/u/policy/update" ~body
@@ -326,8 +338,10 @@ let check_update_policy_root_policy_null () =
       >>= fun (jtest, _, _) ->
       let handler = make_app_request_handler store in
       let body =
-        make_policy_body ~user_uuid:jtest.uuid ~instance:"default" ~unikernels:2
-          ~memory:256 ~block:0 ~cpuids:"0" ~bridges:"service" ~csrf_token ()
+        make_policy_body
+          ~user_uuid:(Uuidm.to_string jtest.uuid)
+          ~instance:"default" ~unikernels:2 ~memory:256 ~block:0 ~cpuids:"0"
+          ~bridges:"service" ~csrf_token ()
       in
       let req =
         make_post_request ~path:"/api/admin/u/policy/update" ~body
@@ -369,8 +383,10 @@ let check_update_policy_albatross_failure () =
       let instances = Utils.LM.singleton failing_lbl unreachable_instance in
       let handler = make_app_request_handler ~policies ~instances store in
       let body =
-        make_policy_body ~user_uuid:qtest.uuid ~instance:"failing" ~unikernels:2
-          ~memory:256 ~block:0 ~cpuids:"0" ~bridges:"service" ~csrf_token ()
+        make_policy_body
+          ~user_uuid:(Uuidm.to_string qtest.uuid)
+          ~instance:"failing" ~unikernels:2 ~memory:256 ~block:0 ~cpuids:"0"
+          ~bridges:"service" ~csrf_token ()
       in
       let req =
         make_post_request ~path:"/api/admin/u/policy/update" ~body

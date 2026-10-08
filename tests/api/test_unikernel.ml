@@ -771,7 +771,7 @@ let check_unikernel_rollback_expired_window () =
         {
           name = label_of_string_exn "hello";
           job = "hello-job";
-          uuid = "old-uuid-123";
+          uuid = User_model.generate_uuid ();
           config = dummy_cfg;
           timestamp = Ptime.epoch;
         }

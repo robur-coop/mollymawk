@@ -293,7 +293,7 @@ let user_t =
   Alcotest.testable pp (fun (u1 : User_model.user) (u2 : User_model.user) ->
       Vmm_core.Name.Label.equal u1.name u2.name
       && Mrmime.Mailbox.equal u1.email u2.email
-      && String.equal u1.uuid u2.uuid
+      && Uuidm.equal u1.uuid u2.uuid
       && Bool.equal u1.active u2.active
       && Bool.equal u1.super_user u2.super_user)
 
@@ -419,15 +419,15 @@ let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
     u2
   in
   Vmm_core.Name.Label.equal n1 n2
-  && Mrmime.Mailbox.equal e1 e2 && String.equal p1 p2 && String.equal id1 id2
+  && Mrmime.Mailbox.equal e1 e2 && String.equal p1 p2 && Uuidm.equal id1 id2
   && Bool.equal a1 a2 && Bool.equal s1 s2 && Ptime.equal uat1 uat2
   && Ptime.equal cat1 cat2
   && Option.equal Ptime.equal ev1 ev2
   && Option.equal Uuidm.equal evu1 evu2
 
-let eq_users (users_1 : User_model.user Utils.SM.t)
-    (users_2 : User_model.user Utils.SM.t) =
-  Utils.SM.equal eq_user_pair users_1 users_2
+let eq_users (users_1 : User_model.user Utils.UM.t)
+    (users_2 : User_model.user Utils.UM.t) =
+  Utils.UM.equal eq_user_pair users_1 users_2
 
 let eq_emails (e1 : Utils.Email.t) (e2 : Utils.Email.t) =
   let {
@@ -457,7 +457,7 @@ let eq_storage (u1, c1, e1) (u2, c2, e2) =
 
 let storage_t = Alcotest.testable pp_storage eq_storage
 
-let mock_storage ?(version = 10) ?(users = Utils.SM.empty)
+let mock_storage ?(version = 10) ?(users = Utils.UM.empty)
     ?(configuration = Utils.LM.empty) ?(email = None) () =
   Storage.t_to_json ~version users configuration email
 

@@ -98,7 +98,8 @@ let policy_row ?(error = "") instance_name policy (user : User_model.user) =
               ~a:
                 [
                   a_href
-                    ("/admin/u/policy/edit?uuid=" ^ user.uuid ^ "&instance="
+                    ("/admin/u/policy/edit?uuid=" ^ Uuidm.to_string user.uuid
+                   ^ "&instance="
                     ^ Configuration.name_to_str instance_name);
                   a_class
                     [
@@ -168,14 +169,19 @@ let user_profile (user : User_model.user) =
                   ~a:[ a_class [ "flex justify-center space-x-4 my-4" ] ]
                   [
                     Utils.button_component
-                      ~attribs:[ a_onclick ("deleteUser('" ^ user.uuid ^ "')") ]
+                      ~attribs:
+                        [
+                          a_onclick
+                            ("deleteUser('" ^ Uuidm.to_string user.uuid ^ "')");
+                        ]
                       ~content:(txt "Delete User") ~btn_type:`Danger_full ();
                     (if user.active then
                        Utils.button_component
                          ~attribs:
                            [
                              a_onclick
-                               ("toggleUserActiveStatus('" ^ user.uuid ^ "')");
+                               ("toggleUserActiveStatus('"
+                              ^ Uuidm.to_string user.uuid ^ "')");
                            ]
                          ~content:(txt "Deactivate") ~btn_type:`Danger_full ()
                      else
@@ -183,7 +189,8 @@ let user_profile (user : User_model.user) =
                          ~attribs:
                            [
                              a_onclick
-                               ("toggleUserActiveStatus('" ^ user.uuid ^ "')");
+                               ("toggleUserActiveStatus('"
+                              ^ Uuidm.to_string user.uuid ^ "')");
                            ]
                          ~content:(txt "Activate") ~btn_type:`Primary_full ());
                     (if user.super_user then
@@ -191,7 +198,8 @@ let user_profile (user : User_model.user) =
                          ~attribs:
                            [
                              a_onclick
-                               ("toggleUserAdminStatus('" ^ user.uuid ^ "')");
+                               ("toggleUserAdminStatus('"
+                              ^ Uuidm.to_string user.uuid ^ "')");
                            ]
                          ~content:(txt "Remove Admin") ~btn_type:`Danger_full ()
                      else
@@ -199,7 +207,8 @@ let user_profile (user : User_model.user) =
                          ~attribs:
                            [
                              a_onclick
-                               ("toggleUserAdminStatus('" ^ user.uuid ^ "')");
+                               ("toggleUserAdminStatus('"
+                              ^ Uuidm.to_string user.uuid ^ "')");
                            ]
                          ~content:(txt "Make Admin") ~btn_type:`Primary_full ());
                   ];
@@ -217,7 +226,7 @@ let user_policy ~empty_policy (user : User_model.user) policies =
             a
               ~a:
                 [
-                  a_href ("/admin/u/policy/edit/" ^ user.uuid);
+                  a_href ("/admin/u/policy/edit/" ^ Uuidm.to_string user.uuid);
                   a_class
                     [
                       "border border-primary-500 hover:bg-primary-700 px-2 \
@@ -316,7 +325,8 @@ let user_policy ~empty_policy (user : User_model.user) policies =
                  policy));
       ])
 
-let user_single_layout ~active_tab content uuid =
+let user_single_layout ~active_tab content (uuid : Uuidm.t) =
+  let uuid = Uuidm.to_string uuid in
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]

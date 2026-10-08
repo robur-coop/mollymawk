@@ -9,15 +9,15 @@ let current_version = 10
 
 type t = {
   (* these fields are persisted to disk *)
-  mutable users : User_model.user Utils.SM.t;
+  mutable users : User_model.user Utils.UM.t;
   mutable configurations : Configuration.t Utils.LM.t;
   mutable email : Utils.Email.t option;
   (* these fields below are not persisted to disk*)
-  mutable by_name : string Utils.LM.t;
-  mutable by_email : string Utils.SM.t;
-  mutable by_cookie : string Utils.SM.t;
-  mutable by_token : string Utils.SM.t;
-  mutable by_verification_token : string Utils.SM.t;
+  mutable by_name : Uuidm.t Utils.LM.t;
+  mutable by_email : Uuidm.t Utils.SM.t;
+  mutable by_cookie : Uuidm.t Utils.SM.t;
+  mutable by_token : Uuidm.t Utils.SM.t;
+  mutable by_verification_token : Uuidm.t Utils.SM.t;
 }
 
 let configurations { configurations; _ } = configurations
@@ -61,7 +61,7 @@ let unregister_user_indexes t (u : User_model.user) =
         Utils.SM.remove (Uuidm.to_string ev) t.by_verification_token
   | None -> ()
 
-let create ?(users = Utils.SM.empty) ?(configurations = Utils.LM.empty) ?email
+let create ?(users = Utils.UM.empty) ?(configurations = Utils.LM.empty) ?email
     () =
   let t =
     {
@@ -75,7 +75,7 @@ let create ?(users = Utils.SM.empty) ?(configurations = Utils.LM.empty) ?email
       by_verification_token = Utils.SM.empty;
     }
   in
-  Utils.SM.iter (fun _ u -> register_user_indexes t u) users;
+  Utils.UM.iter (fun _ u -> register_user_indexes t u) users;
   t
 
 let t_to_json ?(version = current_version) users configurations email =
@@ -84,7 +84,7 @@ let t_to_json ?(version = current_version) users configurations email =
       ("version", `Int version);
       ( "users",
         `List
-          (Utils.SM.fold
+          (Utils.UM.fold
              (fun _ u acc -> User_model.user_to_json u :: acc)
              users []) );
       ("configuration", Configuration.to_json configurations);
@@ -121,8 +121,8 @@ let t_of_json json =
                   if v = 9 then User_model.(user_v9_of_json cookie_of_json) js
                   else User_model.(user_of_json cookie_of_json) js
                 in
-                Ok (Utils.SM.add user.uuid user acc))
-              (Ok Utils.SM.empty) users
+                Ok (Utils.UM.add user.uuid user acc))
+              (Ok Utils.UM.empty) users
           in
           let* configurations = Configuration.of_json configuration in
           let* email =
@@ -141,20 +141,20 @@ let error_msgf fmt = Fmt.kstr (fun msg -> Error (`Msg msg)) fmt
 
 let find_by_email t email =
   match Utils.SM.find_opt (email_to_key email) t.by_email with
-  | Some uuid -> Utils.SM.find_opt uuid t.users
+  | Some uuid -> Utils.UM.find_opt uuid t.users
   | None -> None
 
 let find_by_name t name =
   match Utils.LM.find_opt name t.by_name with
-  | Some uuid -> Utils.SM.find_opt uuid t.users
+  | Some uuid -> Utils.UM.find_opt uuid t.users
   | None -> None
 
-let find_by_uuid t uuid = Utils.SM.find_opt uuid t.users
+let find_by_uuid t uuid = Utils.UM.find_opt uuid t.users
 
 let find_by_cookie t cookie_value =
   match Utils.SM.find_opt cookie_value t.by_cookie with
   | Some uuid -> (
-      match Utils.SM.find_opt uuid t.users with
+      match Utils.UM.find_opt uuid t.users with
       | Some user -> (
           match User_model.user_session_cookie user cookie_value with
           | Some c -> Some (user, c)
@@ -165,7 +165,7 @@ let find_by_cookie t cookie_value =
 let find_by_api_token t token =
   match Utils.SM.find_opt token t.by_token with
   | Some uuid -> (
-      match Utils.SM.find_opt uuid t.users with
+      match Utils.UM.find_opt uuid t.users with
       | Some user -> (
           match Utils.SM.find_opt token user.tokens with
           | Some token_ -> Some (user, token_)
@@ -191,21 +191,21 @@ let update_user_unikernel_updates (new_update : User_model.unikernel_update)
   in
   User_model.update_user user ~unikernel_updates ()
 
-let count_users t = Utils.SM.cardinal t.users
+let count_users t = Utils.UM.cardinal t.users
 
 let find_email_verification_token t uuid =
   match Utils.SM.find_opt (Uuidm.to_string uuid) t.by_verification_token with
-  | Some user_uuid -> Utils.SM.find_opt user_uuid t.users
+  | Some user_uuid -> Utils.UM.find_opt user_uuid t.users
   | None -> None
 
 let count_active t =
-  Utils.SM.fold
+  Utils.UM.fold
     (fun _ (u : User_model.user) acc ->
       if u.User_model.active then acc + 1 else acc)
     t.users 0
 
 let count_superusers t =
-  Utils.SM.fold
+  Utils.UM.fold
     (fun _ (u : User_model.user) acc ->
       if u.User_model.super_user then acc + 1 else acc)
     t.users 0
@@ -243,16 +243,16 @@ let delete_configuration t name =
   t.configurations <- Utils.LM.remove name t.configurations
 
 let add_user t (user : User_model.user) =
-  t.users <- Utils.SM.add user.uuid user t.users;
+  t.users <- Utils.UM.add user.uuid user t.users;
   register_user_indexes t user
 
 let delete_user t (user : User_model.user) =
-  t.users <- Utils.SM.remove user.uuid t.users;
+  t.users <- Utils.UM.remove user.uuid t.users;
   unregister_user_indexes t user
 
 let update_user t (user : User_model.user) =
-  (match Utils.SM.find_opt user.uuid t.users with
+  (match Utils.UM.find_opt user.uuid t.users with
   | Some old_user -> unregister_user_indexes t old_user
   | None -> ());
-  t.users <- Utils.SM.add user.uuid user t.users;
+  t.users <- Utils.UM.add user.uuid user t.users;
   register_user_indexes t user

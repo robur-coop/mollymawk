@@ -13,7 +13,7 @@ let check_deprecated_version () =
       (Storage.t_of_json (mock_storage ~version:8 ())))
 
 let check_valid_version () =
-  let expected = (Utils.SM.empty, Utils.LM.empty, None) in
+  let expected = (Utils.UM.empty, Utils.LM.empty, None) in
   Alcotest.(
     check (result storage_t msg_t) "mollymawk should start for a valid version"
       (Ok expected)
@@ -31,42 +31,42 @@ let check_invalid_version () =
       (Storage.t_of_json (mock_storage ~version:1000 ())))
 
 let check_email_config_in_v9 () =
-  let expected = (Utils.SM.empty, Utils.LM.empty, Some mock_email) in
+  let expected = (Utils.UM.empty, Utils.LM.empty, Some mock_email) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start with email config in v9" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:9 ~email:(Some mock_email) ())))
 
 let check_no_email_config_in_v9 () =
-  let expected = (Utils.SM.empty, Utils.LM.empty, None) in
+  let expected = (Utils.UM.empty, Utils.LM.empty, None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start even with no email config in v9" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:9 ())))
 
 let check_email_config_in_v10 () =
-  let expected = (Utils.SM.empty, Utils.LM.empty, Some mock_email) in
+  let expected = (Utils.UM.empty, Utils.LM.empty, Some mock_email) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start with email config in v10" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:10 ~email:(Some mock_email) ())))
 
 let check_no_email_config_in_v10 () =
-  let expected = (Utils.SM.empty, Utils.LM.empty, None) in
+  let expected = (Utils.UM.empty, Utils.LM.empty, None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start even with no email config in v10" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:10 ())))
 
 let check_no_albatross_config_in_v9 () =
-  let expected = (Utils.SM.empty, Utils.LM.empty, None) in
+  let expected = (Utils.UM.empty, Utils.LM.empty, None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start even with no albatross config in v9" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:9 ())))
 
 let check_no_albatross_config_in_v10 () =
-  let expected = (Utils.SM.empty, Utils.LM.empty, None) in
+  let expected = (Utils.UM.empty, Utils.LM.empty, None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should start even with no albatross config in v10"
@@ -75,7 +75,7 @@ let check_no_albatross_config_in_v10 () =
 
 let check_valid_albatross_config_in_v9 () =
   let expected =
-    ( Utils.SM.empty,
+    ( Utils.UM.empty,
       Utils.LM.singleton mock_albatross_config.name mock_albatross_config,
       None )
   in
@@ -91,7 +91,7 @@ let check_valid_albatross_config_in_v9 () =
 
 let check_valid_albatross_config_in_v10 () =
   let expected =
-    ( Utils.SM.empty,
+    ( Utils.UM.empty,
       Utils.LM.singleton mock_albatross_config.name mock_albatross_config,
       None )
   in
@@ -228,7 +228,7 @@ let check_multiple_valid_albatross_configs_with_different_names () =
     |> Utils.LM.add mock_albatross_config.name mock_albatross_config
     |> Utils.LM.add cfg2.name cfg2
   in
-  let expected = (Utils.SM.empty, configs, None) in
+  let expected = (Utils.UM.empty, configs, None) in
   Alcotest.(
     check (result storage_t msg_t)
       "mollymawk should fail to start if two albatross configs have the same \
@@ -240,7 +240,7 @@ let check_disk_dump () =
   let json = Utils.Json.from_string raw_dump in
   match Storage.t_of_json (json_of_string_exn json) with
   | Ok (users, configs, email) ->
-      Alcotest.(check int "3 users in dump" 3 (Utils.SM.cardinal users));
+      Alcotest.(check int "3 users in dump" 3 (Utils.UM.cardinal users));
       Alcotest.(
         check int "1 configuration in dump" 1 (Utils.LM.cardinal configs));
       Alcotest.(check bool "Email config present" true (Option.is_some email));
@@ -301,11 +301,11 @@ let check_cookies_roundtrip () =
   let session_val = user_session_cookie user in
   let csrf_val = user_csrf_cookie user in
   let json =
-    Storage.t_to_json (Utils.SM.singleton user.uuid user) Utils.LM.empty None
+    Storage.t_to_json (Utils.UM.singleton user.uuid user) Utils.LM.empty None
   in
   match Storage.t_of_json json with
-  | Ok (users, _, _) when Utils.SM.cardinal users = 1 ->
-      let loaded_user = snd (Utils.SM.choose users) in
+  | Ok (users, _, _) when Utils.UM.cardinal users = 1 ->
+      let loaded_user = snd (Utils.UM.choose users) in
       Alcotest.(
         check int "2 cookies loaded into map" 2
           (Utils.SM.cardinal loaded_user.cookies));
@@ -324,12 +324,12 @@ let check_cookies_load_v9 () =
   let csrf_val = user_csrf_cookie user in
   let json =
     Storage.t_to_json ~version:9
-      (Utils.SM.singleton user.uuid user)
+      (Utils.UM.singleton user.uuid user)
       Utils.LM.empty None
   in
   match Storage.t_of_json json with
-  | Ok (users, _, _) when Utils.SM.cardinal users = 1 ->
-      let loaded_user = snd (Utils.SM.choose users) in
+  | Ok (users, _, _) when Utils.UM.cardinal users = 1 ->
+      let loaded_user = snd (Utils.UM.choose users) in
       Alcotest.(
         check int "2 cookies loaded into map from v9" 2
           (Utils.SM.cardinal loaded_user.cookies));
@@ -342,10 +342,95 @@ let check_cookies_load_v9 () =
   | Ok _ -> Alcotest.fail "Expected 1 user"
   | Error (`Msg err) -> Alcotest.fail err
 
+let check_discard_malformed_unikernel_update () =
+  let valid_uk_uuid = User_model.generate_uuid () in
+  let valid_update : User_model.unikernel_update =
+    {
+      name = label_of_string_exn "my-app";
+      job = "my-job";
+      uuid = valid_uk_uuid;
+      config =
+        {
+          typ = `Solo5;
+          compressed = false;
+          image = "";
+          fail_behaviour = `Quit;
+          add_name = true;
+          startup = None;
+          cpuids = Vmm_core.IS.singleton 0;
+          memory = 32;
+          block_devices = [];
+          bridges = [];
+          argv = None;
+          numcpus = 1;
+          linux_boot_partition = None;
+        };
+      timestamp = Mirage_ptime.now ();
+    }
+  in
+  let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in
+  let user =
+    {
+      user with
+      unikernel_updates = Utils.LM.singleton valid_update.name valid_update;
+    }
+  in
+  let json =
+    Storage.t_to_json (Utils.UM.singleton user.uuid user) Utils.LM.empty None
+  in
+  let malformed_update_json =
+    `Assoc
+      [
+        ("name", `String "malformed-app");
+        ("job", `String "bad-job");
+        ("uuid", `String "");
+        ("config", Albatross_json.config_to_json valid_update.config);
+        ( "timestamp",
+          `String (Utils.TimeHelper.string_of_ptime valid_update.timestamp) );
+      ]
+  in
+  let injected_json =
+    match json with
+    | `Assoc fields ->
+        let updated_fields =
+          List.map
+            (function
+              | "users", `List [ `Assoc u_fields ] ->
+                  let u_fields' =
+                    List.map
+                      (function
+                        | "unikernel_updates", `List updates ->
+                            ( "unikernel_updates",
+                              `List (malformed_update_json :: updates) )
+                        | other -> other)
+                      u_fields
+                  in
+                  ("users", `List [ `Assoc u_fields' ])
+              | other -> other)
+            fields
+        in
+        `Assoc updated_fields
+    | _ -> Alcotest.fail "Unexpected json structure"
+  in
+  match Storage.t_of_json injected_json with
+  | Ok (users, _, _) when Utils.UM.cardinal users = 1 ->
+      let loaded_user = snd (Utils.UM.choose users) in
+      Alcotest.(
+        check int "Malformed update discarded, only 1 valid update loaded" 1
+          (Utils.LM.cardinal loaded_user.unikernel_updates));
+      Alcotest.(
+        check bool "Valid update present" true
+          (Utils.LM.mem valid_update.name loaded_user.unikernel_updates))
+  | Ok _ -> Alcotest.fail "Expected 1 user"
+  | Error (`Msg err) -> Alcotest.fail err
+
 let cookie_tests =
   [
     ("Cookies roundtrip", `Quick, check_cookies_roundtrip);
     ("Cookies load from v9", `Quick, check_cookies_load_v9);
+    ( "Discard malformed unikernel updates",
+      `Quick,
+      check_discard_malformed_unikernel_update );
   ]
 
 let tests =

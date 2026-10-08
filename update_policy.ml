@@ -14,7 +14,9 @@ let update_policy_layout (user : User_model.user) ~user_policy
               ^ Configuration.name_to_str instance_name);
           ];
         p ~a:[ a_id "form-alert"; a_class [ "my-4" ] ] [];
-        p ~a:[ a_id "user_id"; a_class [ "hidden" ] ] [ txt user.uuid ];
+        p
+          ~a:[ a_id "user_id"; a_class [ "hidden" ] ]
+          [ txt (Uuidm.to_string user.uuid) ];
         div
           ~a:[ a_class [ "py-3" ] ]
           [

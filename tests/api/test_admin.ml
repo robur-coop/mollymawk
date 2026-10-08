@@ -64,7 +64,9 @@ let check_toggle_account_active () =
       let _admin, session_cookie, csrf_token, test =
         setup_admin_and_user store
       in
-      let body = make_admin_body ~uuid:test.uuid ~csrf_token in
+      let body =
+        make_admin_body ~uuid:(Uuidm.to_string test.uuid) ~csrf_token
+      in
       let req =
         make_post_request ~path:"/api/admin/user/activate/toggle" ~body
           ~session_cookie ~csrf_token ()
@@ -87,7 +89,9 @@ let check_guard_last_active_user () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
       let admin, session_cookie, csrf_token = setup_admin_only store in
-      let body = make_admin_body ~uuid:admin.uuid ~csrf_token in
+      let body =
+        make_admin_body ~uuid:(Uuidm.to_string admin.uuid) ~csrf_token
+      in
       let req =
         make_post_request ~path:"/api/admin/user/activate/toggle" ~body
           ~session_cookie ~csrf_token ()
@@ -110,7 +114,9 @@ let check_toggle_admin_superuser () =
       let _admin, session_cookie, csrf_token, test =
         setup_admin_and_user store
       in
-      let body = make_admin_body ~uuid:test.uuid ~csrf_token in
+      let body =
+        make_admin_body ~uuid:(Uuidm.to_string test.uuid) ~csrf_token
+      in
       let req =
         make_post_request ~path:"/api/admin/user/admin/toggle" ~body
           ~session_cookie ~csrf_token ()
@@ -135,7 +141,9 @@ let check_guard_last_administrator () =
       let admin, session_cookie, csrf_token, _test =
         setup_admin_and_user store
       in
-      let body = make_admin_body ~uuid:admin.uuid ~csrf_token in
+      let body =
+        make_admin_body ~uuid:(Uuidm.to_string admin.uuid) ~csrf_token
+      in
       let req =
         make_post_request ~path:"/api/admin/user/admin/toggle" ~body
           ~session_cookie ~csrf_token ()
@@ -158,7 +166,9 @@ let check_delete_account_success () =
       let _admin, session_cookie, csrf_token, test =
         setup_admin_and_user store
       in
-      let body = make_admin_body ~uuid:test.uuid ~csrf_token in
+      let body =
+        make_admin_body ~uuid:(Uuidm.to_string test.uuid) ~csrf_token
+      in
       let req =
         make_post_request ~path:"/api/admin/user/account/delete" ~body
           ~session_cookie ~csrf_token ()

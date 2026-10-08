@@ -2,6 +2,7 @@ let ( let* ) = Result.bind
 
 module LM = Map.Make (Vmm_core.Name.Label)
 module SM = Map.Make (String)
+module UM = Map.Make (Uuidm)
 
 module Json = struct
   let get key assoc =
