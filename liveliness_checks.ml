@@ -41,6 +41,11 @@ module Make (S : Tcpip.Stack.V4V6) = struct
              (base_url
             ^ " :an error occured while performing a liveliness check on the \
                http endpoint with error: " ^ err))
+    | Error `Not_found ->
+        Logs.err (fun m ->
+            m "http-liveliness-check: Endpoint %s returned 404 Not Found"
+              base_url);
+        Error (`Msg (base_url ^ ": endpoint returned 404 Not Found"))
     | Ok _response -> Ok ()
 
   let check_type stack http_client typ =

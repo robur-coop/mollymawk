@@ -33,11 +33,13 @@ module Http = struct
     >>= function
     | Error (`Msg err) -> Lwt.return (Error (`Msg err))
     | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
-    | Error `Not_found -> Lwt.return (Error (`Msg "returned not found"))
+    | Error `Not_found -> Lwt.return (Error `Not_found)
     | Ok (resp, body) ->
         if
           Http_mirage_client.Status.is_successful resp.Http_mirage_client.status
         then Lwt.return (Ok body)
+        else if resp.Http_mirage_client.status = `Not_found then
+          Lwt.return (Error `Not_found)
         else
           Lwt.return
             (Error

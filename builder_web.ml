@@ -426,6 +426,10 @@ let fetch_unikernel_jobs http_client =
       Logs.info (fun m ->
           m "utils.http.send_http_request: Failed to fetch jobs: %s" msg);
       Lwt.return []
+  | Error `Not_found ->
+      Logs.info (fun m ->
+          m "utils.http.send_http_request: Failed to fetch jobs: Not found");
+      Lwt.return []
 
 let fetch_unikernel_binary_image http_client ~job ~version push_chunks =
   let open Lwt.Infix in

@@ -1580,6 +1580,18 @@ struct
             ^ Configuration.name_to_str unikernel_name
             ^ " found on builds.robur.coop")
           ()
+    | Error (Builder_not_found _ as err) ->
+        let log_msg, web_msg =
+          error_response_params (Configuration.name_to_str unikernel_name) err
+        in
+        Logs.warn (fun m -> m "%s" log_msg);
+        let instance = Configuration.name_to_str albatross.configuration.name in
+        let label = Configuration.name_to_str unikernel_name in
+        Middleware.redirect_to_page reqd
+          ~path:
+            (Printf.sprintf "/unikernel/info?unikernel=%s&instance=%s" label
+               instance)
+          ~msg:web_msg ()
     | Error err ->
         let log_msg, web_msg =
           error_response_params (Configuration.name_to_str unikernel_name) err
