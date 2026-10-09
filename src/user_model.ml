@@ -1,5 +1,3 @@
-module Rng = Mirage_crypto_rng
-
 type token = {
   name : string;
   token_type : string;
@@ -15,7 +13,6 @@ type cookie = {
   name : string;
   value : string;
   expires_in : int;
-  uuid : string option;
   created_at : Ptime.t;
   last_access : Ptime.t;
   user_agent : string option;
@@ -24,7 +21,7 @@ type cookie = {
 type unikernel_update = {
   name : Vmm_core.Name.Label.t;
   job : string;
-  uuid : string;
+  uuid : Uuidm.t;
   config : Vmm_core.Unikernel.config;
   timestamp : Ptime.t;
 }
@@ -35,21 +32,32 @@ type unikernel_scaling_policy = {
   max_instances : int;
 }
 
+module Scaling_policy_key = struct
+  type t = Vmm_core.Name.Label.t * Vmm_core.Name.Label.t
+  (* the unikernel name and the instance name to which the primary unikernel has been deployed on. *)
+
+  let compare (n1, i1) (n2, i2) =
+    let c = Vmm_core.Name.Label.compare n1 n2 in
+    if c <> 0 then c else Vmm_core.Name.Label.compare i1 i2
+end
+
+module Scaling_policy_map = Map.Make (Scaling_policy_key)
+
 type user = {
   name : Vmm_core.Name.Label.t;
   email : Mrmime.Mailbox.t;
   email_verified : Ptime.t option;
   password : string;
-  uuid : string;
-  tokens : token list;
-  cookies : cookie list;
+  uuid : Uuidm.t;
+  tokens : token Utils.SM.t;
+  cookies : cookie Utils.SM.t;
   created_at : Ptime.t;
   updated_at : Ptime.t;
   email_verification_uuid : Uuidm.t option;
   active : bool;
   super_user : bool;
-  unikernel_updates : unikernel_update list;
-  scaling_policies : unikernel_scaling_policy list;
+  unikernel_updates : unikernel_update Utils.LM.t;
+  scaling_policies : unikernel_scaling_policy Scaling_policy_map.t;
 }
 
 let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
@@ -61,7 +69,7 @@ let unikernel_update_to_json (u : unikernel_update) : Yojson.Basic.t =
     [
       ("name", `String (Configuration.name_to_str u.name));
       ("job", `String u.job);
-      ("uuid", `String u.uuid);
+      ("uuid", `String (Uuidm.to_string u.uuid));
       ("config", Albatross_json.config_to_json u.config);
       ("timestamp", `String (Utils.TimeHelper.string_of_ptime u.timestamp));
     ]
@@ -124,6 +132,11 @@ let unikernel_update_of_json = function
             Albatross_json.config_of_json (Yojson.Basic.to_string config)
           in
           let* name = Configuration.name_of_str name in
+          let* uuid =
+            Option.to_result
+              ~none:(`Msg ("invalid UUID for unikernel_update: " ^ uuid))
+              (Uuidm.of_string uuid)
+          in
           Ok { name; job; uuid; config; timestamp }
       | _ ->
           Error
@@ -145,8 +158,6 @@ let cookie_to_json (cookie : cookie) =
         `String (Utils.TimeHelper.string_of_ptime cookie.created_at) );
       ("value", `String cookie.value);
       ("expires_in", `Int cookie.expires_in);
-      ( "uuid",
-        match cookie.uuid with Some uuid -> `String uuid | None -> `Null );
       ( "last_access",
         `String (Utils.TimeHelper.string_of_ptime cookie.last_access) );
       ( "user_agent",
@@ -162,7 +173,6 @@ let cookie_of_json = function
           ( get "name" xs,
             get "value" xs,
             get "expires_in" xs,
-            get "uuid" xs,
             get "created_at" xs,
             get "last_access" xs,
             get "user_agent" xs )
@@ -170,7 +180,6 @@ let cookie_of_json = function
       | ( Some (`String name),
           Some (`String value),
           Some (`Int expires_in),
-          uuid,
           Some (`String created_at_str),
           Some (`String last_access_str),
           user_agent ) ->
@@ -192,18 +201,8 @@ let cookie_of_json = function
                       last_access_str);
                 created_at
           in
-          let* uuid = Utils.Json.string_or_none "uuid" uuid in
           let* user_agent = Utils.Json.string_or_none "user-agent" user_agent in
-          Ok
-            {
-              name;
-              value;
-              expires_in;
-              uuid;
-              created_at;
-              last_access;
-              user_agent;
-            }
+          Ok { name; value; expires_in; created_at; last_access; user_agent }
       | _ ->
           Error
             (`Msg
@@ -285,9 +284,14 @@ let user_to_json (u : user) =
       ("email", `String (Emile.to_string u.email));
       ("email_verified", Utils.TimeHelper.ptime_to_json u.email_verified);
       ("password", `String u.password);
-      ("uuid", `String u.uuid);
-      ("tokens", `List (List.map token_to_json u.tokens));
-      ("cookies", `List (List.map cookie_to_json u.cookies));
+      ("uuid", `String (Uuidm.to_string u.uuid));
+      ( "tokens",
+        `List
+          (Utils.SM.fold (fun _ t acc -> token_to_json t :: acc) u.tokens []) );
+      ( "cookies",
+        `List
+          (Utils.SM.fold (fun _ c acc -> cookie_to_json c :: acc) u.cookies [])
+      );
       ("created_at", `String (Utils.TimeHelper.string_of_ptime u.created_at));
       ("updated_at", `String (Utils.TimeHelper.string_of_ptime u.updated_at));
       ( "email_verification_uuid",
@@ -297,9 +301,15 @@ let user_to_json (u : user) =
       ("active", `Bool u.active);
       ("super_user", `Bool u.super_user);
       ( "unikernel_updates",
-        `List (List.map unikernel_update_to_json u.unikernel_updates) );
+        `List
+          (Utils.LM.fold
+             (fun _ uu acc -> unikernel_update_to_json uu :: acc)
+             u.unikernel_updates []) );
       ( "scaling_policies",
-        `List (List.map scaling_policy_to_json u.scaling_policies) );
+        `List
+          (Scaling_policy_map.fold
+             (fun _ sp acc -> scaling_policy_to_json sp :: acc)
+             u.scaling_policies []) );
     ]
 
 let user_v9_of_json cookie_fn = function
@@ -333,6 +343,11 @@ let user_v9_of_json cookie_fn = function
           Some (`Bool active),
           Some (`Bool super_user),
           Some (`List unikernel_updates) ) ->
+          let* uuid =
+            Option.to_result
+              ~none:(`Msg ("invalid UUID for user: " ^ uuid))
+              (Uuidm.of_string uuid)
+          in
           let created_at =
             match Utils.TimeHelper.ptime_of_string created_at_str with
             | Ok ptime -> Some ptime
@@ -349,16 +364,16 @@ let user_v9_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* token = token_of_json js in
-                Ok (token :: acc))
-              (Ok []) tokens
+                Ok (Utils.SM.add token.value token acc))
+              (Ok Utils.SM.empty) tokens
           in
           let* cookies =
             List.fold_left
               (fun acc js ->
                 let* acc = acc in
                 let* cookie = cookie_fn js in
-                Ok (cookie :: acc))
-              (Ok []) cookies
+                Ok (Utils.SM.add cookie.value cookie acc))
+              (Ok Utils.SM.empty) cookies
           in
           let* email_verification_uuid =
             match email_verification_uuid with
@@ -377,13 +392,17 @@ let user_v9_of_json cookie_fn = function
                      ("invalid json data for email verification UUID, expected \
                        a string: " ^ Utils.Json.to_string js))
           in
-          let* unikernel_updates =
+          let unikernel_updates =
             List.fold_left
               (fun acc js ->
-                let* acc = acc in
-                let* unikernel_update = unikernel_update_of_json js in
-                Ok (unikernel_update :: acc))
-              (Ok []) unikernel_updates
+                match unikernel_update_of_json js with
+                | Ok unikernel_update ->
+                    Utils.LM.add unikernel_update.name unikernel_update acc
+                | Error (`Msg err) ->
+                    Logs.warn (fun m ->
+                        m "discarding malformed unikernel_update: %s" err);
+                    acc)
+              Utils.LM.empty unikernel_updates
           in
           let* name = Configuration.name_of_str name in
           let* email = Mrmime.Mailbox.of_string email in
@@ -402,7 +421,7 @@ let user_v9_of_json cookie_fn = function
               active;
               super_user;
               unikernel_updates;
-              scaling_policies = [];
+              scaling_policies = Scaling_policy_map.empty;
             }
       | _ ->
           Error
@@ -446,6 +465,11 @@ let user_of_json cookie_fn = function
           Some (`Bool super_user),
           Some (`List unikernel_updates),
           Some (`List scaling_policies) ) ->
+          let* uuid =
+            Option.to_result
+              ~none:(`Msg ("invalid UUID for user: " ^ uuid))
+              (Uuidm.of_string uuid)
+          in
           let created_at =
             match Utils.TimeHelper.ptime_of_string created_at_str with
             | Ok ptime -> Some ptime
@@ -462,16 +486,16 @@ let user_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* token = token_of_json js in
-                Ok (token :: acc))
-              (Ok []) tokens
+                Ok (Utils.SM.add token.value token acc))
+              (Ok Utils.SM.empty) tokens
           in
           let* cookies =
             List.fold_left
               (fun acc js ->
                 let* acc = acc in
                 let* cookie = cookie_fn js in
-                Ok (cookie :: acc))
-              (Ok []) cookies
+                Ok (Utils.SM.add cookie.value cookie acc))
+              (Ok Utils.SM.empty) cookies
           in
           let* email_verification_uuid =
             match email_verification_uuid with
@@ -490,13 +514,17 @@ let user_of_json cookie_fn = function
                      ("invalid json data for email verification UUID, expected \
                        a string: " ^ Utils.Json.to_string js))
           in
-          let* unikernel_updates =
+          let unikernel_updates =
             List.fold_left
               (fun acc js ->
-                let* acc = acc in
-                let* unikernel_update = unikernel_update_of_json js in
-                Ok (unikernel_update :: acc))
-              (Ok []) unikernel_updates
+                match unikernel_update_of_json js with
+                | Ok unikernel_update ->
+                    Utils.LM.add unikernel_update.name unikernel_update acc
+                | Error (`Msg err) ->
+                    Logs.warn (fun m ->
+                        m "discarding malformed unikernel_update: %s" err);
+                    acc)
+              Utils.LM.empty unikernel_updates
           in
           let* name = Configuration.name_of_str name in
           let* email = Mrmime.Mailbox.of_string email in
@@ -505,8 +533,12 @@ let user_of_json cookie_fn = function
               (fun acc js ->
                 let* acc = acc in
                 let* scaling_policy = scaling_policy_of_json js in
-                Ok (scaling_policy :: acc))
-              (Ok []) scaling_policies
+                Ok
+                  (Scaling_policy_map.add
+                     ( scaling_policy.name,
+                       scaling_policy.primary_albatross_instance )
+                     scaling_policy acc))
+              (Ok Scaling_policy_map.empty) scaling_policies
           in
           Ok
             {
@@ -536,22 +568,21 @@ let user_of_json cookie_fn = function
 
 let hash_password ~password ~uuid =
   let hash =
-    Digestif.SHA256.(to_raw_string (digestv_string [ uuid; "-"; password ]))
+    Digestif.SHA256.(
+      to_raw_string (digestv_string [ Uuidm.to_string uuid; "-"; password ]))
   in
   Base64.encode_string hash
 
 let generate_uuid () =
-  let data = Rng.generate 16 in
+  let data = Mirage_crypto_rng.generate 16 in
   Uuidm.v4 (Bytes.unsafe_of_string data)
 
-let generate_cookie ~name ~uuid ?(expires_in = 3600) ~created_at ~user_agent ()
-    =
+let generate_cookie ~name ?(expires_in = 3600) ~created_at ~user_agent () =
   let id = generate_uuid () in
   {
     name;
     value = Base64.encode_string (Uuidm.to_string id);
     expires_in;
-    uuid = Some uuid;
     created_at;
     last_access = created_at;
     user_agent;
@@ -571,10 +602,10 @@ let generate_token ~name ~expiry ~current_time =
 
 let create_user ~name ~email ~password ~created_at ~active ~super_user
     ~user_agent =
-  let uuid = Uuidm.to_string (generate_uuid ()) in
+  let uuid = generate_uuid () in
   let password = hash_password ~password ~uuid in
   let session =
-    generate_cookie ~name:session_cookie ~expires_in:week ~uuid ~created_at
+    generate_cookie ~name:session_cookie ~expires_in:week ~created_at
       ~user_agent ()
   in
   ( {
@@ -583,15 +614,15 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
       email_verified = None;
       password;
       uuid;
-      tokens = [];
-      cookies = [ session ];
+      tokens = Utils.SM.empty;
+      cookies = Utils.SM.singleton session.value session;
       created_at;
       updated_at = created_at;
       email_verification_uuid = None;
       active;
       super_user;
-      unikernel_updates = [];
-      scaling_policies = [];
+      unikernel_updates = Utils.LM.empty;
+      scaling_policies = Scaling_policy_map.empty;
     },
     session )
 
@@ -655,22 +686,18 @@ let verify_email_token u _uuid timestamp =
                 verification link."))
 
 let user_session_cookie (user : user) cookie_value =
-  List.find_opt
-    (fun (cookie : cookie) ->
-      String.equal cookie.name session_cookie
-      && String.equal cookie_value cookie.value)
-    user.cookies
+  match Utils.SM.find_opt cookie_value user.cookies with
+  | Some cookie when String.equal cookie.name session_cookie -> Some cookie
+  | _ -> None
 
 let user_csrf_token (user : user) cookie_value =
-  List.find_opt
-    (fun (cookie : cookie) ->
-      String.equal cookie.name csrf_cookie
-      && String.equal cookie_value cookie.value)
-    user.cookies
+  match Utils.SM.find_opt cookie_value user.cookies with
+  | Some cookie when String.equal cookie.name csrf_cookie -> Some cookie
+  | _ -> None
 
 let keep_session_cookies user =
-  List.filter
-    (fun (cookie : cookie) -> String.equal cookie.name session_cookie)
+  Utils.SM.filter
+    (fun _ (cookie : cookie) -> String.equal cookie.name session_cookie)
     user.cookies
 
 let login_user ~email ~password ~user_agent user now =
@@ -687,10 +714,13 @@ let login_user ~email ~password ~user_agent user now =
         with
         | true ->
             let new_session =
-              generate_cookie ~name:session_cookie ~expires_in:week ~uuid:u.uuid
+              generate_cookie ~name:session_cookie ~expires_in:week
                 ~created_at:now ~user_agent ()
             in
-            let cookies = new_session :: keep_session_cookies u in
+            let cookies =
+              Utils.SM.add new_session.value new_session
+                (keep_session_cookies u)
+            in
             let updated_user = update_user u ~cookies () in
             Ok (updated_user, new_session)
         | false -> Error (`Msg "Invalid email or password."))

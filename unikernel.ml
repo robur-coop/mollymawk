@@ -80,9 +80,10 @@ struct
             Ipaddr.Set.of_list [ Ipaddr.V6 addr ] |> Lwt.return_ok
         | Error e -> Lwt.return_error e)
 
-  let send_email happy_eyeballs email_config user_email ~subject ~body =
+  let send_email ?references happy_eyeballs email_config user_email ~subject
+      ~body =
     let email =
-      Utils.Email.construct_email
+      Utils.Email.construct_email ?references
         ~from_email:email_config.Utils.Email.from_email ~to_email:user_email
         ~subject ~body ()
     in
@@ -169,7 +170,6 @@ struct
     | _ -> failwith "Unexpected number of images"
 
   module Store = Store.Make (BLOCK)
-  module Map = Map.Make (String)
 
   let csrf_verification f user csrf reqd =
     let now = Mirage_ptime.now () in
@@ -277,19 +277,20 @@ struct
               Content_disposition.name
           with
           | Some name ->
-              (Map.add name (filename, List.assoc body assoc) map, rest)
+              (Utils.SM.add name (filename, List.assoc body assoc) map, rest)
           | None -> (map, (body, (filename, List.assoc body assoc)) :: rest))
       | Multipart { body; _ } ->
           let fold acc = function Some elt -> go acc elt | None -> acc in
           List.fold_left fold (map, rest) body
     in
-    go (Map.empty, []) m
+    go (Utils.SM.empty, []) m
 
   let generate_csrf_token store user now reqd =
     let csrf = Middleware.generate_csrf_cookie now reqd in
     let updated_user =
       User_model.update_user user ~updated_at:now
-        ~cookies:(csrf :: user.cookies) ()
+        ~cookies:(Utils.SM.add csrf.value csrf user.cookies)
+        ()
     in
     Storage.update_user store updated_user;
     Store.write_data store >>= function
@@ -373,7 +374,7 @@ struct
             match token_or_cookie with
             | `Token -> f user multipart_body reqd
             | `Cookie -> (
-                match Map.find_opt "molly_csrf" multipart_body with
+                match Utils.SM.find_opt "molly_csrf" multipart_body with
                 | None ->
                     Logs.warn (fun m -> m "No csrf token in multipart request");
                     Middleware.http_response reqd
@@ -408,7 +409,7 @@ struct
       | Error (`Msg err) ->
           Error (`Cookie, "No molly-session in cookie header. " ^ err)
       | Ok cookie_value -> (
-          match Storage.find_by_cookie store.Storage.users cookie_value with
+          match Storage.find_by_cookie store cookie_value with
           | None -> Error (`Cookie, "Failed to find user with cookie")
           | Some (user, cookie) ->
               if User_model.is_valid_cookie cookie current_time then
@@ -421,7 +422,7 @@ struct
               else Error (`Cookie, "Session value doesn't match user session"))
     in
     let valid_token token_value =
-      match Storage.find_by_api_token store.users token_value with
+      match Storage.find_by_api_token store token_value with
       | Some (user, token) ->
           if User_model.is_valid_token token current_time then Ok (user, token)
           else Error (`Token, "Token value is not valid " ^ token_value)
@@ -530,7 +531,7 @@ struct
             update_albatross_status instance
               (`Incompatible, reply, "console list inactive");
             (instance.configuration.name, []))
-      (Albatross.Albatross_map.bindings albatross_instances)
+      (Utils.LM.bindings albatross_instances)
 
   let user_unikernels stack (albatross_instances : Albatross_state.a_map)
       user_name =
@@ -549,7 +550,7 @@ struct
             update_albatross_status instance
               (`Incompatible, reply, "unikernel info");
             (instance.configuration.name, []))
-      (Albatross.Albatross_map.bindings albatross_instances)
+      (Utils.LM.bindings albatross_instances)
 
   let user_max_allowed_unikernel_instances _stack albatross user_name =
     let res =
@@ -663,10 +664,8 @@ struct
                 Middleware.http_response reqd ~data:(`String err) `Bad_request
             | Ok (name, email) ->
                 if Middleware.csrf_cookie_verification form_csrf reqd then
-                  let existing_email =
-                    Storage.find_by_email store.Storage.users email
-                  in
-                  let existing_name = Storage.find_by_name store.users name in
+                  let existing_email = Storage.find_by_email store email in
+                  let existing_name = Storage.find_by_name store name in
                   match (existing_name, existing_email) with
                   | Some _, None ->
                       Middleware.http_response reqd
@@ -680,8 +679,7 @@ struct
                       let created_at = Mirage_ptime.now () in
                       let user, cookie =
                         let active, super_user =
-                          if Storage.count_users store.users = 0 then
-                            (true, true)
+                          if Storage.count_users store = 0 then (true, true)
                           else (false, false)
                         in
                         User_model.create_user ~name ~email ~password
@@ -751,7 +749,7 @@ struct
                 Middleware.http_response reqd ~data:(`String err) `Bad_request
             | Ok email -> (
                 let now = Mirage_ptime.now () in
-                let user = Storage.find_by_email store.Storage.users email in
+                let user = Storage.find_by_email store email in
                 match
                   User_model.login_user ~email ~password
                     ~user_agent:(Middleware.user_agent reqd)
@@ -826,11 +824,11 @@ struct
         Option.to_result ~none:(`Msg "invalid UUID")
           (Uuidm.of_string verification_token)
       in
-      let u = Storage.find_email_verification_token store.Storage.users uuid in
+      let u = Storage.find_email_verification_token store uuid in
       User_model.verify_email_token u verification_token (Mirage_ptime.now ())
     with
     | Ok user' ->
-        if String.equal user.uuid user'.uuid then (
+        if Uuidm.equal user.uuid user'.uuid then (
           Storage.update_user store user;
           Store.write_data store >>= function
           | Ok () -> Middleware.redirect_to_page ~path:"/dashboard" reqd ()
@@ -848,8 +846,10 @@ struct
   let toggle_account_attribute json_dict store reqd ~key update_fn error_on_last
       ~error_message =
     match Utils.Json.get "uuid" json_dict with
-    | Some (`String uuid) -> (
-        match Storage.find_by_uuid store.Storage.users uuid with
+    | Some (`String uuid_str) -> (
+        match
+          Option.bind (Uuidm.of_string uuid_str) (Storage.find_by_uuid store)
+        with
         | None ->
             Logs.warn (fun m -> m "%s : Account not found" key);
             Middleware.http_response reqd ~data:(`String "Account not found")
@@ -880,7 +880,7 @@ struct
       (fun user ->
         User_model.update_user user ~active:(not user.active)
           ~updated_at:(Mirage_ptime.now ()) ())
-      (fun user -> user.active && Storage.count_active store.users <= 1)
+      (fun user -> user.active && Storage.count_active store <= 1)
       ~error_message:(`String "Cannot deactivate last active user")
 
   let toggle_admin_activation store _user json_dict reqd =
@@ -888,14 +888,15 @@ struct
       (fun user ->
         User_model.update_user user ~super_user:(not user.super_user)
           ~updated_at:(Mirage_ptime.now ()) ())
-      (fun user ->
-        user.super_user && Storage.count_superusers store.Storage.users <= 1)
+      (fun user -> user.super_user && Storage.count_superusers store <= 1)
       ~error_message:(`String "Cannot remove last administrator")
 
   let delete_account store _user json_dict reqd =
     match Utils.Json.get "uuid" json_dict with
-    | Some (`String uuid) -> (
-        match Storage.find_by_uuid store.Storage.users uuid with
+    | Some (`String uuid_str) -> (
+        match
+          Option.bind (Uuidm.of_string uuid_str) (Storage.find_by_uuid store)
+        with
         | None ->
             Logs.warn (fun m -> m "delete-account : Account not found");
             Middleware.http_response reqd ~data:(`String "Account not found")
@@ -1015,7 +1016,7 @@ struct
 
   let new_user_cookies ~user ~filter ~redirect store reqd =
     let now = Mirage_ptime.now () in
-    let cookies = List.filter filter user.User_model.cookies in
+    let cookies = Utils.SM.filter filter user.User_model.cookies in
     let updated_user =
       User_model.update_user user ~cookies ~updated_at:now ()
     in
@@ -1035,19 +1036,19 @@ struct
             let filter, redirect =
               match (to_logout_cookie, logout) with
               | None, false ->
-                  ( (fun (c : User_model.cookie) ->
+                  ( (fun _ (c : User_model.cookie) ->
                       not
                         (String.equal c.name User_model.session_cookie
                         && c.value <> cookie.value)),
                     Middleware.http_response reqd
                       ~data:(`String "Closed all sessions successfully") `OK )
               | _, true ->
-                  ( (fun (c : User_model.cookie) ->
+                  ( (fun _ (c : User_model.cookie) ->
                       not (String.equal c.value cookie.value)),
                     Middleware.http_response reqd
                       ~data:(`String "Logout successful") `OK )
               | Some to_logout_cookie_value, false ->
-                  ( (fun (c : User_model.cookie) ->
+                  ( (fun _ (c : User_model.cookie) ->
                       not (String.equal to_logout_cookie_value c.value)),
                     Middleware.redirect_to_page ~path:"/account"
                       ~msg:"Closed session successfully" reqd () )
@@ -1067,12 +1068,7 @@ struct
     match Utils.Json.(get "session_value" json_dict) with
     | Some (`String session_value) -> (
         let now = Mirage_ptime.now () in
-        let cookies =
-          List.filter
-            (fun (cookie : User_model.cookie) ->
-              not (String.equal cookie.value session_value))
-            user.cookies
-        in
+        let cookies = Utils.SM.remove session_value user.cookies in
         let updated_user =
           User_model.update_user user ~cookies ~updated_at:now ()
         in
@@ -1145,7 +1141,7 @@ struct
     Albatross_state.init stack albatross.configuration >>= function
     | Ok new_albatross_instance ->
         albatross_instances :=
-          Albatross.Albatross_map.update albatross.configuration.name
+          Utils.LM.update albatross.configuration.name
             (fun _prev -> Some new_albatross_instance)
             !albatross_instances;
         Middleware.http_response reqd
@@ -1173,7 +1169,7 @@ struct
                 Store.write_data store >>= function
                 | Ok () ->
                     albatross_instances :=
-                      Albatross.Albatross_map.update configuration_settings.name
+                      Utils.LM.update configuration_settings.name
                         (fun _prev -> Some new_albatross_instance)
                         !albatross_instances;
                     Middleware.http_response reqd
@@ -1195,8 +1191,7 @@ struct
             Storage.delete_configuration store name;
             Store.write_data store >>= function
             | Ok _new_configurations ->
-                albatross_instances :=
-                  Albatross.Albatross_map.remove name !albatross_instances;
+                albatross_instances := Utils.LM.remove name !albatross_instances;
                 Middleware.http_response reqd
                   ~data:(`String "Configuration delete successfully") `OK
             | Error (`Msg err) ->
@@ -1282,7 +1277,7 @@ struct
                 Lwt.return (successes, failure :: failures)
             | Ok parsed -> Lwt.return (parsed :: successes, failures)))
       ([], [])
-      (Albatross.Albatross_map.bindings albatross_instances)
+      (Utils.LM.bindings albatross_instances)
     >>= fun (successes, failures) ->
     let response_data =
       `Assoc [ ("data", `List successes); ("errors", `List failures) ]
@@ -1365,8 +1360,8 @@ struct
   let unikernel_monitoring_update happy_eyeballs management_domain _user
       multipart_body reqd =
     match
-      ( Map.find_opt "command" multipart_body,
-        Map.find_opt "unikernel_name" multipart_body )
+      ( Utils.SM.find_opt "command" multipart_body,
+        Utils.SM.find_opt "unikernel_name" multipart_body )
     with
     | Some (_, command), Some (_, unikernel_name) -> (
         let open Lwt.Infix in
@@ -1400,13 +1395,9 @@ struct
 
   let unikernel_scaling_policy_update stack store albatross unikernel_name
       (user : User_model.user) multipart_body reqd =
+    let policy_key = (unikernel_name, albatross.Albatross.configuration.name) in
     let current_scaling_policy =
-      List.find_opt
-        (fun (scaling_policy : User_model.unikernel_scaling_policy) ->
-          Vmm_core.Name.Label.equal unikernel_name scaling_policy.name
-          && Vmm_core.Name.Label.equal albatross.Albatross.configuration.name
-               scaling_policy.primary_albatross_instance)
-        user.scaling_policies
+      User_model.Scaling_policy_map.find_opt policy_key user.scaling_policies
     in
     let update_unikernel_scaling scaling_policies =
       let user = User_model.update_user user ~scaling_policies () in
@@ -1424,24 +1415,18 @@ struct
                `Error)
             `Internal_server_error
     in
-    let remove_scaling_policy () =
-      List.filter
-        (fun (p : User_model.unikernel_scaling_policy) ->
-          not
-            (Vmm_core.Name.Label.equal unikernel_name p.name
-            && Vmm_core.Name.Label.equal albatross.Albatross.configuration.name
-                 p.primary_albatross_instance))
-        user.scaling_policies
-    in
     match
-      ( Map.find_opt "should_scale" multipart_body,
-        Map.find_opt "max_instances" multipart_body )
+      ( Utils.SM.find_opt "should_scale" multipart_body,
+        Utils.SM.find_opt "max_instances" multipart_body )
     with
     | Some _, Some (_, max_instances_str) -> (
         match int_of_string_opt max_instances_str with
         | Some max_instances when max_instances >= 1 -> (
             if max_instances = 1 then
-              let scaling_policies = remove_scaling_policy () in
+              let scaling_policies =
+                User_model.Scaling_policy_map.remove policy_key
+                  user.scaling_policies
+              in
               update_unikernel_scaling scaling_policies
             else
               user_max_allowed_unikernel_instances stack albatross user.name
@@ -1473,7 +1458,8 @@ struct
                           }
                     in
                     let scaling_policies =
-                      new_policy :: remove_scaling_policy ()
+                      User_model.Scaling_policy_map.add policy_key new_policy
+                        user.scaling_policies
                     in
                     update_unikernel_scaling scaling_policies)
         | None | Some _ ->
@@ -1491,7 +1477,10 @@ struct
                  `Success)
               `OK
         | Some _ ->
-            let scaling_policies = remove_scaling_policy () in
+            let scaling_policies =
+              User_model.Scaling_policy_map.remove policy_key
+                user.scaling_policies
+            in
             update_unikernel_scaling scaling_policies)
     | _ ->
         reply reqd
@@ -1518,21 +1507,13 @@ struct
         generate_csrf_token store user now reqd >>= function
         | Ok csrf ->
             let last_update_time =
-              match
-                List.find_opt
-                  (fun (u : User_model.unikernel_update) ->
-                    Vmm_core.Name.Label.equal u.name unikernel_name)
-                  user.unikernel_updates
-              with
-              | Some unikernel_update -> Some unikernel_update.timestamp
-              | None -> None
+              Option.map
+                (fun (u : User_model.unikernel_update) -> u.timestamp)
+                (Utils.LM.find_opt unikernel_name user.unikernel_updates)
             in
             let scaling_policy =
-              List.find_opt
-                (fun (scaling_policy : User_model.unikernel_scaling_policy) ->
-                  Vmm_core.Name.Label.equal scaling_policy.name unikernel_name
-                  && Vmm_core.Name.Label.equal albatross.configuration.name
-                       scaling_policy.primary_albatross_instance)
+              User_model.Scaling_policy_map.find_opt
+                (unikernel_name, albatross.configuration.name)
                 user.scaling_policies
             in
             user_max_allowed_unikernel_instances stack albatross user.name
@@ -1693,7 +1674,8 @@ struct
         let data_stream, push_chunks = Lwt_stream.create () in
         let push () = Lwt_stream.get data_stream in
         Builder_web.fetch_unikernel_binary_image http_client ~job
-          ~version:to_be_updated_unikernel push_chunks
+          ~version:(Uuidm.to_string to_be_updated_unikernel)
+          push_chunks
           (force_create_unikernel stack albatross ~unikernel_name ~push
              unikernel_cfg user)
         >>= function
@@ -1731,12 +1713,7 @@ struct
   let process_rollback stack albatross ~unikernel_name current_time store
       http_client reqd (user : User_model.user) =
     let unikernel_name_str = Configuration.name_to_str unikernel_name in
-    match
-      List.find_opt
-        (fun (u : User_model.unikernel_update) ->
-          Vmm_core.Name.Label.equal u.name unikernel_name)
-        user.unikernel_updates
-    with
+    match Utils.LM.find_opt unikernel_name user.unikernel_updates with
     | Some old_unikernel ->
         if
           Utils.TimeHelper.diff_in_seconds ~current_time
@@ -1750,10 +1727,7 @@ struct
           >>= function
           | Ok _res ->
               let updated_unikernel_updates =
-                List.filter
-                  (fun (u : User_model.unikernel_update) ->
-                    not (Vmm_core.Name.Label.equal u.name unikernel_name))
-                  user.unikernel_updates
+                Utils.LM.remove unikernel_name user.unikernel_updates
               in
               let user =
                 User_model.update_user user
@@ -1765,15 +1739,17 @@ struct
                 ~data:
                   (`String
                      ("Rollback successful. " ^ unikernel_name_str
-                    ^ " is now running on build " ^ old_unikernel.uuid))
+                    ^ " is now running on build "
+                     ^ Uuidm.to_string old_unikernel.uuid))
                 `OK
           | Error (`Msg err, http_status) ->
               Middleware.http_response reqd ~title:"Rollback Error"
                 ~data:
                   (`String
                      ("Rollback failed. " ^ unikernel_name_str
-                    ^ " failed to revert to build " ^ old_unikernel.uuid
-                    ^ " with error " ^ err))
+                    ^ " failed to revert to build "
+                     ^ Uuidm.to_string old_unikernel.uuid
+                     ^ " with error " ^ err))
                 http_status
         else
           Middleware.http_response reqd ~title:"Rollback Failed"
@@ -1794,6 +1770,7 @@ struct
   let process_unikernel_update ~unikernel_name ~job ~to_be_updated_unikernel
       ~currently_running_unikernel ~http_liveliness_address ~dns_liveliness
       stack cfg user store http_client albatross reqd =
+    let to_be_updated_unikernel_str = Uuidm.to_string to_be_updated_unikernel in
     process_change stack ~unikernel_name ~job ~to_be_updated_unikernel
       ~currently_running_unikernel cfg user store http_client `Update albatross
     >>= function
@@ -1807,7 +1784,7 @@ struct
                 m
                   "liveliness-checks for %s and build %s failed with error(s) \
                    %s. now performing a rollback"
-                  unikernel_name_str to_be_updated_unikernel err);
+                  unikernel_name_str to_be_updated_unikernel_str err);
             process_rollback stack albatross ~unikernel_name
               (Mirage_ptime.now ()) store http_client reqd user
         | Ok () ->
@@ -1815,7 +1792,7 @@ struct
               ~data:
                 (`String
                    ("Update successful. " ^ unikernel_name_str
-                  ^ " is now running on build " ^ to_be_updated_unikernel))
+                  ^ " is now running on build " ^ to_be_updated_unikernel_str))
               `OK)
     | Error (`Msg err, http_status) ->
         Middleware.http_response reqd ~title:"Update Error"
@@ -1823,7 +1800,7 @@ struct
             (`String
                ("Update failed. "
                ^ Configuration.name_to_str unikernel_name
-               ^ " failed to update to build " ^ to_be_updated_unikernel
+               ^ " failed to update to build " ^ to_be_updated_unikernel_str
                ^ " with error " ^ err))
           http_status
 
@@ -1884,68 +1861,97 @@ struct
                                ("Could not get the unikernel arguments json: "
                               ^ err))
                           `Bad_request
-                    | Ok None -> (
-                        user_unikernel stack albatross ~user_name:user.name
-                          ~unikernel_name
-                        >>= function
-                        | Error err ->
+                    | Ok cfg_opt -> (
+                        match
+                          ( Uuidm.of_string to_be_updated_unikernel,
+                            Uuidm.of_string currently_running_unikernel )
+                        with
+                        | None, _ ->
                             Middleware.http_response reqd
+                              ~title:"Error: Bad to-be-updated unikernel UUID"
                               ~data:
                                 (`String
-                                   ("Couldn't find albatross instance, "
-                                   ^ Configuration.name_to_str instance_name
-                                   ^ " with error: " ^ err))
-                              `Bad_request
-                        | Ok (_n, (info : Vmm_core.Unikernel.info)) ->
-                            let (cfg : Vmm_core.Unikernel.config) =
-                              {
-                                Vmm_core.Unikernel.typ = info.typ;
-                                compressed = false;
-                                image = "";
-                                add_name = true;
-                                startup = info.startup;
-                                fail_behaviour = info.fail_behaviour;
-                                cpuids = info.cpuids;
-                                memory = info.memory;
-                                block_devices =
-                                  List.map
-                                    (fun {
-                                           Vmm_core.Unikernel.unikernel_device;
-                                           host_device;
-                                           sector_size;
-                                           _;
-                                         } ->
-                                      ( unikernel_device,
-                                        Some host_device,
-                                        Some sector_size ))
-                                    info.block_devices;
-                                bridges =
-                                  List.map
-                                    (fun {
-                                           Vmm_core.Unikernel.unikernel_device;
-                                           host_device;
-                                           mac;
-                                         } ->
-                                      ( unikernel_device,
-                                        Some host_device,
-                                        Some mac ))
-                                    info.bridges;
-                                argv = info.argv;
-                                (* ADDED: New required fields for BHyve support *)
-                                numcpus = info.numcpus;
-                                linux_boot_partition = info.linux_boot_partition;
-                              }
-                            in
-                            process_unikernel_update ~unikernel_name ~job
-                              ~to_be_updated_unikernel
-                              ~currently_running_unikernel
-                              ~http_liveliness_address ~dns_liveliness stack cfg
-                              user store http_client albatross reqd)
-                    | Ok (Some cfg) ->
-                        process_unikernel_update ~unikernel_name ~job
-                          ~to_be_updated_unikernel ~currently_running_unikernel
-                          ~http_liveliness_address ~dns_liveliness stack cfg
-                          user store http_client albatross reqd)
+                                   "Couldn't convert the to-be-updated \
+                                    unikernel build UUID") `Bad_request
+                        | _, None ->
+                            Middleware.http_response reqd
+                              ~title:
+                                "Error: Bad currently running unikernel UUID"
+                              ~data:
+                                (`String
+                                   "Couldn't convert the currently running \
+                                    unikernel build UUID") `Bad_request
+                        | ( Some to_be_updated_unikernel,
+                            Some currently_running_unikernel ) -> (
+                            match cfg_opt with
+                            | None -> (
+                                user_unikernel stack albatross
+                                  ~user_name:user.name ~unikernel_name
+                                >>= function
+                                | Error err ->
+                                    Middleware.http_response reqd
+                                      ~data:
+                                        (`String
+                                           ("Couldn't find albatross instance, "
+                                           ^ Configuration.name_to_str
+                                               instance_name
+                                           ^ " with error: " ^ err))
+                                      `Bad_request
+                                | Ok (_n, (info : Vmm_core.Unikernel.info)) ->
+                                    let (cfg : Vmm_core.Unikernel.config) =
+                                      {
+                                        Vmm_core.Unikernel.typ = info.typ;
+                                        compressed = false;
+                                        image = "";
+                                        add_name = true;
+                                        startup = info.startup;
+                                        fail_behaviour = info.fail_behaviour;
+                                        cpuids = info.cpuids;
+                                        memory = info.memory;
+                                        block_devices =
+                                          List.map
+                                            (fun {
+                                                   Vmm_core.Unikernel
+                                                   .unikernel_device;
+                                                   host_device;
+                                                   sector_size;
+                                                   _;
+                                                 } ->
+                                              ( unikernel_device,
+                                                Some host_device,
+                                                Some sector_size ))
+                                            info.block_devices;
+                                        bridges =
+                                          List.map
+                                            (fun {
+                                                   Vmm_core.Unikernel
+                                                   .unikernel_device;
+                                                   host_device;
+                                                   mac;
+                                                 } ->
+                                              ( unikernel_device,
+                                                Some host_device,
+                                                Some mac ))
+                                            info.bridges;
+                                        argv = info.argv;
+                                        (* ADDED: New required fields for BHyve support *)
+                                        numcpus = info.numcpus;
+                                        linux_boot_partition =
+                                          info.linux_boot_partition;
+                                      }
+                                    in
+                                    process_unikernel_update ~unikernel_name
+                                      ~job ~to_be_updated_unikernel
+                                      ~currently_running_unikernel
+                                      ~http_liveliness_address ~dns_liveliness
+                                      stack cfg user store http_client albatross
+                                      reqd)
+                            | Some cfg ->
+                                process_unikernel_update ~unikernel_name ~job
+                                  ~to_be_updated_unikernel
+                                  ~currently_running_unikernel
+                                  ~http_liveliness_address ~dns_liveliness stack
+                                  cfg user store http_client albatross reqd)))
                 | _ ->
                     Middleware.http_response
                       ~data:
@@ -2307,10 +2313,10 @@ struct
          (Configuration.name_to_str unikernel_name))
       `OK
 
-  let view_user stack albatross_instances store uuid
-      (page : [> `Profile | `Unikernels | `Policy ]) _ (user : User_model.user)
-      reqd =
-    match Storage.find_by_uuid store.Storage.users uuid with
+  let view_user stack albatross_instances store
+      (page : [> `Profile | `Unikernels | `Policy ]) uuid _
+      (user : User_model.user) reqd =
+    match Storage.find_by_uuid store uuid with
     | Some u -> (
         user_unikernels stack albatross_instances u.name >>= fun unikernels ->
         user_deceased_by_instance stack albatross_instances u.name
@@ -2353,11 +2359,12 @@ struct
               ~data:err.data reqd `Internal_server_error)
     | None ->
         Middleware.http_response ~api_meth:false
-          ~data:(`String ("Couldn't find account with uuid: " ^ uuid))
+          ~data:
+            (`String ("Couldn't find account with uuid: " ^ Uuidm.to_string uuid))
           reqd `Not_found
 
   let edit_policy store uuid albatross _ (user : User_model.user) reqd =
-    match Storage.find_by_uuid store.Storage.users uuid with
+    match Storage.find_by_uuid store uuid with
     | Some u -> (
         let user_policy =
           Option.value ~default:Albatross_state.empty_policy
@@ -2391,15 +2398,20 @@ struct
               reqd `Bad_request)
     | None ->
         Middleware.http_response ~api_meth:false
-          ~data:(`String ("Couldn't find account with uuid: " ^ uuid))
+          ~data:
+            (`String ("Couldn't find account with uuid: " ^ Uuidm.to_string uuid))
           reqd `Not_found
 
   let update_policy stack albatross_instances store _user json_dict reqd =
     match
       Utils.Json.(get "user_uuid" json_dict, get "albatross_instance" json_dict)
     with
-    | Some (`String user_uuid), Some (`String instance_name) -> (
-        match Storage.find_by_uuid store.Storage.users user_uuid with
+    | Some (`String user_uuid_str), Some (`String instance_name) -> (
+        match
+          Option.bind
+            (Uuidm.of_string user_uuid_str)
+            (Storage.find_by_uuid store)
+        with
         | Some u -> (
             match Configuration.name_of_str instance_name with
             | Ok instance_name -> (
@@ -2851,10 +2863,8 @@ struct
   let choose_instance store (albatross_instances : Albatross_state.a_map)
       callback _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    if Albatross.Albatross_map.cardinal albatross_instances = 1 then
-      let instance_name, _ =
-        Albatross.Albatross_map.min_binding albatross_instances
-      in
+    if Utils.LM.cardinal albatross_instances = 1 then
+      let instance_name, _ = Utils.LM.min_binding albatross_instances in
       Middleware.redirect_to_page
         ~path:
           (Middleware.construct_instance_redirect_url callback instance_name)
@@ -2866,7 +2876,7 @@ struct
             (Dashboard.dashboard_layout ~csrf user ~page_title:"Choose instance"
                ~content:
                  (Albatross_instances.select_instance user
-                    (Albatross.Albatross_map.bindings albatross_instances)
+                    (Utils.LM.bindings albatross_instances)
                     callback)
                ~icon:"/images/robur.png" ())
             ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
@@ -2896,9 +2906,9 @@ struct
     | Some (`String name), Some (`Int expiry) -> (
         let now = Mirage_ptime.now () in
         let token = User_model.generate_token ~name ~expiry ~current_time:now in
+        let tokens = Utils.SM.add token.value token user.tokens in
         let updated_user =
-          User_model.update_user user ~tokens:(token :: user.tokens)
-            ~updated_at:now ()
+          User_model.update_user user ~tokens ~updated_at:now ()
         in
         Storage.update_user store updated_user;
         Store.write_data store >>= function
@@ -2922,12 +2932,7 @@ struct
     match Utils.Json.(get "token_value" json_dict) with
     | Some (`String value) -> (
         let now = Mirage_ptime.now () in
-        let tokens =
-          List.filter
-            (fun (token : User_model.token) ->
-              not (String.equal token.value value))
-            user.tokens
-        in
+        let tokens = Utils.SM.remove value user.tokens in
         let updated_user =
           User_model.update_user user ~tokens ~updated_at:now ()
         in
@@ -2957,24 +2962,12 @@ struct
     with
     | Some (`String name), Some (`Int expiry), Some (`String value) -> (
         let now = Mirage_ptime.now () in
-        let token =
-          List.find_opt
-            (fun (token : User_model.token) -> String.equal token.value value)
-            user.tokens
-        in
-        match token with
+        match Utils.SM.find_opt value user.tokens with
         | Some token_ -> (
             let updated_token = { token_ with name; expires_in = expiry } in
-            let user_tokens =
-              List.filter
-                (fun (token : User_model.token) ->
-                  not (String.equal token.value value))
-                user.tokens
-            in
+            let tokens = Utils.SM.add value updated_token user.tokens in
             let updated_user =
-              User_model.update_user user
-                ~tokens:(updated_token :: user_tokens)
-                ~updated_at:now ()
+              User_model.update_user user ~tokens ~updated_at:now ()
             in
             Storage.update_user store updated_user;
             Store.write_data store >>= function
@@ -3056,11 +3049,9 @@ struct
               ~data:(`String (Fmt.str "Test failed: %s" err))
               `Bad_request)
 
-  module Label_map = Albatross.Albatross_map
-
   let scaling_groups :
-      Autoscaler.Cluster_manager.group Label_map.t Label_map.t ref =
-    ref Label_map.empty
+      Autoscaler.Cluster_manager.group Utils.LM.t Utils.LM.t ref =
+    ref Utils.LM.empty
 
   module Log = (val Logs.src_log Autoscaler.a_logs : Logs.LOG)
 
@@ -3082,17 +3073,17 @@ struct
   let put_group ~(user_name : Vmm_core.Name.Label.t)
       ~(unikernel_name : Vmm_core.Name.Label.t) group =
     let unikernel_map =
-      Option.value ~default:Label_map.empty
-        (Label_map.find_opt user_name !scaling_groups)
+      Option.value ~default:Utils.LM.empty
+        (Utils.LM.find_opt user_name !scaling_groups)
     in
     scaling_groups :=
-      Label_map.add user_name
-        (Label_map.add unikernel_name group unikernel_map)
+      Utils.LM.add user_name
+        (Utils.LM.add unikernel_name group unikernel_map)
         !scaling_groups
 
   let spawn_clone stack store albatross ~unikernel_name ~clone_name ~user_name
       group scaler =
-    match Storage.find_by_name store.Storage.users user_name with
+    match Storage.find_by_name store user_name with
     | None -> Lwt.return_error "User not found"
     | Some user -> (
         user_unikernel stack albatross ~user_name ~unikernel_name >>= function
@@ -3315,7 +3306,7 @@ struct
         let unikernel_name = label in
         match Vmm_core.Name.Path.to_labels (Vmm_core.Name.path name) with
         | [ user_label ] -> (
-            match Storage.find_by_name store.Storage.users user_label with
+            match Storage.find_by_name store user_label with
             | None ->
                 Lwt.return_error
                   (Fmt.str "User %s not found."
@@ -3328,9 +3319,9 @@ struct
                           unikernel_name))
                 in
                 let is_scaling_enabled =
-                  List.exists
-                    (fun (p : User_model.unikernel_scaling_policy) ->
-                      Vmm_core.Name.Label.equal p.name primary_name)
+                  User_model.Scaling_policy_map.exists
+                    (fun (p_name, _) _ ->
+                      Vmm_core.Name.Label.equal p_name primary_name)
                     user.scaling_policies
                 in
                 if is_scaling_enabled then (
@@ -3343,10 +3334,10 @@ struct
                   (* Get the group for this user's unikernel (user -> unikernel -> group). *)
                   let group =
                     let unikernel_map =
-                      Option.value ~default:Label_map.empty
-                        (Label_map.find_opt user.name !scaling_groups)
+                      Option.value ~default:Utils.LM.empty
+                        (Utils.LM.find_opt user.name !scaling_groups)
                     in
-                    match Label_map.find_opt primary_name unikernel_map with
+                    match Utils.LM.find_opt primary_name unikernel_map with
                     | Some g -> g
                     | None ->
                         let primary_vm =
@@ -3450,15 +3441,16 @@ struct
     in
     Lwt.return { Update_flow.user; available_updates }
 
-  let check_available_unikernel_updates stack albatross_instances users
-      http_client =
-    Lwt_list.fold_left_s
-      (fun acc user ->
+  let check_available_unikernel_updates stack albatross_instances
+      (users : User_model.user Utils.UM.t) http_client =
+    Utils.UM.fold
+      (fun _ user acc_p ->
+        acc_p >>= fun acc ->
         check_user_unikernel_updates stack albatross_instances user http_client
         >>= fun update_report ->
         if update_report.available_updates = [] then Lwt.return acc
         else Lwt.return (update_report :: acc))
-      [] users
+      users Lwt.return_nil
 
   let run_background_update_check happy_eyeballs users stack email_config
       albatross_instances http_client =
@@ -3477,8 +3469,12 @@ struct
             >>= fun reports ->
             Lwt_list.iter_s
               (fun (report : Update_flow.user_unikernel_available_updates) ->
-                send_email happy_eyeballs email_config report.user.email
-                  ~subject:"Unikernel updates available"
+                let references =
+                  Fmt.str "updates-%s@robur.coop"
+                    (Uuidm.to_string report.user.uuid)
+                in
+                send_email ~references happy_eyeballs email_config
+                  report.user.email ~subject:"Unikernel updates available"
                   ~body:(Email_templates.updated_unikernels report email_config)
                 >>= function
                 | Ok () ->
@@ -3524,7 +3520,7 @@ struct
     Lwt.async loop
 
   let start_background_scaler_scheduler stack store albatross_instances_ref =
-    let active_streams = ref Map.empty in
+    let active_streams = ref Utils.SM.empty in
     let spawn_stats_stream instance =
       let rec stream_loop () =
         Lwt.catch
@@ -3556,15 +3552,15 @@ struct
       Lwt.pause () >>= fun () ->
       let current_instances = !albatross_instances_ref in
       active_streams :=
-        Map.filter (fun _key p -> Lwt.state p = Lwt.Sleep) !active_streams;
-      Albatross.Albatross_map.iter
+        Utils.SM.filter (fun _key p -> Lwt.state p = Lwt.Sleep) !active_streams;
+      Utils.LM.iter
         (fun instance_name instance ->
           let key = Configuration.name_to_str instance_name in
-          if not (Map.mem key !active_streams) then (
+          if not (Utils.SM.mem key !active_streams) then (
             Log.debug (fun m ->
                 m "Spawning new stats stream for albatross instance %s" key);
             let p = spawn_stats_stream instance in
-            active_streams := Map.add key p !active_streams))
+            active_streams := Utils.SM.add key p !active_streams))
         current_instances;
       Mirage_sleep.ns (Duration.of_sec 30) >>= loop
     in
@@ -3585,7 +3581,7 @@ struct
           ( Lwt.catch
               (fun () ->
                 Log.debug (fun m -> m "Starting background pruning...");
-                Label_map.bindings !scaling_groups
+                Utils.LM.bindings !scaling_groups
                 |> Lwt_list.iter_p (fun (user_name, unikernel_map) ->
                     user_unikernels stack albatross_instances user_name
                     >|= fun results ->
@@ -3600,7 +3596,7 @@ struct
                           acc @ names)
                         [] results
                     in
-                    Label_map.iter
+                    Utils.LM.iter
                       (fun unikernel_name group ->
                         match
                           Autoscaler.Cluster_manager.sync_group group
@@ -3614,14 +3610,14 @@ struct
                                   (Configuration.name_to_str user_name)
                                   (Configuration.name_to_str unikernel_name));
                             let updated_unikernel_map =
-                              Label_map.remove unikernel_name unikernel_map
+                              Utils.LM.remove unikernel_name unikernel_map
                             in
-                            if Label_map.is_empty updated_unikernel_map then
+                            if Utils.LM.is_empty updated_unikernel_map then
                               scaling_groups :=
-                                Label_map.remove user_name !scaling_groups
+                                Utils.LM.remove user_name !scaling_groups
                             else
                               scaling_groups :=
-                                Label_map.add user_name updated_unikernel_map
+                                Utils.LM.add user_name updated_unikernel_map
                                   !scaling_groups)
                       unikernel_map))
               (fun exn ->
@@ -3696,6 +3692,18 @@ struct
                       (`String ("Error with albatross instance name: " ^ err))
                     reqd `Bad_request)
           | Error _ -> Middleware.redirect_to_instance_selector endpoint reqd ()
+        in
+        let get_uuid_admin_page fn =
+          match get_query_parameter "uuid" with
+          | Ok uuid_str -> (
+              match Uuidm.of_string uuid_str with
+              | Some uuid -> authenticate ~check_admin:true store reqd (fn uuid)
+              | None ->
+                  Middleware.http_response ~api_meth:false
+                    ~data:(`String "Invalid UUID") reqd `Bad_request)
+          | Error err ->
+              Middleware.http_response ~api_meth:false ~data:(`String err) reqd
+                `Bad_request
         in
         match path with
         | "/" ->
@@ -3836,39 +3844,28 @@ struct
                   (choose_instance store !albatross_instances callback_link))
         | "/admin/user/profile" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "uuid" with
-                | Ok uuid ->
-                    authenticate ~check_admin:true store reqd
-                      (view_user stack !albatross_instances store uuid `Profile)
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                get_uuid_admin_page
+                  (view_user stack !albatross_instances store `Profile))
         | "/admin/user/unikernels" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "uuid" with
-                | Ok uuid ->
-                    authenticate ~check_admin:true store reqd
-                      (view_user stack !albatross_instances store uuid
-                         `Unikernels)
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                get_uuid_admin_page
+                  (view_user stack !albatross_instances store `Unikernels))
         | "/admin/user/policy" ->
             check_meth `GET (fun () ->
-                match get_query_parameter "uuid" with
-                | Ok uuid ->
-                    authenticate ~check_admin:true store reqd
-                      (view_user stack !albatross_instances store uuid `Policy)
-                | Error err ->
-                    Middleware.http_response ~api_meth:false ~data:(`String err)
-                      reqd `Bad_request)
+                get_uuid_admin_page
+                  (view_user stack !albatross_instances store `Policy))
         | "/admin/u/policy/edit" ->
             check_meth `GET (fun () ->
                 match get_query_parameter "uuid" with
-                | Ok uuid ->
-                    authenticate ~check_admin:true store reqd
-                      (albatross_instance req.H1.Request.target
-                         (edit_policy store uuid))
+                | Ok uuid_str -> (
+                    match Uuidm.of_string uuid_str with
+                    | Some uuid ->
+                        authenticate ~check_admin:true store reqd
+                          (albatross_instance req.H1.Request.target
+                             (edit_policy store uuid))
+                    | None ->
+                        Middleware.http_response ~api_meth:false
+                          ~data:(`String "Invalid UUID") reqd `Bad_request)
                 | Error err ->
                     Middleware.http_response ~api_meth:false ~data:(`String err)
                       reqd `Bad_request)

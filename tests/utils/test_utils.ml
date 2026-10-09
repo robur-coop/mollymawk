@@ -293,7 +293,7 @@ let user_t =
   Alcotest.testable pp (fun (u1 : User_model.user) (u2 : User_model.user) ->
       Vmm_core.Name.Label.equal u1.name u2.name
       && Mrmime.Mailbox.equal u1.email u2.email
-      && String.equal u1.uuid u2.uuid
+      && Uuidm.equal u1.uuid u2.uuid
       && Bool.equal u1.active u2.active
       && Bool.equal u1.super_user u2.super_user)
 
@@ -378,9 +378,9 @@ let eq_config_pair (c1 : Configuration.t) (c2 : Configuration.t) =
        (X509.Private_key.encode_der pk1)
        (X509.Private_key.encode_der pk2)
 
-let eq_config (config_1 : Configuration.t list)
-    (config_2 : Configuration.t list) =
-  List.equal eq_config_pair config_1 config_2
+let eq_config (config_1 : Configuration.t Utils.LM.t)
+    (config_2 : Configuration.t Utils.LM.t) =
+  Utils.LM.equal eq_config_pair config_1 config_2
 
 let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
   let {
@@ -419,14 +419,15 @@ let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
     u2
   in
   Vmm_core.Name.Label.equal n1 n2
-  && Mrmime.Mailbox.equal e1 e2 && String.equal p1 p2 && String.equal id1 id2
+  && Mrmime.Mailbox.equal e1 e2 && String.equal p1 p2 && Uuidm.equal id1 id2
   && Bool.equal a1 a2 && Bool.equal s1 s2 && Ptime.equal uat1 uat2
   && Ptime.equal cat1 cat2
   && Option.equal Ptime.equal ev1 ev2
   && Option.equal Uuidm.equal evu1 evu2
 
-let eq_users (users_1 : User_model.user list) (users_2 : User_model.user list) =
-  List.equal eq_user_pair users_1 users_2
+let eq_users (users_1 : User_model.user Utils.UM.t)
+    (users_2 : User_model.user Utils.UM.t) =
+  Utils.UM.equal eq_user_pair users_1 users_2
 
 let eq_emails (e1 : Utils.Email.t) (e2 : Utils.Email.t) =
   let {
@@ -456,8 +457,8 @@ let eq_storage (u1, c1, e1) (u2, c2, e2) =
 
 let storage_t = Alcotest.testable pp_storage eq_storage
 
-let mock_storage ?(version = 10) ?(users = []) ?(configuration = [])
-    ?(email = None) () =
+let mock_storage ?(version = 10) ?(users = Utils.UM.empty)
+    ?(configuration = Utils.LM.empty) ?(email = None) () =
   Storage.t_to_json ~version users configuration email
 
 let mock_email =
@@ -481,8 +482,8 @@ let mock_albatross_config =
   }
 
 (** User Creation Helper *)
-let make_csrf_cookie ?(user_agent = Some "Alcotest-client") uuid =
-  User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid
+let make_csrf_cookie ?(user_agent = Some "Alcotest-client") () =
+  User_model.generate_cookie ~name:User_model.csrf_cookie
     ~created_at:(Mirage_ptime.now ()) ~user_agent ()
 
 let make_mock_token ?(name = "mock-token") ?(expiry = 3600) () =
@@ -490,7 +491,7 @@ let make_mock_token ?(name = "mock-token") ?(expiry = 3600) () =
 
 let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
     ?(password = "Password123!") ?(active = true) ?(super_user = false)
-    ?(tokens = []) ?(with_csrf = true) () =
+    ?(tokens = Utils.SM.empty) ?(with_csrf = true) () =
   let name_lbl = label_of_string_exn name in
   let email_box = email_of_string_exn email in
   let now = Mirage_ptime.now () in
@@ -499,25 +500,28 @@ let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
       ~super_user ~created_at:now ~user_agent:(Some "Alcotest-client")
   in
   let cookies =
+    let base = Utils.SM.singleton session_cookie.value session_cookie in
     if with_csrf then
-      let csrf = make_csrf_cookie user.uuid in
-      [ session_cookie; csrf ]
-    else [ session_cookie ]
+      let csrf = make_csrf_cookie () in
+      Utils.SM.add csrf.value csrf base
+    else base
   in
   { user with cookies; tokens }
 
 let user_session_cookie (user : User_model.user) =
-  (List.find
-     (fun (c : User_model.cookie) ->
-       String.equal c.name User_model.session_cookie)
-     user.cookies)
-    .value
+  Utils.SM.fold
+    (fun _ (c : User_model.cookie) acc ->
+      if String.equal c.name User_model.session_cookie then Some c.value
+      else acc)
+    user.cookies None
+  |> Option.get
 
 let user_csrf_cookie (user : User_model.user) =
-  (List.find
-     (fun (c : User_model.cookie) -> String.equal c.name User_model.csrf_cookie)
-     user.cookies)
-    .value
+  Utils.SM.fold
+    (fun _ (c : User_model.cookie) acc ->
+      if String.equal c.name User_model.csrf_cookie then Some c.value else acc)
+    user.cookies None
+  |> Option.get
 
 let auth_hdr token =
   match token with

@@ -3,7 +3,7 @@ let ( let* ) = Lwt_result.bind
 type user_unikernel_available_updates = {
   user : User_model.user;
   available_updates :
-    (Albatross.Albatross_map.key
+    (Utils.LM.key
     * (Vmm_core.Name.t * Vmm_core.Unikernel.info * Builder_web.compare) list)
     list;
 }

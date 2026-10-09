@@ -28,7 +28,7 @@ module Make (BLOCK : Mirage_block.S) = struct
             let* json = Utils.Json.from_string s in
             let* t = Storage.t_of_json json in
             Ok t
-        | Ok None -> Ok ([], [], None)
+        | Ok None -> Ok (Utils.UM.empty, Utils.LM.empty, None)
         | Error e ->
             Storage.error_msgf "error while reading storage: %a"
               Stored_data.pp_error e)
@@ -39,5 +39,5 @@ module Make (BLOCK : Mirage_block.S) = struct
     read_data () >|= function
     | Error _ as e -> e
     | Ok (users, configurations, email) ->
-        Ok { Storage.users; configurations; email }
+        Ok (Storage.create ~users ~configurations ?email ())
 end

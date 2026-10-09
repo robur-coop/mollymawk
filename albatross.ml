@@ -38,12 +38,11 @@ type t = {
 let set_online t = t.status <- Online
 
 module String_set = Set.Make (String)
-module Albatross_map = Map.Make (Vmm_core.Name.Label)
 
 module Make (S : Tcpip.Stack.V4V6) = struct
   module TLS = Tls_mirage.Make (S.TCP)
 
-  type a_map = t Albatross_map.t
+  type a_map = t Utils.LM.t
 
   let empty_policy =
     Vmm_core.Policy.
@@ -83,7 +82,7 @@ module Make (S : Tcpip.Stack.V4V6) = struct
   let all_policies ?domain t =
     List.map
       (fun (name, albatross_state) -> (name, policy ?domain albatross_state))
-      (Albatross_map.bindings t)
+      (Utils.LM.bindings t)
 
   let policy_resource_avalaible t =
     let root_policy =
@@ -613,22 +612,24 @@ module Make (S : Tcpip.Stack.V4V6) = struct
                   err);
             Lwt.return (Error (state, err)))
 
-  let init_all stack (configs : Configuration.t list) =
+  let init_all stack (configs : Configuration.t Utils.LM.t) =
     let open Lwt.Infix in
-    Lwt_list.fold_left_s
-      (fun acc_map (configuration : Configuration.t) ->
+    Utils.LM.fold
+      (fun _ (configuration : Configuration.t) acc_p ->
+        acc_p >>= fun acc_map ->
         init stack configuration >|= function
         | Error (state, msg) ->
             Logs.err (fun m ->
                 m "albatross: failed to init instance %s: %s"
                   (Configuration.name_to_str configuration.name)
                   msg);
-            Albatross_map.add configuration.name state acc_map
-        | Ok state -> Albatross_map.add configuration.name state acc_map)
-      Albatross_map.empty configs
+            Utils.LM.add configuration.name state acc_map
+        | Ok state -> Utils.LM.add configuration.name state acc_map)
+      configs
+      (Lwt.return Utils.LM.empty)
 
   let find_instance_by_name (albatross_map : a_map) name =
-    match Albatross_map.find_opt name albatross_map with
+    match Utils.LM.find_opt name albatross_map with
     | Some instance_state -> Ok instance_state
     | None ->
         Error

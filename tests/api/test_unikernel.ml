@@ -771,12 +771,18 @@ let check_unikernel_rollback_expired_window () =
         {
           name = label_of_string_exn "hello";
           job = "hello-job";
-          uuid = "old-uuid-123";
+          uuid = User_model.generate_uuid ();
           config = dummy_cfg;
           timestamp = Ptime.epoch;
         }
       in
-      let user = { user with unikernel_updates = [ expired_update ] } in
+      let user =
+        {
+          user with
+          unikernel_updates =
+            Utils.LM.singleton expired_update.name expired_update;
+        }
+      in
       Storage.update_user store user;
       let body =
         Fmt.str

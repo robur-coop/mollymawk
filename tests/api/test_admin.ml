@@ -11,8 +11,8 @@ let make_admin =
     ~password:"AdminPassword123!" ~created_at:now ~active:true ~super_user:true
     ~user_agent:(Some "Alcotest-client")
 
-let csrf_cookie uuid =
-  User_model.generate_cookie ~name:User_model.csrf_cookie ~uuid ~created_at:now
+let csrf_cookie () =
+  User_model.generate_cookie ~name:User_model.csrf_cookie ~created_at:now
     ~user_agent:(Some "Alcotest-client") ()
 
 let make_user ?(active = false) ?(super_user = false) () =
@@ -25,17 +25,34 @@ let make_user ?(active = false) ?(super_user = false) () =
 let setup_admin_and_user ?(user_active = true) store =
   let admin, session_cookie = make_admin in
   let target_user, _ = make_user ~active:user_active () in
-  let csrf_cookie = csrf_cookie admin.uuid in
-  let admin = { admin with cookies = [ session_cookie; csrf_cookie ] } in
+  let csrf_cookie = csrf_cookie () in
+  let admin =
+    {
+      admin with
+      cookies =
+        Utils.SM.empty
+        |> Utils.SM.add session_cookie.value session_cookie
+        |> Utils.SM.add csrf_cookie.value csrf_cookie;
+    }
+  in
 
-  store.Storage.users <- [ admin; target_user ];
+  Storage.add_user store admin;
+  Storage.add_user store target_user;
   (admin, session_cookie.value, csrf_cookie.value, target_user)
 
 let setup_admin_only store =
   let admin, session_cookie = make_admin in
-  let csrf_cookie = csrf_cookie admin.uuid in
-  let admin = { admin with cookies = [ session_cookie; csrf_cookie ] } in
-  store.Storage.users <- [ admin ];
+  let csrf_cookie = csrf_cookie () in
+  let admin =
+    {
+      admin with
+      cookies =
+        Utils.SM.empty
+        |> Utils.SM.add session_cookie.value session_cookie
+        |> Utils.SM.add csrf_cookie.value csrf_cookie;
+    }
+  in
+  Storage.add_user store admin;
   (admin, session_cookie.value, csrf_cookie.value)
 
 let make_admin_body ~uuid ~csrf_token =
@@ -47,7 +64,9 @@ let check_toggle_account_active () =
       let _admin, session_cookie, csrf_token, test =
         setup_admin_and_user store
       in
-      let body = make_admin_body ~uuid:test.uuid ~csrf_token in
+      let body =
+        make_admin_body ~uuid:(Uuidm.to_string test.uuid) ~csrf_token
+      in
       let req =
         make_post_request ~path:"/api/admin/user/activate/toggle" ~body
           ~session_cookie ~csrf_token ()
@@ -60,7 +79,7 @@ let check_toggle_account_active () =
         "Updated user successfully message" true
         (String.includes ~affix:"Updated user successfully" resp);
       let updated_test_user =
-        Option.get (Storage.find_by_uuid store.Storage.users test.uuid)
+        Option.get (Storage.find_by_uuid store test.uuid)
       in
       Alcotest.(check bool)
         "Target user active becomes false" false updated_test_user.active;
@@ -70,7 +89,9 @@ let check_guard_last_active_user () =
   Lwt_main.run
     ( init_mock_store () >>= fun store ->
       let admin, session_cookie, csrf_token = setup_admin_only store in
-      let body = make_admin_body ~uuid:admin.uuid ~csrf_token in
+      let body =
+        make_admin_body ~uuid:(Uuidm.to_string admin.uuid) ~csrf_token
+      in
       let req =
         make_post_request ~path:"/api/admin/user/activate/toggle" ~body
           ~session_cookie ~csrf_token ()
@@ -82,9 +103,7 @@ let check_guard_last_active_user () =
       Alcotest.(check bool)
         "Cannot deactivate last active user message" true
         (String.includes ~affix:"Cannot deactivate last active user" resp);
-      let updated_admin =
-        Option.get (Storage.find_by_uuid store.Storage.users admin.uuid)
-      in
+      let updated_admin = Option.get (Storage.find_by_uuid store admin.uuid) in
       Alcotest.(check bool)
         "Admin user remains active" true updated_admin.active;
       Lwt.return_unit )
@@ -95,7 +114,9 @@ let check_toggle_admin_superuser () =
       let _admin, session_cookie, csrf_token, test =
         setup_admin_and_user store
       in
-      let body = make_admin_body ~uuid:test.uuid ~csrf_token in
+      let body =
+        make_admin_body ~uuid:(Uuidm.to_string test.uuid) ~csrf_token
+      in
       let req =
         make_post_request ~path:"/api/admin/user/admin/toggle" ~body
           ~session_cookie ~csrf_token ()
@@ -108,7 +129,7 @@ let check_toggle_admin_superuser () =
         "Updated user successfully message" true
         (String.includes ~affix:"Updated user successfully" resp);
       let updated_test_user =
-        Option.get (Storage.find_by_uuid store.Storage.users test.uuid)
+        Option.get (Storage.find_by_uuid store test.uuid)
       in
       Alcotest.(check bool)
         "Target user becomes super_user" true updated_test_user.super_user;
@@ -120,7 +141,9 @@ let check_guard_last_administrator () =
       let admin, session_cookie, csrf_token, _test =
         setup_admin_and_user store
       in
-      let body = make_admin_body ~uuid:admin.uuid ~csrf_token in
+      let body =
+        make_admin_body ~uuid:(Uuidm.to_string admin.uuid) ~csrf_token
+      in
       let req =
         make_post_request ~path:"/api/admin/user/admin/toggle" ~body
           ~session_cookie ~csrf_token ()
@@ -132,9 +155,7 @@ let check_guard_last_administrator () =
       Alcotest.(check bool)
         "Cannot remove last administrator message" true
         (String.includes ~affix:"Cannot remove last administrator" resp);
-      let updated_admin =
-        Option.get (Storage.find_by_uuid store.Storage.users admin.uuid)
-      in
+      let updated_admin = Option.get (Storage.find_by_uuid store admin.uuid) in
       Alcotest.(check bool)
         "Admin remains super_user" true updated_admin.super_user;
       Lwt.return_unit )
@@ -145,7 +166,9 @@ let check_delete_account_success () =
       let _admin, session_cookie, csrf_token, test =
         setup_admin_and_user store
       in
-      let body = make_admin_body ~uuid:test.uuid ~csrf_token in
+      let body =
+        make_admin_body ~uuid:(Uuidm.to_string test.uuid) ~csrf_token
+      in
       let req =
         make_post_request ~path:"/api/admin/user/account/delete" ~body
           ~session_cookie ~csrf_token ()
@@ -157,7 +180,7 @@ let check_delete_account_success () =
       Alcotest.(check bool)
         "Deleted user successfully message" true
         (String.includes ~affix:"Deleted user successfully" resp);
-      let test_in_store = Storage.find_by_uuid store.Storage.users test.uuid in
+      let test_in_store = Storage.find_by_uuid store test.uuid in
       Alcotest.(check bool)
         "Target user removed from store" true
         (Option.is_none test_in_store);

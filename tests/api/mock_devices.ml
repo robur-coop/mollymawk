@@ -141,14 +141,14 @@ let make_app_request_handler ?policies ?instances store =
       status = Albatross.Status.Online;
     }
   in
-  let albatross_instances = ref App.Label_map.empty in
+  let albatross_instances = ref Utils.LM.empty in
   (albatross_instances :=
      match instances with
      | Some insts -> insts
      | None ->
-         App.Label_map.empty
-         |> App.Label_map.add success_config.name success_instance
-         |> App.Label_map.add failure_config.name failure_instance);
+         Utils.LM.empty
+         |> Utils.LM.add success_config.name success_instance
+         |> Utils.LM.add failure_config.name failure_instance);
   let client_addr = (Ipaddr.of_string_exn "127.0.0.1", 8080) in
   let v4 = Ipaddr.V4.Prefix.global in
   let udp =
@@ -221,15 +221,23 @@ let init_mock_store () =
   | Ok store -> Lwt.return store
 
 let add_user_csrf store (user : User_model.user) =
-  let csrf = Test_utils.make_csrf_cookie user.uuid in
-  let user = User_model.update_user user ~cookies:(csrf :: user.cookies) () in
+  let csrf = Test_utils.make_csrf_cookie () in
+  let user =
+    User_model.update_user user
+      ~cookies:(Utils.SM.add csrf.value csrf user.cookies)
+      ()
+  in
   Storage.update_user store user;
   (user, csrf.value)
 
 let add_user_token ?(name = "test-token") ?(expiry = 86400) store
     (user : User_model.user) =
   let token = Test_utils.make_mock_token ~name ~expiry () in
-  let user = User_model.update_user user ~tokens:(token :: user.tokens) () in
+  let user =
+    User_model.update_user user
+      ~tokens:(Utils.SM.add token.value token user.tokens)
+      ()
+  in
   Storage.update_user store user;
   (user, token.value)
 
@@ -248,7 +256,7 @@ let setup_user ?name ?email ?(password = "Password123!") store =
   in
   query_endpoint handler req >>= fun _raw_resp ->
   let name_lbl = Test_utils.label_of_string_exn name in
-  let user = Option.get (Storage.find_by_name (Storage.users store) name_lbl) in
+  let user = Option.get (Storage.find_by_name store name_lbl) in
   let session_cookie = Test_utils.user_session_cookie user in
   let user, csrf_token = add_user_csrf store user in
   Lwt.return (user, session_cookie, csrf_token)
@@ -267,14 +275,14 @@ let setup_non_admin_user ?name ?email ?password store =
   >>= fun (user, session_cookie, csrf_token) ->
   let handler = make_app_request_handler store in
   let body =
-    Fmt.str {|{ "uuid": "%s", "molly_csrf": "%s" }|} user.uuid admin_csrf
+    Fmt.str {|{ "uuid": "%s", "molly_csrf": "%s" }|}
+      (Uuidm.to_string user.uuid)
+      admin_csrf
   in
   let req =
     Test_utils.make_post_request ~path:"/api/admin/user/activate/toggle" ~body
       ~session_cookie:admin_session ~csrf_token:admin_csrf ()
   in
   query_endpoint handler req >>= fun _ ->
-  let user =
-    Option.get (Storage.find_by_uuid (Storage.users store) user.uuid)
-  in
+  let user = Option.get (Storage.find_by_uuid store user.uuid) in
   Lwt.return (user, session_cookie, csrf_token)

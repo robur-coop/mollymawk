@@ -482,9 +482,7 @@ let check_auth_verify_success () =
         make_get_request ~path:"/verify-email" ~session_cookie ~csrf_token ()
       in
       query_endpoint (make_app_request_handler store) req_page >>= fun _ ->
-      let updated_user =
-        Option.get (Storage.find_by_uuid store.Storage.users user.uuid)
-      in
+      let updated_user = Option.get (Storage.find_by_uuid store user.uuid) in
       let token_uuid = Option.get updated_user.email_verification_uuid in
       let token_str = Uuidm.to_string token_uuid in
       let req =
@@ -564,9 +562,7 @@ let check_auth_verify_different_user () =
           ~csrf_token:user2_csrf ()
       in
       query_endpoint (make_app_request_handler store) req_page >>= fun _ ->
-      let updated_user2 =
-        Option.get (Storage.find_by_uuid store.Storage.users user2.uuid)
-      in
+      let updated_user2 = Option.get (Storage.find_by_uuid store user2.uuid) in
       let token_uuid = Option.get updated_user2.email_verification_uuid in
       let token_str = Uuidm.to_string token_uuid in
       (* user1 tries to verify using user2's token *)
