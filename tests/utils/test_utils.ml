@@ -309,12 +309,10 @@ let token_t =
 
 let cookie_t =
   let pp ppf (c : User_model.cookie) =
-    Fmt.pf ppf "%s=%s (expires: %d)" c.name c.value c.expires_in
+    Fmt.pf ppf "%s (expires: %d)" c.value c.expires_in
   in
   Alcotest.testable pp (fun (c1 : User_model.cookie) (c2 : User_model.cookie) ->
-      String.equal c1.name c2.name
-      && String.equal c1.value c2.value
-      && Int.equal c1.expires_in c2.expires_in)
+      String.equal c1.value c2.value && Int.equal c1.expires_in c2.expires_in)
 
 let email_config_t =
   let pp ppf (e : Utils.Email.t) =
@@ -395,7 +393,6 @@ let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
     email_verified = ev1;
     email_verification_uuid = evu1;
     tokens = _tk1;
-    cookies = _ck1;
     unikernel_updates = _uk1;
     scaling_policies = _sp1;
   } =
@@ -412,7 +409,6 @@ let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
     email_verified = ev2;
     email_verification_uuid = evu2;
     tokens = _tk2;
-    cookies = _ck2;
     unikernel_updates = _uk2;
     scaling_policies = _sp2;
   } =
@@ -481,47 +477,22 @@ let mock_albatross_config =
     updated_at = Ptime.epoch;
   }
 
-(** User Creation Helper *)
-let make_csrf_cookie ?(user_agent = Some "Alcotest-client") () =
-  User_model.generate_cookie ~name:User_model.csrf_cookie
-    ~created_at:(Mirage_ptime.now ()) ~user_agent ()
+let make_csrf_token () = Uuidm.to_string (User_model.generate_uuid ())
 
 let make_mock_token ?(name = "mock-token") ?(expiry = 3600) () =
   User_model.generate_token ~name ~expiry ~current_time:(Mirage_ptime.now ())
 
 let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
     ?(password = "Password123!") ?(active = true) ?(super_user = false)
-    ?(tokens = Utils.SM.empty) ?(with_csrf = true) () =
+    ?(tokens = Utils.SM.empty) () =
   let name_lbl = label_of_string_exn name in
   let email_box = email_of_string_exn email in
   let now = Mirage_ptime.now () in
-  let user, session_cookie =
+  let user, _session_cookie =
     User_model.create_user ~name:name_lbl ~email:email_box ~password ~active
       ~super_user ~created_at:now ~user_agent:(Some "Alcotest-client")
   in
-  let cookies =
-    let base = Utils.SM.singleton session_cookie.value session_cookie in
-    if with_csrf then
-      let csrf = make_csrf_cookie () in
-      Utils.SM.add csrf.value csrf base
-    else base
-  in
-  { user with cookies; tokens }
-
-let user_session_cookie (user : User_model.user) =
-  Utils.SM.fold
-    (fun _ (c : User_model.cookie) acc ->
-      if String.equal c.name User_model.session_cookie then Some c.value
-      else acc)
-    user.cookies None
-  |> Option.get
-
-let user_csrf_cookie (user : User_model.user) =
-  Utils.SM.fold
-    (fun _ (c : User_model.cookie) acc ->
-      if String.equal c.name User_model.csrf_cookie then Some c.value else acc)
-    user.cookies None
-  |> Option.get
+  { user with tokens }
 
 let auth_hdr token =
   match token with
