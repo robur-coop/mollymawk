@@ -51,4 +51,6 @@ depends: [
   "bisect_ppx_ng"
   "ocamlformat" {= "0.29.0"}
   "mirage-runtime"
+  "mirage-block"
+  "cmdliner"
 ]
