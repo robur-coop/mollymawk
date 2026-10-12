@@ -1,5 +1,4 @@
 open Lwt.Infix
-
 module OFS = OneFFS.Make (Block)
 module FS = Filesystem.Make (Block)
 
@@ -50,9 +49,7 @@ let start src dst =
 let src_arg =
   let doc = "path to the source image." in
   Cmdliner.Arg.(
-    required
-    & pos 0 (some file) None
-    & info [] ~docv:"OneFFS block image" ~doc)
+    required & pos 0 (some file) None & info [] ~docv:"OneFFS block image" ~doc)
 
 let dst_arg =
   let doc = "path to the destination image." in
@@ -62,9 +59,7 @@ let dst_arg =
     & info [] ~docv:"Destination block image" ~doc)
 
 let cmd =
-  let doc =
-    "migrate from a oneffS image to an fs image."
-  in
+  let doc = "migrate from a oneffS image to an fs image." in
   let info = Cmdliner.Cmd.info "migrate" ~version:"1.0.0" ~doc in
   let term = Cmdliner.Term.(const start $ src_arg $ dst_arg) in
   Cmdliner.Cmd.v info term
