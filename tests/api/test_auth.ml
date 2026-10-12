@@ -483,7 +483,7 @@ let check_expired_csrf_rejected () =
       let two_hours_ago =
         Option.get
           (Ptime.sub_span now
-             (Ptime.Span.of_int_s (User_model.csrf_expiry * 2)))
+             (Ptime.Span.of_int_s (Middleware.csrf_expiry * 2)))
       in
       let expired_csrf = "expired-csrf-token-99999" in
       Middleware.register_csrf expired_csrf user.uuid two_hours_ago;
@@ -551,7 +551,7 @@ let check_login_prunes_expired_csrf () =
       let two_hours_ago =
         Option.get
           (Ptime.sub_span now
-             (Ptime.Span.of_int_s (User_model.csrf_expiry * 2)))
+             (Ptime.Span.of_int_s (Middleware.csrf_expiry * 2)))
       in
       let expired_token = "expired-csrf-token-12345" in
       Middleware.register_csrf expired_token user.uuid two_hours_ago;
