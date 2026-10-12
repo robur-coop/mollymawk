@@ -1,0 +1,21 @@
+(executable
+ (name migrate)
+ (enabled_if
+  (= %{context_name} "default"))
+ (libraries
+  oneffs
+  mirage-block-unix
+  cstruct
+  cstruct-lwt
+  lwt
+  lwt.unix
+  digestif
+  yojson
+  fmt
+  cmdliner
+  logs
+  ptime
+  mirage-ptime
+  mirage-ptime.unix))
+
+(copy_files# ../../filesystem.ml)
