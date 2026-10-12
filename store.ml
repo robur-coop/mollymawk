@@ -47,6 +47,16 @@ module Make (BLOCK : Mirage_block.S) = struct
               let* t = Storage.t_of_json json in
               Ok t)
 
+  let init_block blk =
+    disk := Some blk;
+    Stored_data.init blk >|= function
+    | Error (`Msg msg) ->
+        Logs.err (fun m -> m "error initializing block device %s" msg);
+        Storage.error_msgf "initializing block device"
+    | Ok sb ->
+        superblock := sb;
+        Ok (Storage.create ())
+
   let connect blk =
     disk := Some blk;
     read_data () >|= function
