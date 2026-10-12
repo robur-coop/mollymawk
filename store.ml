@@ -1,5 +1,5 @@
 module Make (BLOCK : Mirage_block.S) = struct
-  module Stored_data = Filesystem.Make (Block)
+  module Stored_data = Filesystem.Make (BLOCK)
   open Lwt.Infix
 
   let disk = ref None
@@ -21,8 +21,8 @@ module Make (BLOCK : Mirage_block.S) = struct
             Storage.error_msgf "error while writing storage: %a"
               Stored_data.pp_decode_err e
         | Error (`Msg msg) ->
-            Logs.err (fun m -> m "error reading block device %s" msg);
-            Storage.error_msgf "reading block device")
+            Logs.err (fun m -> m "error writing block device %s" msg);
+            Storage.error_msgf "writing block device")
 
   let read_data () =
     match !disk with
@@ -36,12 +36,16 @@ module Make (BLOCK : Mirage_block.S) = struct
             Logs.err (fun m ->
                 m "error reading block device %a" Stored_data.pp_decode_err e);
             Storage.error_msgf "reading block device"
-        | Ok (superblock, data) ->
+        | Ok (sb, data) ->
+            superblock := sb;
             Logs.info (fun m -> m "data is %s " data);
-            let ( let* ) = Result.bind in
-            let* json = Utils.Json.from_string data in
-            let* t = Storage.t_of_json json in
-            Ok t)
+            if String.equal data "" then
+              Ok (Utils.UM.empty, Utils.LM.empty, None)
+            else
+              let ( let* ) = Result.bind in
+              let* json = Utils.Json.from_string data in
+              let* t = Storage.t_of_json json in
+              Ok t)
 
   let connect blk =
     disk := Some blk;
