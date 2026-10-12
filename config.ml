@@ -50,7 +50,6 @@ let mollymawk =
       package ~sublibs:[ "emile" ] ~min:"0.13.0" "colombe";
       package "sendmail";
       package ~sublibs:[ "mirage" ] ~min:"0.5.0" "paf";
-      package "oneffs";
       package "duration";
       package ~min:"0.2.0" "ohex";
       package "http-mirage-client";
