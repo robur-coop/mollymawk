@@ -285,28 +285,8 @@ struct
     in
     go (Utils.SM.empty, []) m
 
-  let generate_csrf_token store user now reqd =
-    let csrf = Middleware.generate_csrf_cookie now reqd in
-    let updated_user =
-      User_model.update_user user ~updated_at:now
-        ~cookies:(Utils.SM.add csrf.value csrf user.cookies)
-        ()
-    in
-    Storage.update_user store updated_user;
-    Store.write_data store >>= function
-    | Ok () -> Lwt.return (Ok csrf.value)
-    | Error (`Msg err) ->
-        let error =
-          {
-            Utils.Status.code = 500;
-            title = "CSRF Token Error";
-            success = false;
-            data =
-              `String
-                ("An error occured while generating a CSRF token. Error: " ^ err);
-          }
-        in
-        Lwt.return (Error error)
+  let generate_csrf_token (user : User_model.user) now =
+    Middleware.generate_csrf_token user.uuid now
 
   let decode_request_body reqd =
     let request_body = H1.Reqd.request_body reqd in
@@ -350,7 +330,7 @@ struct
         match token_or_cookie with
         | `Token -> f user json_dict reqd
         | `Cookie -> (
-            match Utils.Json.get User_model.csrf_cookie json_dict with
+            match Utils.Json.get Middleware.csrf_field json_dict with
             | Some (`String token) ->
                 csrf_verification (f user json_dict) user token reqd
             | _ ->
@@ -409,17 +389,20 @@ struct
       | Error (`Msg err) ->
           Error (`Cookie, "No molly-session in cookie header. " ^ err)
       | Ok cookie_value -> (
-          match Storage.find_by_cookie store cookie_value with
+          match Middleware.find_session cookie_value with
           | None -> Error (`Cookie, "Failed to find user with cookie")
-          | Some (user, cookie) ->
-              if User_model.is_valid_cookie cookie current_time then
-                match
-                  let* () = user_is_active user in
-                  user_is_admin user
-                with
-                | Error msg -> Error (`Cookie, msg)
-                | Ok () -> Ok (`Cookie (user, cookie))
-              else Error (`Cookie, "Session value doesn't match user session"))
+          | Some (user_uuid, cookie) -> (
+              match Storage.find_by_uuid store user_uuid with
+              | None -> Error (`Cookie, "Failed to find user with cookie")
+              | Some user ->
+                  if User_model.is_valid_cookie cookie current_time then
+                    match
+                      let* () = user_is_active user in
+                      user_is_admin user
+                    with
+                    | Error msg -> Error (`Cookie, msg)
+                    | Ok () -> Ok (`Cookie (user, cookie))
+                  else Error (`Cookie, "Session expired")))
     in
     let valid_token token_value =
       match Storage.find_by_api_token store token_value with
@@ -464,15 +447,10 @@ struct
             Middleware.http_response reqd ~data:(`String err)
               `Internal_server_error
         | Ok () -> f `Token user reqd)
-    | Ok (`Cookie (user, cookie)) -> (
-        Storage.update_user store
-          (Storage.update_cookie_usage cookie (Middleware.user_agent reqd) user);
-        Store.write_data store >>= function
-        | Error (`Msg err) ->
-            Logs.err (fun m -> m "Error with storage: %s" err);
-            Middleware.http_response reqd ~data:(`String err)
-              `Internal_server_error
-        | Ok () -> f `Cookie user reqd)
+    | Ok (`Cookie (user, cookie)) ->
+        let now = Mirage_ptime.now () in
+        Middleware.update_cookie_usage cookie (Middleware.user_agent reqd) now;
+        f `Cookie user reqd
 
   (* reply can send html. useMiddleware.http_response when you want to return json *)
   let reply reqd ?(content_type = "text/plain") ?(header_list = []) data status
@@ -601,17 +579,18 @@ struct
         Error message
 
   let sign_up reqd =
-    let now = Mirage_ptime.now () in
-    let csrf = Middleware.generate_csrf_cookie now reqd in
-    let csrf_cookie = csrf.name ^ "=" ^ csrf.value ^ ";Path=/;HttpOnly=true" in
+    let csrf_val = Middleware.generate_anonymous_csrf_token () in
+    let csrf_cookie =
+      Middleware.csrf_field ^ "=" ^ csrf_val ^ ";Path=/;HttpOnly=true"
+    in
     match Middleware.session_cookie_value reqd with
     | Ok x when x <> "" ->
         Middleware.redirect_to_page ~path:"/dashboard" reqd ()
     | Ok _ | Error (`Msg _) ->
         reply reqd ~content_type:"text/html"
-          (Sign_up.register_page ~csrf:csrf.value ~icon:"/images/robur.png")
+          (Sign_up.register_page ~csrf:csrf_val ~icon:"/images/robur.png")
           ~header_list:
-            [ ("Set-Cookie", csrf_cookie); ("X-MOLLY-CSRF", csrf.value) ]
+            [ ("Set-Cookie", csrf_cookie); ("X-MOLLY-CSRF", csrf_val) ]
           `OK
 
   let sign_in reqd =
@@ -641,7 +620,7 @@ struct
             Error (`Msg "Password must be at least 8 characters long.")
           else if form_csrf = "" then
             Error
-              (`Msg "CSRF token mismatch error. Please referesh and try again.")
+              (`Msg "CSRF token mismatch error. Please refresh and try again.")
           else
             let ( let* ) = Result.bind in
             let* name = Configuration.name_of_str name in
@@ -687,10 +666,11 @@ struct
                           ~user_agent:(Middleware.user_agent reqd)
                       in
                       Storage.add_user store user;
+                      Middleware.add_session user.uuid cookie;
                       Store.write_data store >>= function
                       | Ok () ->
                           let cookie_value =
-                            cookie.name ^ "=" ^ cookie.value
+                            Middleware.session_cookie ^ "=" ^ cookie.value
                             ^ ";Path=/;HttpOnly=true"
                           in
                           let header_list =
@@ -715,7 +695,7 @@ struct
                   Middleware.http_response reqd
                     ~data:
                       (`String
-                         "CSRF token mismatch error. Please referesh and try \
+                         "CSRF token mismatch error. Please refresh and try \
                           again.") `Bad_request)
         | _ ->
             Middleware.http_response reqd
@@ -758,26 +738,22 @@ struct
                 | Error (`Msg err) ->
                     Middleware.http_response reqd ~data:(`String err)
                       `Bad_request
-                | Ok (user, cookie) -> (
-                    Storage.update_user store user;
-                    Store.write_data store >>= function
-                    | Ok () ->
-                        let cookie_value =
-                          cookie.name ^ "=" ^ cookie.value
-                          ^ ";Path=/;HttpOnly=true"
-                        in
-                        let header_list =
-                          [
-                            ("Set-Cookie", cookie_value);
-                            ("location", "/dashboard");
-                          ]
-                        in
-                        Middleware.http_response reqd ~header_list
-                          ~data:(User_model.user_to_json user)
-                          `OK
-                    | Error (`Msg err) ->
-                        Middleware.http_response reqd ~data:(`String err)
-                          `Internal_server_error)))
+                | Ok (user, cookie) ->
+                    Middleware.prune_expired_csrf now;
+                    Middleware.prune_expired_sessions now;
+                    Middleware.add_session user.uuid cookie;
+                    let cookie_value =
+                      Middleware.session_cookie ^ "=" ^ cookie.value
+                      ^ ";Path=/;HttpOnly=true"
+                    in
+                    let header_list =
+                      [
+                        ("Set-Cookie", cookie_value); ("location", "/dashboard");
+                      ]
+                    in
+                    Middleware.http_response reqd ~header_list
+                      ~data:(User_model.user_to_json user)
+                      `OK))
         | _ ->
             Middleware.http_response reqd
               ~data:
@@ -791,30 +767,26 @@ struct
 
   let verify_email store (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf -> (
-        let email_verification_uuid = User_model.generate_uuid () in
-        let updated_user =
-          User_model.update_user user ~updated_at:now
-            ~email_verification_uuid:(Some email_verification_uuid) ()
+    let csrf = generate_csrf_token user now in
+    let email_verification_uuid = User_model.generate_uuid () in
+    let updated_user =
+      User_model.update_user user ~updated_at:now
+        ~email_verification_uuid:(Some email_verification_uuid) ()
+    in
+    Storage.update_user store updated_user;
+    Store.write_data store >>= function
+    | Ok () ->
+        let verification_link =
+          Utils.Email.generate_verification_link email_verification_uuid
         in
-        Storage.update_user store updated_user;
-        Store.write_data store >>= function
-        | Ok () ->
-            let verification_link =
-              Utils.Email.generate_verification_link email_verification_uuid
-            in
-            Logs.info (fun m -> m "Verification link is: %s" verification_link);
-            reply reqd ~content_type:"text/html"
-              (Verify_email.verify_page user ~csrf ~icon:"/images/robur.png")
-              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-              `OK
-        | Error (`Msg err) ->
-            Middleware.http_response ~api_meth:false reqd ~data:(`String err)
-              `Internal_server_error)
-    | Error err ->
-        Middleware.http_response ~api_meth:false reqd ~title:err.title
-          ~data:err.data `Internal_server_error
+        Logs.info (fun m -> m "Verification link is: %s" verification_link);
+        reply reqd ~content_type:"text/html"
+          (Verify_email.verify_page user ~csrf ~icon:"/images/robur.png")
+          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+          `OK
+    | Error (`Msg err) ->
+        Middleware.http_response ~api_meth:false reqd ~data:(`String err)
+          `Internal_server_error
 
   let verify_email_token store verification_token (user : User_model.user) reqd
       =
@@ -903,6 +875,7 @@ struct
               `Not_found
         | Some user -> (
             Storage.delete_user store user;
+            Middleware.remove_user_sessions user.uuid;
             Store.write_data store >>= function
             | Ok () ->
                 Middleware.http_response reqd
@@ -918,45 +891,37 @@ struct
           ~data:(`String "delete-user: Couldn't find a UUID in the JSON.")
           `Bad_request
 
-  let dashboard stack albatross_instances store _ (user : User_model.user) reqd
-      =
+  let dashboard stack albatross_instances _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        (* TODO use uuid in the future *)
-        user_unikernels stack albatross_instances user.name
-        >>= fun unikernels_by_albatross_instance ->
-        user_deceased_by_instance stack albatross_instances user.name
-        >>= fun deceased_unikernels_by_albatross_instance ->
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user
-             ~content:
-               (Unikernel_index.unikernel_index_layout
-                  unikernels_by_albatross_instance
-                  deceased_unikernels_by_albatross_instance now)
-             ~icon:"/images/robur.png" ())
-          `OK
-    | Error err ->
-        Middleware.http_response ~api_meth:false reqd ~title:err.title
-          ~data:err.data `Internal_server_error
+    let csrf = generate_csrf_token user now in
+    (* TODO use uuid in the future *)
+    user_unikernels stack albatross_instances user.name
+    >>= fun unikernels_by_albatross_instance ->
+    user_deceased_by_instance stack albatross_instances user.name
+    >>= fun deceased_unikernels_by_albatross_instance ->
+    reply reqd ~content_type:"text/html"
+      (Dashboard.dashboard_layout ~csrf user
+         ~content:
+           (Unikernel_index.unikernel_index_layout
+              unikernels_by_albatross_instance
+              deceased_unikernels_by_albatross_instance now)
+         ~icon:"/images/robur.png" ())
+      `OK
 
-  let account_page store _ (user : User_model.user) reqd =
+  let account_page _ (user : User_model.user) reqd =
     match Middleware.session_cookie_value reqd with
-    | Ok active_cookie_value -> (
+    | Ok active_cookie_value ->
         let now = Mirage_ptime.now () in
-        generate_csrf_token store user now reqd >>= function
-        | Ok csrf ->
-            reply reqd ~content_type:"text/html"
-              (Dashboard.dashboard_layout ~csrf user ~page_title:"Account"
-                 ~content:
-                   (User_account.user_account_layout user ~active_cookie_value
-                      now)
-                 ~icon:"/images/robur.png" ())
-              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-              `OK
-        | Error err ->
-            Middleware.http_response ~api_meth:false reqd ~title:err.title
-              ~data:err.data `Internal_server_error)
+        let csrf = generate_csrf_token user now in
+        let sessions = Middleware.user_sessions user.uuid in
+        reply reqd ~content_type:"text/html"
+          (Dashboard.dashboard_layout ~csrf user ~page_title:"Account"
+             ~content:
+               (User_account.user_account_layout user ~sessions
+                  ~active_cookie_value now)
+             ~icon:"/images/robur.png" ())
+          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+          `OK
     | Error (`Msg err) ->
         Middleware.http_response ~api_meth:false reqd ~data:(`String err)
           `Bad_request
@@ -1014,46 +979,25 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let new_user_cookies ~user ~filter ~redirect store reqd =
-    let now = Mirage_ptime.now () in
-    let cookies = Utils.SM.filter filter user.User_model.cookies in
-    let updated_user =
-      User_model.update_user user ~cookies ~updated_at:now ()
-    in
-    Storage.update_user store updated_user;
-    Store.write_data store >>= function
-    | Ok () -> redirect
-    | Error (`Msg err) ->
-        Logs.warn (fun m -> m "Storage error with %s" err);
-        Middleware.http_response reqd ~data:(`String err) `Internal_server_error
-
-  let close_sessions ?to_logout_cookie ?(logout = false) store
+  let close_sessions ?to_logout_cookie ?(logout = false)
       (user : User_model.user) _json_dict reqd =
     match Middleware.session_cookie_value reqd with
     | Ok cookie_value -> (
-        match User_model.user_session_cookie user cookie_value with
-        | Some cookie ->
-            let filter, redirect =
-              match (to_logout_cookie, logout) with
-              | None, false ->
-                  ( (fun _ (c : User_model.cookie) ->
-                      not
-                        (String.equal c.name User_model.session_cookie
-                        && c.value <> cookie.value)),
-                    Middleware.http_response reqd
-                      ~data:(`String "Closed all sessions successfully") `OK )
-              | _, true ->
-                  ( (fun _ (c : User_model.cookie) ->
-                      not (String.equal c.value cookie.value)),
-                    Middleware.http_response reqd
-                      ~data:(`String "Logout successful") `OK )
-              | Some to_logout_cookie_value, false ->
-                  ( (fun _ (c : User_model.cookie) ->
-                      not (String.equal to_logout_cookie_value c.value)),
-                    Middleware.redirect_to_page ~path:"/account"
-                      ~msg:"Closed session successfully" reqd () )
-            in
-            new_user_cookies ~user ~filter ~redirect store reqd
+        match Middleware.find_session cookie_value with
+        | Some (_u, cookie) -> (
+            match (to_logout_cookie, logout) with
+            | None, false ->
+                Middleware.close_other_sessions user.uuid cookie.value;
+                Middleware.http_response reqd
+                  ~data:(`String "Closed all sessions successfully") `OK
+            | _, true ->
+                Middleware.remove_session cookie.value;
+                Middleware.http_response reqd
+                  ~data:(`String "Logout successful") `OK
+            | Some to_logout_cookie_value, false ->
+                Middleware.remove_session to_logout_cookie_value;
+                Middleware.redirect_to_page ~path:"/account"
+                  ~msg:"Closed session successfully" reqd ())
         | None ->
             Middleware.http_response ~api_meth:false reqd
               ~data:(`String "Authentication cookie not found.") `Not_found)
@@ -1064,23 +1008,12 @@ struct
                ("Session cookie error: Couldn't find a session cookie. " ^ err))
           `Bad_request
 
-  let close_session store (user : User_model.user) json_dict reqd =
+  let close_session (_user : User_model.user) json_dict reqd =
     match Utils.Json.(get "session_value" json_dict) with
-    | Some (`String session_value) -> (
-        let now = Mirage_ptime.now () in
-        let cookies = Utils.SM.remove session_value user.cookies in
-        let updated_user =
-          User_model.update_user user ~cookies ~updated_at:now ()
-        in
-        Storage.update_user store updated_user;
-        Store.write_data store >>= function
-        | Ok () ->
-            Middleware.http_response reqd
-              ~data:(`String "Session closed successfully") `OK
-        | Error (`Msg err) ->
-            Logs.warn (fun m -> m "Storage error with %s" err);
-            Middleware.http_response reqd ~data:(`String err)
-              `Internal_server_error)
+    | Some (`String session_value) ->
+        Middleware.remove_session session_value;
+        Middleware.http_response reqd
+          ~data:(`String "Session closed successfully") `OK
     | _ ->
         Middleware.http_response reqd
           ~data:
@@ -1091,50 +1024,36 @@ struct
 
   let users store _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Users"
-             ~content:(Users_index.users_index_layout store.users now)
-             ~icon:"/images/robur.png" ())
-          `OK
-    | Error err ->
-        Middleware.http_response ~api_meth:false reqd ~title:err.title
-          ~data:err.data `Internal_server_error
+    let csrf = generate_csrf_token user now in
+    reply reqd ~content_type:"text/html"
+      (Dashboard.dashboard_layout ~csrf user ~page_title:"Users"
+         ~content:(Users_index.users_index_layout (Storage.users store) now)
+         ~icon:"/images/robur.png" ())
+      `OK
 
-  let albatross_settings store albatross_instances _ (user : User_model.user)
-      reqd =
+  let albatross_settings albatross_instances _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:"Albatross Settings"
-             ~content:
-               (Settings_page.settings_layout ~active_tab:Albatross
-                  (Albatross_config.albatross_config_layout albatross_instances))
-             ~icon:"/images/robur.png" ())
-          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-          `OK
-    | Error err ->
-        Middleware.http_response ~api_meth:false reqd ~title:err.title
-          ~data:err.data `Internal_server_error
+    let csrf = generate_csrf_token user now in
+    reply reqd ~content_type:"text/html"
+      (Dashboard.dashboard_layout ~csrf user ~page_title:"Albatross Settings"
+         ~content:
+           (Settings_page.settings_layout ~active_tab:Albatross
+              (Albatross_config.albatross_config_layout albatross_instances))
+         ~icon:"/images/robur.png" ())
+      ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+      `OK
 
   let email_settings store _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Email Settings"
-             ~content:
-               (Settings_page.settings_layout ~active_tab:Email
-                  (Email_config.email_config_layout store.email))
-             ~icon:"/images/robur.png" ())
-          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-          `OK
-    | Error err ->
-        Middleware.http_response ~api_meth:false reqd ~title:err.title
-          ~data:err.data `Internal_server_error
+    let csrf = generate_csrf_token user now in
+    reply reqd ~content_type:"text/html"
+      (Dashboard.dashboard_layout ~csrf user ~page_title:"Email Settings"
+         ~content:
+           (Settings_page.settings_layout ~active_tab:Email
+              (Email_config.email_config_layout (Storage.email store)))
+         ~icon:"/images/robur.png" ())
+      ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+      `OK
 
   let retry_initializing_instance stack albatross_instances
       (albatross : Albatross.t) _ _user reqd =
@@ -1207,41 +1126,36 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let deploy_form stack store http_client albatross _ (user : User_model.user)
-      reqd =
+  let deploy_form stack http_client albatross _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     Builder_web.fetch_unikernel_jobs http_client >>= fun builder_jobs ->
     user_unikernels_by_instance stack albatross user.name
     >>= fun unikernels_by_albatross_instance ->
     user_blocks_by_instance stack albatross user.name
     >>= fun blocks_by_albatross_instance ->
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf -> (
-        match Albatross_state.policy albatross ~domain:user.name with
-        | Ok p -> (
-            match p with
-            | Some user_policy ->
-                reply reqd ~content_type:"text/html"
-                  (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:"Deploy a Unikernel"
-                     ~content:
-                       (Unikernel_create.unikernel_create_layout ~user_policy
-                          unikernels_by_albatross_instance
-                          blocks_by_albatross_instance
-                          albatross.configuration.name builder_jobs)
-                     ~icon:"/images/robur.png" ())
-                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-                  `OK
-            | None ->
-                Middleware.http_response ~api_meth:false reqd
-                  ~title:"Resource Policy error"
-                  ~data:(`String "No user policy") `Bad_request)
-        | Error err ->
+    let csrf = generate_csrf_token user now in
+    match Albatross_state.policy albatross ~domain:user.name with
+    | Ok p -> (
+        match p with
+        | Some user_policy ->
+            reply reqd ~content_type:"text/html"
+              (Dashboard.dashboard_layout ~csrf user
+                 ~page_title:"Deploy a Unikernel"
+                 ~content:
+                   (Unikernel_create.unikernel_create_layout ~user_policy
+                      unikernels_by_albatross_instance
+                      blocks_by_albatross_instance albatross.configuration.name
+                      builder_jobs)
+                 ~icon:"/images/robur.png" ())
+              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+              `OK
+        | None ->
             Middleware.http_response ~api_meth:false reqd
-              ~title:"Resource Policy error" ~data:(`String err) `Bad_request)
+              ~title:"Resource Policy error" ~data:(`String "No user policy")
+              `Bad_request)
     | Error err ->
-        Middleware.http_response ~api_meth:false reqd ~title:err.title
-          ~data:err.data `Internal_server_error
+        Middleware.http_response ~api_meth:false reqd
+          ~title:"Resource Policy error" ~data:(`String err) `Bad_request
 
   let unikernel_info stack albatross_instances _ (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
@@ -1487,7 +1401,7 @@ struct
           (Utils.display_alert "Missing max number of clones to spawn." `Error)
           `Bad_request
 
-  let unikernel_info_one stack store albatross unikernel_name _
+  let unikernel_info_one stack albatross unikernel_name _
       (user : User_model.user) reqd =
     (* TODO use uuid in the future *)
     user_unikernel stack albatross ~user_name:user.name ~unikernel_name
@@ -1502,38 +1416,33 @@ struct
         in
         Middleware.http_response ~api_meth:false reqd
           ~title:"Unikernel Not Found" ~data:(`String data) `Not_found
-    | Ok unikernel -> (
+    | Ok unikernel ->
         let now = Mirage_ptime.now () in
-        generate_csrf_token store user now reqd >>= function
-        | Ok csrf ->
-            let last_update_time =
-              Option.map
-                (fun (u : User_model.unikernel_update) -> u.timestamp)
-                (Utils.LM.find_opt unikernel_name user.unikernel_updates)
-            in
-            let scaling_policy =
-              User_model.Scaling_policy_map.find_opt
-                (unikernel_name, albatross.configuration.name)
-                user.scaling_policies
-            in
-            user_max_allowed_unikernel_instances stack albatross user.name
-            >>= fun max_allowed ->
-            reply reqd ~content_type:"text/html"
-              (Dashboard.dashboard_layout ~csrf user
-                 ~content:
-                   (Unikernel_single.unikernel_single_layout ~unikernel_name
-                      ~instance_name:albatross.configuration.name ~max_allowed
-                      unikernel ~last_update_time ~current_time:now
-                      scaling_policy)
-                 ~icon:"/images/robur.png" ())
-              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-              `OK
-        | Error err ->
-            Middleware.http_response ~api_meth:false reqd ~title:err.title
-              ~data:err.data `Internal_server_error)
+        let csrf = generate_csrf_token user now in
+        let last_update_time =
+          Option.map
+            (fun (u : User_model.unikernel_update) -> u.timestamp)
+            (Utils.LM.find_opt unikernel_name user.unikernel_updates)
+        in
+        let scaling_policy =
+          User_model.Scaling_policy_map.find_opt
+            (unikernel_name, albatross.configuration.name)
+            user.scaling_policies
+        in
+        user_max_allowed_unikernel_instances stack albatross user.name
+        >>= fun max_allowed ->
+        reply reqd ~content_type:"text/html"
+          (Dashboard.dashboard_layout ~csrf user
+             ~content:
+               (Unikernel_single.unikernel_single_layout ~unikernel_name
+                  ~instance_name:albatross.configuration.name ~max_allowed
+                  unikernel ~last_update_time ~current_time:now scaling_policy)
+             ~icon:"/images/robur.png" ())
+          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+          `OK
 
-  let unikernel_prepare_update stack store http_client albatross unikernel_name
-      _ (user : User_model.user) reqd =
+  let unikernel_prepare_update stack http_client albatross unikernel_name _
+      (user : User_model.user) reqd =
     let open Update_flow in
     let pipeline =
       let* name, unikernel =
@@ -1543,24 +1452,20 @@ struct
       check_for_update name unikernel http_client
     in
     pipeline >>= function
-    | Ok (Update_available (name, unikernel, build_comparison)) -> (
+    | Ok (Update_available (name, unikernel, build_comparison)) ->
         let now = Mirage_ptime.now () in
-        generate_csrf_token store user now reqd >>= function
-        | Ok csrf ->
-            reply reqd ~content_type:"text/html"
-              (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:(Vmm_core.Name.to_string name ^ " Update")
-                 ~content:
-                   (Unikernel_update.unikernel_update_layout
-                      ~instance_name:albatross.configuration.name
-                      ~unikernel_name:(Configuration.name_to_str unikernel_name)
-                      (name, unikernel) now build_comparison)
-                 ~icon:"/images/robur.png" ())
-              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-              `OK
-        | Error err ->
-            Middleware.http_response ~api_meth:false reqd ~title:err.title
-              ~data:err.data `Internal_server_error)
+        let csrf = generate_csrf_token user now in
+        reply reqd ~content_type:"text/html"
+          (Dashboard.dashboard_layout ~csrf user
+             ~page_title:(Vmm_core.Name.to_string name ^ " Update")
+             ~content:
+               (Unikernel_update.unikernel_update_layout
+                  ~instance_name:albatross.configuration.name
+                  ~unikernel_name:(Configuration.name_to_str unikernel_name)
+                  (name, unikernel) now build_comparison)
+             ~icon:"/images/robur.png" ())
+          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+          `OK
     | Ok (No_update_needed (name, uuid)) ->
         Logs.info (fun m ->
             m "No update found for %s (uuid %s)"
@@ -2322,41 +2227,36 @@ struct
         user_deceased_by_instance stack albatross_instances u.name
         >>= fun deceased_unikernels ->
         let now = Mirage_ptime.now () in
-        generate_csrf_token store user now reqd >>= function
-        | Ok csrf -> (
-            let reply content =
-              reply reqd ~content_type:"text/html"
-                (Dashboard.dashboard_layout ~csrf user
-                   ~page_title:
-                     (String.capitalize_ascii
-                        (Configuration.name_to_str u.name))
-                   ~content ~icon:"/images/robur.png" ())
-                ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-                `OK
-            in
-            match page with
-            | `Profile ->
-                reply
-                  (User_single.user_single_layout ~active_tab:Profile
-                     (User_single.user_profile u)
-                     u.uuid)
-            | `Unikernels ->
-                reply
-                  (User_single.user_single_layout ~active_tab:Unikernels
-                     (Unikernel_index.unikernel_index_layout unikernels
-                        deceased_unikernels now)
-                     u.uuid)
-            | `Policy ->
-                reply
-                  (User_single.user_single_layout ~active_tab:Policy
-                     (User_single.user_policy u
-                        ~empty_policy:Albatross_state.empty_policy
-                        (Albatross_state.all_policies ~domain:u.name
-                           albatross_instances))
-                     u.uuid))
-        | Error err ->
-            Middleware.http_response ~api_meth:false ~title:err.title
-              ~data:err.data reqd `Internal_server_error)
+        let csrf = generate_csrf_token user now in
+        let reply content =
+          reply reqd ~content_type:"text/html"
+            (Dashboard.dashboard_layout ~csrf user
+               ~page_title:
+                 (String.capitalize_ascii (Configuration.name_to_str u.name))
+               ~content ~icon:"/images/robur.png" ())
+            ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+            `OK
+        in
+        match page with
+        | `Profile ->
+            reply
+              (User_single.user_single_layout ~active_tab:Profile
+                 (User_single.user_profile u)
+                 u.uuid)
+        | `Unikernels ->
+            reply
+              (User_single.user_single_layout ~active_tab:Unikernels
+                 (Unikernel_index.unikernel_index_layout unikernels
+                    deceased_unikernels now)
+                 u.uuid)
+        | `Policy ->
+            reply
+              (User_single.user_single_layout ~active_tab:Policy
+                 (User_single.user_policy u
+                    ~empty_policy:Albatross_state.empty_policy
+                    (Albatross_state.all_policies ~domain:u.name
+                       albatross_instances))
+                 u.uuid))
     | None ->
         Middleware.http_response ~api_meth:false
           ~data:
@@ -2373,25 +2273,20 @@ struct
                   (Albatross_state.policy albatross ~domain:u.name)))
         in
         match Albatross_state.policy_resource_avalaible albatross with
-        | Ok unallocated_resources -> (
+        | Ok unallocated_resources ->
             let now = Mirage_ptime.now () in
-            generate_csrf_token store user now reqd >>= function
-            | Ok csrf ->
-                reply reqd ~content_type:"text/html"
-                  (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:
-                       (String.capitalize_ascii
-                          (Configuration.name_to_str u.name))
-                     ~content:
-                       (Update_policy.update_policy_layout u
-                          albatross.configuration.name ~user_policy
-                          ~unallocated_resources)
-                     ~icon:"/images/robur.png" ())
-                  ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-                  `OK
-            | Error err ->
-                Middleware.http_response ~api_meth:false ~title:err.title
-                  ~data:err.data reqd `Bad_request)
+            let csrf = generate_csrf_token user now in
+            reply reqd ~content_type:"text/html"
+              (Dashboard.dashboard_layout ~csrf user
+                 ~page_title:
+                   (String.capitalize_ascii (Configuration.name_to_str u.name))
+                 ~content:
+                   (Update_policy.update_policy_layout u
+                      albatross.configuration.name ~user_policy
+                      ~unallocated_resources)
+                 ~icon:"/images/robur.png" ())
+              ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+              `OK
         | Error err ->
             Middleware.http_response ~api_meth:false
               ~data:(`String ("Couldn't get unallocated resources: " ^ err))
@@ -2504,7 +2399,7 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let blocks stack store albatross _ (user : User_model.user) reqd =
+  let blocks stack albatross _ (user : User_model.user) reqd =
     user_blocks_by_instance stack albatross user.name >>= fun blocks ->
     let now = Mirage_ptime.now () in
     let policy =
@@ -2512,21 +2407,17 @@ struct
         ~error:(fun _ -> None)
         (Albatross_state.policy ~domain:user.name albatross)
     in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:
-               (String.capitalize_ascii (Configuration.name_to_str user.name))
-             ~content:
-               (Block_index.block_index_layout albatross.configuration.name
-                  blocks policy)
-             ~icon:"/images/robur.png" ())
-          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-          `OK
-    | Error err ->
-        Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
-          reqd `Bad_request
+    let csrf = generate_csrf_token user now in
+    reply reqd ~content_type:"text/html"
+      (Dashboard.dashboard_layout ~csrf user
+         ~page_title:
+           (String.capitalize_ascii (Configuration.name_to_str user.name))
+         ~content:
+           (Block_index.block_index_layout albatross.configuration.name blocks
+              policy)
+         ~icon:"/images/robur.png" ())
+      ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+      `OK
 
   let delete_block stack albatross_instances (user : User_model.user) json_dict
       reqd =
@@ -2835,33 +2726,28 @@ struct
         Middleware.http_response reqd
           ~data:(`String "Couldn't find block name in json") `Bad_request
 
-  let account_usage stack store albatross _ (user : User_model.user) reqd =
+  let account_usage stack albatross _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        user_blocks_by_instance stack albatross user.name >>= fun blocks ->
-        user_unikernels_by_instance stack albatross user.name
-        >>= fun unikernels ->
-        let policy =
-          Option.value ~default:Albatross_state.empty_policy
-            (Option.join
-               (Result.to_option
-                  (Albatross_state.policy albatross ~domain:user.name)))
-        in
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Usage"
-             ~content:
-               (Account_usage.account_usage_layout albatross.configuration.name
-                  policy unikernels blocks)
-             ~icon:"/images/robur.png" ())
-          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-          `OK
-    | Error err ->
-        Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
-          reqd `Internal_server_error
+    let csrf = generate_csrf_token user now in
+    user_blocks_by_instance stack albatross user.name >>= fun blocks ->
+    user_unikernels_by_instance stack albatross user.name >>= fun unikernels ->
+    let policy =
+      Option.value ~default:Albatross_state.empty_policy
+        (Option.join
+           (Result.to_option
+              (Albatross_state.policy albatross ~domain:user.name)))
+    in
+    reply reqd ~content_type:"text/html"
+      (Dashboard.dashboard_layout ~csrf user ~page_title:"Usage"
+         ~content:
+           (Account_usage.account_usage_layout albatross.configuration.name
+              policy unikernels blocks)
+         ~icon:"/images/robur.png" ())
+      ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+      `OK
 
-  let choose_instance store (albatross_instances : Albatross_state.a_map)
-      callback _ (user : User_model.user) reqd =
+  let choose_instance (albatross_instances : Albatross_state.a_map) callback _
+      (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
     if Utils.LM.cardinal albatross_instances = 1 then
       let instance_name, _ = Utils.LM.min_binding albatross_instances in
@@ -2870,34 +2756,26 @@ struct
           (Middleware.construct_instance_redirect_url callback instance_name)
         reqd ()
     else
-      generate_csrf_token store user now reqd >>= function
-      | Ok csrf ->
-          reply reqd ~content_type:"text/html"
-            (Dashboard.dashboard_layout ~csrf user ~page_title:"Choose instance"
-               ~content:
-                 (Albatross_instances.select_instance user
-                    (Utils.LM.bindings albatross_instances)
-                    callback)
-               ~icon:"/images/robur.png" ())
-            ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-            `OK
-      | Error err ->
-          Middleware.http_response ~api_meth:false ~title:err.title
-            ~data:err.data reqd `Internal_server_error
+      let csrf = generate_csrf_token user now in
+      reply reqd ~content_type:"text/html"
+        (Dashboard.dashboard_layout ~csrf user ~page_title:"Choose instance"
+           ~content:
+             (Albatross_instances.select_instance user
+                (Utils.LM.bindings albatross_instances)
+                callback)
+           ~icon:"/images/robur.png" ())
+        ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+        `OK
 
-  let api_tokens store _ (user : User_model.user) reqd =
+  let api_tokens _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Tokens"
-             ~content:(Tokens_index.tokens_index_layout user.tokens now)
-             ~icon:"/images/robur.png" ())
-          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-          `OK
-    | Error err ->
-        Middleware.http_response reqd ~title:err.title ~data:err.data
-          `Internal_server_error
+    let csrf = generate_csrf_token user now in
+    reply reqd ~content_type:"text/html"
+      (Dashboard.dashboard_layout ~csrf user ~page_title:"Tokens"
+         ~content:(Tokens_index.tokens_index_layout user.tokens now)
+         ~icon:"/images/robur.png" ())
+      ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+      `OK
 
   let create_token store (user : User_model.user) json_dict reqd =
     match
@@ -2990,20 +2868,15 @@ struct
                   (Utils.Json.to_string (`Assoc json_dict))))
           `Bad_request
 
-  let view_albatross_error_logs store albatross _ (user : User_model.user) reqd
-      =
+  let view_albatross_error_logs albatross _ (user : User_model.user) reqd =
     let now = Mirage_ptime.now () in
-    generate_csrf_token store user now reqd >>= function
-    | Ok csrf ->
-        reply reqd ~content_type:"text/html"
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Albatross Errors"
-             ~content:(Albatross_status.albatross_status_layout albatross)
-             ~icon:"/images/robur.png" ())
-          ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
-          `OK
-    | Error err ->
-        Middleware.http_response ~api_meth:false ~title:err.title ~data:err.data
-          reqd `Internal_server_error
+    let csrf = generate_csrf_token user now in
+    reply reqd ~content_type:"text/html"
+      (Dashboard.dashboard_layout ~csrf user ~page_title:"Albatross Errors"
+         ~content:(Albatross_status.albatross_status_layout albatross)
+         ~icon:"/images/robur.png" ())
+      ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
+      `OK
 
   let with_valid_email_config json_dict reqd f =
     match Utils.Email.t_of_json json_dict with
@@ -3505,8 +3378,8 @@ struct
           Logs.info (fun m -> m "Starting background update...");
           Lwt.choose
             [
-              run_background_update_check happy_eyeballs store.Storage.users
-                stack store.email !albatross_instances_ref http_client;
+              run_background_update_check happy_eyeballs (Storage.users store)
+                stack (Storage.email store) !albatross_instances_ref http_client;
               ( Mirage_sleep.ns (Duration.of_hour 1) >|= fun () ->
                 Logs.warn (fun m ->
                     m "Background update timed out after 1 hour") );
@@ -3759,31 +3632,27 @@ struct
                 Middleware.redirect_to_instance_selector "/dashboard" reqd ())
         | "/dashboard" ->
             check_meth `GET (fun () ->
-                authenticate store reqd
-                  (dashboard stack !albatross_instances store))
+                authenticate store reqd (dashboard stack !albatross_instances))
         | "/account" ->
-            check_meth `GET (fun () ->
-                authenticate store reqd (account_page store))
+            check_meth `GET (fun () -> authenticate store reqd account_page)
         | "/account/password/update" ->
             check_meth `POST (fun () ->
                 authenticate store reqd
                   (extract_json_csrf_token (update_password store)))
         | "/api/account/sessions/close" ->
             check_meth `POST (fun () ->
-                authenticate store reqd
-                  (extract_json_csrf_token (close_sessions store)))
+                authenticate store reqd (extract_json_csrf_token close_sessions))
         | "/logout" ->
             check_meth `POST (fun () ->
                 authenticate store reqd
-                  (extract_json_csrf_token (close_sessions ~logout:true store)))
+                  (extract_json_csrf_token (close_sessions ~logout:true)))
         | "/api/account/session/close" ->
             check_meth `POST (fun () ->
-                authenticate store reqd
-                  (extract_json_csrf_token (close_session store)))
+                authenticate store reqd (extract_json_csrf_token close_session))
         | "/blocks" ->
             check_meth `GET (fun () ->
                 authenticate store reqd
-                  (albatross_instance "/blocks" (blocks stack store)))
+                  (albatross_instance "/blocks" (blocks stack)))
         | "/api/block/delete" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -3808,8 +3677,7 @@ struct
                     create_or_upload_block stack !albatross_instances `Upload
                       token_or_cookie user reqd))
         | "/tokens" ->
-            check_meth `GET (fun () ->
-                authenticate store reqd (api_tokens store))
+            check_meth `GET (fun () -> authenticate store reqd api_tokens)
         | "/api/tokens/create" ->
             check_meth `POST (fun () ->
                 authenticate ~api_meth:true store reqd
@@ -3828,7 +3696,7 @@ struct
         | "/usage" ->
             check_meth `GET (fun () ->
                 authenticate store reqd
-                  (albatross_instance "/usage" (account_usage stack store)))
+                  (albatross_instance "/usage" (account_usage stack)))
         | "/select/instance" ->
             check_meth `GET (fun () ->
                 let callback_link =
@@ -3841,7 +3709,7 @@ struct
                   | None -> "/dashboard"
                 in
                 authenticate store reqd
-                  (choose_instance store !albatross_instances callback_link))
+                  (choose_instance !albatross_instances callback_link))
         | "/admin/user/profile" ->
             check_meth `GET (fun () ->
                 get_uuid_admin_page
@@ -3872,12 +3740,12 @@ struct
         | "/admin/settings/albatross" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd
-                  (albatross_settings store !albatross_instances))
+                  (albatross_settings !albatross_instances))
         | "/admin/albatross/errors" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true store reqd
                   (albatross_instance req.H1.Request.target
-                     (view_albatross_error_logs store)))
+                     view_albatross_error_logs))
         | "/api/admin/albatross/retry" ->
             check_meth `GET (fun () ->
                 authenticate ~check_admin:true ~api_meth:true store reqd
@@ -3937,7 +3805,7 @@ struct
             check_meth `GET (fun () ->
                 authenticate store reqd
                   (albatross_instance req.H1.Request.target (fun albatross ->
-                       unikernel (unikernel_info_one stack store albatross))))
+                       unikernel (unikernel_info_one stack albatross))))
         | "/unikernel/console" ->
             check_meth `GET (fun () ->
                 authenticate store reqd
@@ -3948,7 +3816,7 @@ struct
             check_meth `GET (fun () ->
                 authenticate store reqd
                   (albatross_instance "/unikernel/deploy"
-                     (deploy_form stack store http_client)))
+                     (deploy_form stack http_client)))
         | "/api/unikernel/monitoring/status" ->
             check_meth `GET (fun () ->
                 authenticate store reqd ~check_token:true ~api_meth:true
@@ -3997,8 +3865,7 @@ struct
                 authenticate store reqd
                   (albatross_instance req.H1.Request.target (fun albatross ->
                        unikernel
-                         (unikernel_prepare_update stack store http_client
-                            albatross))))
+                         (unikernel_prepare_update stack http_client albatross))))
         | "/api/unikernel/update" ->
             check_meth `POST (fun () ->
                 authenticate ~check_token:true ~api_meth:true store reqd
@@ -4016,8 +3883,7 @@ struct
                 authenticate store reqd
                   (albatross_instance req.H1.Request.target (fun albatross ->
                        unikernel
-                         (unikernel_prepare_update stack store http_client
-                            albatross))))
+                         (unikernel_prepare_update stack http_client albatross))))
         | _ ->
             Middleware.http_response ~api_meth:false ~title:"Page not found"
               ~data:(`String "This page cannot be found.") reqd `Bad_request)
