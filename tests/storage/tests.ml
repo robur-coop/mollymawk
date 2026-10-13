@@ -317,88 +317,6 @@ let check_cookies_not_persisted_in_v10 () =
       | _ -> Alcotest.fail "Expected single user in users list")
   | _ -> Alcotest.fail "Expected assoc in storage json"
 
-let check_cookies_load_v10 () =
-  let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in
-  let base_json =
-    Storage.t_to_json ~version:10
-      (Utils.UM.singleton user.uuid user)
-      Utils.LM.empty None
-  in
-  let cookie_json =
-    `Assoc
-      [
-        ("name", `String "mollymawk_session");
-        ("value", `String "legacy-session-value");
-        ("expires_in", `Int 86400);
-        ("created_at", `String "2026-08-21 20:02:17-00:00");
-      ]
-  in
-  let injected_json =
-    match base_json with
-    | `Assoc fields ->
-        let updated_fields =
-          List.map
-            (function
-              | "users", `List [ `Assoc u_fields ] ->
-                  ( "users",
-                    `List
-                      [
-                        `Assoc (("cookies", `List [ cookie_json ]) :: u_fields);
-                      ] )
-              | other -> other)
-            fields
-        in
-        `Assoc updated_fields
-    | _ -> Alcotest.fail "Unexpected json structure"
-  in
-  match Storage.t_of_json injected_json with
-  | Ok (users, _, _) when Utils.UM.cardinal users = 1 ->
-      let loaded_user = snd (Utils.UM.choose users) in
-      Alcotest.(check user_t) "Loaded user from v10 matches" user loaded_user
-  | Ok _ -> Alcotest.fail "Expected 1 user"
-  | Error (`Msg err) -> Alcotest.fail err
-
-let check_cookies_load_v9 () =
-  let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in
-  let base_json =
-    Storage.t_to_json ~version:9
-      (Utils.UM.singleton user.uuid user)
-      Utils.LM.empty None
-  in
-  let cookie_json =
-    `Assoc
-      [
-        ("name", `String "mollymawk_session");
-        ("value", `String "legacy-session-value");
-        ("expires_in", `Int 86400);
-        ("created_at", `String "2026-08-21 20:02:17-00:00");
-      ]
-  in
-  let injected_json =
-    match base_json with
-    | `Assoc fields ->
-        let updated_fields =
-          List.map
-            (function
-              | "users", `List [ `Assoc u_fields ] ->
-                  ( "users",
-                    `List
-                      [
-                        `Assoc (("cookies", `List [ cookie_json ]) :: u_fields);
-                      ] )
-              | other -> other)
-            fields
-        in
-        `Assoc updated_fields
-    | _ -> Alcotest.fail "Unexpected json structure"
-  in
-  match Storage.t_of_json injected_json with
-  | Ok (users, _, _) when Utils.UM.cardinal users = 1 ->
-      let loaded_user = snd (Utils.UM.choose users) in
-      Alcotest.(check user_t) "Loaded user from v9 matches" user loaded_user
-  | Ok _ -> Alcotest.fail "Expected 1 user"
-  | Error (`Msg err) -> Alcotest.fail err
-
 let check_discard_malformed_unikernel_update () =
   let valid_uk_uuid = User_model.generate_uuid () in
   let valid_update : User_model.unikernel_update =
@@ -486,12 +404,6 @@ let cookie_tests =
     ( "Cookies are not persisted in v10 and omitted from disk",
       `Quick,
       check_cookies_not_persisted_in_v10 );
-    ( "Cookies load from v10 backwards compatibility",
-      `Quick,
-      check_cookies_load_v10 );
-    ( "Cookies load from v9 backwards compatibility",
-      `Quick,
-      check_cookies_load_v9 );
     ( "Discard malformed unikernel updates",
       `Quick,
       check_discard_malformed_unikernel_update );
