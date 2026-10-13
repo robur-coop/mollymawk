@@ -917,7 +917,7 @@ struct
         reply reqd ~content_type:"text/html"
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Account"
              ~content:
-               (User_account.user_account_layout user ~sessions
+               (User_account.user_account_layout user sessions
                   ~active_cookie_value now)
              ~icon:"/images/robur.png" ())
           ~header_list:[ ("X-MOLLY-CSRF", csrf) ]
