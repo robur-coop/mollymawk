@@ -15,7 +15,6 @@ type t = {
   (* these fields below are not persisted to disk*)
   mutable by_name : Uuidm.t Utils.LM.t;
   mutable by_email : Uuidm.t Utils.SM.t;
-  mutable by_cookie : Uuidm.t Utils.SM.t;
   mutable by_token : Uuidm.t Utils.SM.t;
   mutable by_verification_token : Uuidm.t Utils.SM.t;
 }
@@ -30,10 +29,6 @@ let email_to_key (email : Mrmime.Mailbox.t) =
 let register_user_indexes t (u : User_model.user) =
   t.by_name <- Utils.LM.add u.name u.uuid t.by_name;
   t.by_email <- Utils.SM.add (email_to_key u.email) u.uuid t.by_email;
-  t.by_cookie <-
-    Utils.SM.fold
-      (fun _ (c : User_model.cookie) acc -> Utils.SM.add c.value u.uuid acc)
-      u.cookies t.by_cookie;
   t.by_token <-
     Utils.SM.fold
       (fun _ (tok : User_model.token) acc -> Utils.SM.add tok.value u.uuid acc)
@@ -47,10 +42,6 @@ let register_user_indexes t (u : User_model.user) =
 let unregister_user_indexes t (u : User_model.user) =
   t.by_name <- Utils.LM.remove u.name t.by_name;
   t.by_email <- Utils.SM.remove (email_to_key u.email) t.by_email;
-  t.by_cookie <-
-    Utils.SM.fold
-      (fun _ (c : User_model.cookie) acc -> Utils.SM.remove c.value acc)
-      u.cookies t.by_cookie;
   t.by_token <-
     Utils.SM.fold
       (fun _ (tok : User_model.token) acc -> Utils.SM.remove tok.value acc)
@@ -70,7 +61,6 @@ let create ?(users = Utils.UM.empty) ?(configurations = Utils.LM.empty) ?email
       email;
       by_name = Utils.LM.empty;
       by_email = Utils.SM.empty;
-      by_cookie = Utils.SM.empty;
       by_token = Utils.SM.empty;
       by_verification_token = Utils.SM.empty;
     }
@@ -118,8 +108,8 @@ let t_of_json json =
               (fun acc js ->
                 let* acc = acc in
                 let* user =
-                  if v = 9 then User_model.(user_v9_of_json cookie_of_json) js
-                  else User_model.(user_of_json cookie_of_json) js
+                  if v = 9 then User_model.user_v9_of_json js
+                  else User_model.user_of_json js
                 in
                 Ok (Utils.UM.add user.uuid user acc))
               (Ok Utils.UM.empty) users
@@ -151,17 +141,6 @@ let find_by_name t name =
 
 let find_by_uuid t uuid = Utils.UM.find_opt uuid t.users
 
-let find_by_cookie t cookie_value =
-  match Utils.SM.find_opt cookie_value t.by_cookie with
-  | Some uuid -> (
-      match Utils.UM.find_opt uuid t.users with
-      | Some user -> (
-          match User_model.user_session_cookie user cookie_value with
-          | Some c -> Some (user, c)
-          | None -> None)
-      | None -> None)
-  | None -> None
-
 let find_by_api_token t token =
   match Utils.SM.find_opt token t.by_token with
   | Some uuid -> (
@@ -177,12 +156,6 @@ let increment_token_usage (token : User_model.token) (user : User_model.user) =
   let token = { token with usage_count = token.usage_count + 1 } in
   let tokens = Utils.SM.add token.value token user.tokens in
   User_model.update_user user ~tokens ()
-
-let update_cookie_usage (cookie : User_model.cookie) user_agent
-    (user : User_model.user) =
-  let cookie = { cookie with user_agent } in
-  let cookies = Utils.SM.add cookie.value cookie user.cookies in
-  User_model.update_user user ~cookies ()
 
 let update_user_unikernel_updates (new_update : User_model.unikernel_update)
     (user : User_model.user) =

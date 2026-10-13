@@ -11,4 +11,5 @@ let () =
       ("Monitoring & Scaling", Test_scaling.tests);
       ("Email Operations", Test_email.tests);
       ("Policy Operations", Test_policy.tests);
+      ("Middleware Cookies", Test_middleware.tests);
     ]

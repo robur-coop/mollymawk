@@ -215,20 +215,17 @@ let query_endpoint handler raw_request_str =
   finished_promise >>= fun () -> Lwt.return (Buffer.contents output_buffer)
 
 let init_mock_store () =
+  Middleware.reset_state ();
   let block = Mock_Block.create () in
   App.Store.connect block >>= function
   | Error (`Msg msg) -> failwith msg
   | Ok store -> Lwt.return store
 
-let add_user_csrf store (user : User_model.user) =
-  let csrf = Test_utils.make_csrf_cookie () in
-  let user =
-    User_model.update_user user
-      ~cookies:(Utils.SM.add csrf.value csrf user.cookies)
-      ()
-  in
-  Storage.update_user store user;
-  (user, csrf.value)
+let add_user_csrf (user : User_model.user) =
+  let now = Mirage_ptime.now () in
+  let token = Test_utils.make_csrf_token () in
+  Middleware.register_csrf token user.uuid now;
+  (user, token)
 
 let add_user_token ?(name = "test-token") ?(expiry = 86400) store
     (user : User_model.user) =
@@ -257,8 +254,12 @@ let setup_user ?name ?email ?(password = "Password123!") store =
   query_endpoint handler req >>= fun _raw_resp ->
   let name_lbl = Test_utils.label_of_string_exn name in
   let user = Option.get (Storage.find_by_name store name_lbl) in
-  let session_cookie = Test_utils.user_session_cookie user in
-  let user, csrf_token = add_user_csrf store user in
+  let session_cookie =
+    match Middleware.user_sessions user.uuid with
+    | m when not (Utils.SM.is_empty m) -> (snd (Utils.SM.choose m)).value
+    | _ -> failwith "no session cookie found"
+  in
+  let user, csrf_token = add_user_csrf user in
   Lwt.return (user, session_cookie, csrf_token)
 
 let setup_user_with_token ?name ?email ?password ?(token_name = "test-token")

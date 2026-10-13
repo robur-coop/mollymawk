@@ -1,4 +1,4 @@
-let user_account_layout (user : User_model.user) ~active_cookie_value
+let user_account_layout (user : User_model.user) sessions ~active_cookie_value
     current_time =
   let user_name = Configuration.name_to_str user.name in
   Tyxml_html.(
@@ -211,128 +211,120 @@ let user_account_layout (user : User_model.user) ~active_cookie_value
                     div
                       (Utils.SM.fold
                          (fun _ (cookie : User_model.cookie) acc ->
-                           if String.equal cookie.name User_model.session_cookie
-                           then
-                             div
-                               ~a:[ a_class [ "flex items-center my-4" ] ]
-                               [
-                                 div
-                                   [
-                                     i
-                                       ~a:
+                           div
+                             ~a:[ a_class [ "flex items-center my-4" ] ]
+                             [
+                               div
+                                 [
+                                   i
+                                     ~a:
+                                       [
+                                         a_class
+                                           [ "fa-solid fa-desktop text-5xl" ];
+                                       ]
+                                     [];
+                                 ];
+                               div
+                                 ~a:[ a_class [ "ml-3" ] ]
+                                 [
+                                   (* TODO: Parse the user-agent string to extract information like OS, browser etc*)
+                                   p
+                                     ~a:[ a_class [ "text-gray-600" ] ]
+                                     [
+                                       txt
+                                         (match cookie.user_agent with
+                                         | Some agent -> agent
+                                         | None -> "User-Agent unavailable");
+                                     ];
+                                   p
+                                     ~a:[ a_class [ "text-sm text-gray-600" ] ]
+                                     [
+                                       txt "Last active: ";
+                                       (if
+                                          String.equal cookie.value
+                                            active_cookie_value
+                                        then
+                                          span
+                                            [
+                                              span [ txt "now" ];
+                                              span
+                                                ~a:
+                                                  [
+                                                    a_class
+                                                      [
+                                                        "text-primary-500 \
+                                                         font-semibold";
+                                                      ];
+                                                  ]
+                                                [ txt " This device" ];
+                                            ]
+                                        else
+                                          span
+                                            [
+                                              txt
+                                                (Utils.TimeHelper.time_ago
+                                                   ~current_time
+                                                   ~check_time:
+                                                     cookie.last_access);
+                                            ]);
+                                     ];
+                                   p
+                                     ~a:[ a_class [ "text-sm text-gray-600" ] ]
+                                     [
+                                       txt "First use: ";
+                                       span
                                          [
-                                           a_class
-                                             [ "fa-solid fa-desktop text-5xl" ];
-                                         ]
-                                       [];
-                                   ];
-                                 div
-                                   ~a:[ a_class [ "ml-3" ] ]
-                                   [
-                                     (* TODO: Parse the user-agent string to extract information like OS, browser etc*)
-                                     p
-                                       ~a:[ a_class [ "text-gray-600" ] ]
-                                       [
-                                         txt
-                                           (match cookie.user_agent with
-                                           | Some agent -> agent
-                                           | None -> "User-Agent unavailable");
-                                       ];
-                                     p
-                                       ~a:
-                                         [ a_class [ "text-sm text-gray-600" ] ]
-                                       [
-                                         txt "Last active: ";
-                                         (if
-                                            String.equal cookie.value
-                                              active_cookie_value
-                                          then
-                                            span
+                                           txt
+                                             (Utils.TimeHelper.time_ago
+                                                ~current_time
+                                                ~check_time:cookie.created_at);
+                                         ];
+                                     ];
+                                   p
+                                     ~a:[ a_class [ "text-sm text-gray-600" ] ]
+                                     [
+                                       (match
+                                          Ptime.add_span cookie.created_at
+                                            (Ptime.Span.of_int_s
+                                               cookie.expires_in)
+                                        with
+                                       | Some ptime ->
+                                           span
+                                             [
+                                               txt
+                                                 ("Expires on "
+                                                 ^ Utils.TimeHelper
+                                                   .string_of_ptime ptime);
+                                             ]
+                                       | None ->
+                                           span
+                                             [ txt "Expiry time not available" ]);
+                                     ];
+                                   (if
+                                      not
+                                        (String.equal cookie.value
+                                           active_cookie_value)
+                                    then
+                                      div
+                                        [
+                                          Utils.button_component
+                                            ~attribs:
                                               [
-                                                span [ txt "now" ];
-                                                span
-                                                  ~a:
-                                                    [
-                                                      a_class
-                                                        [
-                                                          "text-primary-500 \
-                                                           font-semibold";
-                                                        ];
-                                                    ]
-                                                  [ txt " This device" ];
+                                                a_id
+                                                  ("session-button-"
+                                                 ^ cookie.value);
+                                                a_onclick
+                                                  ("closeSession('"
+                                                 ^ cookie.value ^ "')");
                                               ]
-                                          else
-                                            span
-                                              [
-                                                txt
-                                                  (Utils.TimeHelper.time_ago
-                                                     ~current_time
-                                                     ~check_time:
-                                                       cookie.last_access);
-                                              ]);
-                                       ];
-                                     p
-                                       ~a:
-                                         [ a_class [ "text-sm text-gray-600" ] ]
-                                       [
-                                         txt "First use: ";
-                                         span
-                                           [
-                                             txt
-                                               (Utils.TimeHelper.time_ago
-                                                  ~current_time
-                                                  ~check_time:cookie.created_at);
-                                           ];
-                                       ];
-                                     p
-                                       ~a:
-                                         [ a_class [ "text-sm text-gray-600" ] ]
-                                       [
-                                         (match
-                                            Ptime.add_span cookie.created_at
-                                              (Ptime.Span.of_int_s
-                                                 cookie.expires_in)
-                                          with
-                                         | Some ptime ->
-                                             span
-                                               [
-                                                 txt
-                                                   ("Expires on "
-                                                   ^ Utils.TimeHelper
-                                                     .string_of_ptime ptime);
-                                               ]
-                                         | None ->
-                                             span
-                                               [
-                                                 txt "Expiry time not available";
-                                               ]);
-                                       ];
-                                     (if
-                                        not
-                                          (String.equal cookie.value
-                                             active_cookie_value)
-                                      then
-                                        div
-                                          [
-                                            Utils.button_component
-                                              ~attribs:
-                                                [
-                                                  a_id
-                                                    ("session-button-"
-                                                   ^ cookie.value);
-                                                  a_onclick
-                                                    ("closeSession('"
-                                                   ^ cookie.value ^ "')");
-                                                ]
-                                              ~content:(txt "Close session")
-                                              ~btn_type:`Danger_outlined ();
-                                          ]
-                                      else div []);
-                                   ];
-                               ]
-                             :: acc
-                           else acc)
-                         user.cookies []);
+                                            ~content:(txt "Close session")
+                                            ~btn_type:`Danger_outlined ();
+                                        ]
+                                    else div []);
+                                 ];
+                             ]
+                           :: acc)
+                         sessions []);
                     div
                       ~a:[ a_class [ "my-4 w-1/2 text-center" ] ]
                       [

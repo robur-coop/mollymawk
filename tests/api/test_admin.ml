@@ -11,10 +11,6 @@ let make_admin =
     ~password:"AdminPassword123!" ~created_at:now ~active:true ~super_user:true
     ~user_agent:(Some "Alcotest-client")
 
-let csrf_cookie () =
-  User_model.generate_cookie ~name:User_model.csrf_cookie ~created_at:now
-    ~user_agent:(Some "Alcotest-client") ()
-
 let make_user ?(active = false) ?(super_user = false) () =
   User_model.create_user
     ~name:(label_of_string_exn "test")
@@ -25,35 +21,18 @@ let make_user ?(active = false) ?(super_user = false) () =
 let setup_admin_and_user ?(user_active = true) store =
   let admin, session_cookie = make_admin in
   let target_user, _ = make_user ~active:user_active () in
-  let csrf_cookie = csrf_cookie () in
-  let admin =
-    {
-      admin with
-      cookies =
-        Utils.SM.empty
-        |> Utils.SM.add session_cookie.value session_cookie
-        |> Utils.SM.add csrf_cookie.value csrf_cookie;
-    }
-  in
-
   Storage.add_user store admin;
+  Middleware.add_session admin.uuid session_cookie;
   Storage.add_user store target_user;
-  (admin, session_cookie.value, csrf_cookie.value, target_user)
+  let admin, csrf = add_user_csrf admin in
+  (admin, session_cookie.value, csrf, target_user)
 
 let setup_admin_only store =
   let admin, session_cookie = make_admin in
-  let csrf_cookie = csrf_cookie () in
-  let admin =
-    {
-      admin with
-      cookies =
-        Utils.SM.empty
-        |> Utils.SM.add session_cookie.value session_cookie
-        |> Utils.SM.add csrf_cookie.value csrf_cookie;
-    }
-  in
   Storage.add_user store admin;
-  (admin, session_cookie.value, csrf_cookie.value)
+  Middleware.add_session admin.uuid session_cookie;
+  let admin, csrf = add_user_csrf admin in
+  (admin, session_cookie.value, csrf)
 
 let make_admin_body ~uuid ~csrf_token =
   Fmt.str {|{ "uuid": "%s", "molly_csrf": "%s" }|} uuid csrf_token

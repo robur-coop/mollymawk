@@ -15,8 +15,12 @@ let check_deprecated_version () =
 let check_valid_version () =
   let expected = (Utils.UM.empty, Utils.LM.empty, None) in
   Alcotest.(
-    check (result storage_t msg_t) "mollymawk should start for a valid version"
-      (Ok expected)
+    check (result storage_t msg_t)
+      "mollymawk should start for a valid version 10" (Ok expected)
+      (Storage.t_of_json (mock_storage ~version:10 ())));
+  Alcotest.(
+    check (result storage_t msg_t)
+      "mollymawk should start for a valid version 9" (Ok expected)
       (Storage.t_of_json (mock_storage ~version:9 ())))
 
 let check_invalid_version () =
@@ -296,51 +300,22 @@ let albatross_config_tests =
       check_multiple_valid_albatross_configs_with_different_names );
   ]
 
-let check_cookies_roundtrip () =
+let check_cookies_not_persisted_in_v10 () =
   let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in
-  let session_val = user_session_cookie user in
-  let csrf_val = user_csrf_cookie user in
   let json =
-    Storage.t_to_json (Utils.UM.singleton user.uuid user) Utils.LM.empty None
-  in
-  match Storage.t_of_json json with
-  | Ok (users, _, _) when Utils.UM.cardinal users = 1 ->
-      let loaded_user = snd (Utils.UM.choose users) in
-      Alcotest.(
-        check int "2 cookies loaded into map" 2
-          (Utils.SM.cardinal loaded_user.cookies));
-      Alcotest.(
-        check bool "Session cookie present in map" true
-          (Utils.SM.mem session_val loaded_user.cookies));
-      Alcotest.(
-        check bool "CSRF cookie present in map" true
-          (Utils.SM.mem csrf_val loaded_user.cookies))
-  | Ok _ -> Alcotest.fail "Expected 1 user"
-  | Error (`Msg err) -> Alcotest.fail err
-
-let check_cookies_load_v9 () =
-  let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in
-  let session_val = user_session_cookie user in
-  let csrf_val = user_csrf_cookie user in
-  let json =
-    Storage.t_to_json ~version:9
+    Storage.t_to_json ~version:10
       (Utils.UM.singleton user.uuid user)
       Utils.LM.empty None
   in
-  match Storage.t_of_json json with
-  | Ok (users, _, _) when Utils.UM.cardinal users = 1 ->
-      let loaded_user = snd (Utils.UM.choose users) in
-      Alcotest.(
-        check int "2 cookies loaded into map from v9" 2
-          (Utils.SM.cardinal loaded_user.cookies));
-      Alcotest.(
-        check bool "Session cookie present in map" true
-          (Utils.SM.mem session_val loaded_user.cookies));
-      Alcotest.(
-        check bool "CSRF cookie present in map" true
-          (Utils.SM.mem csrf_val loaded_user.cookies))
-  | Ok _ -> Alcotest.fail "Expected 1 user"
-  | Error (`Msg err) -> Alcotest.fail err
+  match json with
+  | `Assoc xs -> (
+      match List.assoc_opt "users" xs with
+      | Some (`List [ `Assoc u_fields ]) ->
+          Alcotest.(
+            check bool "cookies field completely omitted from JSON in v10" false
+              (List.mem_assoc "cookies" u_fields))
+      | _ -> Alcotest.fail "Expected single user in users list")
+  | _ -> Alcotest.fail "Expected assoc in storage json"
 
 let check_discard_malformed_unikernel_update () =
   let valid_uk_uuid = User_model.generate_uuid () in
@@ -426,8 +401,9 @@ let check_discard_malformed_unikernel_update () =
 
 let cookie_tests =
   [
-    ("Cookies roundtrip", `Quick, check_cookies_roundtrip);
-    ("Cookies load from v9", `Quick, check_cookies_load_v9);
+    ( "Cookies are not persisted in v10 and omitted from disk",
+      `Quick,
+      check_cookies_not_persisted_in_v10 );
     ( "Discard malformed unikernel updates",
       `Quick,
       check_discard_malformed_unikernel_update );

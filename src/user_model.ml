@@ -10,7 +10,6 @@ type token = {
 }
 
 type cookie = {
-  name : string;
   value : string;
   expires_in : int;
   created_at : Ptime.t;
@@ -50,7 +49,6 @@ type user = {
   password : string;
   uuid : Uuidm.t;
   tokens : token Utils.SM.t;
-  cookies : cookie Utils.SM.t;
   created_at : Ptime.t;
   updated_at : Ptime.t;
   email_verification_uuid : Uuidm.t option;
@@ -61,8 +59,6 @@ type user = {
 }
 
 let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
-let session_cookie = "molly_session"
-let csrf_cookie = "molly_csrf"
 
 let unikernel_update_to_json (u : unikernel_update) : Yojson.Basic.t =
   `Assoc
@@ -150,70 +146,6 @@ let unikernel_update_of_json = function
            ("Invalid JSON for unikernel_update: expected a dictionary, got: "
           ^ Utils.Json.to_string js))
 
-let cookie_to_json (cookie : cookie) =
-  `Assoc
-    [
-      ("name", `String cookie.name);
-      ( "created_at",
-        `String (Utils.TimeHelper.string_of_ptime cookie.created_at) );
-      ("value", `String cookie.value);
-      ("expires_in", `Int cookie.expires_in);
-      ( "last_access",
-        `String (Utils.TimeHelper.string_of_ptime cookie.last_access) );
-      ( "user_agent",
-        match cookie.user_agent with
-        | Some agent -> `String agent
-        | None -> `Null );
-    ]
-
-let cookie_of_json = function
-  | `Assoc xs -> (
-      match
-        Utils.Json.
-          ( get "name" xs,
-            get "value" xs,
-            get "expires_in" xs,
-            get "created_at" xs,
-            get "last_access" xs,
-            get "user_agent" xs )
-      with
-      | ( Some (`String name),
-          Some (`String value),
-          Some (`Int expires_in),
-          Some (`String created_at_str),
-          Some (`String last_access_str),
-          user_agent ) ->
-          let created_at =
-            match Utils.TimeHelper.ptime_of_string created_at_str with
-            | Ok ptime -> ptime
-            | Error (`Msg msg) ->
-                Logs.warn (fun m ->
-                    m "couldn't parse created_at %s: value %S" msg
-                      created_at_str);
-                Ptime.epoch
-          in
-          let last_access =
-            match Utils.TimeHelper.ptime_of_string last_access_str with
-            | Ok ptime -> ptime
-            | Error (`Msg msg) ->
-                Logs.warn (fun m ->
-                    m "couldn't parse last_access %s: value %S" msg
-                      last_access_str);
-                created_at
-          in
-          let* user_agent = Utils.Json.string_or_none "user-agent" user_agent in
-          Ok { name; value; expires_in; created_at; last_access; user_agent }
-      | _ ->
-          Error
-            (`Msg
-               ("invalid json for cookie: " ^ Utils.Json.to_string (`Assoc xs)))
-      )
-  | js ->
-      Error
-        (`Msg
-           ("invalid json for cookie, expected a dict: "
-          ^ Utils.Json.to_string js))
-
 let token_to_json t =
   `Assoc
     [
@@ -288,10 +220,6 @@ let user_to_json (u : user) =
       ( "tokens",
         `List
           (Utils.SM.fold (fun _ t acc -> token_to_json t :: acc) u.tokens []) );
-      ( "cookies",
-        `List
-          (Utils.SM.fold (fun _ c acc -> cookie_to_json c :: acc) u.cookies [])
-      );
       ("created_at", `String (Utils.TimeHelper.string_of_ptime u.created_at));
       ("updated_at", `String (Utils.TimeHelper.string_of_ptime u.updated_at));
       ( "email_verification_uuid",
@@ -312,7 +240,7 @@ let user_to_json (u : user) =
              u.scaling_policies []) );
     ]
 
-let user_v9_of_json cookie_fn = function
+let user_v9_of_json = function
   | `Assoc xs -> (
       match
         Utils.Json.
@@ -322,7 +250,6 @@ let user_v9_of_json cookie_fn = function
             get "password" xs,
             get "uuid" xs,
             get "tokens" xs,
-            get "cookies" xs,
             get "created_at" xs,
             get "updated_at" xs,
             get "email_verification_uuid" xs,
@@ -336,7 +263,6 @@ let user_v9_of_json cookie_fn = function
           Some (`String password),
           Some (`String uuid),
           Some (`List tokens),
-          Some (`List cookies),
           Some (`String updated_at_str),
           Some (`String created_at_str),
           Some email_verification_uuid,
@@ -366,14 +292,6 @@ let user_v9_of_json cookie_fn = function
                 let* token = token_of_json js in
                 Ok (Utils.SM.add token.value token acc))
               (Ok Utils.SM.empty) tokens
-          in
-          let* cookies =
-            List.fold_left
-              (fun acc js ->
-                let* acc = acc in
-                let* cookie = cookie_fn js in
-                Ok (Utils.SM.add cookie.value cookie acc))
-              (Ok Utils.SM.empty) cookies
           in
           let* email_verification_uuid =
             match email_verification_uuid with
@@ -414,7 +332,6 @@ let user_v9_of_json cookie_fn = function
               password;
               uuid;
               tokens;
-              cookies;
               created_at = Option.get created_at;
               updated_at = Option.get updated_at;
               email_verification_uuid;
@@ -432,7 +349,7 @@ let user_v9_of_json cookie_fn = function
         (`Msg
            ("invalid json for user, expected a dict: " ^ Utils.Json.to_string js))
 
-let user_of_json cookie_fn = function
+let user_of_json = function
   | `Assoc xs -> (
       match
         Utils.Json.
@@ -442,7 +359,6 @@ let user_of_json cookie_fn = function
             get "password" xs,
             get "uuid" xs,
             get "tokens" xs,
-            get "cookies" xs,
             get "created_at" xs,
             get "updated_at" xs,
             get "email_verification_uuid" xs,
@@ -457,7 +373,6 @@ let user_of_json cookie_fn = function
           Some (`String password),
           Some (`String uuid),
           Some (`List tokens),
-          Some (`List cookies),
           Some (`String updated_at_str),
           Some (`String created_at_str),
           Some email_verification_uuid,
@@ -488,14 +403,6 @@ let user_of_json cookie_fn = function
                 let* token = token_of_json js in
                 Ok (Utils.SM.add token.value token acc))
               (Ok Utils.SM.empty) tokens
-          in
-          let* cookies =
-            List.fold_left
-              (fun acc js ->
-                let* acc = acc in
-                let* cookie = cookie_fn js in
-                Ok (Utils.SM.add cookie.value cookie acc))
-              (Ok Utils.SM.empty) cookies
           in
           let* email_verification_uuid =
             match email_verification_uuid with
@@ -548,7 +455,6 @@ let user_of_json cookie_fn = function
               password;
               uuid;
               tokens;
-              cookies;
               created_at = Option.get created_at;
               updated_at = Option.get updated_at;
               email_verification_uuid;
@@ -577,10 +483,9 @@ let generate_uuid () =
   let data = Mirage_crypto_rng.generate 16 in
   Uuidm.v4 (Bytes.unsafe_of_string data)
 
-let generate_cookie ~name ?(expires_in = 3600) ~created_at ~user_agent () =
+let generate_cookie ?(expires_in = 3600) created_at user_agent () =
   let id = generate_uuid () in
   {
-    name;
     value = Base64.encode_string (Uuidm.to_string id);
     expires_in;
     created_at;
@@ -604,10 +509,7 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
     ~user_agent =
   let uuid = generate_uuid () in
   let password = hash_password ~password ~uuid in
-  let session =
-    generate_cookie ~name:session_cookie ~expires_in:week ~created_at
-      ~user_agent ()
-  in
+  let session = generate_cookie ~expires_in:week created_at user_agent () in
   ( {
       name;
       email;
@@ -615,7 +517,6 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
       password;
       uuid;
       tokens = Utils.SM.empty;
-      cookies = Utils.SM.singleton session.value session;
       created_at;
       updated_at = created_at;
       email_verification_uuid = None;
@@ -626,8 +527,8 @@ let create_user ~name ~email ~password ~created_at ~active ~super_user
     },
     session )
 
-let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
-    ?updated_at ?email_verification_uuid ?active ?super_user ?unikernel_updates
+let update_user user ?name ?email ?email_verified ?password ?tokens ?updated_at
+    ?email_verification_uuid ?active ?super_user ?unikernel_updates
     ?scaling_policies () =
   {
     user with
@@ -636,7 +537,6 @@ let update_user user ?name ?email ?email_verified ?password ?tokens ?cookies
     email_verified = Option.value ~default:user.email_verified email_verified;
     password = Option.value ~default:user.password password;
     tokens = Option.value ~default:user.tokens tokens;
-    cookies = Option.value ~default:user.cookies cookies;
     updated_at = Option.value ~default:user.updated_at updated_at;
     email_verification_uuid =
       Option.value ~default:user.email_verification_uuid email_verification_uuid;
@@ -685,21 +585,6 @@ let verify_email_token u _uuid timestamp =
                "This link has expired. Please sign in to get a new \
                 verification link."))
 
-let user_session_cookie (user : user) cookie_value =
-  match Utils.SM.find_opt cookie_value user.cookies with
-  | Some cookie when String.equal cookie.name session_cookie -> Some cookie
-  | _ -> None
-
-let user_csrf_token (user : user) cookie_value =
-  match Utils.SM.find_opt cookie_value user.cookies with
-  | Some cookie when String.equal cookie.name csrf_cookie -> Some cookie
-  | _ -> None
-
-let keep_session_cookies user =
-  Utils.SM.filter
-    (fun _ (cookie : cookie) -> String.equal cookie.name session_cookie)
-    user.cookies
-
 let login_user ~email ~password ~user_agent user now =
   match user with
   | None -> Error (`Msg "Invalid email or password.")
@@ -714,14 +599,8 @@ let login_user ~email ~password ~user_agent user now =
         with
         | true ->
             let new_session =
-              generate_cookie ~name:session_cookie ~expires_in:week
-                ~created_at:now ~user_agent ()
+              generate_cookie ~expires_in:week now user_agent ()
             in
-            let cookies =
-              Utils.SM.add new_session.value new_session
-                (keep_session_cookies u)
-            in
-            let updated_user = update_user u ~cookies () in
-            Ok (updated_user, new_session)
+            Ok (u, new_session)
         | false -> Error (`Msg "Invalid email or password."))
 (* Invalid email or password is a trick error message to at least prevent malicious users from guessing login details :).*)
