@@ -1,3 +1,9 @@
+(** This code is copied form
+    https://github.com/robur-coop/tlstunnel/blob/main/unikernel/filesystem.ml,
+    written by Hannes Mehnert <https://github.com/hannesm>. This code is
+    provided under an
+    [ISC License](https://github.com/robur-coop/tlstunnel?tab=ISC-1-ov-file) *)
+
 module Make (Block : Mirage_block.S) = struct
   module H = Digestif.SHA256
 

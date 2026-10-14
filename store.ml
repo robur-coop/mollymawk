@@ -38,7 +38,6 @@ module Make (BLOCK : Mirage_block.S) = struct
             Storage.error_msgf "reading block device"
         | Ok (sb, data) ->
             superblock := sb;
-            Logs.info (fun m -> m "data is %s " data);
             if String.equal data "" then
               Ok (Utils.UM.empty, Utils.LM.empty, None)
             else
