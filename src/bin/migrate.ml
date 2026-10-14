@@ -2,41 +2,49 @@ open Lwt.Infix
 module OFS = OneFFS.Make (Block)
 module FS = Filesystem.Make (Block)
 
+let verify_copied_data dst_blk data =
+  FS.read_data dst_blk >>= function
+  | Error (`Msg msg) -> Fmt.failwith "error reading block device %s" msg
+  | Error (#FS.decode_err as e) ->
+      Fmt.failwith "error reading block device %a" FS.pp_decode_err e
+  | Ok (_sp, migrated_data) ->
+      if String.equal data migrated_data then (
+        Logs.info (fun m ->
+            m "successfully migrated %d bytes" (String.length data));
+        Lwt.return_unit)
+      else Fmt.failwith "migrated data doesnt match original data"
+
 let migrate src_path dst_path =
-  Block.connect src_path >>= fun src_blk ->
-  OFS.connect src_blk >>= fun oneffs ->
-  OFS.read oneffs >>= function
-  | Error e ->
-      Fmt.failwith "failed to read oneffs block %s: %a" src_path OFS.pp_error e
-  | Ok None -> (
-      Logs.info (fun m ->
-          m "source block %s is empty, formatting target with empty filesystem"
-            src_path);
-      Block.connect dst_path >>= fun dst_blk ->
-      FS.init dst_blk >>= function
-      | Error (`Msg msg) -> Fmt.failwith "failed initializing target: %s" msg
-      | Ok _sb ->
-          Logs.info (fun m ->
-              m "successfully formatted %s with empty filesystem" dst_path);
-          Lwt.return_unit)
-  | Ok (Some data) -> (
-      Logs.info (fun m -> m "read %d bytes from OneFFS" (String.length data));
-      let _ = Yojson.Basic.from_string data in
-      Block.connect dst_path >>= fun dst_blk ->
-      FS.init dst_blk >>= function
-      | Error (`Msg msg) -> Fmt.failwith "failed initializing target: %s" msg
-      | Ok sb -> (
-          FS.write_data dst_blk sb data >>= function
-          | Error (`Msg msg) -> Fmt.failwith "failed writing target: %s" msg
-          | Ok _sb ->
-              Logs.info (fun m ->
-                  m "successfully migrated %d bytes to %s" (String.length data)
-                    dst_path);
-              Lwt.return_unit))
+  if String.equal src_path dst_path then
+    Fmt.failwith
+      "source image and destination image cannot be the same %s and %s" src_path
+      dst_path
+  else
+    Block.connect src_path >>= fun src_blk ->
+    OFS.connect src_blk >>= fun oneffs ->
+    OFS.read oneffs >>= function
+    | Error e ->
+        Fmt.failwith "failed to read oneffs block %s: %a" src_path OFS.pp_error
+          e
+    | Ok (Some data) -> (
+        Logs.info (fun m -> m "read %d bytes from OneFFS" (String.length data));
+        let _ = Yojson.Basic.from_string data in
+        Block.connect dst_path >>= fun dst_blk ->
+        FS.init dst_blk >>= function
+        | Error (`Msg msg) -> Fmt.failwith "failed initializing target: %s" msg
+        | Ok sb -> (
+            FS.write_data dst_blk sb data >>= function
+            | Error (`Msg msg) -> Fmt.failwith "failed writing target: %s" msg
+            | Ok _sb -> verify_copied_data dst_blk data))
+    | Ok None ->
+        Logs.info (fun m ->
+            m
+              "source block %s is empty, formatting target with empty \
+               filesystem"
+              src_path);
+        Fmt.failwith "nothing to migrate. source block is empty"
 
 let start src dst =
-  Logs.set_reporter (Logs.format_reporter ());
-  Logs.set_level (Some Logs.Info);
   match Lwt_main.run (migrate src dst) with
   | () -> ()
   | exception Failure msg ->
@@ -55,7 +63,7 @@ let dst_arg =
   let doc = "path to the destination image." in
   Cmdliner.Arg.(
     required
-    & pos 1 (some string) None
+    & pos 1 (some file) None
     & info [] ~docv:"Destination block image" ~doc)
 
 let cmd =
