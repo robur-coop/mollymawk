@@ -217,7 +217,7 @@ let query_endpoint handler raw_request_str =
 let init_mock_store () =
   Middleware.reset_state ();
   let block = Mock_Block.create () in
-  App.Store.connect block >>= function
+  App.Store.init_block block >>= function
   | Error (`Msg msg) -> failwith msg
   | Ok store -> Lwt.return store
 
