@@ -2808,21 +2808,25 @@ struct
 
   let delete_token store (user : User_model.user) json_dict reqd =
     match Utils.Json.(get "token_value" json_dict) with
-    | Some (`String value) -> (
-        let now = Mirage_ptime.now () in
-        let tokens = Utils.SM.remove value user.tokens in
-        let updated_user =
-          User_model.update_user user ~tokens ~updated_at:now ()
-        in
-        Storage.update_user store updated_user;
-        Store.write_data store >>= function
-        | Ok () ->
-            Middleware.http_response reqd
-              ~data:(`String "Token deleted successfully") `OK
-        | Error (`Msg err) ->
-            Logs.warn (fun m -> m "Storage error with %s" err);
-            Middleware.http_response reqd ~data:(`String err)
-              `Internal_server_error)
+    | Some (`String value) ->
+        if Utils.SM.mem value user.tokens then (
+          let now = Mirage_ptime.now () in
+          let tokens = Utils.SM.remove value user.tokens in
+          let updated_user =
+            User_model.update_user user ~tokens ~updated_at:now ()
+          in
+          Storage.update_user store updated_user;
+          Store.write_data store >>= function
+          | Ok () ->
+              Middleware.http_response reqd
+                ~data:(`String "Token deleted successfully") `OK
+          | Error (`Msg err) ->
+              Logs.warn (fun m -> m "Storage error with %s" err);
+              Middleware.http_response reqd ~data:(`String err)
+                `Internal_server_error)
+        else
+          Middleware.http_response reqd ~data:(`String "Token not found")
+            `Not_found
     | _ ->
         Middleware.http_response reqd
           ~data:
