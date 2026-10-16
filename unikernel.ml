@@ -2659,43 +2659,44 @@ struct
     | ( Some (`String instance_name),
         Some (`String block_name),
         Some (`Int compression_level) ) -> (
-        let filename = block_name ^ "_dump" in
-        let disposition = "attachment; filename=\"" ^ filename ^ "\"" in
-        let headers =
-          [
-            ("Content-type", "application/octet-stream");
-            ("Content-Disposition", disposition);
-          ]
-        in
-        let headers = H1.Headers.(of_list headers) in
-        let response = H1.Response.create ~headers `OK in
-        let writer = H1.Reqd.respond_with_streaming reqd response in
-        let fini = ref false in
-        let response data =
-          match data with
-          | None ->
-              H1.Body.Writer.close writer;
-              fini := true;
-              Ok ()
-          | Some data ->
-              if H1.Body.Writer.is_closed writer then Error ()
-              else (
-                H1.Body.Writer.write_string writer data;
-                H1.Body.Writer.flush writer Fun.id;
-                Ok ())
-        in
         match
           ( Configuration.name_of_str instance_name,
             Configuration.name_of_str block_name )
         with
-        | Ok instance_name, Ok block_name -> (
+        | Ok instance_name_obj, Ok block_name_obj -> (
             match
               Albatross_state.find_instance_by_name albatross_instances
-                instance_name
+                instance_name_obj
             with
             | Ok albatross -> (
+                let filename = block_name ^ "_dump" in
+                let disposition = "attachment; filename=\"" ^ filename ^ "\"" in
+                let headers =
+                  [
+                    ("Content-type", "application/octet-stream");
+                    ("Content-Disposition", disposition);
+                  ]
+                in
+                let headers = H1.Headers.(of_list headers) in
+                let response = H1.Response.create ~headers `OK in
+                let writer = H1.Reqd.respond_with_streaming reqd response in
+                let fini = ref false in
+                let response data =
+                  match data with
+                  | None ->
+                      H1.Body.Writer.close writer;
+                      fini := true;
+                      Ok ()
+                  | Some data ->
+                      if H1.Body.Writer.is_closed writer then Error ()
+                      else (
+                        H1.Body.Writer.write_string writer data;
+                        H1.Body.Writer.flush writer Fun.id;
+                        Ok ())
+                in
                 Albatross_state.query_block_dump stack albatross
-                  ~domain:user.name ~name:block_name compression_level response
+                  ~domain:user.name ~name:block_name_obj compression_level
+                  response
                 >>= function
                 | Error _err -> Lwt.return_unit
                 | Ok () ->
@@ -2704,13 +2705,13 @@ struct
             | Error err ->
                 Logs.err (fun m ->
                     m "Couldn't find albatross instance with name %s: %s"
-                      (Configuration.name_to_str instance_name)
+                      (Configuration.name_to_str instance_name_obj)
                       err);
                 Middleware.http_response reqd
                   ~data:
                     (`String
                        ("Couldn't find albatross instance with name: "
-                       ^ Configuration.name_to_str instance_name))
+                       ^ Configuration.name_to_str instance_name_obj))
                   `Not_found)
         | Error (`Msg err), _ ->
             Middleware.http_response reqd
