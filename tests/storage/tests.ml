@@ -249,12 +249,11 @@ let check_disk_dump () =
         check int "1 configuration in dump" 1 (Utils.LM.cardinal configs));
       Alcotest.(check bool "Email config present" true (Option.is_some email));
       let _serialized = Storage.t_to_json users configs email in
-      ()
-      (*TODO: this test roundtrip serialization fails because the lists are not reversed, for instance users list needs a List.rev after converting from json. *)
-      (*  Alcotest.(
+      ();
+      Alcotest.(
         check (result storage_t msg_t) "roundtrip serialization matches"
           (Ok (users, configs, email))
-          (Storage.t_of_json serialized)) *)
+          (Storage.t_of_json (json_of_string_exn json)))
   | Error (`Msg err) -> Alcotest.fail err
 
 let version_tests =
