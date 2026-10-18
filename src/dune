@@ -1,0 +1,12 @@
+(library
+ (name mollymawk_libraries)
+ (libraries
+  uuidm
+  ptime
+  albatross
+  mirage-crypto-rng-mkernel
+  yojson
+  x509
+  mrmime
+  tyxml)
+ (wrapped false))

@@ -1,6 +1,6 @@
 open Tyxml
 
-let header ?(page_title = "Mollymawk") ~icon () =
+let header ?(page_title = "Mollymawk") () =
   Html.(
     head
       (title (txt page_title))
@@ -47,7 +47,7 @@ let header ?(page_title = "Mollymawk") ~icon () =
           ~href:"https://unpkg.com/aos@2.3.1/dist/aos.css" ();
         (*aos is animate-on-scroll, adds bouncy effects to html elements*)
         script ~a:[ a_src "https://unpkg.com/aos@2.3.1/dist/aos.js" ] (txt "");
-        link ~rel:[ `Icon ] ~href:icon ();
+        link ~rel:[ `Icon ] ~href:"/images/robur.png" ();
         (*https://alpinejs.dev/ is a lightweight js library and we use it for multiselect form elements*)
         script
           ~a:

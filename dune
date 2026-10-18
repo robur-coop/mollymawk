@@ -1,14 +1,9 @@
-(library
- (name mollymawk_app)
- (modules routes)
- (libraries mkernel mnet vifu))
-
 (executable
  (name main)
  (enabled_if
   (= %{context_name} "solo5"))
  (link_flags :standard -cclib "-z solo5-abi=hvt")
- (modules main assets)
+ (modules main assets routes store filesystem)
  (libraries
   mkernel
   mnet
@@ -19,8 +14,11 @@
   mhttp
   x509
   gmp
+  yojson
+  albatross
   fmt
-  mollymawk_app)
+  tyxml
+  mollymawk_libraries)
  (foreign_stubs
   (language c)
   (names manifest)))
