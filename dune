@@ -1,0 +1,64 @@
+(library
+ (name mollymawk_app)
+ (modules routes)
+ (libraries mkernel mnet vifu))
+
+(executable
+ (name main)
+ (enabled_if
+  (= %{context_name} "solo5"))
+ (link_flags :standard -cclib "-z solo5-abi=hvt")
+ (modules main assets)
+ (libraries
+  mkernel
+  mnet
+  vifu
+  mirage-crypto-rng-mkernel
+  utcp
+  cmdliner
+  mhttp
+  x509
+  gmp
+  fmt
+  mollymawk_app)
+ (foreign_stubs
+  (language c)
+  (names manifest)))
+
+(rule
+ (targets manifest.c)
+ (enabled_if
+  (= %{context_name} "default"))
+ (action
+  (write-file manifest.c "")))
+
+(rule
+ (targets manifest.c)
+ (deps manifest.json)
+ (enabled_if
+  (= %{context_name} "solo5"))
+ (action
+  (run solo5-elftool gen-manifest manifest.json manifest.c)))
+
+(rule
+ (enabled_if
+  (= %{context_name} "solo5"))
+ (targets assets.ml)
+ (deps
+  (source_tree assets))
+ (action
+  (with-stdout-to
+   assets.ml
+   (run
+    mcrunch
+    -s
+    --file=dashboard_1_png:assets/dashboard_1.png
+    --file=grafana_json:assets/grafana.json
+    --file=interconnections_by_guerrillabuzz_jpg:assets/interconnections_by_guerrillabuzz.jpg
+    --file=main_js:assets/main.js
+    --file=mollymawk_bird_by_katelyn_jpg:assets/mollymawk_bird_by_katelyn.jpg
+    --file=robur_png:assets/robur.png
+    --file=server_room_by_yuriy_vertikov_jpg:assets/server_room_by_yuriy-vertikov.jpg
+    --file=style_css:assets/style.css))))
+
+(vendored_dirs vendors)

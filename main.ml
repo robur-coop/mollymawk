@@ -1,0 +1,1 @@
+let () = Mkernel.(run []) @@ fun () -> print_endline "Mollymawk with mkernel"

@@ -1,11 +1,6 @@
 _opam
-dist
 _build
-duniverse
-dune-workspace
-dune.build
-dune.config
 Makefile
-mirage
-*.swp
 data
+vendors
+_mfetch
