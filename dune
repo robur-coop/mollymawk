@@ -7,6 +7,7 @@
  (libraries
   mkernel
   mnet
+  mnet-cli
   vifu
   mirage-crypto-rng-mkernel
   utcp
