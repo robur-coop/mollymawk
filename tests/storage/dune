@@ -1,5 +1,6 @@
-(test
+(executable
  (name tests)
+ (enabled_if (= %{context_name} "default"))
  (libraries
   test_utils
   mollymawk_libraries
@@ -17,3 +18,8 @@
   ohex
   emile
   tyxml))
+
+(rule
+ (alias runtest)
+ (deps tests.exe)
+ (action (run ./tests.exe)))
