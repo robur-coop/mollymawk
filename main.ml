@@ -1,4 +1,5 @@
-open Cmdliner
+type env =
+  { tcp : Mnet.TCP.state }
 
 let rng =
   let fn () = Mirage_crypto_rng_mkernel.(initialize (module Pfortuna)) in
@@ -14,13 +15,22 @@ let http =
       } in
   `H1 h1
 
+let happy_eyeballs =
+  let finally (daemon, _) = Mnet_happy_eyeballs.kill daemon in
+  Vifu.Device.v ~name:"happy-eyeballs" ~finally [] @@ fun { tcp; _ } ->
+  Mnet_happy_eyeballs.create tcp
+
 let run stack _name =
   Mkernel.(run [ rng; stack; block "data" ])
   @@ fun _rng (_, tcp, _) blk () ->
   let _data = Store.connect blk in
   let port = 80 in
   let cfg = Vifu.Config.v ~http port in
-  Vifu.run ~cfg tcp Routes.routes ()
+  let devices = Vifu.Devices.[ happy_eyeballs ] in
+  let env = { tcp } in
+  Vifu.run ~devices ~cfg tcp (Routes.routes ()) env
+
+open Cmdliner
 
 let name =
   let doc = "The name of the unikernel" in

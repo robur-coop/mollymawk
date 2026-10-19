@@ -8,6 +8,7 @@
   mkernel
   mnet
   mnet-cli
+  mnet-happy-eyeballs
   vifu
   mirage-crypto-rng-mkernel
   utcp

@@ -1,18 +1,18 @@
-let respond_with_tyxml_page ty req (_server : Vifu.Server.t) (_env : unit) =
+let respond_with_tyxml_page ty req (_server : Vifu.Server.t) _env =
   let open Vifu.Response.Syntax in
   let* () = Vifu.Response.add ~field:"content-type" "text/html" in
   let* () = Vifu.Response.add ~field:"charset" "utf-8" in
   let* () = Vifu.Response.with_tyxml req ty in
   Vifu.Response.respond `OK
 
-let serve_static ~mime ~content req (_server : Vifu.Server.t) (_env : unit) =
+let serve_static ~mime ~content req (_server : Vifu.Server.t) _env =
   let open Vifu.Response.Syntax in
   (* TODO: if-none-match / etag *)
   let* () = Vifu.Response.add ~field:"Content-Type" mime in
   let* () = Vifu.Response.with_string req content in
   Vifu.Response.respond `OK
 
-let routes =
+let routes () =
   let open Vifu.Route in
   let open Vifu.Uri in
   [
