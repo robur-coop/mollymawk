@@ -1,0 +1,33 @@
+(test
+ (name api_tests)
+ (enabled_if
+  (= %{context_name} "default"))
+ (instrumentation
+  (backend bisect_ppx_ng))
+ (libraries
+  test_utils
+  mollymawk_libraries
+  alcotest
+  albatross
+  albatross.tls
+  yojson
+  mrmime
+  uuidm
+  ptime
+  fmt
+  x509
+  ipaddr
+  ohex
+  emile
+  tyxml
+  uri
+  duration
+  tcpip.stack-socket
+  mimic-happy-eyeballs
+  colombe.emile
+  tls-mirage
+  mirage-runtime
+  multipart_form
+  ))
+
+(copy_files# ../../*.ml)

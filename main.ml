@@ -24,7 +24,7 @@ let run cidr gateway port _name =
   in
   let cfg = Vifu.Config.v ~http:(`H1 h1) port in
   Logs.info (fun m ->
-      m "Starting mollymawk on  %s:%d" (Ipaddr.V4.Prefix.to_string cidr) port);
+      m "Starting mollymawk on %s:%d" (Ipaddr.V4.Prefix.to_string cidr) port);
   Vifu.run ~cfg tcp Routes.routes ()
 
 let ipv4 =
