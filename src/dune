@@ -8,5 +8,6 @@
   yojson
   x509
   mrmime
+  mnet-tls
   tyxml)
  (wrapped false))
