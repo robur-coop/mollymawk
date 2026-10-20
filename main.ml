@@ -1,18 +1,21 @@
-type env =
-  { tcp : Mnet.TCP.state }
+type env = { tcp : Mnet.TCP.state; block : Mkernel.Block.t }
 
 let rng =
-  let fn () = Mirage_crypto_rng_mkernel.(initialize (module Pfortuna)) in
+  let fn () =
+    Mirage_crypto_rng_mkernel.(initialize (module Mirage_crypto_rng.Fortuna))
+  in
   Mkernel.map fn Mkernel.[] |> Mkernel.finally Mirage_crypto_rng_mkernel.kill
 
 let http =
-  let h1 = H1.Config.
+  let h1 =
+    H1.Config.
       {
         default with
         read_buffer_size = 0x4000;
         response_buffer_size = 0x4000;
         response_body_buffer_size = 0x4000;
-      } in
+      }
+  in
   `H1 h1
 
 let happy_eyeballs =
@@ -20,14 +23,18 @@ let happy_eyeballs =
   Vifu.Device.v ~name:"happy-eyeballs" ~finally [] @@ fun { tcp; _ } ->
   Mnet_happy_eyeballs.create tcp
 
+let make_block_device =
+  let finally _ = () in
+  Vifu.Device.v ~name:"store" ~finally [] @@ fun { block; _ } ->
+  Store.connect block
+
 let run stack _name =
-  Mkernel.(run [ rng; stack; block "data" ])
-  @@ fun _rng (_, tcp, _) blk () ->
-  let _data = Store.connect blk in
+  Mkernel.(run [ rng; stack; block "data" ]) @@ fun _rng (_, tcp, _) block () ->
+  let block_device = make_block_device in
   let port = 80 in
   let cfg = Vifu.Config.v ~http port in
-  let devices = Vifu.Devices.[ happy_eyeballs ] in
-  let env = { tcp } in
+  let devices = Vifu.Devices.[ happy_eyeballs; block_device ] in
+  let env = { tcp; block } in
   Vifu.run ~devices ~cfg tcp (Routes.routes ()) env
 
 open Cmdliner

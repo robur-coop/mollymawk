@@ -3,7 +3,7 @@
  (enabled_if
   (= %{context_name} "solo5"))
  (link_flags :standard -cclib "-z solo5-abi=hvt")
- (modules main assets routes store filesystem)
+ (modules main assets routes store filesystem albatross_client)
  (libraries
   mkernel
   mnet
@@ -19,6 +19,7 @@
   yojson
   albatross
   fmt
+  mnet-tls
   tyxml
   mollymawk_libraries)
  (foreign_stubs
