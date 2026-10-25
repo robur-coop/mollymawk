@@ -42,6 +42,18 @@ end
 
 module Scaling_policy_map = Map.Make (Scaling_policy_key)
 
+type registration_form_data = {
+  name : string;
+  email : string;
+  password : string;
+}
+
+let registration_form =
+  let open Vifu.Multipart_form in
+  record (fun name email password -> { name; email; password })
+  |+ field "name" string |+ field "email" string |+ field "password" string
+  |> sealr
+
 type user = {
   name : Vmm_core.Name.Label.t;
   email : Mrmime.Mailbox.t;

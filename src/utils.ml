@@ -23,29 +23,7 @@ end
 
 (* module Http = struct
   let send_http_request ?(path = "") ~base_url http_client =
-    let url = base_url ^ path in
-    let body = "" in
-    let body_f _ acc chunk = Lwt.return (acc ^ chunk) in
-    Http_mirage_client.request http_client ~follow_redirect:true
-      ~headers:[ ("Accept", "application/json") ]
-      url body_f body
-    >>= function
-    | Error (`Msg err) -> Lwt.return (Error (`Msg err))
-    | Error `Cycle -> Lwt.return (Error (`Msg "returned cycle"))
-    | Error `Not_found -> Lwt.return (Error `Not_found)
-    | Ok (resp, body) ->
-        if
-          Http_mirage_client.Status.is_successful resp.Http_mirage_client.status
-        then Lwt.return (Ok body)
-        else if resp.Http_mirage_client.status = `Not_found then
-          Lwt.return (Error `Not_found)
-        else
-          Lwt.return
-            (Error
-               (`Msg
-                  ("accessing " ^ url ^ " resulted in an error: "
-                  ^ Http_mirage_client.Status.to_string resp.status
-                  ^ " " ^ resp.reason)))
+    ...
 end *)
 
 module TimeHelper = struct
@@ -163,12 +141,7 @@ module Email = struct
     | `Assoc assoc -> t_of_json assoc
     | _ -> Error (`Msg "invalid json for email configuration")
 
-  let validate_email email =
-    match Mrmime.Mailbox.of_string email with
-    | Ok _ -> true
-    | Error (`Msg err) ->
-        Logs.err (fun m -> m "Emile-Email-Validation: %s" err);
-        false
+  let validate_email email = Mrmime.Mailbox.of_string email
 
   let generate_verification_link uuid =
     "/auth/verify?token=" ^ Uuidm.to_string uuid
@@ -225,149 +198,18 @@ module Email = struct
 end
 
 module Status = struct
-  type t = { code : int; title : string; data : Yojson.Basic.t; success : bool }
+  type t = { title : string; data : string }
 
-  let to_json (status : t) : string =
-    `Assoc
-      [
-        ("status", `Int status.code);
-        ("title", `String status.title);
-        ("success", `Bool status.success);
-        ("data", status.data);
-      ]
-    |> Yojson.Basic.to_string
+  let make title data = { title; data }
+  let title i = i.title
+  let data i = i.data
+
+  let to_json =
+    Jsont.Object.map ~kind:"Status" make
+    |> Jsont.Object.mem "title" Jsont.string ~enc:title
+    |> Jsont.Object.mem "data" Jsont.string ~enc:data
+    |> Jsont.Object.finish
 end
-
-let csrf_form_input csrf =
-  Tyxml_html.(
-    input
-      ~a:
-        [
-          a_input_type `Hidden;
-          a_id "molly-csrf";
-          a_name "molly_csrf";
-          a_value csrf;
-        ]
-      ())
-
-let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
-  Tyxml_html.(
-    button
-      ~a:
-        (List.fold_left (fun acc attrib -> acc @ [ attrib ]) [] attribs
-        @ [
-            (match btn_type with
-            | `Primary_full ->
-                a_class
-                  [
-                    "py-2 px-2 rounded bg-primary-500 hover:bg-primary-800 \
-                     text-gray-50 font-semibold " ^ extra_css;
-                  ]
-            | `Primary_outlined ->
-                a_class
-                  [
-                    "py-2 px-2 rounded border border-1 border-primary-400 \
-                     text-primary-600 hover:text-gray-50 focus:outline-none \
-                     hover:bg-primary-800 font-semibold " ^ extra_css;
-                  ]
-            | `Danger_full ->
-                a_class
-                  [
-                    "py-2 px-2 rounded bg-secondary-500 hover:bg-secondary-800 \
-                     text-gray-50 font-semibold " ^ extra_css;
-                  ]
-            | `Danger_outlined ->
-                a_class
-                  [
-                    "py-2 px-2 rounded border border-1 border-secondary-400 \
-                     text-secondary-600 hover:text-gray-50 focus:outline-none \
-                     hover:bg-secondary-800 font-semibold " ^ extra_css;
-                  ]);
-          ])
-      [ content ])
-
-(** A UI with two buttons, one for decrementing a value and the other for
-    incrementing the value*)
-let increment_or_decrement_ui ~max_value ~min_value ?(step = 1)
-    ?(default_value = 0) ?(figure_unit = "") ~id ~label' () =
-  let max_value = if max_value <= min_value then min_value else max_value in
-  let default_value =
-    if default_value <= min_value then min_value
-    else if default_value >= max_value then max_value
-    else default_value
-  in
-  Tyxml_html.(
-    div
-      ~a:
-        [
-          a_class [ "space-x-5" ];
-          Unsafe.string_attrib "x-data"
-            ("{count : " ^ string_of_int default_value ^ "}");
-        ]
-      [
-        label
-          ~a:[ a_class [ "block font-medium my-2" ] ]
-          [ txt (Fmt.str "%s (max %d %s)" label' max_value figure_unit) ];
-        button_component
-          ~attribs:
-            [
-              a_button_type `Button;
-              Unsafe.string_attrib "x-on:click"
-                (Fmt.str "if (count > %d) count = count - %d" min_value step);
-            ]
-          ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-          ~btn_type:`Danger_outlined ();
-        span
-          ~a:
-            [
-              a_id id;
-              a_contenteditable `True;
-              a_class [ "text-4xl border px-4" ];
-              Unsafe.string_attrib "@keydown.enter.prevent" "";
-              Unsafe.string_attrib "x-text" "count";
-              Unsafe.string_attrib "x-on:blur"
-                (Fmt.str
-                   "let rawValue = parseInt($el.innerText.replace(/[^0-9-]/g, \
-                    '')) || 0; count = Math.max(%d, Math.min(%d, rawValue)); \
-                    $el.innerText = count;"
-                   min_value max_value);
-              Unsafe.string_attrib "x-init" "$el.innerText = count";
-            ]
-          [];
-        span ~a:[ a_class [ "text-4xl" ] ] [ txt figure_unit ];
-        button_component
-          ~attribs:
-            [
-              a_button_type `Button;
-              Unsafe.string_attrib "x-on:click"
-                (Fmt.str "if (count < %d) count = count + %d" max_value step);
-            ]
-          ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-          ~btn_type:`Primary_outlined ();
-      ])
-
-let display_banner = function
-  | Some message ->
-      Tyxml_html.(
-        section
-          ~a:
-            [
-              a_class
-                [
-                  "w-full bg-primary-200 py-4 text-center text-gray-200 border \
-                   border-primary-400 font-semibold flex justify-center px-5 \
-                   space-x-5";
-                ];
-              a_id "banner-message";
-            ]
-          [
-            p [ txt message ];
-            button_component
-              ~attribs:[ a_id "close-banner-btn"; a_onclick "closeBanner()" ]
-              ~content:(i ~a:[ a_class [ "fa-solid fa-x text-sm" ] ] [])
-              ~btn_type:`Primary_outlined ();
-          ])
-  | None -> Tyxml_html.div []
 
 let bytes_to_megabytes bytes =
   let megabytes = float_of_int bytes /. (1024.0 *. 1024.0) in
@@ -726,14 +568,223 @@ let user_policy_usage policy unikernels blocks : user_policy_usage =
     bridge_usage_count;
   }
 
-let display_alert text alert_type =
-  let open Tyxml_html in
-  let class_ =
-    match alert_type with
-    | `Error -> "border-secondary-400 text-secondary-500"
-    | `Success -> "border-primary-400 text-primary-500"
-  in
-  Format.asprintf "%a" (Tyxml_html.pp_elt ())
-    (div
-       [ p [ txt text ] ]
-       ~a:[ a_class [ "my-4 p-4 border rounded-lg " ^ class_ ] ])
+module Ui = struct
+  let csrf_input csrf =
+    Tyxml_html.(
+      input
+        ~a:
+          [
+            a_input_type `Hidden;
+            a_id "molly-csrf";
+            a_name "molly_csrf";
+            a_value csrf;
+          ]
+        ())
+
+  let form_input ?(input_type = `Text) label_ =
+    Tyxml_html.(
+      div
+        [
+          label
+            ~a:[ a_class [ "block text-sm font-medium" ]; a_label_for label_ ]
+            [ txt (String.capitalize_ascii label_) ];
+          input
+            ~a:
+              [
+                a_autocomplete `On;
+                a_autofocus ();
+                a_input_type input_type;
+                a_name label_;
+                a_id label_;
+                a_class
+                  [
+                    "ring-primary-100 mt-1.5 transition appearance-none block \
+                     w-full px-3 py-3 rounded-xl shadow-sm focus:outline-none";
+                  ];
+              ]
+            ();
+        ])
+
+  let form_link ~label_ ~href () =
+    Tyxml_html.(
+      a
+        ~a:
+          [
+            a_href href;
+            a_class
+              [
+                "hover:text-primary-800 transition-colors my-4 cursor-pointer \
+                 text-sm font-medium text-primary-500";
+              ];
+          ]
+        [ txt label_ ])
+
+  let bird_image =
+    Tyxml_html.(
+      aside
+        ~a:[ a_class [ "relative h-full p-16 col-span-1 md:block hidden" ] ]
+        [
+          img ~src:"/images/molly_bird.jpeg"
+            ~alt:"Mollymawk delivering unikernels"
+            ~a:
+              [
+                a_class
+                  [ "absolute inset-1 max-w-none w-full h-full object-cover" ];
+              ]
+            ();
+        ])
+
+  let alert_element =
+    Tyxml_html.(
+      div
+        ~a:
+          [
+            a_id "alert-container";
+            a_class
+              [
+                "fixed top-1/4 rounded-md right-4 z-50 w-fit space-y-2 p-4 \
+                 shadow text-wrap hidden";
+              ];
+          ]
+        [])
+
+  let heading label_ =
+    Tyxml_html.(
+      h1
+        ~a:
+          [
+            a_class
+              [ "font-semibold text-2xl md:text-3xl mb-8 text-primary-800 p-6" ];
+          ]
+        [ txt label_ ])
+
+  let form_alerts =
+    Tyxml_html.(
+      div
+        [
+          p ~a:[ a_id "success-alert"; a_class [ "text-primary-500" ] ] [];
+          p ~a:[ a_id "error-alert"; a_class [ "text-secondary-500" ] ] [];
+        ])
+
+  let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
+    Tyxml_html.(
+      button
+        ~a:
+          (List.fold_left (fun acc attrib -> acc @ [ attrib ]) [] attribs
+          @ [
+              (match btn_type with
+              | `Primary_full ->
+                  a_class
+                    [
+                      "py-2 px-2 rounded bg-primary-500 hover:bg-primary-800 \
+                       text-gray-50 font-semibold " ^ extra_css;
+                    ]
+              | `Primary_outlined ->
+                  a_class
+                    [
+                      "py-2 px-2 rounded border border-1 border-primary-400 \
+                       text-primary-600 hover:text-gray-50 focus:outline-none \
+                       hover:bg-primary-800 font-semibold " ^ extra_css;
+                    ]
+              | `Danger_full ->
+                  a_class
+                    [
+                      "py-2 px-2 rounded bg-secondary-500 \
+                       hover:bg-secondary-800 text-gray-50 font-semibold "
+                      ^ extra_css;
+                    ]
+              | `Danger_outlined ->
+                  a_class
+                    [
+                      "py-2 px-2 rounded border border-1 border-secondary-400 \
+                       text-secondary-600 hover:text-gray-50 \
+                       focus:outline-none hover:bg-secondary-800 \
+                       font-semibold " ^ extra_css;
+                    ]);
+            ])
+        [ content ])
+
+  (** A UI with two buttons, one for decrementing a value and the other for
+      incrementing the value*)
+  let increment_or_decrement_ui ~max_value ~min_value ?(step = 1)
+      ?(default_value = 0) ?(figure_unit = "") ~id ~label' () =
+    let max_value = if max_value <= min_value then min_value else max_value in
+    let default_value =
+      if default_value <= min_value then min_value
+      else if default_value >= max_value then max_value
+      else default_value
+    in
+    Tyxml_html.(
+      div
+        ~a:
+          [
+            a_class [ "space-x-5" ];
+            Unsafe.string_attrib "x-data"
+              ("{count : " ^ string_of_int default_value ^ "}");
+          ]
+        [
+          label
+            ~a:[ a_class [ "block font-medium my-2" ] ]
+            [ txt (Fmt.str "%s (max %d %s)" label' max_value figure_unit) ];
+          button_component
+            ~attribs:
+              [
+                a_button_type `Button;
+                Unsafe.string_attrib "x-on:click"
+                  (Fmt.str "if (count > %d) count = count - %d" min_value step);
+              ]
+            ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+            ~btn_type:`Danger_outlined ();
+          span
+            ~a:
+              [
+                a_id id;
+                a_contenteditable `True;
+                a_class [ "text-4xl border px-4" ];
+                Unsafe.string_attrib "@keydown.enter.prevent" "";
+                Unsafe.string_attrib "x-text" "count";
+                Unsafe.string_attrib "x-on:blur"
+                  (Fmt.str
+                     "let rawValue = \
+                      parseInt($el.innerText.replace(/[^0-9-]/g, '')) || 0; \
+                      count = Math.max(%d, Math.min(%d, rawValue)); \
+                      $el.innerText = count;"
+                     min_value max_value);
+                Unsafe.string_attrib "x-init" "$el.innerText = count";
+              ]
+            [];
+          span ~a:[ a_class [ "text-4xl" ] ] [ txt figure_unit ];
+          button_component
+            ~attribs:
+              [
+                a_button_type `Button;
+                Unsafe.string_attrib "x-on:click"
+                  (Fmt.str "if (count < %d) count = count + %d" max_value step);
+              ]
+            ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+            ~btn_type:`Primary_outlined ();
+        ])
+
+  let display_banner = function
+    | Some message ->
+        Tyxml_html.(
+          section
+            ~a:
+              [
+                a_class
+                  [
+                    "w-full bg-primary-200 py-4 text-center text-gray-200 \
+                     border border-primary-400 font-semibold flex \
+                     justify-center px-5 space-x-5";
+                  ];
+                a_id "banner-message";
+              ]
+            [
+              p [ txt message ];
+              button_component
+                ~attribs:[ a_id "close-banner-btn"; a_onclick "closeBanner()" ]
+                ~content:(i ~a:[ a_class [ "fa-solid fa-x text-sm" ] ] [])
+                ~btn_type:`Primary_outlined ();
+            ])
+    | None -> Tyxml_html.div []
+end

@@ -16,6 +16,7 @@ let write_data data disk =
   | Error (`Msg msg) ->
       Logs.err (fun m -> m "error writing block device %s" msg);
       FS.error_msgf "writing block device"
+  | exception exn -> FS.error_msgf "unknown error: %s" (Printexc.to_string exn)
 
 let read_data disk =
   match FS.read_data disk with

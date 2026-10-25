@@ -9,5 +9,8 @@
   x509
   mrmime
   mnet-tls
-  tyxml)
+  tyxml
+  ohex
+  vifu
+  digestif)
  (wrapped false))

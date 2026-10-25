@@ -3,17 +3,25 @@
  (enabled_if
   (= %{context_name} "solo5"))
  (link_flags :standard -cclib "-z solo5-abi=hvt")
- (modules main assets routes store filesystem albatross_client)
+ (modules main assets controller app store filesystem albatross_client)
  (libraries
   mkernel
   mnet
   mnet-cli
   mnet-happy-eyeballs
+  mnet-dns
   vifu
   mirage-crypto-rng-mkernel
   utcp
   cmdliner
   mhttp
+  mhttp-client
+  ohex
+  msendmail
+  colombe
+  colombe.emile
+  sendmail
+  emile
   x509
   gmp
   yojson
@@ -42,8 +50,6 @@
   (run solo5-elftool gen-manifest manifest.json manifest.c)))
 
 (rule
- (enabled_if
-  (= %{context_name} "solo5"))
  (targets assets.ml)
  (deps
   (source_tree assets))

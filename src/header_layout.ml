@@ -36,7 +36,7 @@ let header ?(page_title = "Mollymawk") () =
             [
               a_name "htmx-config";
               a_content
-                "{\"responseHandling\": [{\"code\":\"...\", \"swap\": true}]}";
+                "{\"responseHandling\": [{\"code\":\".*\", \"swap\": true}]}";
             ]
           ();
         link ~rel:[ `Stylesheet ]
