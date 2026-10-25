@@ -339,7 +339,7 @@ let check_discard_malformed_unikernel_update () =
           numcpus = 1;
           linux_boot_partition = None;
         };
-      timestamp = Mkernel.now ();
+      timestamp = Ptime.epoch;
     }
   in
   let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in

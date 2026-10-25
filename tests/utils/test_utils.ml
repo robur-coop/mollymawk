@@ -1,4 +1,4 @@
-let rng = Mirage_crypto_rng_mkernel.(initialize (module Pfortuna))
+let rng = Mirage_crypto_rng_unix.use_default ()
 
 (* this dump was gotten from a locally running instance of mollymawk. in store.ml, the function read_disk outputs a string. this is the string that is contained in the value raw_dump below. *)
 let raw_dump =
@@ -477,7 +477,11 @@ let mock_albatross_config =
     updated_at = Ptime.epoch;
   }
 
-let make_csrf_token () = Uuidm.to_string (User_model.generate_uuid ())
+let csrf_key =
+  "2fc872515abe2def1b79259da44ba1d01adbf305e444de885cadf1eb40f7b539"
+
+let session_cookie = ""
+let make_csrf_token () = Csrf.generate_token ~key:csrf_key ~session_cookie
 
 let make_mock_token ?(name = "mock-token") ?(expiry = 3600) () =
   User_model.generate_token ~name ~expiry ~current_time:(Mkernel.now ())
@@ -487,7 +491,7 @@ let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
     ?(tokens = Utils.SM.empty) () =
   let name_lbl = label_of_string_exn name in
   let email_box = email_of_string_exn email in
-  let now = Mkernel.now () in
+  let now = Ptime.epoch in
   let user, _session_cookie =
     User_model.create_user ~name:name_lbl ~email:email_box ~password ~active
       ~super_user ~created_at:now ~user_agent:(Some "Alcotest-client")

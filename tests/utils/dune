@@ -1,6 +1,7 @@
 (library
  (name test_utils)
- (enabled_if (= %{context_name} "default"))
+ (enabled_if
+  (= %{context_name} "default"))
  (libraries
   mollymawk_libraries
   alcotest
@@ -8,7 +9,7 @@
   yojson
   mrmime
   uuidm
-  mirage-crypto-rng-mkernel
+  mirage-crypto-rng.unix
   ptime
   fmt
   logs
