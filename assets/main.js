@@ -118,12 +118,6 @@ function getCookie(name) {
 	}
 }
 
-function getUnikernelName(url) {
-	const urlObj = new URL(url);
-	const pathParts = urlObj.pathname.split('/');
-	return pathParts[pathParts.length - 1];
-}
-
 function filterData() {
 	const input = document.getElementById("searchQuery").value.toUpperCase();
 	const tables = document.querySelectorAll(".data-table");
@@ -158,7 +152,6 @@ function filterAlbatrossInstance(event) {
 	});
 }
 
-var newConfig = false;
 function openConfigForm(name, ip, port, certificate, p_key) {
 	const formSection = document.getElementById("config-form");
 	const configSection = document.getElementById("config-body");
@@ -168,7 +161,7 @@ function openConfigForm(name, ip, port, certificate, p_key) {
 	const certificateInput = document.getElementById("certificate");
 	const pkeyInput = document.getElementById("private-key");
 	const configBtn = document.getElementById("config-button");
-	const addConfigBtn = document.getElementById("add-config")
+	const addConfigBtn = document.getElementById("add-config");
 	nameInput.value = name;
 	ipInput.value = ip;
 	portInput.value = port;
@@ -179,185 +172,15 @@ function openConfigForm(name, ip, port, certificate, p_key) {
 	configSection.classList.remove("block");
 	configSection.classList.add("hidden");
 	addConfigBtn.classList.add("hidden");
-	if (name === '' || ip === '' || port === '' || certificate === '' || p_key === '') {
-		newConfig = true;
-		configBtn.textContent = "Save";
-	} else {
-		configBtn.textContent = "Update";
+	const isNew = name === '' || ip === '' || port === '' || certificate === '' || p_key === '';
+	formSection.setAttribute(
+		"hx-post",
+		isNew ? "/api/admin/settings/albatross/create" : "/api/admin/settings/albatross/update"
+	);
+	if (window.htmx) {
+		htmx.process(formSection);
 	}
-}
-
-async function saveAlbatrossConfig() {
-	const nameInput = document.getElementById("albatross-name").value;
-	const ipInput = document.getElementById("server-ip").value;
-	const portInput = document.getElementById("server-port").value;
-	const certificateInput = document.getElementById("certificate").value;
-	const pkeyInput = document.getElementById("private-key").value;
-	const formAlert = document.getElementById("form-alert");
-	const formButton = document.getElementById('config-button');
-	const molly_csrf = document.getElementById("molly-csrf").value;
-	formButton.classList.add("disabled");
-	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
-	formButton.disabled = true;
-	if (nameInput === '' || ipInput === '' || portInput === '' || certificateInput === '' || pkeyInput === '') {
-		showError(formAlert, "Please fill all fields");
-	} else if (isValidName(nameInput, formAlert)) {
-		try {
-			const response = await fetch(newConfig ? "/api/admin/settings/albatross/create" : "/api/admin/settings/albatross/update", {
-				method: 'POST',
-				headers: {
-					"Content-Type": "application/json",
-					"Accept": "application/json",
-				},
-				body: JSON.stringify({
-					"name": nameInput,
-					"server_ip": ipInput,
-					"server_port": Number(portInput),
-					"certificate": certificateInput,
-					"private_key": pkeyInput,
-					"molly_csrf": molly_csrf
-				})
-			})
-			const data = await response.json();
-			if (data.status === 200) {
-				showError(formAlert, "Successfully updated", true);
-				postAlert("bg-primary-300", data.data);
-				setTimeout(function () {
-					window.location.reload();
-				}, 2000);
-			} else {
-				showError(formAlert, data.data);
-			}
-		} catch (error) {
-			showError(formAlert, error);
-		}
-	}
-	formButton.innerHTML = "Update"
-	formButton.disabled = false;
-}
-
-async function deleteAlbatrossConfig(name) {
-	const formAlert = document.getElementById("form-alert");
-	const formButton = document.getElementById(`delete-config-btn-${name}`);
-	const molly_csrf = document.getElementById("molly-csrf").value;
-	formButton.classList.add("disabled");
-	formButton.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
-	formButton.disabled = true;
-	try {
-		const response = await fetch("/api/admin/settings/albatross/delete", {
-			method: 'POST',
-			headers: {
-				"Content-Type": "application/json",
-				"Accept": "application/json",
-			},
-			body: JSON.stringify({
-				"name": name,
-				"molly_csrf": molly_csrf
-			})
-		})
-		const data = await response.json();
-		if (data.status === 200) {
-			showError(formAlert, "Successfully deleted", true);
-			postAlert("bg-primary-300", data.data);
-			setTimeout(function () {
-				window.location.reload();
-			}, 2000);
-		} else {
-			showError(formAlert, data.data);
-		}
-	} catch (error) {
-		showError(formAlert, error);
-	}
-	formButton.disabled = false;
-	formButton.innerHTML = `<i class="fa-solid fa-trash"></i>`
-}
-
-async function sendRequestForEmailConfig(btnId, btnText, endpoint) {
-	const serverInput = document.getElementById("email-ip").value;
-	const portInput = document.getElementById("email-port").value;
-	const fromInput = document.getElementById("email-sender").value;
-	const toInput = document.getElementById("to-email").value;
-	const baseUrlInput = document.getElementById("base-url").value;
-	const formAlert = document.getElementById("form-alert");
-	const formButton = document.getElementById(btnId);
-	const molly_csrf = document.getElementById("molly-csrf").value;
-	formButton.classList.add("disabled");
-	formButton.innerHTML = `Processing <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
-	formButton.disabled = true;
-	if (serverInput === '' || portInput === '' || fromInput === '') {
-		showError(formAlert, "Please fill all fields");
-	} else {
-		try {
-			const response = await fetch(endpoint, {
-				method: 'POST',
-				headers: {
-					"Content-Type": "application/json",
-					"Accept": "application/json",
-				},
-				body: JSON.stringify({
-					"server": serverInput,
-					"port": Number(portInput),
-					"from_email": fromInput,
-					"base_url": baseUrlInput,
-					"molly_csrf": molly_csrf,
-					...(toInput && { "to_email": toInput })
-				})
-			})
-			const data = await response.json();
-			if (data.status === 200) {
-				showError(formAlert, "Successfully updated", true);
-				postAlert("bg-primary-300", data.data);
-				setTimeout(function () {
-					window.location.reload();
-				}, 2000);
-			} else {
-				showError(formAlert, data.data);
-			}
-		} catch (error) {
-			showError(formAlert, error);
-		}
-	}
-	formButton.innerHTML = btnText;
-	formButton.disabled = false;
-}
-
-async function updateEmailConfig() {
-	sendRequestForEmailConfig("update-email-config-btn", "Update configuration", "/api/admin/settings/email/update")
-}
-
-async function sendTestEmail() {
-	sendRequestForEmailConfig("test-email-btn", "Send Test Email", "/api/admin/settings/email/test")
-}
-
-async function retryConnectingAlbatross(name) {
-	const formAlert = document.getElementById("form-alert");
-	const formButton = document.getElementById(`retry-btn-${name}`);
-	formButton.classList.add("disabled");
-	formButton.innerHTML = `Connecting <i class="fa-solid fa-spinner animate-spin text-primary-800"></i>`
-	formButton.disabled = true;
-	try {
-		const response = await fetch(("/api/admin/albatross/retry?instance=" + name), {
-			method: 'GET',
-			headers: {
-				"Accept": "application/json",
-			},
-		})
-		const data = await response.json();
-		if (data.status === 200) {
-			showError(formAlert, "Connection successful", true);
-			postAlert("bg-primary-300", data.data);
-			setTimeout(function () {
-				window.location.reload();
-			}, 2000);
-		} else {
-			showError(formAlert, data.data);
-			postAlert("bg-secondary-300", data.data);
-		}
-	} catch (error) {
-		showError(formAlert, error);
-	}
-	formButton.disabled = false;
-	formButton.innerHTML = `Retry connecting`
+	configBtn.textContent = isNew ? "Save" : "Update";
 }
 
 function closeBanner() {
@@ -530,29 +353,6 @@ async function deployUnikernel(albatross_instance) {
 	}
 }
 
-async function destroyUnikernel(unikernel_name, instance_name) {
-	try {
-		const molly_csrf = document.getElementById("molly-csrf").value;
-		const response = await fetch(`/api/unikernel/destroy`, {
-			method: 'POST',
-			body: JSON.stringify({ "name": unikernel_name, "molly_csrf": molly_csrf, "albatross_instance": instance_name }),
-			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-		})
-
-		const data = await response.json();
-		if (data.status === 200) {
-			postAlert("bg-primary-300", `Successful: ${data.data}`);
-			setTimeout(function () {
-				window.location.href = "/dashboard";
-			}, 2000);
-		} else {
-			postAlert("bg-secondary-300", `${name} has been destroyed successfully.`);
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-	}
-}
-
 function buttonLoading(btn, load, text) {
 	if (load) {
 		btn.disabled = true;
@@ -562,57 +362,6 @@ function buttonLoading(btn, load, text) {
 		btn.innerHTML = text;
 	}
 }
-
-async function toggleUserStatus(uuid, endpoint) {
-	try {
-		const molly_csrf = document.getElementById("molly-csrf").value;
-		const response = await fetch(endpoint, {
-			method: 'POST',
-			body: JSON.stringify({ uuid, molly_csrf }),
-			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-		});
-
-		const data = await response.json();
-		if (response.status === 200) {
-			postAlert("bg-primary-300", data.data);
-			setTimeout(() => window.location.reload(), 1000);
-		} else {
-			postAlert("bg-secondary-300", data.data);
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-	}
-}
-
-async function deleteUser(uuid) {
-	try {
-		const molly_csrf = document.getElementById("molly-csrf").value;
-		const response = await fetch('/api/admin/user/account/delete', {
-			method: 'POST',
-			body: JSON.stringify({ uuid, molly_csrf }),
-			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-		});
-
-		const data = await response.json();
-		if (response.status === 200) {
-			postAlert("bg-primary-300", data.data);
-			setTimeout(() => window.location.assign("/admin/users"), 1000);
-		} else {
-			postAlert("bg-secondary-300", data.data);
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-	}
-}
-
-async function toggleUserActiveStatus(uuid) {
-	await toggleUserStatus(uuid, "/api/admin/user/activate/toggle");
-}
-
-async function toggleUserAdminStatus(uuid) {
-	await toggleUserStatus(uuid, "/api/admin/user/admin/toggle");
-}
-
 
 function multiselect(selected, options) {
 	return {
@@ -633,56 +382,6 @@ function multiselect(selected, options) {
 			this.selected.splice(index, 1);
 		}
 	};
-}
-
-async function updatePolicy(instance_name) {
-	const unikernel_count = document.getElementById("f_allowed_unikernels").innerText;
-	const mem_size = document.getElementById("f_allowed_memory").innerText;
-	const storage_size = document.getElementById("f_allowed_storage").innerText;
-	const cpuids = document.getElementById("selectedCPUs").value;
-	const bridges = document.getElementById("selectedBridges").value;
-	const user_id = document.getElementById("user_id").innerText;
-	const molly_csrf = document.getElementById("molly-csrf").value;
-	const formAlert = document.getElementById("form-alert");
-	const policyButton = document.getElementById("set-policy-btn");
-
-	try {
-		buttonLoading(policyButton, true, "Processing...");
-
-		const response = await fetch("/api/admin/u/policy/update", {
-			method: 'POST',
-			headers: {
-				"Content-Type": "application/json",
-				"Accept": "application/json",
-			},
-			body: JSON.stringify({
-				"albatross_instance": instance_name,
-				"unikernels": Number(unikernel_count),
-				"memory": Number(mem_size),
-				"block": Number(storage_size),
-				"cpuids": cpuids,
-				"bridges": bridges,
-				"user_uuid": user_id,
-				"molly_csrf": molly_csrf
-			})
-		});
-
-		const data = await response.json();
-
-		if (data.status === 200) {
-			showError(formAlert, "Successfully updated", true);
-			postAlert("bg-primary-300", "Policy updated successfully");
-			setTimeout(function () {
-				window.location.href = "/admin/user/policy?uuid=" + user_id;
-			}, 2000);
-		} else {
-			showError(formAlert, data.data);
-		}
-	} catch (error) {
-		showError(formAlert, error.toString());
-	} finally {
-		buttonLoading(policyButton, false, "Set Policy");
-	}
 }
 
 function sort_data() {
@@ -743,159 +442,6 @@ function sort_data() {
 			return document.querySelector("#data-table tbody");
 		}
 	};
-}
-
-async function updatePassword() {
-	const passwordButton = document.getElementById("password-button");
-	try {
-		buttonLoading(passwordButton, true, "Updating..")
-		const molly_csrf = document.getElementById("molly-csrf").value;
-		const current_password = document.getElementById("current-password").value;
-		const new_password = document.getElementById("new-password").value;
-		const confirm_password = document.getElementById("confirm-password").value;
-		const formAlert = document.getElementById("form-alert");
-		if (!current_password || !new_password || !confirm_password) {
-			showError(formAlert, "Please fill in all the required passwords");
-			buttonLoading(passwordButton, false, "Deploy")
-		} else {
-			const response = await fetch('/account/password/update', {
-				method: 'POST',
-				body: JSON.stringify(
-					{
-						molly_csrf,
-						current_password,
-						new_password,
-						confirm_password
-
-					}),
-				headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-			});
-
-			const data = await response.json();
-			if (response.status === 200) {
-				postAlert("bg-primary-300", data.data);
-				setTimeout(() => window.location.reload(), 1000);
-			} else {
-				postAlert("bg-secondary-300", data.data);
-				buttonLoading(passwordButton, false, "Save")
-			}
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-		buttonLoading(passwordButton, false, "Save")
-	}
-}
-
-async function closeSessions() {
-	const sessionButton = document.getElementById("session-button");
-	try {
-		buttonLoading(sessionButton, true, "Closing sessions..")
-		const molly_csrf = document.getElementById("molly-csrf").value;
-		const response = await fetch('/api/account/sessions/close', {
-			method: 'POST',
-			body: JSON.stringify(
-				{
-					molly_csrf,
-				}),
-			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-		});
-
-		const data = await response.json();
-		if (response.status === 200) {
-			postAlert("bg-primary-300", data.data);
-			setTimeout(() => window.location.reload(), 1000);
-		} else {
-			postAlert("bg-secondary-300", data.data);
-			buttonLoading(sessionButton, false, "Logout all other sessions")
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-		buttonLoading(sessionButton, false, "Logout all other sessions")
-	}
-}
-
-async function closeSession(session_value) {
-	const sessionButton = document.getElementById(`session-button-${session_value}`);
-	try {
-		buttonLoading(sessionButton, true, "Closing session..")
-		const molly_csrf = document.getElementById("molly-csrf").value;
-		const response = await fetch('/api/account/session/close', {
-			method: 'POST',
-			body: JSON.stringify(
-				{
-					session_value,
-					molly_csrf,
-				}),
-			headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }
-		});
-
-		const data = await response.json();
-		if (response.status === 200) {
-			postAlert("bg-primary-300", data.data);
-			setTimeout(() => window.location.reload(), 1000);
-		} else {
-			postAlert("bg-secondary-300", data.data);
-			buttonLoading(sessionButton, false, "Close session")
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-		buttonLoading(sessionButton, false, "Close session")
-	}
-}
-
-async function logout() {
-	const logoutButton = document.getElementById("logout-button");
-	try {
-		buttonLoading(logoutButton, true, "Closing session..")
-		const molly_csrf = document.getElementById("molly-csrf").value;
-		fetch('/logout', {
-			method: 'POST',
-			body: JSON.stringify(
-				{
-					molly_csrf,
-				}),
-			headers: { 'Content-Type': 'application/json' }
-		});
-		setTimeout(() => window.location.reload(), 1000);
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-		buttonLoading(logoutButton, false, "Logout")
-	}
-}
-
-async function deleteBlock(block_name, albatross_instance) {
-	const deleteButton = document.getElementById(`delete-block-button-${block_name}`);
-	const molly_csrf = document.getElementById("molly-csrf").value;
-	const formAlert = document.getElementById("form-alert");
-	try {
-		buttonLoading(deleteButton, true, "Deleting...")
-		const response = await fetch("/api/block/delete", {
-			method: 'POST',
-			headers: {
-				"Content-Type": "application/json",
-				"Accept": "application/json",
-			},
-			body: JSON.stringify(
-				{
-					"block_name": block_name,
-					"albatross_instance": albatross_instance,
-					"molly_csrf": molly_csrf
-				})
-		})
-		const data = await response.json();
-		if (data.status === 200) {
-			showError(formAlert, "Successfully deleted", true);
-			postAlert("bg-primary-300", "Block device deleted successfully");
-			setTimeout(() => window.location.reload(), 1000);
-			buttonLoading(deleteButton, false, "Delete")
-		} else {
-			showError(formAlert, data.data);
-			buttonLoading(deleteButton, false, "Delete")
-		}
-	} catch (error) {
-		showError(formAlert, error);
-		buttonLoading(deleteButton, false, "Delete")
-	}
 }
 
 async function createBlock(albatross_instance) {
@@ -1042,250 +588,6 @@ async function uploadToBlock(block_name, albatross_instance) {
 	}
 }
 
-
-async function createToken() {
-	const tokenButton = document.getElementById('create-token-button');
-	const token_name = document.getElementById("token_name").value;
-	const token_expiry = document.getElementById("token_expiry").value;
-	const molly_csrf = document.getElementById("molly-csrf").value;
-	const formAlert = document.getElementById("tokens-form-alert");
-
-	if (!token_name || token_name == "") {
-		showError(formAlert, "Please enter a name");
-		buttonLoading(tokenButton, false, "Create Token")
-		return;
-	}
-	if (!token_expiry || token_expiry == "") {
-		showError(formAlert, "Please select a validity period");
-		buttonLoading(tokenButton, false, "Create Token")
-		return;
-	}
-	try {
-		buttonLoading(tokenButton, true, "Creating...")
-		const response = await fetch("/api/tokens/create", {
-			method: 'POST',
-			headers: {
-				"Content-Type": "application/json",
-				"Accept": "application/json",
-			},
-			body: JSON.stringify(
-				{
-					"token_name": token_name,
-					"token_expiry": Number(token_expiry),
-					"molly_csrf": molly_csrf
-				})
-		})
-		const data = await response.json();
-		if (data.status === 200) {
-			postAlert("bg-primary-300", "Token created successfully");
-			setTimeout(() => window.location.reload(), 1000);
-			buttonLoading(tokenButton, false, "Create Token")
-		} else {
-			postAlert("bg-secondary-300", data.data);
-			buttonLoading(tokenButton, false, "Create Token")
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-		buttonLoading(tokenButton, false, "Create Token")
-	}
-}
-
-async function deleteToken(value) {
-	const tokenButton = document.getElementById(`delete-token-button-${value}`);
-	const molly_csrf = document.getElementById("molly-csrf").value;
-	try {
-		buttonLoading(tokenButton, true, "Deleting...")
-		const response = await fetch("/api/tokens/delete", {
-			method: 'POST',
-			headers: {
-				"Content-Type": "application/json",
-				"Accept": "application/json",
-			},
-			body: JSON.stringify(
-				{
-					"token_value": value,
-					"molly_csrf": molly_csrf
-				})
-		})
-		const data = await response.json();
-		if (data.status === 200) {
-			postAlert("bg-primary-300", "Token deleted successfully");
-			setTimeout(() => window.location.reload(), 1000);
-			buttonLoading(tokenButton, false, "Delete")
-		} else {
-			postAlert("bg-secondary-300", data.data);
-			buttonLoading(tokenButton, false, "Delete")
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-		buttonLoading(tokenButton, false, "Delete")
-	}
-}
-
-async function updateToken(value) {
-	const tokenButton = document.getElementById("update-token-button");
-	const token_name = document.getElementById("token_u_name").value;
-	const token_expiry = document.getElementById("token_u_expiry").value;
-	const molly_csrf = document.getElementById("molly-csrf").value;
-	const formAlert = document.getElementById("tokens-update-form-alert");
-
-	if (!token_name || token_name == "") {
-		showError(formAlert, "Please enter a name");
-		buttonLoading(tokenButton, false, "Update Token")
-		return;
-	}
-	if (!token_expiry || token_expiry == "") {
-		showError(formAlert, "Please select a validity period");
-		buttonLoading(tokenButton, false, "Update Token")
-		return;
-	}
-	try {
-		buttonLoading(tokenButton, true, "Updating...")
-		const response = await fetch("/api/tokens/update", {
-			method: 'POST',
-			headers: {
-				"Content-Type": "application/json",
-				"Accept": "application/json",
-			},
-			body: JSON.stringify(
-				{
-					"token_value": value,
-					"token_name": token_name,
-					"token_expiry": Number(token_expiry),
-					"molly_csrf": molly_csrf
-				})
-		})
-		const data = await response.json();
-		if (data.status === 200) {
-			postAlert("bg-primary-300", "Token updated successfully");
-			setTimeout(() => window.location.reload(), 1000);
-			buttonLoading(tokenButton, false, "Update Token")
-		} else {
-			postAlert("bg-secondary-300", data.data);
-			buttonLoading(tokenButton, false, "Update Token")
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-		buttonLoading(tokenButton, false, "Update Token")
-	}
-}
-
-async function updateUnikernel(job, to_be_updated_unikernel, currently_running_unikernel, unikernel_name, albatross_instance) {
-	const updateButton = document.getElementById("update-unikernel-button");
-	const unikernelArguments = document.getElementById("unikernel-arguments").value;
-	const argumentsToggle = document.getElementById("arguments-toggle").checked;
-	const molly_csrf = document.getElementById("molly-csrf").value;
-	const formAlert = document.getElementById("unikernel-arguments-alert");
-	const liveliness_toggle = document.getElementById("liveliness-toggle").checked;
-	const http_toggle = document.getElementById("http-toggle").checked;
-	const dns_toggle = document.getElementById("dns-toggle").checked;
-	const dns_address = document.getElementById("dns-address").value.trim();
-	const dns_name = document.getElementById("dns-name").value.trim();
-	const http_address = document.getElementById("http-address").value.trim();
-
-	if (argumentsToggle && !unikernelArguments) {
-		showError(formAlert, "You must give arguments for this build else switch 'Update the configuration for this build' off");
-		buttonLoading(updateButton, false, "Proceed to update")
-		return;
-	}
-
-	if (liveliness_toggle && !(http_toggle || dns_toggle)) {
-		showError(formAlert, "Error: If liveliness is enabled, at least one of HTTP or DNS must be activated.");
-		buttonLoading(updateButton, false, "Proceed to update")
-		return;
-	}
-
-	if (dns_toggle && !(dns_address && dns_name)) {
-		showError(formAlert, "Error: DNS is enabled, but DNS name and DNS address is not provided.");
-		buttonLoading(updateButton, false, "Proceed to update")
-		return;
-	}
-
-	if (http_toggle && !http_address) {
-		showError(formAlert, "Error: HTTP is enabled, but no HTTP address is provided.");
-		buttonLoading(updateButton, false, "Proceed to update")
-		return;
-	}
-
-	try {
-		buttonLoading(updateButton, true, "Updating...")
-		const response = await fetch("/api/unikernel/update", {
-			method: 'POST',
-			headers: {
-				"Content-Type": "application/json",
-				"Accept": "application/json",
-			},
-			body: JSON.stringify(
-				{
-					"job": job,
-					"to_be_updated_unikernel": to_be_updated_unikernel,
-					"currently_running_unikernel": currently_running_unikernel,
-					"unikernel_name": unikernel_name,
-					"unikernel_arguments": argumentsToggle ? JSON.parse(unikernelArguments) : null,
-					"http_liveliness_address": http_toggle ? (http_address ? http_address : null) : null,
-					"dns_liveliness": dns_toggle ? ({
-						"dns_address": dns_address ? dns_address : null,
-						"dns_name": dns_name ? dns_name : null
-					}) : null,
-					"molly_csrf": molly_csrf,
-					"albatross_instance": albatross_instance,
-				})
-		})
-		const data = await response.json();
-		if (data.status === 200) {
-			postAlert("bg-primary-300", "Unikernel updated successfully");
-			setTimeout(() => {
-				window.location.href = `/unikernel/info?unikernel=${unikernel_name}&instance=${albatross_instance}`;
-			}, 1000);
-			buttonLoading(updateButton, false, "Proceed to update")
-		} else {
-			postAlert("bg-secondary-300", data.data);
-			showError(formAlert, data.data);
-			buttonLoading(updateButton, false, "Proceed to update")
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-		showError(formAlert, error);
-		buttonLoading(updateButton, false, "Proceed to update")
-	}
-}
-
-async function rollbackUnikernel(unikernel_name, instance_name) {
-	const rollbackButton = document.getElementById("unikernel-rollback");
-	const molly_csrf = document.getElementById("molly-csrf").value;
-	const formAlert = document.getElementById("form-alert");
-	try {
-		buttonLoading(rollbackButton, true, "Rolling back...")
-		const response = await fetch("/api/unikernel/rollback", {
-			method: 'POST',
-			headers: {
-				"Content-Type": "application/json",
-				"Accept": "application/json",
-			},
-			body: JSON.stringify(
-				{
-					"unikernel_name": unikernel_name,
-					"albatross_instance": instance_name,
-					"molly_csrf": molly_csrf
-				})
-		})
-		const data = await response.json();
-		if (data.status === 200) {
-			postAlert("bg-primary-300", "Unikernel rollback successful");
-			setTimeout(() => window.location.reload(), 1000);
-			buttonLoading(rollbackButton, false, "Rollback")
-		} else {
-			postAlert("bg-secondary-300", data.data);
-			showError(formAlert, data.data);
-			buttonLoading(rollbackButton, false, "Rollback")
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-		showError(formAlert, error);
-		buttonLoading(rollbackButton, false, "Rollback")
-	}
-}
-
 function isValidName(s, formAlert = null, inputElement = null) {
 	let error = null;
 	if (!s || s === '') {
@@ -1351,17 +653,34 @@ window.mapFields = function (field_id, detail, options) {
 	return reqs.map(n => ({ title: n, selected: '' }));
 };
 
-function parseXhrResponse(xhr) {
-	let res = {};
+function parseXhrResponse(xhr, redirectUrl = null) {
+	const formAlert = document.getElementById("form-alert");
 	try {
-		res = JSON.parse(xhr.responseText);
-		if (res.success) {
-			postAlert("bg-primary-300", "Succesful");
-			setTimeout(() => window.location.reload(), 1000);
+		const res = JSON.parse(xhr.responseText);
+		const msg = typeof res.data === "string" ? res.data : res.title;
+		if (xhr.status >= 200 && xhr.status < 300) {
+			if (formAlert) {
+				showError(formAlert, msg || "Successful", true);
+			}
+			postAlert("bg-primary-300", msg || "Successful");
+			setTimeout(() => {
+				if (redirectUrl) {
+					window.location.assign(redirectUrl);
+				} else {
+					window.location.reload();
+				}
+			}, 1000);
 		} else {
-			postAlert("bg-secondary-300", res.data);
+			if (formAlert) {
+				showError(formAlert, msg || "An error occurred");
+			}
+			postAlert("bg-secondary-300", msg || "An error occurred");
 		}
 	} catch (error) {
+		if (formAlert) {
+			showError(formAlert, error);
+		}
 		postAlert("bg-secondary-300", error);
 	}
 }
+window.parseXhrResponse = parseXhrResponse;
