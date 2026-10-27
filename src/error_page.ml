@@ -1,4 +1,4 @@
-let error_layout (error : Models.Status.t) =
+let error_layout (error : Models.Response.t) =
   Tyxml_html.(
     section
       ~a:[ a_class [ "text-center" ] ]

@@ -657,12 +657,11 @@ function parseXhrResponse(xhr, redirectUrl = null) {
 	const formAlert = document.getElementById("form-alert");
 	try {
 		const res = JSON.parse(xhr.responseText);
-		const msg = typeof res.data === "string" ? res.data : res.title;
 		if (xhr.status >= 200 && xhr.status < 300) {
 			if (formAlert) {
-				showError(formAlert, msg || "Successful", true);
+				showError(formAlert, res.data || "Successful", true);
 			}
-			postAlert("bg-primary-300", msg || "Successful");
+			postAlert("bg-primary-300", res.data || "Successful");
 			setTimeout(() => {
 				if (redirectUrl) {
 					window.location.assign(redirectUrl);
@@ -672,9 +671,9 @@ function parseXhrResponse(xhr, redirectUrl = null) {
 			}, 1000);
 		} else {
 			if (formAlert) {
-				showError(formAlert, msg || "An error occurred");
+				showError(formAlert, res.data || "An error occurred");
 			}
-			postAlert("bg-secondary-300", msg || "An error occurred");
+			postAlert("bg-secondary-300", res.data || "An error occurred");
 		}
 	} catch (error) {
 		if (formAlert) {

@@ -815,7 +815,7 @@ let check_page_not_found () =
 
 let check_error_layout_html_escaping () =
   let status =
-    Models.Status.make "Bad Request"
+    Models.Response.make "Bad Request"
       "<script>alert('xss')</script> <img src=x onerror=alert(1)>"
   in
   let rendered_html =
@@ -839,9 +839,9 @@ let check_status_to_json_escaping () =
   let injection_payload =
     "<script>alert(\"xss\")</script>\n\r\t\" \"><img src=x onerror=alert(1)>"
   in
-  let status = Models.Status.make "Bad Request" injection_payload in
+  let status = Models.Response.make "Bad Request" injection_payload in
   let json_str =
-    Result.get_ok (Jsont_bytesrw.encode_string Models.Status.to_json status)
+    Result.get_ok (Jsont_bytesrw.encode_string Models.Response.to_json status)
   in
   let parsed =
     match Utils.Json.from_string json_str with

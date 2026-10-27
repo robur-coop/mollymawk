@@ -244,9 +244,10 @@ let render_log_sources log_entries unikernel_name =
                 Unsafe.string_attrib "hx-ext" "form-json";
                 Unsafe.string_attrib "hx-post"
                   "/api/unikernel/monitoring/update";
-                Unsafe.string_attrib "hx-swap" "innerHTML";
+                Unsafe.string_attrib "hx-swap" "none";
                 Unsafe.string_attrib "hx-include" "#molly-csrf";
-                Unsafe.string_attrib "hx-target" "#monitoring-container";
+                Unsafe.string_attrib "hx-on::after-request"
+                  "window.parseXhrResponse(event.detail.xhr)";
               ]
             [
               Ui.hidden_input
@@ -393,9 +394,10 @@ let render_metric_sources metric_entries unikernel_name =
                 Unsafe.string_attrib "hx-ext" "form-json";
                 Unsafe.string_attrib "hx-post"
                   "/api/unikernel/monitoring/update";
-                Unsafe.string_attrib "hx-swap" "innerHTML";
+                Unsafe.string_attrib "hx-swap" "none";
                 Unsafe.string_attrib "hx-include" "#molly-csrf";
-                Unsafe.string_attrib "hx-target" "#monitoring-container";
+                Unsafe.string_attrib "hx-on::after-request"
+                  "window.parseXhrResponse(event.detail.xhr)";
               ]
             [
               Ui.hidden_input
@@ -462,10 +464,12 @@ let parse_metrics_entries entries =
 
 let monitoring_status_html ~name ~logs ~metrics =
   let log_entries =
-    Result.bind (parse_monitoring_response logs) parse_log_entries
+    Result.bind logs (fun l ->
+        Result.bind (parse_monitoring_response l) parse_log_entries)
   in
   let metric_entries =
-    Result.bind (parse_monitoring_response metrics) parse_metrics_entries
+    Result.bind metrics (fun m ->
+        Result.bind (parse_monitoring_response m) parse_metrics_entries)
   in
   div
     ~a:[ a_id "monitoring-container"; a_class [ "space-y-6 py-4" ] ]

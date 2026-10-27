@@ -50,14 +50,8 @@ let check_update_policy_success () =
     "Response has HTTP 200 OK" true
     (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
   Alcotest.(check bool)
-    "Response contains allowed_unikernels" true
-    (String.includes ~affix:"\"allowed_unikernels\":5" resp);
-  Alcotest.(check bool)
-    "Response contains allowed_memory" true
-    (String.includes ~affix:"\"allowed_memory\":512" resp);
-  Alcotest.(check bool)
-    "Response contains allowed_block_size" true
-    (String.includes ~affix:"\"allowed_block_size\":0" resp)
+    "Response contains success message" true
+    (String.includes ~affix:"Updated policy successfully" resp)
 
 let check_update_policy_with_block_size_success () =
   let store = init_mock_store () in
@@ -83,8 +77,8 @@ let check_update_policy_with_block_size_success () =
     "Response has HTTP 200 OK" true
     (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
   Alcotest.(check bool)
-    "Response contains allowed_block_size: 2048" true
-    (String.includes ~affix:"\"allowed_block_size\":2048" resp)
+    "Response contains success message" true
+    (String.includes ~affix:"Updated policy successfully" resp)
 
 let check_update_policy_exceeds_root_unikernels () =
   let store = init_mock_store () in

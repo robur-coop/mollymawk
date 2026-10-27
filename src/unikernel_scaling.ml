@@ -34,13 +34,14 @@ let display_policy ~instance_name ~unikernel_name ~max_allowed scaling_policy =
                     (Fmt.str
                        "/api/unikernel/scaling/update?instance=%s&unikernel=%s"
                        instance_name unikernel_name);
-                  Unsafe.string_attrib "hx-swap" "innerHTML";
+                  Unsafe.string_attrib "hx-swap" "none";
                   Unsafe.string_attrib "hx-include" "#molly-csrf";
                   Unsafe.string_attrib "hx-vals"
                     "js:{max_instances: \
                      parseInt(document.getElementById('max-instances').innerText.trim(), \
                      10)}";
-                  Unsafe.string_attrib "hx-target" "#scaling-policy-container";
+                  Unsafe.string_attrib "hx-on::after-request"
+                    "window.parseXhrResponse(event.detail.xhr)";
                 ]
               [
                 Ui.switch_button

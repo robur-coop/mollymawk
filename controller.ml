@@ -80,32 +80,17 @@ let page_response ?(headers = []) ?session_cookie ty req
 let api_response ?(headers = []) ~title ~data http_status req =
   let open Vifu.Response.Syntax in
   let* () = add_headers headers in
-  let status = Models.Status.make title data in
-  let* () = Vifu.Response.with_json req Models.Status.to_json status in
-  Vifu.Response.respond http_status
-
-let api_typed_response ?(headers = []) ~title ~codec ~data http_status req =
-  let open Vifu.Response.Syntax in
-  let* () = add_headers headers in
   let resp = Models.Response.make title data in
-  let* () = Vifu.Response.with_json req (Models.Response.of_data codec) resp in
+  let* () = Vifu.Response.with_json req Models.Response.to_json resp in
   Vifu.Response.respond http_status
 
 let error_page_response ?(title = "Error") ~data http_status req =
   let open Vifu.Response.Syntax in
-  let status = Models.Status.make title data in
+  let status = Models.Response.make title data in
   let ty =
     Guest_layout.guest_layout ~page_title:title (Error_page.error_layout status)
   in
   let* () = Vifu.Response.with_tyxml req ty in
-  Vifu.Response.respond http_status
-
-let text_response ?(content_type = "text/plain; charset=utf-8") ?(headers = [])
-    data http_status req =
-  let open Vifu.Response.Syntax in
-  let* () = add_headers headers in
-  let* () = Vifu.Response.add ~field:"Content-Type" content_type in
-  let* () = Vifu.Response.with_string req data in
   Vifu.Response.respond http_status
 
 let static_asset_response ~mime ~content req (_server : Vifu.Server.t) _env =
@@ -408,10 +393,9 @@ module Auth = struct
                 Session.add_session user.uuid cookie;
                 match Store.write_data storage env.block with
                 | Ok () ->
-                    api_typed_response
+                    api_response
                       ~headers:(set_cookie_header cookie.value)
-                      ~title:"Success" ~codec:Models.User.user_json ~data:user
-                      `OK req
+                      ~title:"Success" ~data:"Registration successful" `OK req
                 | Error (`Msg err) ->
                     Storage.delete_user storage user;
                     Session.remove_session cookie.value;
@@ -443,10 +427,9 @@ module Auth = struct
               | Ok (user, cookie) ->
                   Session.prune_expired_sessions (now ());
                   Session.add_session user.uuid cookie;
-                  api_typed_response
+                  api_response
                     ~headers:(set_cookie_header cookie.value)
-                    ~title:"Success" ~codec:Models.User.user_json ~data:user `OK
-                    req))
+                    ~title:"Success" ~data:"Login successful" `OK req))
 
   let logout_user req server env =
     with_user_cookie_api ~error_title:"Failure" ~error_status:`Unauthorized req
@@ -1868,16 +1851,12 @@ module Unikernel = struct
                   Storage.update_user store user;
                   match Store.write_data store env.block with
                   | Ok () ->
-                      text_response
-                        (Ui.display_alert
-                           "Unikernel scaling policy updated successfully."
-                           `Success)
+                      api_response ~title:"Success"
+                        ~data:"Unikernel scaling policy updated successfully."
                         `OK req
                   | Error (`Msg err) ->
-                      text_response
-                        (Ui.display_alert
-                           (Fmt.str "Failed to save scaling policy: %s" err)
-                           `Error)
+                      api_response ~title:"Internal Server Error"
+                        ~data:(Fmt.str "Failed to save scaling policy: %s" err)
                         `Internal_server_error req
                 in
                 match (form.should_scale, form.max_instances) with
@@ -1895,20 +1874,17 @@ module Unikernel = struct
                             albatross_inst user.name
                         with
                         | Error err ->
-                            text_response
-                              (Ui.display_alert
-                                 (Fmt.str "An error occurred: %s" err)
-                                 `Error)
+                            api_response ~title:"Bad Request"
+                              ~data:(Fmt.str "An error occurred: %s" err)
                               `Bad_request req
                         | Ok max_allowed ->
                             if max_instances > max_allowed then
-                              text_response
-                                (Ui.display_alert
-                                   (Fmt.str
-                                      "Error: you can spawn a maximum of %d \
-                                       clones."
-                                      max_allowed)
-                                   `Error)
+                              api_response ~title:"Bad Request"
+                                ~data:
+                                  (Fmt.str
+                                     "Error: you can spawn a maximum of %d \
+                                      clones."
+                                     max_allowed)
                                 `Bad_request req
                             else
                               let new_policy =
@@ -1928,18 +1904,16 @@ module Unikernel = struct
                               in
                               update_unikernel_scaling scaling_policies
                     else
-                      text_response
-                        (Ui.display_alert
-                           "Max instances must be greater than 1." `Error)
+                      api_response ~title:"Bad Request"
+                        ~data:"Max instances must be greater than 1."
                         `Bad_request req
                 | false, _ -> (
                     match current_scaling_policy with
                     | None ->
-                        text_response
-                          (Ui.display_alert
-                             "No scaling policy exist for this unikernel. \
-                              Nothing to do here."
-                             `Success)
+                        api_response ~title:"Success"
+                          ~data:
+                            "No scaling policy exist for this unikernel. \
+                             Nothing to do here."
                           `OK req
                     | Some _ ->
                         let scaling_policies =
@@ -1948,9 +1922,8 @@ module Unikernel = struct
                         in
                         update_unikernel_scaling scaling_policies)
                 | true, None ->
-                    text_response
-                      (Ui.display_alert "Missing max number of clones to spawn."
-                         `Error)
+                    api_response ~title:"Bad Request"
+                      ~data:"Missing max number of clones to spawn."
                       `Bad_request req)))
 
   let send_monitoring_tcp_command happy_eyeballs ~command ~target =
@@ -2028,16 +2001,18 @@ module Unikernel = struct
             let metrics =
               send_monitoring_tcp_command he ~command:"m*" ~target
             in
-            match (logs, metrics) with
-            | Ok logs_data, Ok metrics_data ->
-                let html =
-                  Monitoring.monitoring_status_html ~name:target ~logs:logs_data
-                    ~metrics:metrics_data
-                in
-                let body = Format.asprintf "%a" (Tyxml_html.pp_elt ()) html in
-                text_response body `OK req
-            | Error err, _ | _, Error err ->
-                text_response (Ui.display_alert err `Error) `Bad_request req))
+            let status =
+              match (logs, metrics) with
+              | Ok _, Ok _ -> `OK
+              | Error _, _ | _, Error _ -> `Bad_request
+            in
+            let html =
+              Monitoring.monitoring_status_html ~name:target ~logs ~metrics
+            in
+            let body = Format.asprintf "%a" (Tyxml_html.pp_elt ()) html in
+            let open Vifu.Response.Syntax in
+            let* () = Vifu.Response.with_text req body in
+            Vifu.Response.respond status))
 
   let unikernel_monitoring_update req server env =
     with_user_cookie_api req server (fun _user _cookie ->
@@ -2054,14 +2029,12 @@ module Unikernel = struct
                         ~target:unikernel_name
                     with
                     | Error err ->
-                        text_response
-                          (Ui.display_alert ("An error occured: " ^ err) `Error)
+                        api_response ~title:"Bad Request"
+                          ~data:("An error occured: " ^ err)
                           `Bad_request req
                     | Ok response ->
-                        text_response
-                          (Ui.display_alert
-                             ("Updated succesfully: " ^ response)
-                             `Success)
+                        api_response ~title:"Success"
+                          ~data:("Updated succesfully: " ^ response)
                           `OK req)
                 | Error err ->
                     let msg =
@@ -2071,12 +2044,11 @@ module Unikernel = struct
                         command_str err
                     in
                     Logs.info (fun m -> m "%s" msg);
-                    text_response (Ui.display_alert msg `Error) `Bad_request req
+                    api_response ~title:"Bad Request" ~data:msg `Bad_request req
                 )
             | _ ->
-                text_response
-                  (Ui.display_alert
-                     "Missing unikernel name or command in request." `Error)
+                api_response ~title:"Bad Request"
+                  ~data:"Missing unikernel name or command in request."
                   `Bad_request req))
 end
 
@@ -2401,10 +2373,10 @@ module Admin = struct
                                           ~title:"Internal Server Error"
                                           ~data:("error setting policy: " ^ err)
                                           `Internal_server_error req
-                                    | Ok policy ->
-                                        api_typed_response ~title:"Success"
-                                          ~codec:Models.Policy.policy_info_json
-                                          ~data:policy `OK req))
+                                    | Ok _policy ->
+                                        api_response ~title:"Success"
+                                          ~data:"Updated policy successfully"
+                                          `OK req))
                             | Ok None ->
                                 Logs.err (fun m ->
                                     m "policy: root policy can't be null ");

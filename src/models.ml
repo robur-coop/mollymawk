@@ -15,25 +15,17 @@ let instance_action_form target_field make =
   |> csrf_mem |> Object.finish
 
 module Response = struct
-  type 'a t = { title : string; data : 'a }
+  type t = { title : string; data : string }
 
   let make title data = { title; data }
   let title r = r.title
   let data r = r.data
 
-  let of_data ?(kind = "Response") data_codec =
-    Jsont.Object.map ~kind make
+  let to_json =
+    Jsont.Object.map ~kind:"Response" make
     |> Jsont.Object.mem "title" Jsont.string ~enc:title
-    |> Jsont.Object.mem "data" data_codec ~enc:data
+    |> Jsont.Object.mem "data" Jsont.string ~enc:data
     |> Jsont.Object.finish
-end
-
-module Status = struct
-  type t = string Response.t
-
-  let make = Response.make
-  let data = Response.data
-  let to_json = Response.of_data ~kind:"Status" Jsont.string
 end
 
 module Multipart = struct
@@ -930,29 +922,6 @@ module Policy = struct
     let ( let* ) = Result.bind in
     let* () = Vmm_core.Policy.usable policy in
     Ok policy
-
-  let policy_info_json =
-    let open Jsont in
-    let name (n, _) = Vmm_core.Name.to_string n in
-    let allowed_unikernels (_, (p : Vmm_core.Policy.t)) = p.unikernels in
-    let allowed_cpuids (_, (p : Vmm_core.Policy.t)) =
-      Vmm_core.IS.elements p.cpuids
-    in
-    let allowed_memory (_, (p : Vmm_core.Policy.t)) = p.memory in
-    let allowed_block_size (_, (p : Vmm_core.Policy.t)) =
-      Option.value ~default:0 p.block
-    in
-    let allowed_bridges (_, (p : Vmm_core.Policy.t)) =
-      Vmm_core.String_set.elements p.bridges
-    in
-    Object.enc_only ~kind:"PolicyInfo" ()
-    |> Object.mem "name" string ~enc:name
-    |> Object.mem "allowed_unikernels" int ~enc:allowed_unikernels
-    |> Object.mem "allowed_cpuids" (list int) ~enc:allowed_cpuids
-    |> Object.mem "allowed_memory" int ~enc:allowed_memory
-    |> Object.mem "allowed_block_size" int ~enc:allowed_block_size
-    |> Object.mem "allowed_bridges" (list string) ~enc:allowed_bridges
-    |> Object.finish
 end
 
 module Admin_user = struct

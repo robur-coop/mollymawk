@@ -1,15 +1,3 @@
-let display_alert text alert_type =
-  let open Tyxml_html in
-  let class_ =
-    match alert_type with
-    | `Error -> "border-secondary-400 text-secondary-500"
-    | `Success -> "border-primary-400 text-primary-500"
-  in
-  Format.asprintf "%a" (Tyxml_html.pp_elt ())
-    (div
-       [ p [ txt text ] ]
-       ~a:[ a_class [ "my-4 p-4 border rounded-lg " ^ class_ ] ])
-
 let input_classes =
   "ring-primary-100 mt-1.5 transition appearance-none block w-full px-3 py-3 \
    rounded-xl shadow-sm border hover:border-primary-200 \

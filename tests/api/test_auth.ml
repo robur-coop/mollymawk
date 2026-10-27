@@ -162,8 +162,8 @@ let check_registration_endpoint () =
        (String.lowercase_ascii response_str));
 
   Alcotest.(check bool)
-    "Response body contains user name test" true
-    (String.includes ~affix:"\"name\":\"test\"" response_str);
+    "Response body contains registration success message" true
+    (String.includes ~affix:"Registration successful" response_str);
 
   Alcotest.(check int)
     "User stored in database" 1
@@ -265,8 +265,8 @@ let check_login_endpoint () =
     (String.includes ~affix:"location: /dashboard"
        (String.lowercase_ascii resp));
   Alcotest.(check bool)
-    "Response body contains test" true
-    (String.includes ~affix:"\"name\":\"test\"" resp);
+    "Response body contains login success message" true
+    (String.includes ~affix:"Login successful" resp);
   Alcotest.(check bool)
     "Session recorded in storage" true
     (not (Utils.SM.is_empty (Controller.Session.user_sessions user.uuid)))
