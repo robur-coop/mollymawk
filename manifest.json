@@ -3,6 +3,7 @@
   "version": 1,
   "devices": [
     { "type": "NET_BASIC", "name": "service" },
+    { "type": "NET_BASIC", "name": "management" },
     { "type": "BLOCK_BASIC", "name": "data" }
   ]
 }

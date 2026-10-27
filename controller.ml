@@ -1,6 +1,10 @@
 type env = {
   tcp : Mnet.TCP.state;
   udp : Mnet.UDP.state;
+  m_tcp : Mnet.TCP.state;
+  m_udp : Mnet.UDP.state;
+  m_tcp : Mnet.TCP.state;
+  m_udp : Mnet.UDP.state;
   block : Mkernel.Block.t;
   csrf_key : string;
 }

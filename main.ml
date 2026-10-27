@@ -26,7 +26,9 @@ let secret =
 
 let term =
   let open Term in
-  const App.run $ Mnet_cli.setup "service" $ secret $ name
+  const App.run $ Mnet_cli.setup "service"
+  $ Mnet_cli.setup "management"
+  $ secret $ name
 
 let cmd =
   let info = Cmd.info "mollymawk" in

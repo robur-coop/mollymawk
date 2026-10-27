@@ -3,6 +3,8 @@ open Controller
 type env = Controller.env = {
   tcp : Mnet.TCP.state;
   udp : Mnet.UDP.state;
+  m_tcp : Mnet.TCP.state;
+  m_udp : Mnet.UDP.state;
   block : Mkernel.Block.t;
   csrf_key : string;
 }
@@ -78,20 +80,9 @@ let http =
   in
   `H1 h1
 
-let happy_eyeballs =
-  let daemon_ref = ref None in
-  let finally _ = Option.iter Mnet_happy_eyeballs.kill !daemon_ref in
-  Vifu.Device.v ~name:"happy-eyeballs" ~finally [] @@ fun { tcp; _ } ->
-  let daemon, he = Mnet_happy_eyeballs.create tcp in
-  daemon_ref := Some daemon;
-  he
-
-let run stack secret _name =
-  Mkernel.(run [ rng; stack; block "data" ])
-  @@ fun _rng (_, tcp, udp) block () ->
-  let albatross_device =
-    Albatross_client.make_device storage (fun env -> env.tcp)
-  in
+let run stack management_stack secret _name =
+  Mkernel.(run [ rng; stack; management_stack; block "data" ])
+  @@ fun _rng (_, tcp, udp) (_, m_tcp, m_udp) block () ->
   let port = 80 in
   let cookie_secret, csrf_key = derive_keys secret in
   let cfg =
@@ -99,7 +90,16 @@ let run stack secret _name =
       ~cookie_key:(Mirage_crypto.AES.GCM.of_secret cookie_secret)
       ~http port
   in
-  let devices = Vifu.Devices.[ happy_eyeballs; storage; albatross_device ] in
-  let env = { tcp; udp; block; csrf_key } in
+  let devices =
+    Vifu.Devices.
+      [
+        happy_eyeballs;
+        management_happy_eyeballs;
+        storage;
+        albatross;
+        Scheduler.device;
+      ]
+  in
+  let env = { tcp; udp; m_tcp; m_udp; block; csrf_key } in
   let middlewares = Vifu.Middlewares.[ Session.session ] in
   Vifu.run ~middlewares ~devices ~cfg tcp (routes ()) env
