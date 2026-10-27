@@ -29,7 +29,7 @@ let empty_superblock () =
   {
     super_version = s_version;
     super_counter = 0;
-    timestamp = Mkernel.now ();
+    timestamp = Utils.now ();
     active_sector = 0L;
     data_length = 0;
     data_checksum = "";
