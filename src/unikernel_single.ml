@@ -1,0 +1,575 @@
+let restart_unikernel_dialog ~unikernel_name ~instance_name info =
+  Tyxml_html.(
+    div
+      ~a:[ a_class [ "p-4" ]; a_id "restart-container" ]
+      [
+        form
+          ~a:
+            [
+              Unsafe.string_attrib "hx-post"
+                (Fmt.str "/api/unikernel/restart?instance=%s&unikernel=%s"
+                   (Models.Configuration.name_to_str instance_name)
+                   (Models.Configuration.name_to_str unikernel_name));
+              Unsafe.string_attrib "hx-ext" "form-json";
+              Unsafe.string_attrib "hx-include" "#molly-csrf";
+              Unsafe.string_attrib "hx-target" "#restart-container";
+              Unsafe.string_attrib "hx-swap" "none";
+              Unsafe.string_attrib "hx-on::after-request"
+                "window.parseXhrResponse(event.detail.xhr)";
+              Unsafe.string_attrib "hx-on::config-request"
+                "if (!document.getElementById('restart-dialog').checked) \
+                 delete event.detail.parameters['arguments'];";
+            ]
+          [
+            Ui.switch_button ~switch_id:"restart-dialog"
+              ~switch_label:"Modify unikernel arguments"
+              (Ui.raw_textarea
+                 ~attribs:
+                   [
+                     a_rows 25;
+                     a_cols 80;
+                     a_required ();
+                     a_name "arguments";
+                     a_id "unikernel-arguments";
+                   ]
+                 (Albatross_json.unikernel_info_to_arguments_pretty_string info));
+            Ui.button_component ~btn_type:`Primary_outlined
+              ~content:(txt "Restart")
+              ~attribs:[ a_button_type `Submit; a_id "restart-button" ]
+              ();
+          ];
+      ])
+
+let unikernel_single_layout ~unikernel_name ~instance_name
+    ?(last_update_time = None) ~current_time ~max_allowed unikernel
+    scaling_policy =
+  let u_name, u_data = unikernel in
+  let unikernel_name_str = Models.Configuration.name_to_str unikernel_name in
+  Tyxml_html.(
+    section
+      ~a:[ a_class [ "col-span-10 p-4 bg-gray-50 my-1" ] ]
+      [
+        div
+          ~a:[ a_id "unikernel-container"; a_class [ "p-4 rounded-md" ] ]
+          [
+            div
+              ~a:[ a_id "info-container" ]
+              [
+                div
+                  ~a:[ a_class [ "flex justify-between" ] ]
+                  [
+                    div
+                      [
+                        div
+                          ~a:[ a_class [ "flex space-x-2 items-end" ] ]
+                          [
+                            h2
+                              ~a:
+                                [
+                                  a_id "unikernel-name";
+                                  a_class [ "text-xl font-bold uppercase" ];
+                                ]
+                              [ txt (Vmm_core.Name.to_string u_name) ];
+                            p
+                              ~a:[ a_class [ "text-sm" ] ]
+                              [
+                                txt
+                                  ("created "
+                                  ^ Utils.TimeHelper.time_ago ~current_time
+                                      ~check_time:
+                                        u_data.Vmm_core.Unikernel.started);
+                              ];
+                          ];
+                        div
+                          ~a:
+                            [
+                              a_class [ "text-sm my-1 flex items-center gap-2" ];
+                            ]
+                          [
+                            span
+                              ~a:[ a_class [ "text-gray-700" ] ]
+                              [ txt "Digest: " ];
+                            span
+                              ~a:
+                                [
+                                  Unsafe.string_attrib "x-u_data"
+                                    "{ copied: false }";
+                                  Unsafe.string_attrib "x-on:click"
+                                    (Fmt.str
+                                       "navigator.clipboard.writeText('%s').then(() \
+                                        => { copied = true; setTimeout(() => \
+                                        copied = false, 2000); })"
+                                       (Ohex.encode u_data.digest));
+                                  a_class
+                                    [
+                                      "font-mono bg-gray-200 px-1.5 py-0.5 \
+                                       text-xs rounded cursor-pointer \
+                                       hover:bg-gray-300 transition-colors \
+                                       relative";
+                                    ];
+                                  a_title "Click to copy digest";
+                                ]
+                              [
+                                txt (Ohex.encode u_data.digest);
+                                span
+                                  ~a:
+                                    [
+                                      Unsafe.string_attrib "x-show" "copied";
+                                      a_class
+                                        [
+                                          "absolute -top-9 left-1/2 transform \
+                                           -translate-x-1/2 bg-gray-800 \
+                                           text-white text-xs px-2 py-2 \
+                                           rounded shadow whitespace-nowrap \
+                                           z-10";
+                                        ];
+                                      a_style "display: none;";
+                                    ]
+                                  [ txt "Copied!" ];
+                              ];
+                          ];
+                        p
+                          ~a:[ a_class [ "text-sm" ] ]
+                          [
+                            a
+                              ~a:
+                                [
+                                  a_href
+                                    ("https://builds.robur.coop/hash?sha256="
+                                   ^ Ohex.encode u_data.digest);
+                                  a_class [ "text-primary-600"; "font-bold" ];
+                                  a_style "text-decoration: underline;";
+                                ]
+                              [ txt "Search on builds.robur.coop" ];
+                          ];
+                        p
+                          ~a:[ a_class [ "text-sm" ] ]
+                          [
+                            txt
+                              ("Albatross instance: "
+                              ^ Models.Configuration.name_to_str instance_name);
+                          ];
+                        p
+                          ~a:[ a_class [ "text-sm" ] ]
+                          [
+                            txt
+                              (Fmt.str "Startup priority: %s"
+                                 (Option.value ~default:"50 (default)"
+                                    (Option.map string_of_int u_data.startup)));
+                          ];
+                      ];
+                    div
+                      ~a:[ a_class [ "flex space-x-2 items-center" ] ]
+                      [
+                        div
+                          [
+                            Modal_dialog.modal_dialog
+                              ~modal_title:"Restart Unikernel"
+                              ~button_type:`Primary_outlined
+                              ~button_content:(txt "Restart")
+                              ~content:
+                                (restart_unikernel_dialog ~unikernel_name
+                                   ~instance_name u_data)
+                              ();
+                          ];
+                        div
+                          [
+                            Ui.link_button
+                              ~href:
+                                ("/unikernel/update?unikernel="
+                               ^ unikernel_name_str ^ "&instance="
+                                ^ Models.Configuration.name_to_str instance_name
+                                )
+                              ~content:(txt "Update")
+                              ~btn_type:`Primary_outlined ();
+                          ];
+                        (* check that the last update happened less than 10 minutes ago (600 seconds)*)
+                        (let instance_name_str =
+                           Models.Configuration.name_to_str instance_name
+                         in
+                         match last_update_time with
+                         | Some check_time
+                           when Utils.TimeHelper.diff_in_seconds ~current_time
+                                  ~check_time
+                                < Utils.rollback_seconds_limit ->
+                             div
+                               [
+                                 Ui.button_component
+                                   ~attribs:
+                                     [
+                                       a_id "unikernel-rollback";
+                                       Unsafe.string_attrib "hx-post"
+                                         "/api/unikernel/rollback";
+                                       Unsafe.string_attrib "hx-ext" "form-json";
+                                       Unsafe.string_attrib "hx-include"
+                                         "#molly-csrf";
+                                       Unsafe.string_attrib "hx-vals"
+                                         (Fmt.str
+                                            {|{"unikernel_name": "%s", "albatross_instance": "%s"}|}
+                                            unikernel_name_str instance_name_str);
+                                       Unsafe.string_attrib "hx-swap" "none";
+                                       Unsafe.string_attrib
+                                         "hx-on::after-request"
+                                         "window.parseXhrResponse(event.detail.xhr)";
+                                     ]
+                                   ~content:(txt "Rollback")
+                                   ~btn_type:`Primary_outlined ();
+                               ]
+                         | _ -> div []);
+                        div
+                          [
+                            Ui.button_component
+                              ~attribs:
+                                [
+                                  Unsafe.string_attrib "hx-post"
+                                    "/api/unikernel/destroy";
+                                  Unsafe.string_attrib "hx-ext" "form-json";
+                                  Unsafe.string_attrib "hx-include"
+                                    "#molly-csrf";
+                                  Unsafe.string_attrib "hx-vals"
+                                    (Fmt.str
+                                       {|{"name": "%s", "albatross_instance": "%s"}|}
+                                       unikernel_name_str
+                                       (Models.Configuration.name_to_str
+                                          instance_name));
+                                  Unsafe.string_attrib "hx-swap" "none";
+                                  Unsafe.string_attrib "hx-on::after-request"
+                                    "window.parseXhrResponse(event.detail.xhr, \
+                                     '/dashboard')";
+                                ]
+                              ~content:(txt "Destroy")
+                              ~btn_type:`Danger_outlined ();
+                          ];
+                      ];
+                  ];
+                p ~a:[ a_id "form-alert"; a_class [ "my-3" ] ] [];
+                div
+                  ~a:[ a_class [ "grid grid-cols-3 gap-3 text-white my-3" ] ]
+                  [
+                    div
+                      ~a:[ a_class [ "p-4 rounded border border-primary-700" ] ]
+                      [
+                        div
+                          ~a:[ a_class [ "flex justify-between" ] ]
+                          [
+                            i
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "fa-solid fa-microchip text-xl \
+                                       text-primary-500";
+                                    ];
+                                ]
+                              [];
+                            p ~a:[ a_class [ "text-md" ] ] [ txt "CPU" ];
+                          ];
+                        p
+                          ~a:[ a_class [ "text-3xl text-right" ] ]
+                          [
+                            txt
+                              (String.concat ", "
+                                 (List.map string_of_int
+                                    (Vmm_core.IS.elements u_data.cpuids)));
+                          ];
+                      ];
+                    div
+                      ~a:[ a_class [ "p-4 rounded border border-primary-700" ] ]
+                      [
+                        div
+                          ~a:[ a_class [ "flex justify-between" ] ]
+                          [
+                            i
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "fa-solid fa-hard-drive text-xl \
+                                       text-primary-500";
+                                    ];
+                                ]
+                              [];
+                            p ~a:[ a_class [ "text-md" ] ] [ txt "Memory" ];
+                          ];
+                        p
+                          ~a:[ a_class [ "text-3xl text-right" ] ]
+                          [ txt (string_of_int u_data.memory ^ "MB") ];
+                      ];
+                    div
+                      ~a:[ a_class [ "p-4 rounded border border-primary-700" ] ]
+                      [
+                        div
+                          ~a:[ a_class [ "flex justify-between" ] ]
+                          [
+                            i
+                              ~a:
+                                [
+                                  a_class
+                                    [
+                                      "fa-solid fa-warehouse text-xl \
+                                       text-primary-500";
+                                    ];
+                                ]
+                              [];
+                            p ~a:[ a_class [ "text-md" ] ] [ txt "Type" ];
+                          ];
+                        p
+                          ~a:[ a_class [ "text-3xl text-right" ] ]
+                          [
+                            txt
+                              (match u_data.typ with
+                              | `Solo5 -> "Solo5"
+                              | `BHyve -> "BHyve");
+                          ];
+                      ];
+                  ];
+                div
+                  ~a:
+                    [
+                      a_class
+                        [
+                          "rounded my-4 text-white p-4 border \
+                           border-primary-700 bg-gray-800";
+                        ];
+                    ]
+                  [
+                    div
+                      ~a:
+                        [ a_class [ "flex justify-between items-center mb-4" ] ]
+                      [
+                        div
+                          [
+                            p
+                              ~a:[ a_class [ "text-xl font-semibold" ] ]
+                              [ txt "Autoscaling" ];
+                            Option.fold
+                              ~none:(small [ txt "Scaling is disabled" ])
+                              ~some:(fun scale ->
+                                small
+                                  [
+                                    txt
+                                      (Fmt.str
+                                         "Scaling is enabled and scale up to \
+                                          %d instances."
+                                         scale.Models.User.max_instances);
+                                  ])
+                              scaling_policy;
+                          ];
+                        Modal_dialog.modal_dialog
+                          ~modal_title:"Configure Scaling policy"
+                          ~button_content:
+                            (span
+                               ~a:[ a_class [ "flex items-center gap-2" ] ]
+                               [
+                                 i
+                                   ~a:[ a_class [ "fa-solid fa-sliders px-2" ] ]
+                                   [];
+                                 txt "Configure Scaling";
+                               ])
+                          ~button_type:`Primary_outlined
+                          ~content:
+                            (div
+                               ~a:[ a_class [ "w-full min-w-96 flex" ] ]
+                               [
+                                 Unikernel_scaling.display_policy
+                                   ~instance_name:
+                                     (Models.Configuration.name_to_str
+                                        instance_name)
+                                   ~unikernel_name:unikernel_name_str
+                                   ~max_allowed scaling_policy;
+                               ])
+                          ();
+                      ];
+                  ];
+                div
+                  ~a:
+                    [
+                      a_class
+                        [
+                          "rounded my-4 text-white p-4 border \
+                           border-primary-700 bg-gray-800";
+                        ];
+                    ]
+                  [
+                    div
+                      ~a:
+                        [ a_class [ "flex justify-between items-center mb-4" ] ]
+                      [
+                        p
+                          ~a:[ a_class [ "text-xl font-semibold" ] ]
+                          [ txt "Monitoring & Diagnostics" ];
+                        Modal_dialog.modal_dialog
+                          ~modal_title:"Configure Monitoring"
+                          ~button_content:
+                            (span
+                               ~a:[ a_class [ "flex items-center gap-2" ] ]
+                               [
+                                 i
+                                   ~a:[ a_class [ "fa-solid fa-sliders px-2" ] ]
+                                   [];
+                                 txt "Configure Monitoring";
+                               ])
+                          ~button_type:`Primary_outlined
+                          ~content:
+                            (div
+                               ~a:
+                                 [
+                                   a_class [ "w-full min-w-96" ];
+                                   Unsafe.string_attrib "hx-get"
+                                     ("/api/unikernel/monitoring/status?unikernel="
+                                    ^ unikernel_name_str);
+                                   Unsafe.string_attrib "hx-trigger" "intersect";
+                                   Unsafe.string_attrib "hx-swap" "innerHTML";
+                                 ]
+                               [
+                                 div
+                                   ~a:
+                                     [
+                                       a_class
+                                         [
+                                           "flex items-center gap-2 \
+                                            text-gray-400 text-sm py-4";
+                                         ];
+                                     ]
+                                   [
+                                     i
+                                       ~a:
+                                         [
+                                           a_class
+                                             [
+                                               "fa-solid fa-circle-notch \
+                                                fa-spin";
+                                             ];
+                                         ]
+                                       [];
+                                     txt "Loading monitoring status...";
+                                   ];
+                               ])
+                          ();
+                      ];
+                  ];
+                div
+                  ~a:[ a_class [ "grid grid-cols-2" ] ]
+                  [
+                    div
+                      ~a:
+                        [
+                          a_class
+                            [
+                              "rounded my-4 text-white p-4 divide-y border \
+                               border-primary-700";
+                            ];
+                        ]
+                      [
+                        div
+                          [
+                            p
+                              ~a:[ a_class [ "text-xl font-semibold" ] ]
+                              [ txt "Arguments" ];
+                            Ui.simple_table
+                              ~headers:[ Ui.static_th "Argument" ]
+                              (List.map
+                                 (fun arg -> tr [ Ui.td_txt arg ])
+                                 (Option.value u_data.argv ~default:[]));
+                          ];
+                        div
+                          ~a:[ a_class [ "my-4" ] ]
+                          [
+                            p
+                              ~a:[ a_class [ "text-xl font-semibold" ] ]
+                              [ txt "Block Devices" ];
+                            Ui.simple_table
+                              ~headers:
+                                [
+                                  Ui.static_th "Unikernel block device";
+                                  Ui.static_th "Host device";
+                                  Ui.static_th "Sector size";
+                                  Ui.static_th "Size";
+                                ]
+                              (List.map
+                                 (fun {
+                                        Vmm_core.Unikernel.unikernel_device;
+                                        host_device;
+                                        sector_size;
+                                        size;
+                                      } ->
+                                   tr
+                                     [
+                                       Ui.td_txt unikernel_device;
+                                       Ui.td_txt host_device;
+                                       Ui.td_txt
+                                         (string_of_int sector_size ^ " bytes");
+                                       Ui.td_txt (string_of_int size ^ " MB");
+                                     ])
+                                 u_data.block_devices);
+                          ];
+                        div
+                          ~a:[ a_class [ "my-4" ] ]
+                          [
+                            p
+                              ~a:[ a_class [ "text-xl font-semibold" ] ]
+                              [ txt "Network Devices" ];
+                            Ui.simple_table
+                              ~headers:
+                                [
+                                  Ui.static_th "Unikernel network device";
+                                  Ui.static_th "Host device";
+                                  Ui.static_th "MAC Address";
+                                ]
+                              (List.map
+                                 (fun {
+                                        Vmm_core.Unikernel.unikernel_device;
+                                        host_device;
+                                        mac;
+                                      } ->
+                                   tr
+                                     [
+                                       Ui.td_txt unikernel_device;
+                                       Ui.td_txt host_device;
+                                       Ui.td_txt (Macaddr.to_string mac);
+                                     ])
+                                 u_data.bridges);
+                          ];
+                        div
+                          ~a:[ a_class [ "my-4" ] ]
+                          [
+                            p
+                              ~a:[ a_class [ "text-xl font-semibold" ] ]
+                              [ txt "Fail Behaviour" ];
+                            (match u_data.fail_behaviour with
+                            | `Quit -> p [ txt "Quit" ]
+                            | `Restart None -> p [ txt "Restart" ]
+                            | `Restart (Some codes) ->
+                                p
+                                  [
+                                    txt
+                                      (String.concat ", "
+                                         (List.map string_of_int
+                                            (Vmm_core.IS.elements codes)));
+                                  ]);
+                          ];
+                      ];
+                    div
+                      ~a:[ a_class [ "text-left p-4" ] ]
+                      [
+                        p
+                          ~a:[ a_class [ "text-xl font-semibold" ] ]
+                          [ txt "Console Output" ];
+                        div
+                          ~a:[ a_id "console-container" ]
+                          [
+                            Ui.raw_textarea
+                              ~attribs:
+                                [
+                                  a_id "console-output";
+                                  a_rows 42;
+                                  a_readonly ();
+                                  a_disabled ();
+                                ]
+                              "";
+                          ];
+                      ];
+                  ];
+              ];
+          ];
+      ])

@@ -1,30 +1,43 @@
-let ( let* ) = Result.bind
-
 module LM = Map.Make (Vmm_core.Name.Label)
 module SM = Map.Make (String)
 module UM = Map.Make (Uuidm)
 
-module Json = struct
-  let get key assoc =
-    Option.map snd (List.find_opt (fun (k, _) -> String.equal k key) assoc)
+let now () = try Mkernel.now () with _ -> Ptime.epoch
 
-  let to_string t = Yojson.Basic.to_string t
+module Json = struct
+  let get key mems = Option.map snd (Jsont.Json.find_mem key mems)
+
+  let to_string (t : Jsont.json) =
+    Result.get_ok (Jsont_bytesrw.encode_string Jsont.json t)
 
   let from_string data =
-    try Ok (Yojson.Basic.from_string data)
-    with Yojson.Json_error s -> Error (`Msg s)
+    Jsont_bytesrw.decode_string' Jsont.json data
+    |> Result.map_error (fun (_, _, k) -> `Msg (Jsont.Error.kind_to_string k))
 
-  let string_or_none field = function
-    | None | Some `Null -> Ok None
-    | Some (`String v) -> Ok (Some v)
-    | Some json ->
-        Error (`Msg ("invalid json for " ^ field ^ ": " ^ to_string json))
+  let encode codec v = Result.get_ok (Jsont.Json.encode codec v)
+
+  let decode codec j =
+    Jsont.Json.decode' codec j
+    |> Result.map_error (fun (_, _, k) -> `Msg (Jsont.Error.kind_to_string k))
+
+  let of_string_result ~enc dec =
+    Jsont.Base.string
+      (Jsont.Base.map
+         ~dec:(fun meta s ->
+           match dec s with
+           | Ok v -> v
+           | Error (`Msg msg) -> Jsont.Error.msg meta msg)
+         ~enc ())
+
+  let uuid_json =
+    of_string_result ~enc:Uuidm.to_string (fun s ->
+        Option.to_result ~none:(`Msg ("invalid UUID: " ^ s)) (Uuidm.of_string s))
+
+  let mailbox_json =
+    of_string_result ~enc:Emile.to_string Mrmime.Mailbox.of_string
+
+  let ipaddr_json = of_string_result ~enc:Ipaddr.to_string Ipaddr.of_string
 end
-
-(* module Http = struct
-  let send_http_request ?(path = "") ~base_url http_client =
-    ...
-end *)
 
 module TimeHelper = struct
   let ptime_of_string (t_str : string) : (Ptime.t, [> `Msg of string ]) result =
@@ -40,37 +53,15 @@ module TimeHelper = struct
   let string_of_ptime (t : Ptime.t) : string =
     Ptime.to_rfc3339 ~space:true t ~frac_s:0
 
+  let ptime_json = Json.of_string_result ~enc:string_of_ptime ptime_of_string
+
   (* calculate the diff between two timestamps *)
   let diff_in_seconds ~current_time ~check_time =
     let span = Ptime.diff current_time check_time in
     match Ptime.Span.to_int_s span with Some s -> s | None -> 0
 
-  (* print timestamp in human-readable form *)
-  let print_human_readable ~now ~timestamp =
-    let duration =
-      diff_in_seconds ~current_time:now ~check_time:timestamp |> Duration.of_sec
-    in
-    Format.asprintf "%a" Duration.pp duration
-
-  (* parse Ptime.t option to json *)
-  let ptime_to_json ptime =
-    Option.value ~default:`Null
-      (Option.map (fun p -> `String (string_of_ptime p)) ptime)
-
-  (* parse Ptime.t option from a json *)
-  let ptime_of_json = function
-    | `String s -> (
-        match ptime_of_string s with
-        | Ok ptime -> Ok (Some ptime)
-        | Error _ -> Error (`Msg "invalid date string"))
-    | `Null -> Ok None
-    | _ -> Error (`Msg "invalid json for Ptime.t option")
-
-  let future_time ptime seconds =
-    let created_span = Ptime.to_span ptime in
-    let expiry = Ptime.Span.of_int_s seconds in
-    let future_span = Ptime.Span.add created_span expiry in
-    Ptime.of_span future_span
+  let is_within_seconds ~current_time ~check_time ttl =
+    diff_in_seconds ~current_time ~check_time < ttl
 
   let time_ago ~current_time ~check_time =
     let diff = diff_in_seconds ~current_time ~check_time in
@@ -83,390 +74,12 @@ module TimeHelper = struct
     else Printf.sprintf "%d y ago" (diff / 31536000)
 end
 
-module Email = struct
-  type t = {
-    server : Ipaddr.t;
-    port : int;
-    from_email : Mrmime.Mailbox.t;
-    base_url : string;
-    to_email : Mrmime.Mailbox.t option;
-  }
-
-  let to_json config =
-    match config with
-    | None -> `Null
-    | Some config ->
-        `Assoc
-          [
-            ("server", `String (Ipaddr.to_string config.server));
-            ("port", `Int config.port);
-            ("from_email", `String (Emile.to_string config.from_email));
-            ("base_url", `String config.base_url);
-          ]
-
-  let t_of_json assoc =
-    match
-      Json.
-        ( get "server" assoc,
-          get "port" assoc,
-          get "from_email" assoc,
-          get "base_url" assoc,
-          get "to_email" assoc )
-    with
-    | ( Some (`String server),
-        Some (`Int port),
-        Some (`String from_email),
-        Some (`String base_url),
-        to_email ) ->
-        let* server = Ipaddr.of_string server in
-        let* from_email = Mrmime.Mailbox.of_string from_email in
-        let* to_email =
-          match to_email with
-          | None -> Ok None
-          | Some (`String email_str) -> (
-              match Mrmime.Mailbox.of_string email_str with
-              | Ok email -> Ok (Some email)
-              | Error (`Msg e) -> Error (`Msg e))
-          | Some _ -> Error (`Msg "to_email must be a string")
-        in
-        Ok { server; port; from_email; base_url; to_email }
-    | _ ->
-        Error
-          (`Msg
-             (Fmt.str "missing fields in email configuration json, got %s"
-                (Yojson.Basic.to_string (`Assoc assoc))))
-
-  let of_json json =
-    match json with
-    | `Assoc assoc -> t_of_json assoc
-    | _ -> Error (`Msg "invalid json for email configuration")
-
-  let validate_email email = Mrmime.Mailbox.of_string email
-
-  let generate_verification_link uuid =
-    "/auth/verify?token=" ^ Uuidm.to_string uuid
-
-  let subject_of_strings xs =
-    List.fold_left
-      (fun acc s -> acc @ Mrmime.Unstructured.Craft.[ sp 1; v s ])
-      []
-      (String.split_on_char ' ' xs)
-
-  let construct_email ?references ~from_email ~to_email ~subject ~body () =
-    let open Mrmime in
-    let fields =
-      Field.
-        [
-          Field
-            ( Field_name.subject,
-              Unstructured,
-              Unstructured.Craft.(compile (subject_of_strings subject)) );
-          Field (Field_name.v "From", Addresses, [ `Mailbox from_email ]);
-          Field (Field_name.v "To", Addresses, [ `Mailbox to_email ]);
-          Field (Field_name.date, Date, Date.of_ptime ~zone:GMT (Mkernel.now ()));
-          Field
-            ( Field_name.content_type,
-              Content,
-              Content_type.(
-                make `Text (Subtype.v `Text "html")
-                  (Parameters.singleton (Parameters.k "charset")
-                     (Parameters.v "utf-8"))) );
-          Field (Field_name.content_encoding, Encoding, `Quoted_printable);
-        ]
-    in
-    let fields =
-      match references with
-      | None -> fields
-      | Some r ->
-          Field.Field
-            ( Field_name.references,
-              Field.Unstructured,
-              Unstructured.Craft.(compile [ v ("<" ^ r ^ ">") ]) )
-          :: fields
-    in
-    let header = Header.of_list fields in
-    let body_stream =
-      let sent = ref false in
-      fun () ->
-        if !sent then None
-        else (
-          sent := true;
-          Some (body, 0, String.length body))
-    in
-    let part = Mt.part ~header body_stream in
-    Mt.make header Mt.simple part
-end
-
-module Status = struct
-  type t = { title : string; data : string }
-
-  let make title data = { title; data }
-  let title i = i.title
-  let data i = i.data
-
-  let to_json =
-    Jsont.Object.map ~kind:"Status" make
-    |> Jsont.Object.mem "title" Jsont.string ~enc:title
-    |> Jsont.Object.mem "data" Jsont.string ~enc:data
-    |> Jsont.Object.finish
-end
-
 let bytes_to_megabytes bytes =
   let megabytes = float_of_int bytes /. (1024.0 *. 1024.0) in
   Printf.sprintf "%.2f MB" megabytes
 
 (*10 minutes for a rollback to be valid*)
 let rollback_seconds_limit = 600
-
-let switch_button ~switch_id ~switch_label ?(initial_state = false) html_content
-    =
-  Tyxml_html.(
-    div
-      ~a:
-        [
-          a_class [ "my-6" ];
-          Unsafe.string_attrib "x-data"
-            ("{ toggle: " ^ string_of_bool initial_state ^ " }");
-        ]
-      [
-        label
-          ~a:
-            [
-              a_label_for switch_id;
-              a_class [ "inline-flex cursor-pointer items-center gap-3" ];
-            ]
-          [
-            input
-              ~a:
-                [
-                  a_id switch_id;
-                  a_name switch_id;
-                  a_input_type `Checkbox;
-                  a_class [ "peer sr-only" ];
-                  a_role [ "switch" ];
-                  Unsafe.string_attrib "x-model" "toggle";
-                  (if initial_state then a_checked () else a_alt "");
-                ]
-              ();
-            span
-              ~a:
-                [
-                  a_aria "hidden" [ "true" ];
-                  a_class
-                    [
-                      "relative h-6 w-11 after:h-5 after:w-5 \
-                       peer-checked:after:translate-x-5 rounded-full border \
-                       border-gray-300 bg-gray-50 after:absolute \
-                       after:bottom-0 after:left-[0.0625rem] after:top-0 \
-                       after:my-auto after:rounded-full after:bg-gray-600 \
-                       after:transition-all after:content-[''] \
-                       peer-checked:bg-primary-500 peer-checked:after:bg-white \
-                       peer-focus:outline peer-focus:outline-2 \
-                       peer-focus:outline-offset-2 peer-focus:outline-gray-800 \
-                       peer-focus:peer-checked:outline-primary-500 \
-                       peer-active:outline-offset-0 \
-                       peer-disabled:cursor-not-allowed \
-                       peer-disabled:opacity-70 dark:border-gray-700 \
-                       dark:bg-gray-900 dark:after:bg-gray-300 \
-                       dark:peer-checked:bg-primary-500 \
-                       dark:peer-checked:after:bg-white \
-                       dark:peer-focus:outline-gray-300 \
-                       dark:peer-focus:peer-checked:outline-primary-500";
-                    ];
-                ]
-              [];
-            span
-              ~a:
-                [
-                  a_class
-                    [
-                      "tracking-wide text-sm font-medium text-gray-600 \
-                       peer-checked:text-gray-900 \
-                       peer-disabled:cursor-not-allowed \
-                       dark:peer-checked:text-white";
-                    ];
-                ]
-              [ txt switch_label ];
-          ];
-        div
-          ~a:[ Unsafe.string_attrib "x-show" "toggle"; a_class [ "my-4" ] ]
-          [ html_content ];
-      ])
-
-let dynamic_dropdown_form (items : 'a list) ~(get_label : 'a -> string)
-    ~(get_value : 'a -> string) ~(id : string) ?(manual_entry = false) () =
-  let alpine_options =
-    "["
-    ^ String.concat ", "
-        (List.map
-           (fun item ->
-             Printf.sprintf "{ label: '%s', value: '%s' }"
-               (String.escaped (get_label item))
-               (String.escaped (get_value item)))
-           items)
-    ^ "]"
-  in
-  Tyxml_html.(
-    div
-      ~a:
-        [
-          Unsafe.string_attrib "x-data"
-            ("{ fields: [], options: " ^ alpine_options ^ ", field_id: '" ^ id
-           ^ "' }");
-          Unsafe.string_attrib "@populate-manifest.window"
-            ("if (window.mapFields && $event.detail[field_id]) fields = \
-              window.mapFields(field_id, $event.detail, " ^ alpine_options
-           ^ "); else if (!$event.detail[field_id]) fields = [];");
-        ]
-      [
-        Unsafe.data "<template x-for='(field, index) in fields' :key='index'>";
-        div
-          ~a:[ a_class [ "grid grid-cols-2 gap-4 my-2" ] ]
-          [
-            (* Text input with dynamic ID *)
-            div
-              ~a:[ a_class [ "flex space-x-2" ] ]
-              [
-                (* Remove button *)
-                Unsafe.data
-                  {|
-                  <button type="button" @click="fields.splice(index, 1)"
-                    class="text-secondary-500 text-2xl hover:text-secondary-700 font-bold">
-                    &times;
-                  </button>
-                |};
-                input
-                  ~a:
-                    [
-                      a_input_type `Text;
-                      a_name "name";
-                      a_required ();
-                      a_placeholder "Name of this device in your unikernel";
-                      a_class
-                        [
-                          "ring-primary-100 mt-1.5 transition appearance-none \
-                           block w-full px-3 py-3 rounded-xl shadow-sm border";
-                          "hover:border-primary-200 focus:border-primary-300 \
-                           bg-primary-50 bg-opacity-0";
-                          "hover:bg-opacity-50 focus:bg-opacity-50 \
-                           ring-primary-200 focus:ring-primary-200";
-                          "focus:ring-[1px] focus:outline-none";
-                        ];
-                      Unsafe.string_attrib ":id" "field_id + '-input-' + index";
-                      Unsafe.string_attrib "x-model" "field.title";
-                    ]
-                  ();
-              ];
-            div
-              ~a:[ Unsafe.string_attrib "x-data" "{ isManual: false }" ]
-              [
-                (if manual_entry then
-                   div
-                     [
-                       label
-                         ~a:
-                           [
-                             a_class
-                               [
-                                 "inline-flex cursor-pointer items-center gap-3";
-                               ];
-                           ]
-                         [
-                           span [ txt "Type host device name manually" ];
-                           input
-                             ~a:
-                               [
-                                 Unsafe.string_attrib ":id"
-                                   "field_id + '-toggle-' + index";
-                                 a_input_type `Checkbox;
-                                 a_class [ "accent-primary-500" ];
-                                 a_role [ "switch" ];
-                                 Unsafe.string_attrib "x-model" "isManual";
-                               ]
-                             ();
-                         ];
-                     ]
-                 else div []);
-                template
-                  ~a:[ Unsafe.string_attrib "x-if" "isManual" ]
-                  [
-                    div
-                      [
-                        input
-                          ~a:
-                            [
-                              a_input_type `Text;
-                              a_name "manual-name";
-                              a_placeholder "Name of this device on the host";
-                              a_class
-                                [
-                                  "ring-primary-100 mt-1.5 transition \
-                                   appearance-none block w-full px-3 py-3 \
-                                   rounded-xl shadow-sm border";
-                                  "hover:border-primary-200 \
-                                   focus:border-primary-300 bg-primary-50 \
-                                   bg-opacity-0";
-                                  "hover:bg-opacity-50 focus:bg-opacity-50 \
-                                   ring-primary-200 focus:ring-primary-200";
-                                  "focus:ring-[1px] focus:outline-none";
-                                ];
-                              Unsafe.string_attrib ":id"
-                                "field_id + '-select-' + index";
-                            ]
-                          ();
-                      ];
-                  ];
-                template
-                  ~a:[ Unsafe.string_attrib "x-if" "!isManual" ]
-                  [
-                    div
-                      [
-                        select
-                          ~a:
-                            [
-                              a_class
-                                [
-                                  "ring-primary-100 mt-1.5 transition block \
-                                   w-full px-3 py-3 rounded-xl shadow-sm \
-                                   border";
-                                  "hover:border-primary-200 \
-                                   focus:border-primary-300 bg-primary-50 \
-                                   bg-opacity-0";
-                                  "hover:bg-opacity-50 focus:bg-opacity-50 \
-                                   ring-primary-200 focus:ring-primary-200";
-                                  "focus:ring-[1px] focus:outline-none";
-                                ];
-                              Unsafe.string_attrib ":id"
-                                "field_id + '-select-' + index";
-                            ]
-                          [
-                            Unsafe.data
-                              {|
-                    <template x-for="option in options" :key="option.value">
-                      <option :value="option.value" x-text="option.label" :selected="option.value === field.selected"></option>
-                    </template>
-                  |};
-                          ];
-                      ];
-                  ];
-              ];
-          ];
-        Unsafe.data "</template>";
-        (* Add button *)
-        button
-          ~a:
-            [
-              a_button_type `Button;
-              Unsafe.string_attrib "@click"
-                "fields.push({ selected: '', title: '' })";
-              a_class
-                [
-                  "bg-primary-500 text-gray-100 px-3 py-1 rounded \
-                   hover:bg-primary-600";
-                ];
-            ]
-          [ txt "+ Add" ];
-      ])
 
 let cpuid_to_array_string lst =
   if lst = [] then "[]"
@@ -485,7 +98,6 @@ let deployed_unikernels unikernels = List.length unikernels
 
 let cpu_usage_count policy unikernels =
   let cpuid_count = Hashtbl.create (List.length unikernels) in
-  (* count usage of each cpuid in unikernels *)
   List.iter
     (fun (_, unikernel) ->
       Vmm_core.IS.iter
@@ -496,9 +108,7 @@ let cpu_usage_count policy unikernels =
           Hashtbl.replace cpuid_count cpuid (count + 1))
         unikernel.Vmm_core.Unikernel.cpuids)
     unikernels;
-  (* Prepare list of all cpuids from policy *)
   let policy_cpuids = Vmm_core.IS.elements policy.Vmm_core.Policy.cpuids in
-  (* Generate the list with all policy.cpuids and their respective counts *)
   List.map
     (fun cpuid ->
       let count =
@@ -523,17 +133,13 @@ let bridge_usage_count policy unikernels =
   let bridge_count =
     Hashtbl.create (Vmm_core.String_set.cardinal policy.Vmm_core.Policy.bridges)
   in
-  (* Initialize all policy bridges with a count of 0 *)
   Vmm_core.String_set.iter
     (fun bridge -> Hashtbl.replace bridge_count bridge 0)
     policy.bridges;
-
-  (* Count each bridge usage from unikernel.bridges, but only if it's in policy.bridges *)
   List.iter
     (fun (_, unikernel) ->
       List.iter
         (fun { Vmm_core.Unikernel.host_device; _ } ->
-          (* Only count if the bridge is in policy.bridges *)
           if Vmm_core.String_set.mem host_device policy.bridges then
             let count =
               Hashtbl.find_opt bridge_count host_device
@@ -542,14 +148,11 @@ let bridge_usage_count policy unikernels =
             Hashtbl.replace bridge_count host_device (count + 1))
         unikernel.Vmm_core.Unikernel.bridges)
     unikernels;
-
-  (* Convert the hash table to a sorted list of (bridge_name, count) *)
   let bridge_usage_list =
     Hashtbl.fold
       (fun bridge count acc -> (bridge, count) :: acc)
       bridge_count []
   in
-  (* Sort the list by bridge name *)
   List.sort (fun (b1, _) (b2, _) -> String.compare b1 b2) bridge_usage_list
 
 let user_policy_usage policy unikernels blocks : user_policy_usage =
@@ -567,224 +170,3 @@ let user_policy_usage policy unikernels blocks : user_policy_usage =
     cpu_usage_count;
     bridge_usage_count;
   }
-
-module Ui = struct
-  let csrf_input csrf =
-    Tyxml_html.(
-      input
-        ~a:
-          [
-            a_input_type `Hidden;
-            a_id "molly-csrf";
-            a_name "molly_csrf";
-            a_value csrf;
-          ]
-        ())
-
-  let form_input ?(input_type = `Text) label_ =
-    Tyxml_html.(
-      div
-        [
-          label
-            ~a:[ a_class [ "block text-sm font-medium" ]; a_label_for label_ ]
-            [ txt (String.capitalize_ascii label_) ];
-          input
-            ~a:
-              [
-                a_autocomplete `On;
-                a_autofocus ();
-                a_input_type input_type;
-                a_name label_;
-                a_id label_;
-                a_class
-                  [
-                    "ring-primary-100 mt-1.5 transition appearance-none block \
-                     w-full px-3 py-3 rounded-xl shadow-sm focus:outline-none";
-                  ];
-              ]
-            ();
-        ])
-
-  let form_link ~label_ ~href () =
-    Tyxml_html.(
-      a
-        ~a:
-          [
-            a_href href;
-            a_class
-              [
-                "hover:text-primary-800 transition-colors my-4 cursor-pointer \
-                 text-sm font-medium text-primary-500";
-              ];
-          ]
-        [ txt label_ ])
-
-  let bird_image =
-    Tyxml_html.(
-      aside
-        ~a:[ a_class [ "relative h-full p-16 col-span-1 md:block hidden" ] ]
-        [
-          img ~src:"/images/molly_bird.jpeg"
-            ~alt:"Mollymawk delivering unikernels"
-            ~a:
-              [
-                a_class
-                  [ "absolute inset-1 max-w-none w-full h-full object-cover" ];
-              ]
-            ();
-        ])
-
-  let alert_element =
-    Tyxml_html.(
-      div
-        ~a:
-          [
-            a_id "alert-container";
-            a_class
-              [
-                "fixed top-1/4 rounded-md right-4 z-50 w-fit space-y-2 p-4 \
-                 shadow text-wrap hidden";
-              ];
-          ]
-        [])
-
-  let heading label_ =
-    Tyxml_html.(
-      h1
-        ~a:
-          [
-            a_class
-              [ "font-semibold text-2xl md:text-3xl mb-8 text-primary-800 p-6" ];
-          ]
-        [ txt label_ ])
-
-  let form_alerts =
-    Tyxml_html.(
-      div
-        [
-          p ~a:[ a_id "success-alert"; a_class [ "text-primary-500" ] ] [];
-          p ~a:[ a_id "error-alert"; a_class [ "text-secondary-500" ] ] [];
-        ])
-
-  let button_component ~attribs ~content ~btn_type ?(extra_css = "") () =
-    Tyxml_html.(
-      button
-        ~a:
-          (List.fold_left (fun acc attrib -> acc @ [ attrib ]) [] attribs
-          @ [
-              (match btn_type with
-              | `Primary_full ->
-                  a_class
-                    [
-                      "py-2 px-2 rounded bg-primary-500 hover:bg-primary-800 \
-                       text-gray-50 font-semibold " ^ extra_css;
-                    ]
-              | `Primary_outlined ->
-                  a_class
-                    [
-                      "py-2 px-2 rounded border border-1 border-primary-400 \
-                       text-primary-600 hover:text-gray-50 focus:outline-none \
-                       hover:bg-primary-800 font-semibold " ^ extra_css;
-                    ]
-              | `Danger_full ->
-                  a_class
-                    [
-                      "py-2 px-2 rounded bg-secondary-500 \
-                       hover:bg-secondary-800 text-gray-50 font-semibold "
-                      ^ extra_css;
-                    ]
-              | `Danger_outlined ->
-                  a_class
-                    [
-                      "py-2 px-2 rounded border border-1 border-secondary-400 \
-                       text-secondary-600 hover:text-gray-50 \
-                       focus:outline-none hover:bg-secondary-800 \
-                       font-semibold " ^ extra_css;
-                    ]);
-            ])
-        [ content ])
-
-  (** A UI with two buttons, one for decrementing a value and the other for
-      incrementing the value*)
-  let increment_or_decrement_ui ~max_value ~min_value ?(step = 1)
-      ?(default_value = 0) ?(figure_unit = "") ~id ~label' () =
-    let max_value = if max_value <= min_value then min_value else max_value in
-    let default_value =
-      if default_value <= min_value then min_value
-      else if default_value >= max_value then max_value
-      else default_value
-    in
-    Tyxml_html.(
-      div
-        ~a:
-          [
-            a_class [ "space-x-5" ];
-            Unsafe.string_attrib "x-data"
-              ("{count : " ^ string_of_int default_value ^ "}");
-          ]
-        [
-          label
-            ~a:[ a_class [ "block font-medium my-2" ] ]
-            [ txt (Fmt.str "%s (max %d %s)" label' max_value figure_unit) ];
-          button_component
-            ~attribs:
-              [
-                a_button_type `Button;
-                Unsafe.string_attrib "x-on:click"
-                  (Fmt.str "if (count > %d) count = count - %d" min_value step);
-              ]
-            ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-            ~btn_type:`Danger_outlined ();
-          span
-            ~a:
-              [
-                a_id id;
-                a_contenteditable `True;
-                a_class [ "text-4xl border px-4" ];
-                Unsafe.string_attrib "@keydown.enter.prevent" "";
-                Unsafe.string_attrib "x-text" "count";
-                Unsafe.string_attrib "x-on:blur"
-                  (Fmt.str
-                     "let rawValue = \
-                      parseInt($el.innerText.replace(/[^0-9-]/g, '')) || 0; \
-                      count = Math.max(%d, Math.min(%d, rawValue)); \
-                      $el.innerText = count;"
-                     min_value max_value);
-                Unsafe.string_attrib "x-init" "$el.innerText = count";
-              ]
-            [];
-          span ~a:[ a_class [ "text-4xl" ] ] [ txt figure_unit ];
-          button_component
-            ~attribs:
-              [
-                a_button_type `Button;
-                Unsafe.string_attrib "x-on:click"
-                  (Fmt.str "if (count < %d) count = count + %d" max_value step);
-              ]
-            ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-            ~btn_type:`Primary_outlined ();
-        ])
-
-  let display_banner = function
-    | Some message ->
-        Tyxml_html.(
-          section
-            ~a:
-              [
-                a_class
-                  [
-                    "w-full bg-primary-200 py-4 text-center text-gray-200 \
-                     border border-primary-400 font-semibold flex \
-                     justify-center px-5 space-x-5";
-                  ];
-                a_id "banner-message";
-              ]
-            [
-              p [ txt message ];
-              button_component
-                ~attribs:[ a_id "close-banner-btn"; a_onclick "closeBanner()" ]
-                ~content:(i ~a:[ a_class [ "fa-solid fa-x text-sm" ] ] [])
-                ~btn_type:`Primary_outlined ();
-            ])
-    | None -> Tyxml_html.div []
-end
