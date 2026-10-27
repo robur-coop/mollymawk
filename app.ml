@@ -17,8 +17,8 @@ let rng =
 
 let routes () =
   let open Vifu.Route in
-  let open Vifu.Uri in
   let open Vifu.Type in
+  let open Vifu.Uri in
   [
     (* Static routes *)
     get (rel / "style.css" /?? nil)
@@ -57,10 +57,146 @@ let routes () =
           (Guest_layout.guest_layout
              ~page_title:"Deploy unikernels with ease | Mollymawk"
              Index_page.index_page);
-    get (rel / "sign-in" /?? nil) --> Auth.sign_in_page;
-    get (rel / "sign-up" /?? nil) --> Auth.sign_up_page;
-    post (m User_model.registration_form) (rel / "api" / "register" /?? nil)
+    get (rel / "sign-in" /?? any) --> Auth.sign_in_page;
+    get (rel / "sign-up" /?? any) --> Auth.sign_up_page;
+    post
+      (json_encoding Models.Registration.registration_form)
+      (rel / "api" / "register" /?? any)
     --> Auth.register_user;
+    post (json_encoding Models.Login.login_form) (rel / "api" / "login" /?? any)
+    --> Auth.login_user;
+    post
+      (json_encoding Models.Close_sessions.close_sessions_form)
+      (rel / "logout" /?? any)
+    --> Auth.logout_user;
+    post
+      (json_encoding Models.Password.update_password_form)
+      (rel / "account" / "password" / "update" /?? any)
+    --> Auth.update_password;
+    post
+      (json_encoding Models.Close_sessions.close_sessions_form)
+      (rel / "api" / "account" / "sessions" / "close" /?? any)
+    --> Auth.close_all_sessions;
+    post
+      (json_encoding Models.Close_session.close_session_form)
+      (rel / "api" / "account" / "session" / "close" /?? any)
+    --> Auth.close_session;
+    (* Email routes *)
+    get (rel / "verify-email" /?? any) --> Email.verify_email;
+    get (rel / "auth" / "verify" /?? any) --> Email.verify_email_token;
+    get (rel / "admin" / "settings" / "email" /?? any) --> Email.email_settings;
+    post
+      (json_encoding Models.Email.email_form)
+      (rel / "api" / "admin" / "settings" / "email" / "update" /?? any)
+    --> Email.update_email_configuration;
+    post
+      (json_encoding Models.Email.email_form)
+      (rel / "api" / "admin" / "settings" / "email" / "test" /?? any)
+    --> Email.test_email_configuration;
+    (* Block routes *)
+    get (rel / "blocks" /?? any) --> Block.blocks;
+    post
+      (json_encoding Models.Block.delete_form)
+      (rel / "api" / "block" / "delete" /?? any)
+    --> Block.delete_block;
+    post (m Models.Block.upload_form) (rel / "api" / "block" / "create" /?? any)
+    --> Block.create_block;
+    post (m Models.Block.upload_form) (rel / "api" / "block" / "upload" /?? any)
+    --> Block.upload_block;
+    post
+      (json_encoding Models.Block.download_form)
+      (rel / "api" / "block" / "download" /?? any)
+    --> Block.download_block;
+    (* Unikernel routes *)
+    get (rel / "dashboard" /?? any) --> Unikernel.dashboard;
+    get (rel / "api" / "unikernels" /?? any) --> Unikernel.unikernel_info;
+    get (rel / "unikernel" / "info" /?? any) --> Unikernel.unikernel_info_one;
+    get (rel / "unikernel" / "console" /?? any)
+    --> Unikernel.unikernel_console_viewer;
+    get (rel / "unikernel" / "deploy" /?? any) --> Unikernel.deploy_form;
+    get (rel / "api" / "unikernel" / "monitoring" / "status" /?? any)
+    --> Unikernel.unikernel_monitoring_status;
+    post
+      (json_encoding Models.Unikernel.monitoring_form)
+      (rel / "api" / "unikernel" / "monitoring" / "update" /?? any)
+    --> Unikernel.unikernel_monitoring_update;
+    post
+      (json_encoding Models.Unikernel.scaling_form)
+      (rel / "api" / "unikernel" / "scaling" / "update" /?? any)
+    --> Unikernel.unikernel_scaling_policy_update;
+    post
+      (json_encoding Models.Unikernel.destroy_form)
+      (rel / "api" / "unikernel" / "destroy" /?? any)
+    --> Unikernel.unikernel_destroy;
+    post
+      (json_encoding Models.Unikernel.restart_form)
+      (rel / "api" / "unikernel" / "restart" /?? any)
+    --> Unikernel.unikernel_restart;
+    get (rel / "api" / "unikernel" / "console" /?? any)
+    --> Unikernel.unikernel_console;
+    post multipart_form (rel / "api" / "unikernel" / "create" /?? any)
+    --> Unikernel.unikernel_create;
+    get (rel / "unikernel" / "update" /?? any)
+    --> Unikernel.unikernel_prepare_update;
+    post
+      (json_encoding Models.Unikernel.update_form)
+      (rel / "api" / "unikernel" / "update" /?? any)
+    --> Unikernel.unikernel_update;
+    post
+      (json_encoding Models.Unikernel.rollback_form)
+      (rel / "api" / "unikernel" / "rollback" /?? any)
+    --> Unikernel.unikernel_rollback;
+    get (rel / "unikernel" / "update" / "compare-changes" /?? any)
+    --> Unikernel.unikernel_prepare_update;
+    (* Account routes *)
+    get (rel / "account" /?? any) --> Auth.account_page;
+    get (rel / "usage" /?? any) --> Auth.account_usage;
+    (* Albatross Instance Selection & Admin Config routes *)
+    get (rel / "albatross" / "instances" /?? any)
+    --> Albatross_admin.instances_redirect;
+    get (rel / "select" / "instance" /?? any)
+    --> Albatross_admin.choose_instance;
+    get (rel / "admin" / "settings" / "albatross" /?? any)
+    --> Albatross_admin.albatross_settings;
+    get (rel / "admin" / "albatross" / "errors" /?? any)
+    --> Albatross_admin.view_albatross_error_logs;
+    get (rel / "api" / "admin" / "albatross" / "retry" /?? any)
+    --> Albatross_admin.retry_initializing_instance;
+    post
+      (json_encoding Models.Configuration.config_form)
+      (rel / "api" / "admin" / "settings" / "albatross" / "create" /?? any)
+    --> Albatross_admin.create_albatross_configuration;
+    post
+      (json_encoding Models.Configuration.config_form)
+      (rel / "api" / "admin" / "settings" / "albatross" / "update" /?? any)
+    --> Albatross_admin.update_albatross_configuration;
+    post
+      (json_encoding Models.Configuration.delete_form)
+      (rel / "api" / "admin" / "settings" / "albatross" / "delete" /?? any)
+    --> Albatross_admin.delete_albatross_config;
+    (* User Administration & Policy Management routes *)
+    get (rel / "admin" / "users" /?? any) --> Admin.users;
+    get (rel / "admin" / "user" / "profile" /?? any) --> Admin.view_user_profile;
+    get (rel / "admin" / "user" / "unikernels" /?? any)
+    --> Admin.view_user_unikernels;
+    get (rel / "admin" / "user" / "policy" /?? any) --> Admin.view_user_policy;
+    get (rel / "admin" / "u" / "policy" / "edit" /?? any) --> Admin.edit_policy;
+    post
+      (json_encoding Models.Policy.policy_form)
+      (rel / "api" / "admin" / "u" / "policy" / "update" /?? any)
+    --> Admin.update_policy;
+    post
+      (json_encoding Models.Admin_user.user_uuid_form)
+      (rel / "api" / "admin" / "user" / "activate" / "toggle" /?? any)
+    --> Admin.toggle_account_activation;
+    post
+      (json_encoding Models.Admin_user.user_uuid_form)
+      (rel / "api" / "admin" / "user" / "admin" / "toggle" /?? any)
+    --> Admin.toggle_admin_activation;
+    post
+      (json_encoding Models.Admin_user.user_uuid_form)
+      (rel / "api" / "admin" / "user" / "account" / "delete" /?? any)
+    --> Admin.delete_account;
   ]
 
 let derive_keys secret =
