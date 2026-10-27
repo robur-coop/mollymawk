@@ -1,3 +1,16 @@
+module Mkernel = struct
+  include Mkernel
+
+  module Block = struct
+    include Mkernel.Block
+
+    let sector_size _ = 512
+    let length _ = 64 * 1024 * 1024
+    let atomic_read _ ~src_off:_ ?dst_off:_ _ = ()
+    let atomic_write _ ?src_off:_ ~dst_off:_ _ = ()
+  end
+end
+
 let rng = Mirage_crypto_rng_unix.use_default ()
 
 (* this dump was gotten from a locally running instance of mollymawk. in store.ml, the function read_disk outputs a string. this is the string that is contained in the value raw_dump below. *)
@@ -282,73 +295,12 @@ let msg_t : [ `Msg of string ] Alcotest.testable =
   let pp ppf (`Msg s) = Fmt.string ppf s in
   Alcotest.testable pp (fun (`Msg a) (`Msg b) -> String.equal a b)
 
-let yojson_t : Yojson.Basic.t Alcotest.testable =
-  let pp ppf j = Fmt.pf ppf "%s" (Yojson.Basic.pretty_to_string j) in
-  Alcotest.testable pp Yojson.Basic.equal
-
-let user_t =
-  let pp ppf (u : User_model.user) =
-    Fmt.pf ppf "%a" Yojson.Basic.pp (User_model.user_to_json u)
-  in
-  Alcotest.testable pp (fun (u1 : User_model.user) (u2 : User_model.user) ->
-      Vmm_core.Name.Label.equal u1.name u2.name
-      && Mrmime.Mailbox.equal u1.email u2.email
-      && Uuidm.equal u1.uuid u2.uuid
-      && Bool.equal u1.active u2.active
-      && Bool.equal u1.super_user u2.super_user)
-
-let token_t =
-  let pp ppf (t : User_model.token) =
-    Fmt.pf ppf "%a" Yojson.Basic.pp (User_model.token_to_json t)
-  in
-  Alcotest.testable pp (fun (t1 : User_model.token) (t2 : User_model.token) ->
-      String.equal t1.name t2.name
-      && String.equal t1.value t2.value
-      && Int.equal t1.expires_in t2.expires_in
-      && Int.equal t1.usage_count t2.usage_count)
-
-let cookie_t =
-  let pp ppf (c : User_model.cookie) =
-    Fmt.pf ppf "%s (expires: %d)" c.value c.expires_in
-  in
-  Alcotest.testable pp (fun (c1 : User_model.cookie) (c2 : User_model.cookie) ->
-      String.equal c1.value c2.value && Int.equal c1.expires_in c2.expires_in)
-
-let email_config_t =
-  let pp ppf (e : Utils.Email.t) =
-    Fmt.pf ppf "%a" Yojson.Basic.pp (Utils.Email.to_json (Some e))
-  in
-  Alcotest.testable pp (fun (e1 : Utils.Email.t) (e2 : Utils.Email.t) ->
-      Ipaddr.compare e1.server e2.server = 0
-      && Int.equal e1.port e2.port
-      && String.equal e1.base_url e2.base_url
-      && Mrmime.Mailbox.equal e1.from_email e2.from_email)
-
-let config_pair_t =
-  let pp ppf (c : Configuration.t) =
-    Fmt.pf ppf "%s (%a:%d)"
-      (Configuration.name_to_str c.name)
-      Ipaddr.pp c.server_ip c.server_port
-  in
-  Alcotest.testable pp (fun (c1 : Configuration.t) (c2 : Configuration.t) ->
-      Vmm_core.Name.Label.equal c1.name c2.name
-      && Ipaddr.compare c1.server_ip c2.server_ip = 0
-      && Int.equal c1.server_port c2.server_port)
-
-let policy_t =
-  let pp ppf (p : Vmm_core.Policy.t) = Fmt.pf ppf "%a" Vmm_core.Policy.pp p in
-  Alcotest.testable pp (fun (p1 : Vmm_core.Policy.t) (p2 : Vmm_core.Policy.t) ->
-      Int.equal p1.unikernels p2.unikernels
-      && Vmm_core.IS.equal p1.cpuids p2.cpuids
-      && Int.equal p1.memory p2.memory
-      && Option.equal Int.equal p1.block p2.block)
-
 let pp_storage ppf (users, configuration, email) =
-  Fmt.pf ppf "%a" Yojson.Basic.pp (Storage.t_to_json users configuration email)
+  Fmt.pf ppf "%a" Jsont.Json.pp (Storage.t_to_json users configuration email)
 
-let eq_config_pair (c1 : Configuration.t) (c2 : Configuration.t) =
+let eq_config_pair (c1 : Models.Configuration.t) (c2 : Models.Configuration.t) =
   let {
-    Configuration.name = n1;
+    Models.Configuration.name = n1;
     server_ip = si1;
     server_port = sp1;
     updated_at = ua1;
@@ -357,7 +309,7 @@ let eq_config_pair (c1 : Configuration.t) (c2 : Configuration.t) =
   } =
     c1
   and {
-    Configuration.name = n2;
+    Models.Configuration.name = n2;
     server_ip = si2;
     server_port = sp2;
     updated_at = ua2;
@@ -376,13 +328,13 @@ let eq_config_pair (c1 : Configuration.t) (c2 : Configuration.t) =
        (X509.Private_key.encode_der pk1)
        (X509.Private_key.encode_der pk2)
 
-let eq_config (config_1 : Configuration.t Utils.LM.t)
-    (config_2 : Configuration.t Utils.LM.t) =
+let eq_config (config_1 : Models.Configuration.t Utils.LM.t)
+    (config_2 : Models.Configuration.t Utils.LM.t) =
   Utils.LM.equal eq_config_pair config_1 config_2
 
-let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
+let eq_user_pair (u1 : Models.User.user) (u2 : Models.User.user) =
   let {
-    User_model.name = n1;
+    Models.User.name = n1;
     email = e1;
     password = p1;
     uuid = id1;
@@ -392,13 +344,12 @@ let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
     created_at = cat1;
     email_verified = ev1;
     email_verification_uuid = evu1;
-    tokens = _tk1;
     unikernel_updates = _uk1;
     scaling_policies = _sp1;
   } =
     u1
   and {
-    User_model.name = n2;
+    Models.User.name = n2;
     email = e2;
     password = p2;
     uuid = id2;
@@ -408,7 +359,6 @@ let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
     created_at = cat2;
     email_verified = ev2;
     email_verification_uuid = evu2;
-    tokens = _tk2;
     unikernel_updates = _uk2;
     scaling_policies = _sp2;
   } =
@@ -421,13 +371,13 @@ let eq_user_pair (u1 : User_model.user) (u2 : User_model.user) =
   && Option.equal Ptime.equal ev1 ev2
   && Option.equal Uuidm.equal evu1 evu2
 
-let eq_users (users_1 : User_model.user Utils.UM.t)
-    (users_2 : User_model.user Utils.UM.t) =
+let eq_users (users_1 : Models.User.user Utils.UM.t)
+    (users_2 : Models.User.user Utils.UM.t) =
   Utils.UM.equal eq_user_pair users_1 users_2
 
-let eq_emails (e1 : Utils.Email.t) (e2 : Utils.Email.t) =
+let eq_emails (e1 : Models.Email.t) (e2 : Models.Email.t) =
   let {
-    Utils.Email.server = s1;
+    Models.Email.server = s1;
     port = p1;
     base_url = bu1;
     from_email = fe1;
@@ -435,7 +385,7 @@ let eq_emails (e1 : Utils.Email.t) (e2 : Utils.Email.t) =
   } =
     e1
   and {
-    Utils.Email.server = s2;
+    Models.Email.server = s2;
     port = p2;
     base_url = bu2;
     from_email = fe2;
@@ -459,7 +409,7 @@ let mock_storage ?(version = 10) ?(users = Utils.UM.empty)
 
 let mock_email =
   {
-    Utils.Email.server = Ipaddr.of_string_exn "10.0.0.1";
+    Models.Email.server = Ipaddr.of_string_exn "10.0.0.1";
     port = 56;
     from_email = email_of_string_exn "test@robur.coop";
     base_url = "robur.coop";
@@ -469,7 +419,7 @@ let mock_email =
 let mock_albatross_config =
   let cert = certificate_exn private_key in
   {
-    Configuration.name = label_of_string_exn "default";
+    Models.Configuration.name = label_of_string_exn "default";
     certificate = cert;
     private_key;
     server_ip = Ipaddr.of_string_exn "10.0.0.1";
@@ -480,64 +430,53 @@ let mock_albatross_config =
 let csrf_key =
   "2fc872515abe2def1b79259da44ba1d01adbf305e444de885cadf1eb40f7b539"
 
-let session_cookie = ""
-let make_csrf_token () = Csrf.generate_token ~key:csrf_key ~session_cookie
+let session_cookie = "test-session-cookie"
 
-let make_mock_token ?(name = "mock-token") ?(expiry = 3600) () =
-  User_model.generate_token ~name ~expiry ~current_time:(Mkernel.now ())
+let make_csrf_token ?(session_cookie = session_cookie) () =
+  Csrf.generate_token ~key:csrf_key ~session_cookie
+    ~now:(int_of_float (Ptime.to_float_s Ptime.epoch))
+    ()
 
 let make_mock_user ?(name = "testuser") ?(email = "test@example.com")
-    ?(password = "Password123!") ?(active = true) ?(super_user = false)
-    ?(tokens = Utils.SM.empty) () =
+    ?(password = "Password123!") ?(active = true) ?(super_user = false) () =
   let name_lbl = label_of_string_exn name in
   let email_box = email_of_string_exn email in
   let now = Ptime.epoch in
   let user, _session_cookie =
-    User_model.create_user ~name:name_lbl ~email:email_box ~password ~active
+    Models.User.create_user ~name:name_lbl ~email:email_box ~password ~active
       ~super_user ~created_at:now ~user_agent:(Some "Alcotest-client")
   in
-  { user with tokens }
+  user
 
-let auth_hdr token =
-  match token with
-  | Some t -> Fmt.str "Authorization: Bearer %s\r\n" t
-  | None -> ""
+let cookie_hdr = function
+  | "" -> ""
+  | s -> Fmt.str "Cookie: molly_session=%s\r\n" s
 
-let cookie_hdr session_cookie csrf_token =
-  match (session_cookie, csrf_token) with
-  | "", "" -> ""
-  | s, "" -> Fmt.str "Cookie: molly_session=%s\r\n" s
-  | "", c -> Fmt.str "Cookie: molly_csrf=%s\r\n" c
-  | s, c -> Fmt.str "Cookie: molly_session=%s; molly_csrf=%s\r\n" s c
-
-let make_get_request ~path ?(session_cookie = "") ?(csrf_token = "") ?token () =
-  let auth_hdr = auth_hdr token in
-  let cookie_hdr = cookie_hdr session_cookie csrf_token in
+let make_get_request ~path ?(session_cookie = "") ?csrf_token:_ () =
+  let cookie_hdr = cookie_hdr session_cookie in
   Fmt.str
     "GET %s HTTP/1.1\r\n\
      Host: localhost\r\n\
      User-Agent: Alcotest-client\r\n\
-     %s%s\r\n"
-    path auth_hdr cookie_hdr
+     %s\r\n"
+    path cookie_hdr
 
-let make_post_request ~path ~body ?(csrf_token = "") ?(session_cookie = "")
-    ?token () =
-  let auth_hdr = auth_hdr token in
-  let cookie_hdr = cookie_hdr session_cookie csrf_token in
+let make_post_request ~path ~body ?csrf_token:_ ?(session_cookie = "") () =
+  let cookie_hdr = cookie_hdr session_cookie in
   Fmt.str
     "POST %s HTTP/1.1\r\n\
      Host: localhost\r\n\
      Content-Type: application/json\r\n\
      Content-Length: %d\r\n\
      User-Agent: Alcotest-client\r\n\
-     %s%s\r\n\
+     %s\r\n\
      %s"
-    path (String.length body) auth_hdr cookie_hdr body
+    path (String.length body) cookie_hdr body
 
 let default_boundary = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
 
 let make_multipart_request ?(boundary = default_boundary) ~parts ?file_part
-    ?(session_cookie = "") ?(csrf_token = "") ?token path =
+    ?(session_cookie = "") ?csrf_token:_ path =
   let body_buf = Buffer.create 1024 in
   List.iter
     (fun (key, value) ->
@@ -560,17 +499,16 @@ let make_multipart_request ?(boundary = default_boundary) ~parts ?file_part
   | None -> ());
   Buffer.add_string body_buf (Fmt.str "--%s--\r\n" boundary);
   let body = Buffer.contents body_buf in
-  let auth_hdr = auth_hdr token in
-  let cookie_hdr = cookie_hdr session_cookie csrf_token in
+  let cookie_hdr = cookie_hdr session_cookie in
   Fmt.str
     "POST %s HTTP/1.1\r\n\
      Host: localhost\r\n\
      Content-Type: multipart/form-data; boundary=%s\r\n\
      Content-Length: %d\r\n\
      User-Agent: Alcotest-client\r\n\
-     %s%s\r\n\
+     %s\r\n\
      %s"
-    path boundary (String.length body) auth_hdr cookie_hdr body
+    path boundary (String.length body) cookie_hdr body
 
 let is_redirect resp =
   String.starts_with ~prefix:"HTTP/1.1 302" resp

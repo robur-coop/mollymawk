@@ -5,10 +5,16 @@
   ptime
   albatross
   mirage-crypto-rng-mkernel
-  yojson
   x509
   mrmime
+  mnet
   mnet-tls
+  mhttp-client
+  msendmail
+  colombe
+  colombe.emile
+  sendmail
+  emile
   tyxml
   ohex
   vifu

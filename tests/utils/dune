@@ -4,9 +4,9 @@
   (= %{context_name} "default"))
  (libraries
   mollymawk_libraries
+  mkernel
   alcotest
   albatross
-  yojson
   mrmime
   uuidm
   mirage-crypto-rng.unix

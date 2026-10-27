@@ -7,7 +7,6 @@
   mollymawk_libraries
   alcotest
   albatross
-  yojson
   mrmime
   uuidm
   mirage-crypto-rng-mkernel

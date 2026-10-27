@@ -3,7 +3,7 @@
  (enabled_if
   (= %{context_name} "solo5"))
  (link_flags :standard -cclib "-z solo5-abi=hvt")
- (modules main assets controller app store filesystem albatross_client)
+ (modules main assets controller app store filesystem liveliness_checks)
  (libraries
   mkernel
   mnet
@@ -24,7 +24,6 @@
   emile
   x509
   gmp
-  yojson
   albatross
   fmt
   mnet-tls

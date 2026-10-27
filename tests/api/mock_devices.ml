@@ -1,184 +1,106 @@
-open Lwt.Infix
+let current_store = ref (Storage.create ())
 
-module Mock_KV : Mirage_kv.RO = struct
-  type t = unit
-  type error = Mirage_kv.error
-  type key = Mirage_kv.Key.t
+let init_mock_store () =
+  let s = Storage.create () in
+  current_store := s;
+  s
 
-  let pp_error = Mirage_kv.pp_error
-  let disconnect _ = Lwt.return_unit
-  let exists _ _ = Lwt.return (Ok (Some `Value))
-  let get _ _ = Lwt.return (Ok "dummy")
-  let list _ _ = Lwt.return (Ok [])
-  let size _ _ = Lwt.return (Ok (Optint.Int63.of_int 10))
-  let digest _ _ = Lwt.return (Ok "hash")
-  let last_modified _ _ = Lwt.return (Ok Ptime.epoch)
-  let get_partial _ _ ~offset:_ ~length:_ = Lwt.return (Ok "dummy")
-end
+let peer (_ : Mhttp_server.flow) = "127.0.0.1"
+let now () = Int32.of_float (Unix.gettimeofday ())
+let dummy_flow : Mhttp_server.flow = Obj.magic ()
 
-module Mock_Block : sig
-  include Mirage_block.S
+let mock_env : Controller.env =
+  {
+    tcp = Obj.magic ();
+    udp = Obj.magic ();
+    m_tcp = Obj.magic ();
+    m_udp = Obj.magic ();
+    block = Obj.magic ();
+    csrf_key = Test_utils.csrf_key;
+  }
 
-  val create : unit -> t
-end = struct
-  type t = unit
-  type error = Mker
-  type write_error = None
+let () = Albatross_client.mock_eval := Some Mock_albatross.eval_success
+let secret_key = Mirage_crypto.AES.GCM.of_secret (String.make 32 'k')
 
-  let pp_error = Mirage_block.pp_error
-  let pp_write_error = Mirage_block.pp_write_error
+let add_device dev value map =
+  let (Vif_core.Device.Device (_, _, key)) =
+    (Obj.magic dev : (_, _) Vif_core.Device.device)
+  in
+  Vif_core.Device.Hmap.add key value map
 
-  let get_info () =
-    Lwt.return
+let server_for_store ?policies store : Vif_core.Server.t =
+  let albatross_instances =
+    ref (Mock_albatross.default_instances ?policies ())
+  in
+  let dev_map =
+    Vif_core.Device.Hmap.empty
+    |> add_device Controller.storage store
+    |> add_device Controller.happy_eyeballs (Obj.magic ())
+    |> add_device Controller.management_happy_eyeballs (Obj.magic ())
+    |> add_device Controller.albatross albatross_instances
+  in
+  Vif_core.Server.
+    {
+      devices = dev_map;
+      cookie_key = secret_key;
+      metrics = Vif_core.Metrics.empty ();
+    }
+
+let middlewares : (Mhttp_server.flow, Controller.env) Vif_core.Middleware.m =
+  Obj.magic Vifu.Middlewares.[ Controller.Session.session ]
+
+let default_handler req _target _server _env =
+  Obj.magic
+    (Controller.error_page_response ~title:"Page not found"
+       ~data:"This page cannot be found. Bad HTTP request method" `Bad_request
+       (Obj.magic req))
+
+let dispatch ~meth ~request ?host target =
+  let routes : (Mhttp_server.flow, _) Vif_core.Route.t list =
+    Obj.magic (App.routes ())
+  in
+  Vif_core.Route.dispatch ~default:default_handler routes ~meth ~request ?host
+    target
+
+let dispatch_reqd ?policies conn reqd =
+  let req0 = Vif_core.Request0.of_reqd ~peer dummy_flow (`H1 conn) (`V1 reqd) in
+  let server = server_for_store ?policies !current_store in
+  let ctx =
+    Vif_core.Middleware.
       {
-        Mirage_block.read_write = true;
-        sector_size = 512;
-        size_sectors = 4096L;
+        server;
+        req0;
+        target = Vif_core.Request0.target req0;
+        user's_value = mock_env;
       }
-
-  let disconnect () = Lwt.return_unit
-  let read () _sector_start _bufs = Lwt.return (Ok ())
-  let write () _sector_start _bufs = Lwt.return (Ok ())
-  let create () = ()
-end
-
-module Mock_smtp = struct
-  let start () =
-    let fd = Lwt_unix.(socket PF_INET SOCK_STREAM 0) in
-    Lwt_unix.bind fd (Lwt_unix.ADDR_INET (Unix.inet_addr_loopback, 0))
-    >>= fun () ->
-    let port =
-      match Lwt_unix.getsockname fd with
-      | Lwt_unix.ADDR_INET (_, p) -> p
-      | _ -> failwith "port not assigned"
-    in
-    Lwt_unix.listen fd 10;
-    let handle client =
-      let out_ch = Lwt_io.of_fd ~mode:Lwt_io.Output client in
-      Lwt_io.write out_ch "ok\r\n" >>= fun () ->
-      Lwt_io.flush out_ch >>= fun () ->
-      Lwt.catch (fun () -> Lwt_io.close out_ch) (fun _ -> Lwt.return_unit)
-    in
-    let rec accept_loop () =
-      Lwt_unix.accept fd >>= fun (client, _addr) ->
-      Lwt.async (fun () -> handle client);
-      accept_loop ()
-    in
-    Lwt.async accept_loop;
-    Lwt.return port
-
-  let port = Lwt_main.run (start ())
-end
-
-module HE = Happy_eyeballs_mirage.Make (Tcpip_stack_socket.V4V6)
-module DNS = Dns_client_mirage.Make (Tcpip_stack_socket.V4V6) (HE)
-module Mimic_HE = Mimic_happy_eyeballs.Make (Tcpip_stack_socket.V4V6) (HE) (DNS)
-module Client = Http_mirage_client.Make (Tcpip_stack_socket.V4V6.TCP) (Mimic_HE)
-
-module App =
-  Unikernel.Main (Tcpip_stack_socket.V4V6) (Tcpip_stack_socket.V4V6) (DNS)
-    (Mock_KV)
-    (Mock_Block)
-    (Client)
-
-type mock_paf_flow = { flow : unit; mutable no_close : bool }
-
-let make_default_policies ~domain ?(unikernels = 10) ?(memory = 1024)
-    ?(block = Some 2048) ?(bridges = [ "service" ]) ?(cpuids = [ 0; 1 ]) () =
-  let path = Vmm_core.Name.Path.of_label domain in
-  let name = Vmm_core.Name.make_of_path path in
-  let root_policy : Vmm_core.Policy.t =
-    {
-      unikernels = unikernels * 2;
-      cpuids = Vmm_core.IS.of_list cpuids;
-      memory = memory * 2;
-      block;
-      bridges = Vmm_core.String_set.of_list bridges;
-    }
   in
-  let policy : Vmm_core.Policy.t =
-    {
-      unikernels;
-      cpuids = Vmm_core.IS.of_list cpuids;
-      memory;
-      block = Option.map (fun b -> b / 2) block;
-      bridges = Vmm_core.String_set.of_list bridges;
-    }
+  let env =
+    Vif_core.Middleware.run middlewares ctx Vif_core.Middleware.Hmap.empty
   in
-  let trie =
-    fst (Vmm_trie.insert Vmm_core.Name.root root_policy Vmm_trie.empty)
+  let request = Vif_core.recognize_request ~env req0 in
+  let target = Vif_core.Request0.target req0 in
+  let meth = Vif_core.Request0.meth req0 in
+  let host = Vif_core.Headers.get (Vif_core.Request0.headers req0) "host" in
+  let fn = dispatch ~meth ~request ?host target in
+  let Vif_core.Response.Sent, () =
+    Vif_core.Response.(run server ~now req0 Empty)
+      (Obj.magic (fn (Obj.magic server) mock_env))
   in
-  fst (Vmm_trie.insert name policy trie)
+  Vif_core.Request0.close req0
 
-let make_app_request_handler ?policies ?instances store =
-  let js_file = "/* some js */" in
-  let css_file = "/* some css */" in
-  let grafana_file = "{}" in
-  let imgs : Unikernel.images =
-    {
-      molly_img = "molly";
-      robur_img = "robur";
-      albatross_img = "albatross";
-      mirage_img = "mirage";
-      dashboard_img = "dashboard";
-    }
-  in
-  let management_domain = Domain_name.of_string_exn "robur.coop" in
-  let success_config = Lwt_main.run Mock_albatross.success_config in
-  let failure_config = Lwt_main.run Mock_albatross.failure_config in
-  let policies = Option.value ~default:Vmm_trie.empty policies in
-  let success_instance : Albatross.t =
-    {
-      configuration = success_config;
-      policies;
-      status = Albatross.Status.Online;
-    }
-  in
-  let failure_instance : Albatross.t =
-    {
-      configuration = failure_config;
-      policies;
-      status = Albatross.Status.Online;
-    }
-  in
-  let albatross_instances = ref Utils.LM.empty in
-  (albatross_instances :=
-     match instances with
-     | Some insts -> insts
-     | None ->
-         Utils.LM.empty
-         |> Utils.LM.add success_config.name success_instance
-         |> Utils.LM.add failure_config.name failure_instance);
-  let client_addr = (Ipaddr.of_string_exn "127.0.0.1", 8080) in
-  let v4 = Ipaddr.V4.Prefix.global in
-  let udp =
-    Lwt_main.run
-      (Udpv4v6_socket.connect ~ipv4_only:false ~ipv6_only:false v4 None)
-  in
-  let tcp =
-    Lwt_main.run
-      (Tcpv4v6_socket.connect ~ipv4_only:false ~ipv6_only:false v4 None)
-  in
-  let stack = Lwt_main.run (Tcpip_stack_socket.V4V6.connect udp tcp) in
-  let happy_eyeballs = HE.create stack in
-  let management_happy_eyeballs = happy_eyeballs in
-  let http_client = Lwt_main.run (Client.connect Mimic.empty) in
-  let flow_type : mock_paf_flow = { flow = (); no_close = true } in
-  let flow : App.Paf.TCP.flow = Obj.magic flow_type in
-  App.request_handler stack management_happy_eyeballs management_domain
-    albatross_instances js_file css_file imgs grafana_file store http_client
-    happy_eyeballs flow client_addr
+let make_default_policies = Mock_albatross.make_default_policies
 
-(* this function query_endpoint is for in-memory http requests *)
-let query_endpoint handler raw_request_str =
+let query_endpoint ?policies req =
+  Miou_unix.run @@ fun () ->
   let output_buffer = Buffer.create 1024 in
-  let finished_promise, notify_finished = Lwt.wait () in
-  let conn = H1.Server_connection.create handler in
-  let bs =
-    Bigstringaf.of_string ~off:0
-      ~len:(String.length raw_request_str)
-      raw_request_str
+  let conn_ref = ref None in
+  let handler reqd =
+    let conn = Option.get !conn_ref in
+    dispatch_reqd ?policies conn reqd
   in
+  let conn = H1.Server_connection.create handler in
+  conn_ref := Some conn;
+  let bs = Bigstringaf.of_string ~off:0 ~len:(String.length req) req in
   let _ =
     H1.Server_connection.read_eof conn bs ~off:0 ~len:(Bigstringaf.length bs)
   in
@@ -187,103 +109,42 @@ let query_endpoint handler raw_request_str =
     | `Write iovecs ->
         List.iter
           (fun { H1.IOVec.buffer; off; len } ->
-            let s = Bigstringaf.substring ~off ~len buffer in
-            Buffer.add_string output_buffer s;
+            Buffer.add_string output_buffer
+              (Bigstringaf.substring ~off ~len buffer);
             H1.Server_connection.report_write_result conn (`Ok len))
           iovecs;
-        if
-          String.includes ~affix:"application/octet-stream"
-            (Buffer.contents output_buffer)
-        then drain ()
-        else if Buffer.length output_buffer > 0 then (
-          if Lwt.is_sleeping finished_promise then
-            Lwt.wakeup_later notify_finished ())
-        else drain ()
-    | `Yield ->
-        if
-          String.includes ~affix:"t\n\r\n\rEOF\n\r"
-            (Buffer.contents output_buffer)
-        then (
-          if Lwt.is_sleeping finished_promise then
-            Lwt.wakeup_later notify_finished ())
-        else H1.Server_connection.yield_writer conn (fun () -> drain ())
-    | `Close _ | `Upgrade ->
-        if Lwt.is_sleeping finished_promise then
-          Lwt.wakeup_later notify_finished ()
+        drain ()
+    | `Yield -> H1.Server_connection.yield_writer conn (fun () -> drain ())
+    | `Close _ | `Upgrade -> ()
   in
   drain ();
-  finished_promise >>= fun () -> Lwt.return (Buffer.contents output_buffer)
-
-let init_mock_store () =
-  Middleware.reset_state ();
-  let block = Mock_Block.create () in
-  App.Store.init_block block >>= function
-  | Error (`Msg msg) -> failwith msg
-  | Ok store -> Lwt.return store
-
-let add_user_csrf (user : User_model.user) =
-  let now = Mkernel.now () in
-  let token = Test_utils.make_csrf_token () in
-  Middleware.register_csrf token user.uuid now;
-  (user, token)
-
-let add_user_token ?(name = "test-token") ?(expiry = 86400) store
-    (user : User_model.user) =
-  let token = Test_utils.make_mock_token ~name ~expiry () in
-  let user =
-    User_model.update_user user
-      ~tokens:(Utils.SM.add token.value token user.tokens)
-      ()
-  in
-  Storage.update_user store user;
-  (user, token.value)
+  Buffer.contents output_buffer
 
 let setup_user ?name ?email ?(password = "Password123!") store =
   let name = Option.value ~default:"test" name in
   let email = Option.value ~default:"test@robur.coop" email in
-  let handler = make_app_request_handler store in
-  let body =
-    Fmt.str
-      {|{ "name": "%s", "email": "%s", "password": "%s", "form_csrf": "test-csrf" }|}
-      name email password
+  let active, super_user =
+    if Storage.count_users store = 0 then (true, true) else (false, false)
   in
-  let req =
-    Test_utils.make_post_request ~path:"/api/register" ~body
-      ~csrf_token:"test-csrf" ()
-  in
-  query_endpoint handler req >>= fun _raw_resp ->
   let name_lbl = Test_utils.label_of_string_exn name in
-  let user = Option.get (Storage.find_by_name store name_lbl) in
-  let session_cookie =
-    match Middleware.user_sessions user.uuid with
-    | m when not (Utils.SM.is_empty m) -> (snd (Utils.SM.choose m)).value
-    | _ -> failwith "no session cookie found"
+  let email_box = Test_utils.email_of_string_exn email in
+  let user, cookie =
+    Models.User.create_user ~name:name_lbl ~email:email_box ~password
+      ~created_at:Ptime.epoch ~active ~super_user
+      ~user_agent:(Some "Alcotest-client")
   in
-  let user, csrf_token = add_user_csrf user in
-  Lwt.return (user, session_cookie, csrf_token)
-
-let setup_user_with_token ?name ?email ?password ?(token_name = "test-token")
-    ?(expiry = 86400) store =
-  setup_user ?name ?email ?password store
-  >>= fun (user, _session_cookie, _csrf_token) ->
-  let user, token_value = add_user_token ~name:token_name ~expiry store user in
-  Lwt.return (user, token_value)
+  Storage.add_user store user;
+  Controller.Session.add_session user.uuid cookie;
+  let session_cookie = cookie.value in
+  (user, session_cookie, Test_utils.make_csrf_token ~session_cookie ())
 
 let setup_non_admin_user ?name ?email ?password store =
-  setup_user ~name:"admin" ~email:"admin@robur.coop" store
-  >>= fun (_admin, admin_session, admin_csrf) ->
-  setup_user ?name ?email ?password store
-  >>= fun (user, session_cookie, csrf_token) ->
-  let handler = make_app_request_handler store in
-  let body =
-    Fmt.str {|{ "uuid": "%s", "molly_csrf": "%s" }|}
-      (Uuidm.to_string user.uuid)
-      admin_csrf
+  let _admin, _admin_session, _admin_csrf_token =
+    setup_user ~name:"admin" ~email:"admin@robur.coop" store
   in
-  let req =
-    Test_utils.make_post_request ~path:"/api/admin/user/activate/toggle" ~body
-      ~session_cookie:admin_session ~csrf_token:admin_csrf ()
+  let user, session_cookie, csrf_token =
+    setup_user ?name ?email ?password store
   in
-  query_endpoint handler req >>= fun _ ->
-  let user = Option.get (Storage.find_by_uuid store user.uuid) in
-  Lwt.return (user, session_cookie, csrf_token)
+  let user = Models.User.update_user user ~active:true () in
+  Storage.update_user store user;
+  (user, session_cookie, csrf_token)

@@ -131,24 +131,24 @@ let check_invalid_private_key_in_albatross_config () =
 let check_missing_certificate_in_albatross_config () =
   let expected = `Msg "No certificate" in
   let bad_json =
-    `Assoc
+    Albatross_json.j_obj
       [
-        ("version", `Int 10);
-        ("users", `List []);
+        ("version", Jsont.Json.int 10);
+        ("users", Jsont.Json.list []);
         ( "configuration",
-          `List
+          Jsont.Json.list
             [
-              `Assoc
+              Albatross_json.j_obj
                 [
-                  ("name", `String "default");
-                  ("certificate", `String "");
-                  ("private_key", `String "");
-                  ("server_ip", `String "10.0.0.1");
-                  ("server_port", `Int 25);
-                  ("updated_at", `String "2026-08-21 20:02:17-00:00");
+                  ("name", Jsont.Json.string "default");
+                  ("certificate", Jsont.Json.string "");
+                  ("private_key", Jsont.Json.string "");
+                  ("server_ip", Jsont.Json.string "10.0.0.1");
+                  ("server_port", Jsont.Json.int 25);
+                  ("updated_at", Jsont.Json.string "2026-08-21 20:02:17-00:00");
                 ];
             ] );
-        ("email", `Null);
+        ("email", Jsont.Json.null ());
       ]
   in
   Alcotest.(
@@ -161,31 +161,31 @@ let check_missing_certificate_in_albatross_config () =
 let check_missing_private_key_in_albatross_config () =
   let expected = `Msg "No private key" in
   let bad_json =
-    `Assoc
+    Albatross_json.j_obj
       [
-        ("version", `Int 10);
-        ("users", `List []);
+        ("version", Jsont.Json.int 10);
+        ("users", Jsont.Json.list []);
         ( "configuration",
-          `List
+          Jsont.Json.list
             [
-              `Assoc
+              Albatross_json.j_obj
                 [
-                  ("name", `String "default");
+                  ("name", Jsont.Json.string "default");
                   ( "certificate",
-                    `String
+                    Jsont.Json.string
                       "-----BEGIN CERTIFICATE-----\n\
                        MIG1MGmgAwIBAgILAOLhFMcl4xlKt5YwBQYDK2VwMAAwHhcNNzAwMTAxMDAwMDAw\n\
                        WhcNMjYwODIxMjEzNjA4WjAAMCowBQYDK2VwAyEAKkL+FItGwbO0WWbhPR6DtCJX\n\
                        wDxNWnAnuTdVpdd+aSowBQYDK2VwA0EAmFZ10FnNhq2kYLzFObcw0P2uwyPfdnAg\n\
                        DFLzoFIPoYlE98spkELRNeMpkxMbRsd4G2XYbrwdnwFOc9B+faX+Dw==\n\
                        -----END CERTIFICATE-----\n" );
-                  ("private_key", `String "");
-                  ("server_ip", `String "10.0.0.1");
-                  ("server_port", `Int 25);
-                  ("updated_at", `String "2026-08-21 20:02:17-00:00");
+                  ("private_key", Jsont.Json.string "");
+                  ("server_ip", Jsont.Json.string "10.0.0.1");
+                  ("server_port", Jsont.Json.int 25);
+                  ("updated_at", Jsont.Json.string "2026-08-21 20:02:17-00:00");
                 ];
             ] );
-        ("email", `Null);
+        ("email", Jsont.Json.null ());
       ]
   in
   Alcotest.(
@@ -200,10 +200,10 @@ let check_multiple_valid_albatross_configs_with_same_name () =
   let expected = `Msg "Duplicated albatross configurations" in
   let one_cfg_json =
     match
-      Configuration.to_json
+      Models.Configuration.to_json
         (Utils.LM.singleton mock_albatross_config.name mock_albatross_config)
     with
-    | `List [ c ] -> c
+    | Jsont.Array ([ c ], _) -> c
     | _ -> failwith "unexpected json"
   in
   Alcotest.(
@@ -212,19 +212,19 @@ let check_multiple_valid_albatross_configs_with_same_name () =
        name"
       (Error expected)
       (Storage.t_of_json
-         (`Assoc
+         (Albatross_json.j_obj
             [
-              ("version", `Int 10);
-              ("users", `List []);
-              ("configuration", `List [ one_cfg_json; one_cfg_json ]);
-              ("email", `Null);
+              ("version", Jsont.Json.int 10);
+              ("users", Jsont.Json.list []);
+              ("configuration", Jsont.Json.list [ one_cfg_json; one_cfg_json ]);
+              ("email", Jsont.Json.null ());
             ])))
 
 let check_multiple_valid_albatross_configs_with_different_names () =
   let cfg2 =
     {
       mock_albatross_config with
-      Configuration.name = label_of_string_exn "default-2";
+      Models.Configuration.name = label_of_string_exn "default-2";
     }
   in
   let configs =
@@ -307,18 +307,18 @@ let check_cookies_not_persisted_in_v10 () =
       Utils.LM.empty None
   in
   match json with
-  | `Assoc xs -> (
-      match List.assoc_opt "users" xs with
-      | Some (`List [ `Assoc u_fields ]) ->
+  | Jsont.Object (xs, _) -> (
+      match Utils.Json.get "users" xs with
+      | Some (Jsont.Array ([ Jsont.Object (u_fields, _) ], _)) ->
           Alcotest.(
             check bool "cookies field completely omitted from JSON in v10" false
-              (List.mem_assoc "cookies" u_fields))
+              (Option.is_some (Utils.Json.get "cookies" u_fields)))
       | _ -> Alcotest.fail "Expected single user in users list")
   | _ -> Alcotest.fail "Expected assoc in storage json"
 
 let check_discard_malformed_unikernel_update () =
-  let valid_uk_uuid = User_model.generate_uuid () in
-  let valid_update : User_model.unikernel_update =
+  let valid_uk_uuid = Models.User.generate_uuid () in
+  let valid_update : Models.User.unikernel_update =
     {
       name = label_of_string_exn "my-app";
       job = "my-job";
@@ -353,37 +353,43 @@ let check_discard_malformed_unikernel_update () =
     Storage.t_to_json (Utils.UM.singleton user.uuid user) Utils.LM.empty None
   in
   let malformed_update_json =
-    `Assoc
+    Albatross_json.j_obj
       [
-        ("name", `String "malformed-app");
-        ("job", `String "bad-job");
-        ("uuid", `String "");
+        ("name", Jsont.Json.string "malformed-app");
+        ("job", Jsont.Json.string "bad-job");
+        ("uuid", Jsont.Json.string "");
         ("config", Albatross_json.config_to_json valid_update.config);
         ( "timestamp",
-          `String (Utils.TimeHelper.string_of_ptime valid_update.timestamp) );
+          Jsont.Json.string
+            (Utils.TimeHelper.string_of_ptime valid_update.timestamp) );
       ]
   in
   let injected_json =
     match json with
-    | `Assoc fields ->
+    | Jsont.Object (fields, meta) ->
         let updated_fields =
           List.map
             (function
-              | "users", `List [ `Assoc u_fields ] ->
+              | name, Jsont.Array ([ Jsont.Object (u_fields, u_meta) ], a_meta)
+                when fst name = "users" ->
                   let u_fields' =
                     List.map
                       (function
-                        | "unikernel_updates", `List updates ->
-                            ( "unikernel_updates",
-                              `List (malformed_update_json :: updates) )
+                        | u_name, Jsont.Array (updates, up_meta)
+                          when fst u_name = "unikernel_updates" ->
+                            ( u_name,
+                              Jsont.Array
+                                (malformed_update_json :: updates, up_meta) )
                         | other -> other)
                       u_fields
                   in
-                  ("users", `List [ `Assoc u_fields' ])
+                  ( name,
+                    Jsont.Array ([ Jsont.Object (u_fields', u_meta) ], a_meta)
+                  )
               | other -> other)
             fields
         in
-        `Assoc updated_fields
+        Jsont.Object (updated_fields, meta)
     | _ -> Alcotest.fail "Unexpected json structure"
   in
   match Storage.t_of_json injected_json with

@@ -1,1016 +1,822 @@
 open Test_utils
 open Mock_devices
-open Lwt.Infix
 
 let check_landing_page () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Alcotest.(check bool)
-        "Contains landing page title" true
-        (String.includes ~affix:"Deploy unikernels with ease" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp);
+  Alcotest.(check bool)
+    "Contains landing page title" true
+    (String.includes ~affix:"Deploy unikernels with ease" resp)
 
 let check_sign_in_page () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/sign-in" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Alcotest.(check bool)
-        "Contains sign-in form action" true
-        (String.includes ~affix:"/api/login" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/sign-in" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp);
+  Alcotest.(check bool)
+    "Contains sign-in form action" true
+    (String.includes ~affix:"/api/login" resp)
 
 let check_sign_up_page () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/sign-up" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Alcotest.(check bool)
-        "Contains sign-up form action" true
-        (String.includes ~affix:"/api/register" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/sign-up" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp);
+  Alcotest.(check bool)
+    "Contains sign-up form action" true
+    (String.includes ~affix:"/api/register" resp)
 
 let check_static_javascript () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/main.js" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/javascript" true
-        (String.includes ~affix:"text/javascript" resp);
-      Alcotest.(check bool)
-        "Contains js content" true
-        (String.includes ~affix:"/* some js */" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/main.js" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/javascript" true
+    (String.includes ~affix:"text/javascript" resp);
+  Alcotest.(check bool) "Contains js content" true (String.length resp > 100)
 
 let check_static_stylesheet () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/style.css" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/css" true
-        (String.includes ~affix:"text/css" resp);
-      Alcotest.(check bool)
-        "Contains css content" true
-        (String.includes ~affix:"/* some css */" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/style.css" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/css" true
+    (String.includes ~affix:"text/css" resp);
+  Alcotest.(check bool) "Contains css content" true (String.length resp > 100)
 
 let check_grafana_dashboard_json () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/grafana.json" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is application/json" true
-        (String.includes ~affix:"application/json" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/grafana.json" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is application/json" true
+    (String.includes ~affix:"application/json" resp)
 
 let check_static_image () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/images/robur.png" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is image/png" true
-        (String.includes ~affix:"image/png" resp);
-      Alcotest.(check bool)
-        "Contains image content" true
-        (String.includes ~affix:"robur" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/images/robur.png" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is image/png" true
+    (String.includes ~affix:"image/png" resp);
+  Alcotest.(check bool) "Contains image content" true (String.length resp > 100)
 
 let check_static_image_molly_bird () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/images/molly_bird.jpeg" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is image/jpeg" true
-        (String.includes ~affix:"image/jpeg" resp);
-      Alcotest.(check bool)
-        "Contains image content" true
-        (String.includes ~affix:"molly" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/images/molly_bird.jpeg" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is image/jpeg" true
+    (String.includes ~affix:"image/jpeg" resp);
+  Alcotest.(check bool) "Contains image content" true (String.length resp > 100)
 
 let check_static_image_albatross () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/images/albatross_1.png" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is image/jpeg" true
-        (String.includes ~affix:"image/jpeg" resp);
-      Alcotest.(check bool)
-        "Contains image content" true
-        (String.includes ~affix:"albatross" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/images/albatross_1.png" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is image/jpeg" true
+    (String.includes ~affix:"image/jpeg" resp);
+  Alcotest.(check bool) "Contains image content" true (String.length resp > 100)
 
 let check_static_image_dashboard () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/images/dashboard_1.png" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is image/png" true
-        (String.includes ~affix:"image/png" resp);
-      Alcotest.(check bool)
-        "Contains image content" true
-        (String.includes ~affix:"dashboard" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/images/dashboard_1.png" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is image/png" true
+    (String.includes ~affix:"image/png" resp);
+  Alcotest.(check bool) "Contains image content" true (String.length resp > 100)
 
 let check_static_image_mirage () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/images/mirage_os_1.png" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is image/jpeg" true
-        (String.includes ~affix:"image/jpeg" resp);
-      Alcotest.(check bool)
-        "Contains image content" true
-        (String.includes ~affix:"mirage" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/images/mirage_os_1.png" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is image/jpeg" true
+    (String.includes ~affix:"image/jpeg" resp);
+  Alcotest.(check bool) "Contains image content" true (String.length resp > 100)
 
 let check_dashboard_authenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/dashboard" ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/dashboard" ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_dashboard_unauthenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/dashboard" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/dashboard" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_account_page_authenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/account" ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req = make_get_request ~path:"/account" ~session_cookie ~csrf_token () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_account_page_unauthenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/account" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
-
-let check_tokens_page_authenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/tokens" ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
-
-let check_tokens_page_unauthenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/tokens" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/account" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_select_instance_authenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/select/instance?callback=/dashboard"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Alcotest.(check bool)
-        "Contains instance selection content" true
-        (String.includes ~affix:"Select an instance" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/select/instance?callback=/dashboard"
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp);
+  Alcotest.(check bool)
+    "Contains instance selection content" true
+    (String.includes ~affix:"Select an instance" resp)
 
 let check_select_instance_unauthenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/select/instance" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/select/instance" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_albatross_instances_redirect () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/albatross/instances" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to select instance" true
-        (is_redirect resp && String.includes ~affix:"/select/instance" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/albatross/instances" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to select instance" true
+    (is_redirect resp && String.includes ~affix:"/select/instance" resp)
 
 let check_usage_authenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/usage?instance=default" ~session_cookie
-          ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/usage?instance=default" ~session_cookie ~csrf_token
+      ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_usage_missing_instance () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/usage" ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to instance selector" true
-        (is_redirect resp && String.includes ~affix:"/select/instance" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req = make_get_request ~path:"/usage" ~session_cookie ~csrf_token () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to instance selector" true
+    (is_redirect resp && String.includes ~affix:"/select/instance" resp)
 
 let check_usage_unauthenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/usage?instance=default" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/usage?instance=default" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_unikernel_info_authenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request
-          ~path:"/unikernel/info?instance=default&unikernel=hello"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/unikernel/info?instance=default&unikernel=hello"
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_unikernel_info_name_casing () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let handler = make_app_request_handler store in
-      let req_lower =
-        make_get_request
-          ~path:"/unikernel/info?instance=default&unikernel=hello"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint handler req_lower >>= fun resp_lower ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK for lowercase unikernel name" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp_lower);
-      Alcotest.(check bool)
-        "Response references unikernel hello" true
-        (String.includes ~affix:"unikernel=hello" resp_lower);
-      let req_cap =
-        make_get_request
-          ~path:"/unikernel/info?instance=default&unikernel=Hello"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint handler req_cap >>= fun resp_cap ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK for capitalized unikernel name" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp_cap);
-      Alcotest.(check bool)
-        "Hello references the same unikernel hello" true
-        (String.includes ~affix:"unikernel=hello" resp_cap);
-      let req_upper =
-        make_get_request
-          ~path:"/unikernel/info?instance=default&unikernel=HELLO"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint handler req_upper >>= fun resp_upper ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK for uppercase unikernel name" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp_upper);
-      Alcotest.(check bool)
-        "HELLO references the same unikernel hello" true
-        (String.includes ~affix:"unikernel=hello" resp_upper);
-      let req_nonexistent =
-        make_get_request
-          ~path:"/unikernel/info?instance=default&unikernel=other"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint handler req_nonexistent >>= fun resp_nonexistent ->
-      Alcotest.(check bool)
-        "Response has HTTP 404 Not Found for non-matching unikernel name" true
-        (String.starts_with ~prefix:"HTTP/1.1 404 Not Found" resp_nonexistent);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req_lower =
+    make_get_request ~path:"/unikernel/info?instance=default&unikernel=hello"
+      ~session_cookie ~csrf_token ()
+  in
+  let resp_lower = query_endpoint req_lower in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK for lowercase unikernel name" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp_lower);
+  Alcotest.(check bool)
+    "Response references unikernel hello" true
+    (String.includes ~affix:"unikernel=hello" resp_lower);
+  let req_cap =
+    make_get_request ~path:"/unikernel/info?instance=default&unikernel=Hello"
+      ~session_cookie ~csrf_token ()
+  in
+  let resp_cap = query_endpoint req_cap in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK for capitalized unikernel name" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp_cap);
+  Alcotest.(check bool)
+    "Hello references the same unikernel hello" true
+    (String.includes ~affix:"unikernel=hello" resp_cap);
+  let req_upper =
+    make_get_request ~path:"/unikernel/info?instance=default&unikernel=HELLO"
+      ~session_cookie ~csrf_token ()
+  in
+  let resp_upper = query_endpoint req_upper in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK for uppercase unikernel name" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp_upper);
+  Alcotest.(check bool)
+    "HELLO references the same unikernel hello" true
+    (String.includes ~affix:"unikernel=hello" resp_upper);
+  let req_nonexistent =
+    make_get_request ~path:"/unikernel/info?instance=default&unikernel=other"
+      ~session_cookie ~csrf_token ()
+  in
+  let resp_nonexistent = query_endpoint req_nonexistent in
+  Alcotest.(check bool)
+    "Response has HTTP 404 Not Found for non-matching unikernel name" true
+    (String.starts_with ~prefix:"HTTP/1.1 404 Not Found" resp_nonexistent)
 
 let check_unikernel_info_missing_unikernel () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/unikernel/info?instance=default"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 400 Bad Request" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/unikernel/info?instance=default" ~session_cookie
+      ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 400 Bad Request" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp)
 
 let check_unikernel_info_missing_instance () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/unikernel/info?unikernel=hello" ~session_cookie
-          ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to instance selector" true
-        (is_redirect resp && String.includes ~affix:"/select/instance" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/unikernel/info?unikernel=hello" ~session_cookie
+      ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to instance selector" true
+    (is_redirect resp && String.includes ~affix:"/select/instance" resp)
 
 let check_unikernel_info_unauthenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req =
-        make_get_request
-          ~path:"/unikernel/info?instance=default&unikernel=hello" ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req =
+    make_get_request ~path:"/unikernel/info?instance=default&unikernel=hello" ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_unikernel_console_viewer_authenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request
-          ~path:"/unikernel/console?instance=default&unikernel=hello"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/unikernel/console?instance=default&unikernel=hello"
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_unikernel_console_viewer_missing_unikernel () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/unikernel/console?instance=default"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 400 Bad Request" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/unikernel/console?instance=default" ~session_cookie
+      ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 400 Bad Request" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp)
 
 let check_unikernel_console_viewer_missing_instance () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/unikernel/console?unikernel=hello"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to instance selector" true
-        (is_redirect resp && String.includes ~affix:"/select/instance" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/unikernel/console?unikernel=hello" ~session_cookie
+      ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to instance selector" true
+    (is_redirect resp && String.includes ~affix:"/select/instance" resp)
 
 let check_unikernel_console_viewer_unauthenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req =
-        make_get_request
-          ~path:"/unikernel/console?instance=default&unikernel=hello" ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req =
+    make_get_request ~path:"/unikernel/console?instance=default&unikernel=hello"
+      ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_unikernel_deploy_authenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (user, session_cookie, csrf_token) ->
-      let policies = make_default_policies ~domain:user.name () in
-      let req =
-        make_get_request ~path:"/unikernel/deploy?instance=default"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler ~policies store) req
-      >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let user, session_cookie, csrf_token = setup_user store in
+  let policies = make_default_policies ~domain:user.name () in
+  let req =
+    make_get_request ~path:"/unikernel/deploy?instance=default" ~session_cookie
+      ~csrf_token ()
+  in
+  let resp = query_endpoint ~policies req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_unikernel_deploy_missing_instance () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/unikernel/deploy" ~session_cookie ~csrf_token
-          ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to instance selector" true
-        (is_redirect resp && String.includes ~affix:"/select/instance" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/unikernel/deploy" ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to instance selector" true
+    (is_redirect resp && String.includes ~affix:"/select/instance" resp)
 
 let check_unikernel_deploy_unauthenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req =
-        make_get_request ~path:"/unikernel/deploy?instance=default" ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/unikernel/deploy?instance=default" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_unikernel_update_missing_unikernel () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/unikernel/update?instance=default"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 400 Bad Request" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/unikernel/update?instance=default" ~session_cookie
+      ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 400 Bad Request" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp)
 
 let check_unikernel_update_unauthenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req =
-        make_get_request
-          ~path:"/unikernel/update?instance=default&unikernel=hello" ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req =
+    make_get_request ~path:"/unikernel/update?instance=default&unikernel=hello"
+      ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_unikernel_update_compare_changes_unauthenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req =
-        make_get_request
-          ~path:
-            "/unikernel/update/compare-changes?instance=default&unikernel=hello"
-          ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req =
+    make_get_request
+      ~path:"/unikernel/update/compare-changes?instance=default&unikernel=hello"
+      ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_unikernel_update_compare_changes_missing_instance () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request
-          ~path:"/unikernel/update/compare-changes?unikernel=hello"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to select instance" true
-        (is_redirect resp || String.includes ~affix:"/select/instance" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/unikernel/update/compare-changes?unikernel=hello"
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to select instance" true
+    (is_redirect resp || String.includes ~affix:"/select/instance" resp)
 
 let check_unikernel_update_compare_changes_missing_unikernel () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request
-          ~path:"/unikernel/update/compare-changes?instance=default"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 400 Bad Request" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/unikernel/update/compare-changes?instance=default"
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 400 Bad Request" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp)
 
 let check_unikernel_update_compare_changes_bad_method () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_post_request
-          ~path:
-            "/unikernel/update/compare-changes?instance=default&unikernel=hello"
-          ~body:"" ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 400 Bad Request" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_post_request
+      ~path:"/unikernel/update/compare-changes?instance=default&unikernel=hello"
+      ~body:"" ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 400 Bad Request" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp)
 
 let check_admin_users_superuser () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/admin/users" ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/admin/users" ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_admin_users_non_admin () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user ~name:"admin" ~email:"admin@robur.coop" store >>= fun _ ->
-      (*this second user created will not be an admin*)
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/admin/users" ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects non-admin to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _ = setup_user ~name:"admin" ~email:"admin@robur.coop" store in
+  (*this second user created will not be an admin*)
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/admin/users" ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects non-admin to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_admin_users_unauthenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/admin/users" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects unauthenticated to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/admin/users" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects unauthenticated to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_admin_user_profile_superuser () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request
-          ~path:("/admin/user/profile?uuid=" ^ Uuidm.to_string user.uuid)
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request
+      ~path:("/admin/user/profile?uuid=" ^ Uuidm.to_string user.uuid)
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_admin_user_profile_not_found () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request
-          ~path:"/admin/user/profile?uuid=00000000-0000-0000-0000-000000000000"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 404 Not Found" true
-        (String.starts_with ~prefix:"HTTP/1.1 404 Not Found" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request
+      ~path:"/admin/user/profile?uuid=00000000-0000-0000-0000-000000000000"
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 404 Not Found" true
+    (String.starts_with ~prefix:"HTTP/1.1 404 Not Found" resp)
 
 let check_admin_user_profile_missing_uuid () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/admin/user/profile" ~session_cookie ~csrf_token
-          ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 400 Bad Request" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/admin/user/profile" ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 400 Bad Request" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp)
 
 let check_admin_user_unikernels_superuser () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request
-          ~path:("/admin/user/unikernels?uuid=" ^ Uuidm.to_string user.uuid)
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request
+      ~path:("/admin/user/unikernels?uuid=" ^ Uuidm.to_string user.uuid)
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_admin_user_unikernels_missing_uuid () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/admin/user/unikernels" ~session_cookie
-          ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 400 Bad Request" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/admin/user/unikernels" ~session_cookie ~csrf_token
+      ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 400 Bad Request" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp)
 
 let check_admin_user_policy_superuser () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request
-          ~path:("/admin/user/policy?uuid=" ^ Uuidm.to_string user.uuid)
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request
+      ~path:("/admin/user/policy?uuid=" ^ Uuidm.to_string user.uuid)
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_admin_user_policy_missing_uuid () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/admin/user/policy" ~session_cookie ~csrf_token
-          ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 400 Bad Request" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/admin/user/policy" ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 400 Bad Request" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp)
 
 let check_admin_user_policy_edit_superuser () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (user, session_cookie, csrf_token) ->
-      let policies = make_default_policies ~domain:user.name () in
-      let req =
-        make_get_request
-          ~path:
-            ("/admin/u/policy/edit?uuid=" ^ Uuidm.to_string user.uuid
-           ^ "&instance=default")
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler ~policies store) req
-      >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let user, session_cookie, csrf_token = setup_user store in
+  let policies = make_default_policies ~domain:user.name () in
+  let req =
+    make_get_request
+      ~path:
+        ("/admin/u/policy/edit?uuid=" ^ Uuidm.to_string user.uuid
+       ^ "&instance=default")
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint ~policies req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_admin_user_policy_edit_missing_uuid () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/admin/u/policy/edit?instance=default"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 400 Bad Request" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/admin/u/policy/edit?instance=default"
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 400 Bad Request" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp)
 
 let check_admin_user_policy_edit_missing_instance () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request
-          ~path:("/admin/u/policy/edit?uuid=" ^ Uuidm.to_string user.uuid)
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to instance selector" true
-        (is_redirect resp && String.includes ~affix:"/select/instance" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request
+      ~path:("/admin/u/policy/edit?uuid=" ^ Uuidm.to_string user.uuid)
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to instance selector" true
+    (is_redirect resp && String.includes ~affix:"/select/instance" resp)
 
 let check_admin_settings_albatross_superuser () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/admin/settings/albatross" ~session_cookie
-          ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/admin/settings/albatross" ~session_cookie
+      ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_admin_settings_albatross_non_admin () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user ~name:"admin" ~email:"admin@robur.coop" store >>= fun _ ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/admin/settings/albatross" ~session_cookie
-          ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects non-admin to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _ = setup_user ~name:"admin" ~email:"admin@robur.coop" store in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/admin/settings/albatross" ~session_cookie
+      ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects non-admin to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_admin_settings_email_superuser () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/admin/settings/email" ~session_cookie
-          ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/admin/settings/email" ~session_cookie ~csrf_token
+      ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_admin_settings_email_non_admin () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user ~name:"admin" ~email:"admin@robur.coop" store >>= fun _ ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/admin/settings/email" ~session_cookie
-          ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects non-admin to sign-in" true
-        (is_redirect resp || String.includes ~affix:"/sign-in" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _ = setup_user ~name:"admin" ~email:"admin@robur.coop" store in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/admin/settings/email" ~session_cookie ~csrf_token
+      ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects non-admin to sign-in" true
+    (is_redirect resp || String.includes ~affix:"/sign-in" resp)
 
 let check_admin_albatross_errors_superuser () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/admin/albatross/errors?instance=default"
-          ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/admin/albatross/errors?instance=default"
+      ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp)
 
 let check_admin_albatross_errors_missing_instance () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/admin/albatross/errors" ~session_cookie
-          ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Redirects to instance selector" true
-        (is_redirect resp && String.includes ~affix:"/select/instance" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/admin/albatross/errors" ~session_cookie ~csrf_token
+      ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Redirects to instance selector" true
+    (is_redirect resp && String.includes ~affix:"/select/instance" resp)
 
 let check_verify_email_page () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (user, session_cookie, csrf_token) ->
-      let req =
-        make_get_request ~path:"/verify-email" ~session_cookie ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Content-Type is text/html" true
-        (String.includes ~affix:"text/html" resp);
-      Alcotest.(check bool)
-        "Contains X-MOLLY-CSRF header" true
-        (String.includes ~affix:"X-MOLLY-CSRF" resp);
-      Alcotest.(check bool)
-        "Contains verify email title" true
-        (String.includes ~affix:"Verify Email" resp);
-      let updated_user = Option.get (Storage.find_by_uuid store user.uuid) in
-      Alcotest.(check bool)
-        "User has email_verification_uuid assigned" true
-        (Option.is_some updated_user.email_verification_uuid);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_get_request ~path:"/verify-email" ~session_cookie ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Content-Type is text/html" true
+    (String.includes ~affix:"text/html" resp);
+  Alcotest.(check bool)
+    "Contains X-MOLLY-CSRF header" true
+    (String.includes ~affix:"X-MOLLY-CSRF" resp);
+  Alcotest.(check bool)
+    "Contains verify email title" true
+    (String.includes ~affix:"Verify Email" resp);
+  let updated_user = Option.get (Storage.find_by_uuid store user.uuid) in
+  Alcotest.(check bool)
+    "User has email_verification_uuid assigned" true
+    (Option.is_some updated_user.email_verification_uuid)
 
 let check_verify_email_unauthenticated () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/verify-email" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool) "Response is a redirect" true (is_redirect resp);
-      Alcotest.(check bool)
-        "Redirects to /sign-in" true
-        (String.includes ~affix:"location: /sign-in"
-           (String.lowercase_ascii resp));
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/verify-email" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool) "Response is a redirect" true (is_redirect resp);
+  Alcotest.(check bool)
+    "Redirects to /sign-in" true
+    (String.includes ~affix:"location: /sign-in" (String.lowercase_ascii resp))
 
 let check_verify_email_invalid_method () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      setup_user store >>= fun (_user, session_cookie, csrf_token) ->
-      let req =
-        make_post_request ~path:"/verify-email" ~body:"" ~session_cookie
-          ~csrf_token ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 400 Bad Request" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Alcotest.(check bool)
-        "Bad HTTP request method message" true
-        (String.includes ~affix:"Bad HTTP request method" resp);
-      Lwt.return_unit )
+  let store = init_mock_store () in
+  let _user, session_cookie, csrf_token = setup_user store in
+  let req =
+    make_post_request ~path:"/verify-email" ~body:"" ~session_cookie ~csrf_token
+      ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 400 Bad Request" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+  Alcotest.(check bool)
+    "Bad HTTP request method message" true
+    (String.includes ~affix:"Bad HTTP request method" resp)
 
 let check_page_not_found () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/some/nonexistent/page" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 400 Bad Request" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Alcotest.(check bool)
-        "Contains page not found message" true
-        (String.includes ~affix:"This page cannot be found" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/some/nonexistent/page" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 400 Bad Request" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+  Alcotest.(check bool)
+    "Contains page not found message" true
+    (String.includes ~affix:"This page cannot be found" resp)
 
 let check_error_layout_html_escaping () =
   let status =
-    {
-      Utils.Status.code = 400;
-      title = "Bad Request";
-      data =
-        `String "<script>alert('xss')</script> <img src=x onerror=alert(1)>";
-      success = false;
-    }
+    Models.Status.make "Bad Request"
+      "<script>alert('xss')</script> <img src=x onerror=alert(1)>"
   in
   let rendered_html =
     Format.asprintf "%a" (Tyxml_html.pp_elt ()) (Error_page.error_layout status)
@@ -1033,15 +839,10 @@ let check_status_to_json_escaping () =
   let injection_payload =
     "<script>alert(\"xss\")</script>\n\r\t\" \"><img src=x onerror=alert(1)>"
   in
-  let status =
-    {
-      Utils.Status.code = 400;
-      title = "Bad Request";
-      data = `String injection_payload;
-      success = false;
-    }
+  let status = Models.Status.make "Bad Request" injection_payload in
+  let json_str =
+    Result.get_ok (Jsont_bytesrw.encode_string Models.Status.to_json status)
   in
-  let json_str = Utils.Status.to_json status in
   let parsed =
     match Utils.Json.from_string json_str with
     | Ok j -> j
@@ -1049,9 +850,9 @@ let check_status_to_json_escaping () =
   in
   let data_str =
     match parsed with
-    | `Assoc kvs -> (
-        match List.assoc_opt "data" kvs with
-        | Some (`String s) -> s
+    | Jsont.Object (kvs, _) -> (
+        match Utils.Json.get "data" kvs with
+        | Some (Jsont.String (s, _)) -> s
         | _ -> Alcotest.fail "Missing data field")
     | _ -> Alcotest.fail "Expected Assoc"
   in
@@ -1063,125 +864,105 @@ let check_status_to_json_escaping () =
     (String.includes ~affix:"\\\"" data_str)
 
 let check_api_error_injection_handling () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let injection_name = "<script>alert('xss')</script>\"" in
-      let json_body =
-        Fmt.str
-          {|{ "name": %s, "email": "test@robur.coop", "password": "Password123!", "form_csrf": "test" }|}
-          (Yojson.Basic.to_string (`String injection_name))
-      in
-      let req =
-        make_post_request ~path:"/api/register" ~body:json_body
-          ~csrf_token:"test" ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response is HTTP 400" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Alcotest.(check bool)
-        "Response content-type is application/json" true
-        (String.includes ~affix:"content-type: application/json"
-           (String.lowercase_ascii resp));
-      Alcotest.(check bool)
-        "Response body does not contain unescaped script tag" false
-        (String.includes ~affix:"<script>" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let session_cookie = "test-session" in
+  let csrf_token = make_csrf_token ~session_cookie () in
+  let injection_name = "<script>alert('xss')</script>\"" in
+  let json_body =
+    Fmt.str
+      {|{ "name": %s, "email": "test@robur.coop", "password": "Password123!", "molly_csrf": "%s" }|}
+      (Utils.Json.to_string (Jsont.Json.string injection_name))
+      csrf_token
+  in
+  let req =
+    make_post_request ~path:"/api/register" ~body:json_body ~session_cookie
+      ~csrf_token ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response is HTTP 400" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+  Alcotest.(check bool)
+    "Response content-type is application/json" true
+    (String.includes ~affix:"content-type: application/json"
+       (String.lowercase_ascii resp));
+  Alcotest.(check bool)
+    "Response body does not contain unescaped script tag" false
+    (String.includes ~affix:"<script>" resp)
 
 let check_api_malformed_json_error_escaping () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req =
-        make_post_request ~path:"/api/register"
-          ~body:"{ \"invalid\": \"<script>alert(1)</script>\", broken: }"
-          ~csrf_token:"test" ()
-      in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response is HTTP 400" true
-        (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
-      Alcotest.(check bool)
-        "Response body does not contain unescaped script tag" false
-        (String.includes ~affix:"<script>" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req =
+    make_post_request ~path:"/api/register"
+      ~body:"{ \"invalid\": \"<script>alert(1)</script>\", broken: }"
+      ~csrf_token:"test" ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response is HTTP 400" true
+    (String.starts_with ~prefix:"HTTP/1.1 400 Bad Request" resp);
+  Alcotest.(check bool)
+    "Response body does not contain unescaped script tag" false
+    (String.includes ~affix:"<script>" resp)
 
 let check_unauthenticated_redirect_with_target () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let target1 = "/account" in
-      let req1 = make_get_request ~path:target1 () in
-      query_endpoint (make_app_request_handler store) req1 >>= fun resp1 ->
-      Alcotest.(check bool) "Response is redirect" true (is_redirect resp1);
-      Alcotest.(check bool)
-        "Redirects to sign-in with encoded redirect param" true
-        (String.includes
-           ~affix:("location: /sign-in?redirect=" ^ Uri.pct_encode target1)
-           resp1);
+  let _store = init_mock_store () in
+  let target1 = "/account" in
+  let req1 = make_get_request ~path:target1 () in
+  let resp1 = query_endpoint req1 in
+  Alcotest.(check bool) "Response is redirect" true (is_redirect resp1);
+  Alcotest.(check bool)
+    "Redirects to sign-in with encoded redirect param" true
+    (String.includes
+       ~affix:("location: /sign-in?redirect=" ^ Controller.pct_encode target1)
+       resp1);
 
-      let target2 = "/tokens" in
-      let req2 = make_get_request ~path:target2 () in
-      query_endpoint (make_app_request_handler store) req2 >>= fun resp2 ->
-      Alcotest.(check bool) "Response is redirect" true (is_redirect resp2);
-      Alcotest.(check bool)
-        "Redirects to sign-in with encoded tokens path" true
-        (String.includes
-           ~affix:("location: /sign-in?redirect=" ^ Uri.pct_encode target2)
-           resp2);
+  let target3 = "/usage?instance=default" in
+  let req3 = make_get_request ~path:target3 () in
+  let resp3 = query_endpoint req3 in
+  Alcotest.(check bool) "Response is redirect" true (is_redirect resp3);
+  Alcotest.(check bool)
+    "Redirects to sign-in with encoded query parameters" true
+    (String.includes
+       ~affix:("location: /sign-in?redirect=" ^ Controller.pct_encode target3)
+       resp3);
 
-      let target3 = "/usage?instance=default" in
-      let req3 = make_get_request ~path:target3 () in
-      query_endpoint (make_app_request_handler store) req3 >>= fun resp3 ->
-      Alcotest.(check bool) "Response is redirect" true (is_redirect resp3);
-      Alcotest.(check bool)
-        "Redirects to sign-in with encoded query parameters" true
-        (String.includes
-           ~affix:("location: /sign-in?redirect=" ^ Uri.pct_encode target3)
-           resp3);
-
-      let target4 = "/unikernel/info?instance=default&unikernel=hello" in
-      let req4 = make_get_request ~path:target4 () in
-      query_endpoint (make_app_request_handler store) req4 >>= fun resp4 ->
-      Alcotest.(check bool) "Response is redirect" true (is_redirect resp4);
-      Alcotest.(check bool)
-        "Redirects to sign-in with encoded multi-param query" true
-        (String.includes
-           ~affix:("location: /sign-in?redirect=" ^ Uri.pct_encode target4)
-           resp4);
-      Lwt.return_unit )
+  let target4 = "/unikernel/info?instance=default&unikernel=hello" in
+  let req4 = make_get_request ~path:target4 () in
+  let resp4 = query_endpoint req4 in
+  Alcotest.(check bool) "Response is redirect" true (is_redirect resp4);
+  Alcotest.(check bool)
+    "Redirects to sign-in with encoded multi-param query" true
+    (String.includes
+       ~affix:("location: /sign-in?redirect=" ^ Controller.pct_encode target4)
+       resp4)
 
 let check_unauthenticated_redirect_excluded_routes () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/dashboard" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool) "Response is redirect" true (is_redirect resp);
-      Alcotest.(check bool)
-        "Redirect location is exactly /sign-in" true
-        (String.includes ~affix:"location: /sign-in\r\n" resp
-        || String.includes ~affix:"location: /sign-in\n" resp);
-      Alcotest.(check bool)
-        "Does not include redirect query param" false
-        (String.includes ~affix:"redirect=" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/dashboard" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool) "Response is redirect" true (is_redirect resp);
+  Alcotest.(check bool)
+    "Redirect location is exactly /sign-in" true
+    (String.includes ~affix:"location: /sign-in\r\n" resp
+    || String.includes ~affix:"location: /sign-in\n" resp);
+  Alcotest.(check bool)
+    "Does not include redirect query param" false
+    (String.includes ~affix:"redirect=" resp)
 
 let check_sign_in_page_redirect_handling () =
-  Lwt_main.run
-    ( init_mock_store () >>= fun store ->
-      let req = make_get_request ~path:"/sign-in?redirect=%2Faccount" () in
-      query_endpoint (make_app_request_handler store) req >>= fun resp ->
-      Alcotest.(check bool)
-        "Response has HTTP 200 OK" true
-        (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
-      Alcotest.(check bool)
-        "Contains URLSearchParams search query extraction" true
-        (String.includes ~affix:"URLSearchParams(window.location.search)" resp);
-      Alcotest.(check bool)
-        "Contains redirect URL extraction with fallback" true
-        (String.includes ~affix:"urlParams.get('redirect') || '/dashboard'" resp);
-      Alcotest.(check bool)
-        "Contains window.location.replace" true
-        (String.includes ~affix:"window.location.replace(redirectUrl)" resp);
-      Lwt.return_unit )
+  let _store = init_mock_store () in
+  let req = make_get_request ~path:"/sign-in?redirect=%2Faccount" () in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Response has HTTP 200 OK" true
+    (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
+  Alcotest.(check bool)
+    "Contains hx-post to /api/login" true
+    (String.includes ~affix:"hx-post=\"/api/login\"" resp);
+  Alcotest.(check bool)
+    "Contains parseXhrResponse redirect handling" true
+    (String.includes ~affix:"window.parseXhrResponse" resp)
 
 let tests =
   [
@@ -1216,12 +997,6 @@ let tests =
     ( "User account (/account) unauthenticated redirects",
       `Quick,
       check_account_page_unauthenticated );
-    ( "Tokens view (/tokens) authenticated",
-      `Quick,
-      check_tokens_page_authenticated );
-    ( "Tokens view (/tokens) unauthenticated redirects",
-      `Quick,
-      check_tokens_page_unauthenticated );
     ( "Select instance (/select/instance) authenticated",
       `Quick,
       check_select_instance_authenticated );

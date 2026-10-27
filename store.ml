@@ -5,7 +5,7 @@ let superblock = ref (FS.empty_superblock ())
 let write_data data disk =
   match
     Filesystem.write_data disk !superblock
-      (Yojson.Basic.to_string
+      (Utils.Json.to_string
          (Storage.t_to_json data.Storage.users data.configurations data.email))
   with
   | Ok sb ->

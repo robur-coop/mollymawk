@@ -155,11 +155,11 @@ function filterAlbatrossInstance(event) {
 function openConfigForm(name, ip, port, certificate, p_key) {
 	const formSection = document.getElementById("config-form");
 	const configSection = document.getElementById("config-body");
-	const nameInput = document.getElementById("albatross-name");
-	const ipInput = document.getElementById("server-ip");
-	const portInput = document.getElementById("server-port");
+	const nameInput = document.getElementById("name");
+	const ipInput = document.getElementById("server_ip");
+	const portInput = document.getElementById("server_port");
 	const certificateInput = document.getElementById("certificate");
-	const pkeyInput = document.getElementById("private-key");
+	const pkeyInput = document.getElementById("private_key");
 	const configBtn = document.getElementById("config-button");
 	const addConfigBtn = document.getElementById("add-config");
 	nameInput.value = name;

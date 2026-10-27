@@ -1,40 +1,61 @@
-; (executable
-;  (name api_tests)
-;  (enabled_if
-;   (= %{context_name} "default"))
-;  (instrumentation
-;   (backend bisect_ppx_ng))
-;  (libraries
-;   test_utils
-;   mollymawk_libraries
-;   alcotest
-;   albatross
-;   albatross.tls
-;   yojson
-;   mrmime
-;   uuidm
-;   ptime
-;   fmt
-;   x509
-;   ipaddr
-;   ohex
-;   emile
-;   tyxml
-;   uri
-;   duration
-;   tcpip.stack-socket
-;   mimic-happy-eyeballs
-;   colombe.emile
-;   tls-mirage
-;   mirage-runtime
-;   multipart_form
-;   ))
-; 
-; (rule
-;  (alias runtest)
-;  (deps api_tests.exe)
-;  (enabled_if
-;   (= %{context_name} "default"))
-;  (action (run ./api_tests.exe)))
-; 
-; (copy_files# ../../*.ml)
+(executable
+ (name api_tests)
+ (enabled_if
+  (= %{context_name} "default"))
+ (modules :standard)
+ (flags
+  (:standard -open Test_utils))
+ (instrumentation
+  (backend bisect_ppx_ng))
+ (libraries
+  test_utils
+  mollymawk_libraries
+  alcotest
+  albatross
+  mrmime
+  uuidm
+  ptime
+  ptime.clock.os
+  fmt
+  x509
+  ipaddr
+  ohex
+  emile
+  tyxml
+  uri
+  duration
+  multipart_form
+  vifu
+  vif.core
+  mhttp
+  mhttp-server
+  mhttp-client
+  miou
+  miou.unix
+  h1
+  digestif
+  mnet
+  mnet-cli
+  mnet-dns
+  mkernel
+  mnet-happy-eyeballs
+  mnet-tls
+  utcp
+  gmp
+  msendmail
+  colombe
+  colombe.emile
+  sendmail
+  unix
+  cmdliner))
+
+(rule
+ (alias runtest)
+ (deps api_tests.exe)
+ (enabled_if
+  (= %{context_name} "default"))
+ (action
+  (run ./api_tests.exe)))
+
+(copy_files#
+ ../../{app,controller,store,filesystem,assets,liveliness_checks}.ml)

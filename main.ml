@@ -26,7 +26,8 @@ let secret =
 
 let term =
   let open Term in
-  const App.run $ Mnet_cli.setup "service"
+  const (fun _ -> App.run)
+  $ Mnet_cli.setup_logs $ Mnet_cli.setup "service"
   $ Mnet_cli.setup "management"
   $ secret $ name
 

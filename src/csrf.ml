@@ -1,12 +1,12 @@
 let csrf_expiry = 3600 (* seconds *)
 let csrf_field = "molly_csrf"
 let mac ~key ~msg = Digestif.SHA256.hmac_string ~key msg
-let now () = int_of_float (Ptime.to_float_s (Mkernel.now ()))
+let now () = int_of_float (Ptime.to_float_s (Utils.now ()))
 
 (* token = nonce.timestamp.hex(hmac(session_cookie.nonce.timestamp)) *)
-let generate_token ~key ~session_cookie =
+let generate_token ~key ~session_cookie ?(now = now ()) () =
   let nonce = Ohex.encode (Mirage_crypto_rng.generate 16) in
-  let payload = nonce ^ "." ^ string_of_int (now ()) in
+  let payload = nonce ^ "." ^ string_of_int now in
   payload ^ "."
   ^ Digestif.SHA256.to_hex (mac ~key ~msg:(session_cookie ^ "." ^ payload))
 
@@ -26,6 +26,5 @@ let verify_token ~key ~session_cookie ~token =
       | _ -> Error `Invalid_format)
   | _ -> Error `Invalid_format
 
-let verify ~key ~session_cookie ~token ~submitted_token =
-  Eqaf.equal token submitted_token
-  && Result.is_ok (verify_token ~key ~session_cookie ~token)
+let verify ~key ~session_cookie ~token () =
+  Result.is_ok (verify_token ~key ~session_cookie ~token)

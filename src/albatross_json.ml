@@ -1,51 +1,62 @@
-open Utils.Json
+let j_obj xs =
+  Jsont.Json.object'
+    (List.map (fun (k, v) -> Jsont.Json.mem (Jsont.Json.name k) v) xs)
+
+let get_mem key mems = Option.map snd (Jsont.Json.find_mem key mems)
+
+let int_of_json = function
+  | Jsont.Number (f, _) when Float.is_integer f -> Some (int_of_float f)
+  | _ -> None
 
 let fail_behaviour = function
-  | `Quit -> `String "quit"
+  | `Quit -> Jsont.Json.string "quit"
   | `Restart ex ->
       let els = Option.value ~default:[] (Option.map Vmm_core.IS.elements ex) in
-      `Assoc
+      j_obj
         [
-          ("restart", `Null);
-          ("exit_code", `List (List.map (fun e -> `Int e) els));
-          ("all_exit_codes", `Bool (ex = None));
+          ("restart", Jsont.Json.null ());
+          ("exit_code", Jsont.Json.list (List.map Jsont.Json.int els));
+          ("all_exit_codes", Jsont.Json.bool (ex = None));
         ]
 
-let cpuids cs = `List (List.map (fun c -> `Int c) (Vmm_core.IS.elements cs))
-let memory m = `Int m
+let cpuids cs =
+  Jsont.Json.list (List.map Jsont.Json.int (Vmm_core.IS.elements cs))
+
+let memory m = Jsont.Json.int m
 
 let argv args =
-  `List (List.map (fun a -> `String a) (Option.value ~default:[] args))
+  Jsont.Json.list (List.map Jsont.Json.string (Option.value ~default:[] args))
 
 let block_devices bs =
   let block
       { Vmm_core.Unikernel.unikernel_device; host_device; sector_size; size } =
-    `Assoc
+    j_obj
       [
-        ("name", `String unikernel_device);
-        ("host_device", `String host_device);
-        ("sector_size", `Int sector_size);
-        ("size", `Int size);
+        ("name", Jsont.Json.string unikernel_device);
+        ("host_device", Jsont.Json.string host_device);
+        ("sector_size", Jsont.Json.int sector_size);
+        ("size", Jsont.Json.int size);
       ]
   in
-  `List (List.map block bs)
+  Jsont.Json.list (List.map block bs)
 
 let bridges bs =
   let bridge
       ({ Vmm_core.Unikernel.unikernel_device; host_device; _ } :
         Vmm_core.Unikernel.net_info) =
-    `Assoc
+    j_obj
       [
-        ("name", `String unikernel_device); ("host_device", `String host_device);
+        ("name", Jsont.Json.string unikernel_device);
+        ("host_device", Jsont.Json.string host_device);
       ]
   in
-  `List (List.map bridge bs)
+  Jsont.Json.list (List.map bridge bs)
 
 let unikernel_info (unikernel_name, info) =
-  `Assoc
+  j_obj
     [
       ( "name",
-        `String
+        Jsont.Json.string
           (Option.value ~default:""
              (Option.map Vmm_core.Name.Label.to_string
                 (Vmm_core.Name.name unikernel_name))) );
@@ -55,60 +66,70 @@ let unikernel_info (unikernel_name, info) =
       ("block_devices", block_devices info.block_devices);
       ("network_interfaces", bridges info.bridges);
       ("arguments", argv info.argv);
-      ("numcpus", `Int info.numcpus);
+      ("numcpus", Jsont.Json.int info.numcpus);
       ( "linux_boot_partition",
-        Option.fold ~none:`Null
-          ~some:(fun s -> `String s)
-          info.linux_boot_partition );
+        Jsont.Json.option Jsont.Json.string info.linux_boot_partition );
     ]
 
-let unikernel_infos is = `List (List.map unikernel_info is)
+let unikernel_info_to_pretty_string u =
+  Result.get_ok
+    (Jsont_bytesrw.encode_string ~format:Jsont.Indent Jsont.json
+       (unikernel_info u))
+
+let unikernel_infos is = Jsont.Json.list (List.map unikernel_info is)
 
 let block_info (name, size, used) =
-  `Assoc
+  j_obj
     [
-      ("name", `String (Vmm_core.Name.to_string name));
-      ("size", `Int size);
-      ("used", `Bool used);
+      ("name", Jsont.Json.string (Vmm_core.Name.to_string name));
+      ("size", Jsont.Json.int size);
+      ("used", Jsont.Json.bool used);
     ]
 
-let block_infos bs = `List (List.map block_info bs)
+let block_infos bs = Jsont.Json.list (List.map block_info bs)
 
 let policy_info (name, policy) =
-  `Assoc
+  j_obj
     [
-      ("name", `String (Vmm_core.Name.to_string name));
-      ("allowed_unikernels", `Int policy.Vmm_core.Policy.unikernels);
+      ("name", Jsont.Json.string (Vmm_core.Name.to_string name));
+      ("allowed_unikernels", Jsont.Json.int policy.Vmm_core.Policy.unikernels);
       ( "allowed_cpuids",
-        `List
-          (List.map (fun id -> `Int id) (Vmm_core.IS.elements policy.cpuids)) );
-      ("allowed_memory", `Int policy.memory);
-      ("allowed_block_size", `Int (Option.value ~default:0 policy.block));
+        Jsont.Json.list
+          (List.map Jsont.Json.int (Vmm_core.IS.elements policy.cpuids)) );
+      ("allowed_memory", Jsont.Json.int policy.memory);
+      ( "allowed_block_size",
+        Jsont.Json.int (Option.value ~default:0 policy.block) );
       ( "allowed_bridges",
-        `List
-          (List.map
-             (fun b -> `String b)
+        Jsont.Json.list
+          (List.map Jsont.Json.string
              (Vmm_core.String_set.elements policy.bridges)) );
     ]
 
-let policy_infos ps = `List (List.map policy_info ps)
+let policy_infos ps = Jsont.Json.list (List.map policy_info ps)
 
 let success = function
-  | `Empty -> `Null
-  | `String m -> `String m
+  | `Empty -> Jsont.Json.null ()
+  | `String m -> Jsont.Json.string m
   | `Policies ps -> policy_infos ps
   | `Old_unikernel_info4 is -> unikernel_infos is
   | `Old_unikernel_info5 is -> unikernel_infos is
   | `Unikernel_info is -> unikernel_infos is
   | `Block_devices bs -> block_infos bs
-  | `Unikernel_image _ -> `String "unikernel image not supported"
-  | `Old_block_device_image (_, bd) -> `String bd
-  | `Block_device_image _compressed -> `String "block device image"
-  | `Consoles _names -> `String "consoles"
+  | `Unikernel_image _ -> Jsont.Json.string "unikernel image not supported"
+  | `Old_block_device_image (_, bd) -> Jsont.Json.string bd
+  | `Block_device_image _compressed -> Jsont.Json.string "block device image"
+  | `Consoles _names -> Jsont.Json.string "consoles"
 
 let console_data_to_json (ts, data) =
-  `Assoc
-    [ ("timestamp", `String (Ptime.to_rfc3339 ts)); ("line", `String data) ]
+  j_obj
+    [
+      ("timestamp", Jsont.Json.string (Ptime.to_rfc3339 ts));
+      ("line", Jsont.Json.string data);
+    ]
+
+let console_data_to_string (ts, data) =
+  Result.get_ok
+    (Jsont_bytesrw.encode_string Jsont.json (console_data_to_json (ts, data)))
 
 let res = function
   | `Command _ -> Error (`String "command not supported")
@@ -121,21 +142,31 @@ let res = function
   | `Data (`Old_stats_data _) -> Error (`String "stats not supported")
   | `Data (`Block_data _) -> Error (`String "block data not supported")
 
-let fail_behaviour_of_json js =
+let res_to_string r =
+  Result.map
+    (fun j -> Result.get_ok (Jsont_bytesrw.encode_string Jsont.json j))
+    (res r)
+
+let fail_behaviour_of_json (js : Jsont.json) =
   let ( let* ) = Result.bind in
   match js with
-  | `String "quit" -> Ok `Quit
-  | `Assoc rs -> (
-      match (get "restart" rs, get "exit_code" rs, get "all_exit_codes" rs) with
+  | Jsont.String ("quit", _) -> Ok `Quit
+  | Jsont.Object (rs, _) -> (
+      match
+        ( get_mem "restart" rs,
+          get_mem "exit_code" rs,
+          get_mem "all_exit_codes" rs )
+      with
       | None, _, _ -> Error (`Msg "expected a restart")
-      | Some _, Some (`List codes), _ ->
+      | Some _, Some (Jsont.Array (codes, _)), _ ->
           let* codes =
             List.fold_left
               (fun acc i ->
                 let* acc = acc in
-                match i with
-                | `Int n -> Ok (n :: acc)
-                | _ -> Error (`Msg "fail_behaviour exit code is not an integer"))
+                match int_of_json i with
+                | Some n -> Ok (n :: acc)
+                | None ->
+                    Error (`Msg "fail_behaviour exit code is not an integer"))
               (Ok []) codes
           in
           Ok (`Restart (Some (Vmm_core.IS.of_list codes)))
@@ -144,117 +175,94 @@ let fail_behaviour_of_json js =
       | Some _, _, _ -> Ok (`Restart None))
   | _ -> Error (`Msg "fail behaviour must be quit or restart")
 
-let bridge_of_json (js : Yojson.Basic.t) =
+let bridge_of_json (js : Jsont.json) =
   (* we support [ "foo" ] as well as [ { name: "foo" ; host_device: "myfoo" ; mac: "aa:bb:cc:dd:ee:ff" *)
   let ( let* ) = Result.bind in
   match js with
-  | `String bridge -> Ok (bridge, None, None)
-  | `Assoc xs -> (
-      match (get "name" xs, get "host_device" xs, get "mac" xs) with
+  | Jsont.String (bridge, _) -> Ok (bridge, None, None)
+  | Jsont.Object (xs, _) -> (
+      match (get_mem "name" xs, get_mem "host_device" xs, get_mem "mac" xs) with
       | None, _, _ -> Error (`Msg "name must be present in the json")
-      | Some (`String name), (None | Some `Null), (None | Some `Null) ->
+      | ( Some (Jsont.String (name, _)),
+          (None | Some (Jsont.Null _)),
+          (None | Some (Jsont.Null _)) ) ->
           Ok (name, None, None)
-      | Some (`String name), Some (`String host), (None | Some `Null) ->
+      | ( Some (Jsont.String (name, _)),
+          Some (Jsont.String (host, _)),
+          (None | Some (Jsont.Null _)) ) ->
           Ok (name, Some host, None)
-      | Some (`String name), (None | Some `Null), Some (`String mac) ->
+      | ( Some (Jsont.String (name, _)),
+          (None | Some (Jsont.Null _)),
+          Some (Jsont.String (mac, _)) ) ->
           let* mac = Macaddr.of_string mac in
           Ok (name, None, Some mac)
-      | Some (`String name), Some (`String host), Some (`String mac) ->
+      | ( Some (Jsont.String (name, _)),
+          Some (Jsont.String (host, _)),
+          Some (Jsont.String (mac, _)) ) ->
           let* mac = Macaddr.of_string mac in
           Ok (name, Some host, Some mac)
       | _, _, _ -> Error (`Msg "couldn't decode json"))
   | _ -> Error (`Msg "bad json, either string or assoc")
 
-let block_device_of_json js =
+let block_device_of_json (js : Jsont.json) =
   (* we support [ "foo" ] as well as [ { name: "foo" ; host_device: "myfoo" ; sector_size: 20 *)
   match js with
-  | `String name -> Ok (name, None, None)
-  | `Assoc xs -> (
-      match (get "name" xs, get "host_device" xs, get "sector_size" xs) with
+  | Jsont.String (name, _) -> Ok (name, None, None)
+  | Jsont.Object (xs, _) -> (
+      match
+        (get_mem "name" xs, get_mem "host_device" xs, get_mem "sector_size" xs)
+      with
       | None, _, _ -> Error (`Msg "name must be present in the json")
-      | Some (`String name), (None | Some `Null), (None | Some `Null) ->
+      | ( Some (Jsont.String (name, _)),
+          (None | Some (Jsont.Null _)),
+          (None | Some (Jsont.Null _)) ) ->
           Ok (name, None, None)
-      | Some (`String name), Some (`String host), (None | Some `Null) ->
+      | ( Some (Jsont.String (name, _)),
+          Some (Jsont.String (host, _)),
+          (None | Some (Jsont.Null _)) ) ->
           Ok (name, Some host, None)
-      | Some (`String name), (None | Some `Null), Some (`Int sector_size) ->
-          Ok (name, None, Some sector_size)
-      | Some (`String name), Some (`String host), Some (`Int sector_size) ->
-          Ok (name, Some host, Some sector_size)
+      | Some (Jsont.String (name, _)), (None | Some (Jsont.Null _)), Some s -> (
+          match int_of_json s with
+          | Some sector_size -> Ok (name, None, Some sector_size)
+          | None -> Error (`Msg "couldn't decode json"))
+      | Some (Jsont.String (name, _)), Some (Jsont.String (host, _)), Some s
+        -> (
+          match int_of_json s with
+          | Some sector_size -> Ok (name, Some host, Some sector_size)
+          | None -> Error (`Msg "couldn't decode json"))
       | _, _, _ -> Error (`Msg "couldn't decode json"))
   | _ -> Error (`Msg "bad json, either string or assoc")
 
-let policy_of_json json_dict =
-  match
-    Utils.Json.
-      ( get "unikernels" json_dict,
-        get "memory" json_dict,
-        get "block" json_dict,
-        get "cpuids" json_dict,
-        get "bridges" json_dict )
-  with
-  | ( Some (`Int unikernels),
-      Some (`Int memory),
-      Some (`Int block),
-      Some (`String cpuids),
-      Some (`String bridges) ) ->
-      let policy =
-        {
-          Vmm_core.Policy.unikernels;
-          memory;
-          block = (if block = 0 then None else Some block);
-          cpuids =
-            (let parsed_cpuids =
-               List.filter_map
-                 (fun s ->
-                   match int_of_string_opt s with
-                   | Some i -> Some i
-                   | None ->
-                       Logs.warn (fun m -> m "Ignoring invalid CPU id: %s" s);
-                       None)
-                 (String.split_on_char ',' cpuids)
-             in
-             Vmm_core.IS.of_list parsed_cpuids);
-          bridges =
-            Vmm_core.String_set.of_list (String.split_on_char ',' bridges);
-        }
-      in
-      let ( let* ) = Result.bind in
-      let* () = Vmm_core.Policy.usable policy in
-      Ok policy
-  | _ ->
-      Error
-        (`Msg
-           (Fmt.str "policy: unexpected types, got %s"
-              (to_string (`Assoc json_dict))))
-
-let config_of_json str =
+let config_of_jsont (json : Jsont.json) =
   let ( let* ) = Result.bind in
-  let* json = from_string str in
   let* dict =
-    match json with `Assoc r -> Ok r | _ -> Error (`Msg "not a json assoc")
+    match json with
+    | Jsont.Object (r, _) -> Ok r
+    | _ -> Error (`Msg "not a json assoc")
   in
   let* fail_behaviour =
     Option.fold ~none:(Ok `Quit) ~some:fail_behaviour_of_json
-      (get "fail_behaviour" dict)
+      (get_mem "fail_behaviour" dict)
   in
   let* cpuids =
-    match get "cpuids" dict with
+    match get_mem "cpuids" dict with
     | None ->
         (* backward compatibility for data on disk *)
         Option.fold
           ~none:(Error (`Msg "cpuids must be a list of integers"))
-          ~some:(function
-            | `Int n -> Ok (Vmm_core.IS.singleton n)
-            | _ -> Error (`Msg "cpuid must be an integer"))
-          (get "cpuid" dict)
-    | Some (`List l) ->
+          ~some:(fun j ->
+            match int_of_json j with
+            | Some n -> Ok (Vmm_core.IS.singleton n)
+            | None -> Error (`Msg "cpuid must be an integer"))
+          (get_mem "cpuid" dict)
+    | Some (Jsont.Array (l, _)) ->
         let* ids =
           List.fold_left
             (fun acc i ->
               let* acc = acc in
-              match i with
-              | `Int i -> Ok (i :: acc)
-              | _ -> Error (`Msg "CPUid is not an int"))
+              match int_of_json i with
+              | Some i -> Ok (i :: acc)
+              | None -> Error (`Msg "CPUid is not an int"))
             (Ok []) l
         in
         if ids = [] then Error (`Msg "CPUids cannot be an empty list")
@@ -263,22 +271,25 @@ let config_of_json str =
   in
   let* numcpus =
     Option.fold ~none:(Ok 1) (* Default to 1 vCPU *)
-      ~some:(function
-        | `Int n when n > 0 -> Ok n
+      ~some:(fun j ->
+        match int_of_json j with
+        | Some n when n > 0 -> Ok n
         | _ -> Error (`Msg "vcpus must be a positive integer greater than 0"))
-      (get "vcpus" dict)
+      (get_mem "vcpus" dict)
   in
   let* linux_boot_partition =
-    match get "linux_boot_partition" dict with
-    | None | Some `Null | Some (`String "") -> Ok None
-    | Some (`String s) -> Ok (Some s)
+    match get_mem "linux_boot_partition" dict with
+    | None | Some (Jsont.Null _) | Some (Jsont.String ("", _)) -> Ok None
+    | Some (Jsont.String (s, _)) -> Ok (Some s)
     | Some _ -> Error (`Msg "linux_boot_partition must be a string")
   in
   let* memory =
     Option.fold ~none:(Ok 32)
-      ~some:(function
-        | `Int n -> Ok n | _ -> Error (`Msg "memory must be an integer"))
-      (get "memory" dict)
+      ~some:(fun j ->
+        match int_of_json j with
+        | Some n -> Ok n
+        | None -> Error (`Msg "memory must be an integer"))
+      (get_mem "memory" dict)
   in
   let* bridges =
     let bridge bs =
@@ -289,15 +300,15 @@ let config_of_json str =
           Ok (b :: r))
         (Ok []) bs
     in
-    match get "network_interfaces" dict with
+    match get_mem "network_interfaces" dict with
     | None -> Ok []
-    | Some (`List bs) -> bridge bs
+    | Some (Jsont.Array (bs, _)) -> bridge bs
     | Some _ -> Error (`Msg "expected a list of network devices")
   in
   let* block_devices =
-    match get "block_devices" dict with
+    match get_mem "block_devices" dict with
     | None -> Ok []
-    | Some (`List bs) ->
+    | Some (Jsont.Array (bs, _)) ->
         List.fold_left
           (fun r x ->
             let* r = r in
@@ -309,35 +320,36 @@ let config_of_json str =
   let* argv =
     Option.fold ~none:(Ok None)
       ~some:(function
-        | `List bs ->
+        | Jsont.Array (bs, _) ->
             let* args =
               List.fold_left
                 (fun acc arg ->
                   let* acc = acc in
                   match arg with
-                  | `String n -> Ok (n :: acc)
+                  | Jsont.String (n, _) -> Ok (n :: acc)
                   | _ -> Error (`Msg "argument is not a string"))
                 (Ok []) bs
             in
             if args = [] then Ok None else Ok (Some (List.rev args))
         | _ -> Error (`Msg "arguments must be a list of strings"))
-      (get "arguments" dict)
+      (get_mem "arguments" dict)
   in
   let* startup =
     Option.fold ~none:(Ok None)
-      ~some:(function
-        | `Int n when n >= 0 && n <= 100 ->
+      ~some:(fun j ->
+        match int_of_json j with
+        | Some n when n >= 0 && n <= 100 ->
             if n = 50 then Ok None else Ok (Some n)
         | _ ->
             Error
               (`Msg
                  "startup must be an integer between 1 and 100, default is 50"))
-      (get "startup" dict)
+      (get_mem "startup" dict)
   in
   let* typ =
-    match get "typ" dict with
+    match get_mem "typ" dict with
     | None -> Error (`Msg "typ must be provided")
-    | Some (`String t) -> (
+    | Some (Jsont.String (t, _)) -> (
         match t with
         | "solo5" -> Ok `Solo5
         | "bhyve" -> Ok `BHyve
@@ -361,76 +373,88 @@ let config_of_json str =
       linux_boot_partition;
     }
 
+let config_of_json str =
+  let ( let* ) = Result.bind in
+  let* json =
+    Jsont_bytesrw.decode_string Jsont.json str
+    |> Result.map_error (fun e -> `Msg e)
+  in
+  config_of_jsont json
+
 let typ = function `Solo5 -> "solo5" | `BHyve -> "bhyve"
 
 let config_to_json (cfg : Vmm_core.Unikernel.config) =
   let block_devices bs =
     let block (name, host_device, sector_size) =
-      `Assoc
+      j_obj
         [
-          ("name", `String name);
-          ( "host_device",
-            match host_device with
-            | Some host_device -> `String host_device
-            | None -> `Null );
-          ( "sector_size",
-            match sector_size with
-            | Some sector_size -> `Int sector_size
-            | None -> `Null );
+          ("name", Jsont.Json.string name);
+          ("host_device", Jsont.Json.option Jsont.Json.string host_device);
+          ("sector_size", Jsont.Json.option Jsont.Json.int sector_size);
         ]
     in
-    `List (List.map block bs)
+    Jsont.Json.list (List.map block bs)
   and bridges bs =
     let bridge (name, host_device, mac) =
-      `Assoc
+      j_obj
         [
-          ("name", `String name);
-          ( "host_device",
-            match host_device with
-            | Some host_device -> `String host_device
-            | None -> `Null );
+          ("name", Jsont.Json.string name);
+          ("host_device", Jsont.Json.option Jsont.Json.string host_device);
           ( "mac",
-            match mac with
-            | Some mac -> `String (Macaddr.to_string mac)
-            | None -> `Null );
+            Jsont.Json.option
+              (fun ?meta m -> Jsont.Json.string ?meta (Macaddr.to_string m))
+              mac );
         ]
     in
-    `List (List.map bridge bs)
+    Jsont.Json.list (List.map bridge bs)
   in
-  `Assoc
+  j_obj
     [
-      ("typ", `String (typ cfg.typ));
-      ("compressed", `Bool cfg.compressed);
+      ("typ", Jsont.Json.string (typ cfg.typ));
+      ("compressed", Jsont.Json.bool cfg.compressed);
       ("fail_behaviour", fail_behaviour cfg.fail_behaviour);
       ("cpuids", cpuids cfg.cpuids);
       ("memory", memory cfg.memory);
       ("block_devices", block_devices cfg.block_devices);
       ("network_interfaces", bridges cfg.bridges);
       ("arguments", argv cfg.argv);
-      ("numcpus", `Int cfg.numcpus);
+      ("numcpus", Jsont.Json.int cfg.numcpus);
       ( "linux_boot_partition",
-        Option.fold ~none:`Null
-          ~some:(fun s -> `String s)
-          cfg.linux_boot_partition );
+        Jsont.Json.option Jsont.Json.string cfg.linux_boot_partition );
     ]
 
+let config_json : Vmm_core.Unikernel.config Jsont.t =
+  Jsont.map
+    ~dec:(fun j ->
+      match config_of_jsont j with
+      | Ok cfg -> cfg
+      | Error (`Msg msg) -> Jsont.Error.msg Jsont.Meta.none msg)
+    ~enc:config_to_json Jsont.json
+
 let unikernel_info_to_arguments_json info =
-  `Assoc
+  j_obj
     [
-      ("typ", `String (typ info.Vmm_core.Unikernel.typ));
+      ("typ", Jsont.Json.string (typ info.Vmm_core.Unikernel.typ));
       ("fail_behaviour", fail_behaviour info.fail_behaviour);
-      ("startup", `Int (Option.fold ~none:50 ~some:Fun.id info.startup));
+      ( "startup",
+        Jsont.Json.int (Option.fold ~none:50 ~some:Fun.id info.startup) );
       (* add_name is not found in Vmm_core.Unikernel.info *)
-      ("add_name", `Bool true);
+      ("add_name", Jsont.Json.bool true);
       ("cpuids", cpuids info.cpuids);
       ("memory", memory info.memory);
       ("block_devices", block_devices info.block_devices);
       ("network_interfaces", bridges info.bridges);
       ("arguments", argv info.argv);
-      ("numcpus", `Int info.numcpus);
+      ("numcpus", Jsont.Json.int info.numcpus);
       ( "linux_boot_partition",
-        `String (Option.fold ~none:"" ~some:Fun.id info.linux_boot_partition) );
+        Jsont.Json.string
+          (Option.fold ~none:"" ~some:Fun.id info.linux_boot_partition) );
     ]
+
+let unikernel_info_to_arguments_pretty_string info =
+  Result.get_ok
+    (Jsont_bytesrw.encode_string ~format:Jsont.Indent Jsont.json
+       (unikernel_info_to_arguments_json info))
 
 let arguments_of_json str =
   match config_of_json str with
