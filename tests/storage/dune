@@ -22,5 +22,7 @@
 (rule
  (alias runtest)
  (deps tests.exe)
+ (enabled_if
+  (= %{context_name} "default"))
  (action
   (run ./tests.exe)))
