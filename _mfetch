@@ -38,7 +38,7 @@ utcp
 vif
 vifu
 x509
-zarith
+git+https://github.com/mirage/zarith.git#eb17f2f4f98ef2f989e1068a0a732b0012865f8f
 gmp
 tcpip
 mirage-flow
