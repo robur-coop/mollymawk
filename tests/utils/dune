@@ -5,6 +5,7 @@
  (libraries
   mollymawk_libraries
   mkernel
+  mnet-happy-eyeballs
   alcotest
   albatross
   mrmime

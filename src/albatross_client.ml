@@ -59,57 +59,26 @@ let policy ?domain t =
          (fun d -> Vmm_core.Name.make_of_path (Vmm_core.Name.Path.of_label d))
          domain)
   in
-  Ok (Vmm_trie.find path t.policies)
+  Vmm_trie.find path t.policies
 
-let policies ?domain t =
-  let* path =
-    match domain with
-    | None -> Ok Vmm_core.Name.Path.root
-    | Some domain -> (
-        match Vmm_core.Name.Path.of_string domain with
-        | Error (`Msg msg) ->
-            Error (Fmt.str "albatross: domain %s is not a path: %s" domain msg)
-        | Ok path -> Ok path)
-  in
-  Ok (Vmm_trie.fold path t.policies (fun name p acc -> (name, p) :: acc) [])
-
-let all_policies ?domain t =
-  List.map
-    (fun (name, albatross_state) -> (name, policy ?domain albatross_state))
-    (Utils.LM.bindings t)
+let all_policies ?domain t = Utils.LM.map (policy ?domain) t
 
 let policy_resource_avalaible t =
-  let root_policy =
-    match policy t with
-    | Ok p -> (
-        match p with
-        | Some p -> Ok p
-        | None ->
-            Logs.err (fun m -> m "policy error: empty root policy");
-            Error (`Msg "root policy is empty"))
-    | Error err ->
-        Logs.err (fun m -> m "policy error:  %s" err);
-        Error (`Msg "error getting root policy")
-  in
-  let policies =
-    match policies t with
-    | Ok p -> p
-    | Error err ->
-        Logs.err (fun m -> m "policy error:  %s" err);
-        []
-  in
-  let unikernels_used, memory_used, storage_used =
-    List.fold_left
-      (fun (total_vms, total_memory, total_block) (name_, policy) ->
-        if not Vmm_core.Name.(equal name_ root) then
-          ( total_vms + policy.Vmm_core.Policy.unikernels,
-            total_memory + policy.memory,
-            total_block + Option.value ~default:0 policy.block )
-        else (total_vms, total_memory, total_block))
-      (0, 0, 0) policies
-  in
-  match root_policy with
-  | Ok root_policy ->
+  match policy t with
+  | None ->
+      Logs.err (fun m -> m "policy error: empty root policy");
+      Error "root policy is empty"
+  | Some root_policy ->
+      let unikernels_used, memory_used, storage_used =
+        Vmm_trie.fold Vmm_core.Name.Path.root t.policies
+          (fun name_ policy (total_vms, total_memory, total_block) ->
+            if not Vmm_core.Name.(equal name_ root) then
+              ( total_vms + policy.Vmm_core.Policy.unikernels,
+                total_memory + policy.memory,
+                total_block + Option.value ~default:0 policy.block )
+            else (total_vms, total_memory, total_block))
+          (0, 0, 0)
+      in
       Ok
         Vmm_core.Policy.
           {
@@ -119,7 +88,6 @@ let policy_resource_avalaible t =
             block = Option.map (fun b -> b - storage_used) root_policy.block;
             bridges = root_policy.bridges;
           }
-  | Error (`Msg err) -> Error err
 
 let key_ids exts pub issuer =
   let open X509 in
@@ -193,8 +161,7 @@ let gen_cert t ?domain cmd name =
     match domain with
     | None -> Ok (c.private_key, c.certificate, [])
     | Some domain ->
-        let* policy = policy ~domain t in
-        let policy = Option.value ~default:empty_policy policy in
+        let policy = Option.value ~default:empty_policy (policy ~domain t) in
         let cmd = `Policy_cmd (`Policy_add policy) in
         let* key, cert =
           key_cert ~is_ca:true ~cmd c.private_key domain
@@ -316,11 +283,9 @@ let connect_tls tcp t certificates =
   let config_name = Models.Configuration.name_to_str config.name in
   let tcp_flow =
     try
-      if Obj.magic tcp == Obj.magic () then raise Mnet.TCP.Net_unreach
-      else
-        Ok
-          (Mnet.TCP.connect ~kind:Mnet.TCP.direct tcp
-             (config.server_ip, config.server_port))
+      Ok
+        (Mnet.TCP.connect ~kind:Mnet.TCP.direct tcp
+           (config.server_ip, config.server_port))
     with
     | Mnet.TCP.Net_unreach ->
         let err =
@@ -399,55 +364,30 @@ let send_push t tls_flow push_fn =
   in
   loop ()
 
-let mock_eval =
-  ref
-    (None
-      : (t ->
-        Vmm_core.Name.t ->
-        Vmm_commands.t ->
-        (Vmm_commands.header * Vmm_commands.res, string) result)
-        option)
-
 let raw_query tcp t ?(name = Vmm_core.Name.root) certificates cmd ?push f =
-  match !mock_eval with
-  | Some mock_fn -> (
-      let config_name = Models.Configuration.name_to_str t.configuration.name in
-      match mock_fn t name cmd with
+  let config_name = Models.Configuration.name_to_str t.configuration.name in
+  let* tls_flow = connect_tls tcp t certificates in
+  let push_res =
+    match push with
+    | None -> Ok ()
+    | Some push_fn -> send_push t tls_flow push_fn
+  in
+  match push_res with
+  | Error _ as e ->
+      Vmm_tls_mnet.close tls_flow;
+      e
+  | Ok () -> (
+      match f tls_flow with
+      | Ok res -> Ok res
       | Error msg ->
+          Vmm_tls_mnet.close tls_flow;
           Logs.err (fun m ->
               m "albatross %s: error querying %a %a: %s" config_name
                 Vmm_core.Name.pp name
                 (Vmm_commands.pp ~verbose:false)
                 cmd msg);
           t.status <- Status.update t.status (Status.make `Incompatible msg);
-          Error msg
-      | Ok wire ->
-          t.status <- Status.Online;
-          Ok (Obj.magic wire))
-  | None -> (
-      let config_name = Models.Configuration.name_to_str t.configuration.name in
-      let* tls_flow = connect_tls tcp t certificates in
-      let push_res =
-        match push with
-        | None -> Ok ()
-        | Some push_fn -> send_push t tls_flow push_fn
-      in
-      match push_res with
-      | Error _ as e ->
-          Vmm_tls_mnet.close tls_flow;
-          e
-      | Ok () -> (
-          match f tls_flow with
-          | Ok res -> Ok res
-          | Error msg ->
-              Vmm_tls_mnet.close tls_flow;
-              Logs.err (fun m ->
-                  m "albatross %s: error querying %a %a: %s" config_name
-                    Vmm_core.Name.pp name
-                    (Vmm_commands.pp ~verbose:false)
-                    cmd msg);
-              t.status <- Status.update t.status (Status.make `Incompatible msg);
-              Error msg))
+          Error msg)
 
 let init tcp (configuration : Models.Configuration.t) =
   let state =
@@ -546,19 +486,8 @@ let query_block_dump tcp t ~domain ~name compression f =
   let cmd = `Block_cmd (`Block_dump compression) in
   match certs t domain name cmd with
   | Error str -> Error str
-  | Ok (vmm_name, certificates) -> (
-      match !mock_eval with
-      | Some mock_fn -> (
-          match mock_fn t vmm_name cmd with
-          | Error msg -> Error msg
-          | Ok (_, `Failure msg) -> Error msg
-          | Ok _ ->
-              ignore (f (Some "mock block dump content\n\r\n\rEOF\n\r"));
-              ignore (f None);
-              Ok ())
-      | None ->
-          raw_query tcp t ~name:vmm_name certificates cmd
-            (block_data vmm_name f))
+  | Ok (vmm_name, certificates) ->
+      raw_query tcp t ~name:vmm_name certificates cmd (block_data vmm_name f)
 
 let query_unikernel_binary tcp t ~domain ~name f =
   let cmd = `Unikernel_cmd (`Unikernel_get 4) in
@@ -630,45 +559,38 @@ let user_unikernels_by_instance tcp (state : t) user_name =
       []
 
 let user_deceased_by_instance tcp (albatross_instances : a_map) user_name =
-  List.map
-    (fun (_name, (instance : t)) ->
+  Utils.LM.map
+    (fun (instance : t) ->
       match
         query tcp instance ~domain:user_name ~name:dot_name
           (`Console_cmd `Console_list_inactive)
       with
-      | Error _msg -> (instance.configuration.name, [])
+      | Error _msg -> []
       | Ok (_hdr, `Success (`Consoles names)) ->
           set_online instance;
-          (instance.configuration.name, names)
-      | Ok _reply -> (instance.configuration.name, []))
-    (Utils.LM.bindings albatross_instances)
+          names
+      | Ok _reply -> [])
+    albatross_instances
 
 let user_unikernels tcp (albatross_instances : a_map) user_name =
-  List.map
-    (fun (_name, (instance : t)) ->
+  Utils.LM.map
+    (fun (instance : t) ->
       match
         query tcp instance ~domain:user_name (`Unikernel_cmd `Unikernel_info)
       with
-      | Error _msg -> (instance.configuration.name, [])
+      | Error _msg -> []
       | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
       | Ok (_hdr, `Success (`Old_unikernel_info5 unikernels))
       | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
           set_online instance;
-          (instance.configuration.name, unikernels)
-      | Ok _reply -> (instance.configuration.name, []))
-    (Utils.LM.bindings albatross_instances)
+          unikernels
+      | Ok _reply -> [])
+    albatross_instances
 
 let user_max_allowed_unikernel_instances albatross user_name =
-  match policy albatross ~domain:user_name with
-  | Error err -> Error err
-  | Ok user_albatross_policy ->
-      let max_allowed =
-        Option.fold ~none:0
-          ~some:(fun (user_policy : Vmm_core.Policy.t) ->
-            user_policy.unikernels)
-          user_albatross_policy
-      in
-      Ok max_allowed
+  Option.fold ~none:0
+    ~some:(fun (user_policy : Vmm_core.Policy.t) -> user_policy.unikernels)
+    (policy albatross ~domain:user_name)
 
 let user_unikernel tcp state ~user_name ~unikernel_name =
   match

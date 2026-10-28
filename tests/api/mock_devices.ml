@@ -19,7 +19,6 @@ let mock_env : Controller.env =
     csrf_key = Test_utils.csrf_key;
   }
 
-let () = Albatross_client.mock_eval := Some Mock_albatross.eval_success
 let secret_key = Mirage_crypto.AES.GCM.of_secret (String.make 32 'k')
 
 let add_device dev value map =

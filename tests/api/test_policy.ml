@@ -1,8 +1,8 @@
 open Test_utils
 open Mock_devices
 
-let make_policy_body ?user_uuid ?(instance = "default") ?(unikernels = 5)
-    ?(memory = 512) ?(block = 0) ?(cpuids = "0") ?(bridges = "service")
+let make_policy_body ?user_uuid ?(instance = "default") ?(unikernels = 2)
+    ?(block = 0) ?(cpuids = "0") ?(bridges = "service") ?(memory = 32)
     ?csrf_token () =
   let csrf_fields =
     match csrf_token with
@@ -36,10 +36,7 @@ let check_update_policy_success () =
   let test, _, _ = setup_user ~name:"test" ~email:"test@robur.coop" store in
   let policies = make_default_policies ~domain:test.name () in
   let body =
-    make_policy_body
-      ~user_uuid:(Uuidm.to_string test.uuid)
-      ~instance:"default" ~unikernels:5 ~memory:512 ~block:0 ~cpuids:"0"
-      ~bridges:"service" ~csrf_token ()
+    make_policy_body ~user_uuid:(Uuidm.to_string test.uuid) ~csrf_token ()
   in
   let req =
     make_post_request ~path:"/api/admin/u/policy/update" ~body ~session_cookie
@@ -65,8 +62,7 @@ let check_update_policy_with_block_size_success () =
   let body =
     make_policy_body
       ~user_uuid:(Uuidm.to_string test.uuid)
-      ~instance:"default" ~unikernels:4 ~memory:1024 ~block:2048 ~cpuids:"0,1"
-      ~bridges:"service" ~csrf_token ()
+      ~block:2048 ~csrf_token ()
   in
   let req =
     make_post_request ~path:"/api/admin/u/policy/update" ~body ~session_cookie
@@ -90,8 +86,7 @@ let check_update_policy_exceeds_root_unikernels () =
   let body =
     make_policy_body
       ~user_uuid:(Uuidm.to_string ctest.uuid)
-      ~instance:"default" ~unikernels:50 ~memory:512 ~block:0 ~cpuids:"0"
-      ~bridges:"service" ~csrf_token ()
+      ~unikernels:50 ~csrf_token ()
   in
   let req =
     make_post_request ~path:"/api/admin/u/policy/update" ~body ~session_cookie
@@ -115,8 +110,7 @@ let check_update_policy_exceeds_root_memory () =
   let body =
     make_policy_body
       ~user_uuid:(Uuidm.to_string btest.uuid)
-      ~instance:"default" ~unikernels:5 ~memory:4096 ~block:0 ~cpuids:"0"
-      ~bridges:"service" ~csrf_token ()
+      ~memory:4096 ~csrf_token ()
   in
   let req =
     make_post_request ~path:"/api/admin/u/policy/update" ~body ~session_cookie
@@ -136,13 +130,10 @@ let check_update_policy_unauthorized_bridge () =
     setup_user ~name:"admin" ~email:"admin@robur.coop" store
   in
   let etest, _, _ = setup_user ~name:"etest" ~email:"etest@robur.coop" store in
-  let policies =
-    make_default_policies ~domain:etest.name ~bridges:[ "service" ] ()
-  in
+  let policies = make_default_policies ~domain:etest.name () in
   let body =
     make_policy_body
       ~user_uuid:(Uuidm.to_string etest.uuid)
-      ~instance:"default" ~unikernels:2 ~memory:256 ~block:0 ~cpuids:"0"
       ~bridges:"unauthorized" ~csrf_token ()
   in
   let req =
@@ -167,8 +158,7 @@ let check_update_policy_unauthorized_cpuid () =
   let body =
     make_policy_body
       ~user_uuid:(Uuidm.to_string itest.uuid)
-      ~instance:"default" ~unikernels:2 ~memory:256 ~block:0 ~cpuids:"99"
-      ~bridges:"service" ~csrf_token ()
+      ~cpuids:"99" ~csrf_token ()
   in
   let req =
     make_post_request ~path:"/api/admin/u/policy/update" ~body ~session_cookie
@@ -188,10 +178,7 @@ let check_update_policy_user_not_found () =
     setup_user ~name:"admin" ~email:"admin@robur.coop" store
   in
   let non_existent_uuid = "00000000-0000-0000-0000-000000000000" in
-  let body =
-    make_policy_body ~user_uuid:non_existent_uuid ~instance:"default"
-      ~csrf_token ()
-  in
+  let body = make_policy_body ~user_uuid:non_existent_uuid ~csrf_token () in
   let req =
     make_post_request ~path:"/api/admin/u/policy/update" ~body ~session_cookie
       ~csrf_token ()
@@ -256,7 +243,7 @@ let check_update_policy_missing_user_uuid () =
   let _admin, session_cookie, csrf_token =
     setup_user ~name:"admin" ~email:"admin@robur.coop" store
   in
-  let body = make_policy_body ~instance:"default" ~csrf_token () in
+  let body = make_policy_body ~csrf_token () in
   let req =
     make_post_request ~path:"/api/admin/u/policy/update" ~body ~session_cookie
       ~csrf_token ()
@@ -300,10 +287,7 @@ let check_update_policy_root_policy_null () =
   in
   let jtest, _, _ = setup_user ~name:"jtest" ~email:"jtest@robur.coop" store in
   let body =
-    make_policy_body
-      ~user_uuid:(Uuidm.to_string jtest.uuid)
-      ~instance:"default" ~unikernels:2 ~memory:256 ~block:0 ~cpuids:"0"
-      ~bridges:"service" ~csrf_token ()
+    make_policy_body ~user_uuid:(Uuidm.to_string jtest.uuid) ~csrf_token ()
   in
   let req =
     make_post_request ~path:"/api/admin/u/policy/update" ~body ~session_cookie
@@ -327,8 +311,7 @@ let check_update_policy_albatross_failure () =
   let body =
     make_policy_body
       ~user_uuid:(Uuidm.to_string qtest.uuid)
-      ~instance:"failing" ~unikernels:2 ~memory:256 ~block:0 ~cpuids:"0"
-      ~bridges:"service" ~csrf_token ()
+      ~instance:"failing" ~csrf_token ()
   in
   let req =
     make_post_request ~path:"/api/admin/u/policy/update" ~body ~session_cookie
@@ -347,10 +330,7 @@ let check_update_policy_invalid_csrf () =
   let _admin, session_cookie, _csrf_token =
     setup_user ~name:"admin" ~email:"admin@robur.coop" store
   in
-  let body =
-    make_policy_body ~user_uuid:"dummy" ~instance:"default"
-      ~csrf_token:"bad-csrf" ()
-  in
+  let body = make_policy_body ~user_uuid:"dummy" ~csrf_token:"bad-csrf" () in
   let req =
     make_post_request ~path:"/api/admin/u/policy/update" ~body ~session_cookie
       ~csrf_token:"bad-csrf" ()
@@ -365,7 +345,7 @@ let check_update_policy_missing_csrf () =
   let _admin, session_cookie, _csrf_token =
     setup_user ~name:"admin" ~email:"admin@robur.coop" store
   in
-  let body = make_policy_body ~user_uuid:"dummy" ~instance:"default" () in
+  let body = make_policy_body ~user_uuid:"dummy" () in
   let req =
     make_post_request ~path:"/api/admin/u/policy/update" ~body ~session_cookie
       ()
@@ -381,9 +361,7 @@ let check_update_policy_missing_csrf () =
 let check_update_policy_non_admin_forbidden () =
   let store = init_mock_store () in
   let _user, session_cookie, csrf_token = setup_non_admin_user store in
-  let body =
-    make_policy_body ~user_uuid:"dummy" ~instance:"default" ~csrf_token ()
-  in
+  let body = make_policy_body ~user_uuid:"dummy" ~csrf_token () in
   let req =
     make_post_request ~path:"/api/admin/u/policy/update" ~body ~session_cookie
       ~csrf_token ()
@@ -398,7 +376,7 @@ let check_update_policy_non_admin_forbidden () =
 
 let check_update_policy_unauthenticated () =
   let _store = init_mock_store () in
-  let body = make_policy_body ~user_uuid:"dummy" ~instance:"default" () in
+  let body = make_policy_body ~user_uuid:"dummy" () in
   let req = make_post_request ~path:"/api/admin/u/policy/update" ~body () in
   let resp = query_endpoint req in
   Alcotest.(check bool)

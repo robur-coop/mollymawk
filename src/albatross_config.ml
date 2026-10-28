@@ -192,7 +192,8 @@ let albatross_config_layout albatross_instances =
                   Ui.static_th "Last update";
                   Ui.static_th "Action";
                 ]
-              (List.map albatross_table_row
-                 (Utils.LM.bindings albatross_instances));
+              (Utils.LM.fold
+                 (fun k v acc -> albatross_table_row (k, v) :: acc)
+                 albatross_instances []);
           ];
       ])

@@ -522,9 +522,7 @@ module Auth = struct
             in
             let policy =
               Option.value ~default:Albatross_client.empty_policy
-                (Option.join
-                   (Result.to_option
-                      (Albatross_client.policy albatross_inst ~domain:user.name)))
+                (Albatross_client.policy albatross_inst ~domain:user.name)
             in
             page_response
               ~headers:[ ("X-MOLLY-CSRF", csrf) ]
@@ -662,9 +660,7 @@ module Block = struct
                 user.name
             in
             let policy =
-              Result.fold ~ok:Fun.id
-                ~error:(fun _ -> None)
-                (Albatross_client.policy ~domain:user.name albatross_inst)
+              Albatross_client.policy ~domain:user.name albatross_inst
             in
             let csrf = generate_csrf_token env req in
             page_response
@@ -974,7 +970,7 @@ module Unikernel = struct
             in
             let csrf = generate_csrf_token env req in
             match Albatross_client.policy albatross_inst ~domain:user.name with
-            | Ok (Some user_policy) ->
+            | Some user_policy ->
                 page_response
                   ~headers:[ ("X-MOLLY-CSRF", csrf) ]
                   (Dashboard.dashboard_layout ~csrf user
@@ -986,20 +982,16 @@ module Unikernel = struct
                           albatross_inst.configuration.name builder_jobs)
                      ())
                   req server env
-            | Ok None ->
+            | None ->
                 error_page_response ~title:"Resource Policy error"
-                  ~data:"No user policy" `Bad_request req
-            | Error err ->
-                error_page_response ~title:"Resource Policy error" ~data:err
-                  `Bad_request req))
+                  ~data:"No user policy" `Bad_request req))
 
   let unikernel_info req server env =
     with_user_cookie_api req server (fun user _cookie ->
         let albatross_instances = !(Vifu.Server.device albatross server) in
         let successes, failures =
-          List.fold_left
-            (fun (successes, failures) (name, (instance : Albatross_client.t))
-               ->
+          Utils.LM.fold
+            (fun name (instance : Albatross_client.t) (successes, failures) ->
               match
                 Albatross_client.query env.tcp instance ~domain:user.name
                   (`Unikernel_cmd `Unikernel_info)
@@ -1028,8 +1020,7 @@ module Unikernel = struct
                       in
                       (successes, failure :: failures)
                   | Ok parsed -> (parsed :: successes, failures)))
-            ([], [])
-            (Utils.LM.bindings albatross_instances)
+            albatross_instances ([], [])
         in
         let response_data : Models.Unikernel.info_response =
           { data = successes; errors = failures }
@@ -1869,40 +1860,34 @@ module Unikernel = struct
                         in
                         update_unikernel_scaling scaling_policies
                       else
-                        match
+                        let max_allowed =
                           Albatross_client.user_max_allowed_unikernel_instances
                             albatross_inst user.name
-                        with
-                        | Error err ->
-                            api_response ~title:"Bad Request"
-                              ~data:(Fmt.str "An error occurred: %s" err)
-                              `Bad_request req
-                        | Ok max_allowed ->
-                            if max_instances > max_allowed then
-                              api_response ~title:"Bad Request"
-                                ~data:
-                                  (Fmt.str
-                                     "Error: you can spawn a maximum of %d \
-                                      clones."
-                                     max_allowed)
-                                `Bad_request req
-                            else
-                              let new_policy =
-                                match current_scaling_policy with
-                                | Some p -> { p with max_instances }
-                                | None ->
-                                    {
-                                      Models.User.name = unikernel_name;
-                                      primary_albatross_instance =
-                                        albatross_inst.configuration.name;
-                                      max_instances;
-                                    }
-                              in
-                              let scaling_policies =
-                                Models.User.Scaling_policy_map.add policy_key
-                                  new_policy user.scaling_policies
-                              in
-                              update_unikernel_scaling scaling_policies
+                        in
+                        if max_instances > max_allowed then
+                          api_response ~title:"Bad Request"
+                            ~data:
+                              (Fmt.str
+                                 "Error: you can spawn a maximum of %d clones."
+                                 max_allowed)
+                            `Bad_request req
+                        else
+                          let new_policy =
+                            match current_scaling_policy with
+                            | Some p -> { p with max_instances }
+                            | None ->
+                                {
+                                  Models.User.name = unikernel_name;
+                                  primary_albatross_instance =
+                                    albatross_inst.configuration.name;
+                                  max_instances;
+                                }
+                          in
+                          let scaling_policies =
+                            Models.User.Scaling_policy_map.add policy_key
+                              new_policy user.scaling_policies
+                          in
+                          update_unikernel_scaling scaling_policies
                     else
                       api_response ~title:"Bad Request"
                         ~data:"Max instances must be greater than 1."
@@ -1929,61 +1914,54 @@ module Unikernel = struct
   let send_monitoring_tcp_command happy_eyeballs ~command ~target =
     let port = 2323 in
     try
-      if Obj.magic happy_eyeballs == Obj.magic () then
-        let msg =
-          Fmt.str "[monitoring] Failed to connect to %s:%d, error uninitialized"
-            target port
-        in
-        Error msg
-      else
-        match
-          Mnet_happy_eyeballs.connect ~kind:Mnet.TCP.direct happy_eyeballs
-            target [ port ]
-        with
-        | Error (`Msg err) ->
+      match
+        Mnet_happy_eyeballs.connect ~kind:Mnet.TCP.direct happy_eyeballs target
+          [ port ]
+      with
+      | Error (`Msg err) ->
+          let msg =
+            Fmt.str "[monitoring] Failed to connect to %s:%d, error %s" target
+              port err
+          in
+          Logs.info (fun m -> m "%s" msg);
+          Error msg
+      | Ok ((_ip, _port), flow) -> (
+          try
+            Mnet.TCP.write flow command;
+            match Mnet.TCP.read flow with
+            | Ok [] | Error `Eof ->
+                Mnet.TCP.close flow;
+                let msg =
+                  Fmt.str
+                    "[monitoring] Received eof while reading from %s:%d \
+                     (command: %s)"
+                    target port command
+                in
+                Logs.info (fun m -> m "%s" msg);
+                Error msg
+            | Error `Refused ->
+                Mnet.TCP.close flow;
+                let msg =
+                  Fmt.str
+                    "[monitoring] Connection refused while reading from %s:%d \
+                     (command: %s)"
+                    target port command
+                in
+                Logs.info (fun m -> m "%s" msg);
+                Error msg
+            | Ok chunks ->
+                Mnet.TCP.close flow;
+                Ok (String.concat "" chunks)
+          with exn ->
+            (try Mnet.TCP.close flow with _ -> ());
             let msg =
-              Fmt.str "[monitoring] Failed to connect to %s:%d, error %s" target
-                port err
+              Fmt.str
+                "[monitoring] Failed communicating with %s:%d (command: %s), \
+                 error %s"
+                target port command (Printexc.to_string exn)
             in
             Logs.info (fun m -> m "%s" msg);
-            Error msg
-        | Ok ((_ip, _port), flow) -> (
-            try
-              Mnet.TCP.write flow command;
-              match Mnet.TCP.read flow with
-              | Ok [] | Error `Eof ->
-                  Mnet.TCP.close flow;
-                  let msg =
-                    Fmt.str
-                      "[monitoring] Received eof while reading from %s:%d \
-                       (command: %s)"
-                      target port command
-                  in
-                  Logs.info (fun m -> m "%s" msg);
-                  Error msg
-              | Error `Refused ->
-                  Mnet.TCP.close flow;
-                  let msg =
-                    Fmt.str
-                      "[monitoring] Connection refused while reading from \
-                       %s:%d (command: %s)"
-                      target port command
-                  in
-                  Logs.info (fun m -> m "%s" msg);
-                  Error msg
-              | Ok chunks ->
-                  Mnet.TCP.close flow;
-                  Ok (String.concat "" chunks)
-            with exn ->
-              (try Mnet.TCP.close flow with _ -> ());
-              let msg =
-                Fmt.str
-                  "[monitoring] Failed communicating with %s:%d (command: %s), \
-                   error %s"
-                  target port command (Printexc.to_string exn)
-              in
-              Logs.info (fun m -> m "%s" msg);
-              Error msg)
+            Error msg)
     with exn ->
       let msg =
         Fmt.str "[monitoring] Failed to connect to %s:%d, error %s" target port
@@ -2075,8 +2053,7 @@ module Albatross_admin = struct
             ~headers:[ ("X-MOLLY-CSRF", csrf) ]
             (Dashboard.dashboard_layout ~csrf user ~page_title:"Choose instance"
                ~content:
-                 (Albatross_instances.select_instance user
-                    (Utils.LM.bindings albatross_instances)
+                 (Albatross_instances.select_instance user albatross_instances
                     callback)
                ())
             req server env)
@@ -2282,9 +2259,7 @@ module Admin = struct
             | Some u -> (
                 let user_policy =
                   Option.value ~default:Albatross_client.empty_policy
-                    (Option.join
-                       (Result.to_option
-                          (Albatross_client.policy albatross_inst ~domain:u.name)))
+                    (Albatross_client.policy albatross_inst ~domain:u.name)
                 in
                 match
                   Albatross_client.policy_resource_avalaible albatross_inst
@@ -2338,7 +2313,7 @@ module Admin = struct
                         match Models.Policy.to_policy form with
                         | Ok policy -> (
                             match Albatross_client.policy albatross_inst with
-                            | Ok (Some root_policy) -> (
+                            | Some root_policy -> (
                                 match
                                   Vmm_core.Policy.is_smaller ~super:root_policy
                                     ~sub:policy
@@ -2377,20 +2352,11 @@ module Admin = struct
                                         api_response ~title:"Success"
                                           ~data:"Updated policy successfully"
                                           `OK req))
-                            | Ok None ->
+                            | None ->
                                 Logs.err (fun m ->
                                     m "policy: root policy can't be null ");
                                 api_response ~title:"Internal Server Error"
                                   ~data:"Root policy is null"
-                                  `Internal_server_error req
-                            | Error err ->
-                                Logs.err (fun m ->
-                                    m
-                                      "policy: an error occured while fetching \
-                                       root policy: %s"
-                                      err);
-                                api_response ~title:"Internal Server Error"
-                                  ~data:("error with root policy: " ^ err)
                                   `Internal_server_error req)
                         | Error (`Msg err) ->
                             api_response ~title:"Bad Request" ~data:err
@@ -2507,9 +2473,8 @@ module Scheduler = struct
       Albatross_client.user_unikernels_by_instance tcp albatross_inst user_name
     in
     match Albatross_client.policy ~domain:user_name albatross_inst with
-    | Error err -> Error err
-    | Ok None -> Error "No policy found for user"
-    | Ok (Some p) -> (
+    | None -> Error "No policy found for user"
+    | Some p -> (
         let cpu_usage_count = Utils.cpu_usage_count p unikernels in
         let sorted_cpus =
           cpu_usage_count
@@ -2849,9 +2814,9 @@ module Scheduler = struct
     let unikernels_per_instance =
       Albatross_client.user_unikernels tcp albatross_instances user.name
     in
-    let results =
-      List.map
-        (fun (instance_name, unikernels) ->
+    let available_updates =
+      Utils.LM.filter_map
+        (fun _instance_name unikernels ->
           let updates =
             List.filter_map
               (fun (name, unikernel) ->
@@ -2863,11 +2828,8 @@ module Scheduler = struct
                 | _ -> None)
               unikernels
           in
-          (instance_name, updates))
+          if updates = [] then None else Some updates)
         unikernels_per_instance
-    in
-    let available_updates =
-      List.filter (fun (_, updates) -> updates <> []) results
     in
     { Update_flow.user; available_updates }
 
@@ -2878,7 +2840,7 @@ module Scheduler = struct
         let update_report =
           check_user_unikernel_updates tcp albatross_instances user he
         in
-        if update_report.available_updates = [] then acc
+        if Utils.LM.is_empty update_report.available_updates then acc
         else update_report :: acc)
       users []
 
@@ -3007,22 +2969,22 @@ module Scheduler = struct
       in
       (try
          Log.debug (fun m -> m "Starting background pruning...");
-         Utils.LM.bindings !scaling_groups
-         |> List.iter (fun (user_name, unikernel_map) ->
+         Utils.LM.iter
+           (fun user_name unikernel_map ->
              let results =
                Albatross_client.user_unikernels tcp !albatross_instances_ref
                  user_name
              in
              let active_vm_names =
-               List.fold_left
-                 (fun acc (_instance_name, vms) ->
+               Utils.LM.fold
+                 (fun _instance_name vms acc ->
                    let names =
                      List.filter_map
                        (fun (name, _info) -> Vmm_core.Name.name name)
                        vms
                    in
                    acc @ names)
-                 [] results
+                 results []
              in
              Utils.LM.iter
                (fun unikernel_name group ->
@@ -3047,6 +3009,7 @@ module Scheduler = struct
                          Utils.LM.add user_name updated_unikernel_map
                            !scaling_groups)
                unikernel_map)
+           !scaling_groups
        with exn ->
          Log.err (fun m ->
              m "Background pruning failed: %s" (Printexc.to_string exn)));

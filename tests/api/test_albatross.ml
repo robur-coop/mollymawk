@@ -11,7 +11,6 @@ let mismatched_cert_pem =
   X509.Certificate.encode_pem (certificate_exn second_private_key)
 
 let make_albatross_body ?name ?cert ?key ?ip ?port ?csrf_token () =
-  let success_cfg = Mock_albatross.success_config in
   let name = Option.value ~default:"secondary" name in
   let cert = Option.value ~default:valid_cert_pem cert in
   let key = Option.value ~default:valid_key_pem key in
@@ -180,7 +179,6 @@ let check_create_success () =
 let check_create_duplicate_rejected () =
   let store = init_mock_store () in
   let _user, session_cookie, csrf_token = setup_user store in
-  let success_cfg = Mock_albatross.success_config in
   store.Storage.configurations <-
     Utils.LM.singleton success_cfg.name success_cfg;
   let body =
@@ -290,7 +288,6 @@ let check_create_invalid_ip () =
 let check_create_connection_failure () =
   let store = init_mock_store () in
   let _user, session_cookie, csrf_token = setup_user store in
-  let failure_cfg = Mock_albatross.failure_config in
   let body =
     make_albatross_body ~name:"failing-node" ~port:failure_cfg.server_port
       ~csrf_token ()
@@ -381,7 +378,6 @@ let check_create_invalid_method () =
 let check_update_success () =
   let store = init_mock_store () in
   let _user, session_cookie, csrf_token = setup_user store in
-  let success_cfg = Mock_albatross.success_config in
   store.Storage.configurations <-
     Utils.LM.singleton success_cfg.name success_cfg;
   let body =
@@ -420,7 +416,6 @@ let check_update_nonexistent_rejected () =
 let check_update_mismatched_cert_and_key () =
   let store = init_mock_store () in
   let _user, session_cookie, csrf_token = setup_user store in
-  let success_cfg = Mock_albatross.success_config in
   store.Storage.configurations <-
     Utils.LM.singleton success_cfg.name success_cfg;
   let body =
@@ -466,8 +461,6 @@ let check_update_missing_fields () =
 let check_update_connection_failure () =
   let store = init_mock_store () in
   let _user, session_cookie, csrf_token = setup_user store in
-  let success_cfg = Mock_albatross.success_config in
-  let failure_cfg = Mock_albatross.failure_config in
   store.Storage.configurations <-
     Utils.LM.singleton success_cfg.name success_cfg;
   let body =
@@ -490,7 +483,6 @@ let check_update_connection_failure () =
 let check_update_invalid_csrf () =
   let store = init_mock_store () in
   let _user, session_cookie, _csrf_token = setup_user store in
-  let success_cfg = Mock_albatross.success_config in
   store.Storage.configurations <-
     Utils.LM.singleton success_cfg.name success_cfg;
   let body =
@@ -510,7 +502,6 @@ let check_update_invalid_csrf () =
 let check_update_non_admin_forbidden () =
   let store = init_mock_store () in
   let _user, session_cookie, csrf_token = setup_non_admin_user store in
-  let success_cfg = Mock_albatross.success_config in
   store.Storage.configurations <-
     Utils.LM.singleton success_cfg.name success_cfg;
   let body =
@@ -532,7 +523,6 @@ let check_update_non_admin_forbidden () =
 
 let check_update_unauthenticated () =
   let store = init_mock_store () in
-  let success_cfg = Mock_albatross.success_config in
   store.Storage.configurations <-
     Utils.LM.singleton success_cfg.name success_cfg;
   let body =
@@ -566,7 +556,6 @@ let check_update_invalid_method () =
 let check_delete_success () =
   let store = init_mock_store () in
   let _user, session_cookie, csrf_token = setup_user store in
-  let success_cfg = Mock_albatross.success_config in
   store.Storage.configurations <-
     Utils.LM.singleton success_cfg.name success_cfg;
   let name_str = Models.Configuration.name_to_str success_cfg.name in

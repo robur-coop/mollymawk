@@ -513,3 +513,153 @@ let make_multipart_request ?(boundary = default_boundary) ~parts ?file_part
 let is_redirect resp =
   String.starts_with ~prefix:"HTTP/1.1 302" resp
   || String.starts_with ~prefix:"HTTP/1.1 303" resp
+
+let dummy_info (name : Vmm_core.Name.t) =
+  let dummy_cfg =
+    Vmm_core.Unikernel.
+      {
+        typ = `Solo5;
+        compressed = false;
+        image = "";
+        fail_behaviour = `Quit;
+        add_name = true;
+        startup = None;
+        cpuids = Vmm_core.IS.singleton 0;
+        memory = 32;
+        block_devices = [];
+        bridges = [];
+        argv = None;
+        numcpus = 1;
+        linux_boot_partition = None;
+      }
+  in
+  let dummy_u =
+    Vmm_core.Unikernel.
+      {
+        config = dummy_cfg;
+        cmd = [||];
+        pid = 1234;
+        taps = [];
+        digest = String.make 32 'a';
+        started = Utils.now ();
+      }
+  in
+  let info = Vmm_core.Unikernel.info (fun _ -> None) dummy_u in
+  (name, info)
+
+let known_unikernel_label = label_of_string_exn "hello"
+
+let success_cfg =
+  {
+    mock_albatross_config with
+    server_ip = Ipaddr.of_string_exn "127.0.0.1";
+    server_port = 1025;
+  }
+
+let failure_cfg =
+  {
+    mock_albatross_config with
+    name = label_of_string_exn "failing";
+    server_ip = Ipaddr.of_string_exn "127.0.0.1";
+    server_port = 1026;
+  }
+
+let is_failing (config : Models.Configuration.t) =
+  String.starts_with ~prefix:"failing"
+    (Models.Configuration.name_to_str config.name)
+  || config.server_port = failure_cfg.server_port
+
+module Mnet_happy_eyeballs = struct
+  include Mnet_happy_eyeballs
+
+  let connect ~kind:_ _ _ _ = Error (`Msg "uninitialized")
+end
+
+module Albatross_client = struct
+  include Albatross_client
+
+  let init _tcp (configuration : Models.Configuration.t) =
+    let state : t =
+      { status = Status.Online; policies = Vmm_trie.empty; configuration }
+    in
+    if is_failing configuration then Error (state, "albatross failure")
+    else Ok state
+
+  let query _tcp t ~domain ?(name = dot_name) ?push:_ cmd =
+    let vmm_name =
+      Vmm_core.Name.make (Vmm_core.Name.Path.of_label domain) name
+    in
+    let hdr = Vmm_commands.header vmm_name in
+    if is_failing t.configuration then Ok (hdr, `Failure "albatross failure")
+    else
+      match cmd with
+      | `Unikernel_cmd `Unikernel_info ->
+          let hello_name =
+            Vmm_core.Name.make
+              (Vmm_core.Name.Path.of_label domain)
+              known_unikernel_label
+          in
+          Ok (hdr, `Success (`Unikernel_info [ dummy_info hello_name ]))
+      | `Unikernel_cmd (`Unikernel_create _) ->
+          Ok (hdr, `Success (`String "unikernel created"))
+      | `Unikernel_cmd (`Unikernel_force_create _) ->
+          Ok (hdr, `Success (`String "unikernel force created"))
+      | _ -> Ok (hdr, `Success (`String "ok"))
+
+  let query_console _tcp t ~domain:_ ~name:_ _f =
+    if is_failing t.configuration then Error "albatross failure" else Ok ()
+
+  let query_block_dump _tcp t ~domain:_ ~name:_ _compression f =
+    if is_failing t.configuration then Error "albatross failure"
+    else
+      Result.map_error
+        (fun () -> "error")
+        (f (Some "mock block dump content\n\r\n\rEOF\n\r"))
+
+  let query_unikernel_binary _tcp t ~domain:_ ~name:_ f =
+    if is_failing t.configuration then Error "albatross failure"
+    else Result.map_error (fun () -> "error") (f "mock binary")
+
+  let query_stats _tcp t _f =
+    if is_failing t.configuration then Error "albatross failure" else Ok ()
+
+  let set_policy _tcp t ~domain policy =
+    if is_failing t.configuration then Error "albatross failure"
+    else
+      let name =
+        Vmm_core.Name.make_of_path (Vmm_core.Name.Path.of_label domain)
+      in
+      t.policies <- fst (Vmm_trie.insert name policy t.policies);
+      Ok (name, policy)
+
+  let user_blocks_by_instance _tcp _state _user_name = []
+
+  let user_unikernels_by_instance _tcp (state : t) user_name =
+    if is_failing state.configuration then []
+    else
+      let hello_name =
+        Vmm_core.Name.make
+          (Vmm_core.Name.Path.of_label user_name)
+          known_unikernel_label
+      in
+      [ dummy_info hello_name ]
+
+  let user_deceased_by_instance _tcp (albatross_instances : a_map) _user_name =
+    Utils.LM.map (fun _ -> []) albatross_instances
+
+  let user_unikernels tcp (albatross_instances : a_map) user_name =
+    Utils.LM.map
+      (fun inst -> user_unikernels_by_instance tcp inst user_name)
+      albatross_instances
+
+  let user_unikernel _tcp (state : t) ~user_name ~unikernel_name =
+    if is_failing state.configuration then Error "albatross failure"
+    else if Vmm_core.Name.Label.equal unikernel_name known_unikernel_label then
+      let hello_name =
+        Vmm_core.Name.make
+          (Vmm_core.Name.Path.of_label user_name)
+          unikernel_name
+      in
+      Ok (dummy_info hello_name)
+    else Error "Expected one unikernel, but got 0"
+end
