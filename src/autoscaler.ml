@@ -213,8 +213,7 @@ module Cluster_manager = struct
       [key] in the [group] (either primary or one of the clones). Returns the
       newly updated VM state and the updated group. *)
   let update_vm_metrics group key now rusage =
-    let all_instances = group.primary :: group.clones in
-    match List.assoc_opt key all_instances with
+    match List.assoc_opt key (group.primary :: group.clones) with
     | None -> Error "Current VM not found in group during update"
     | Some vm ->
         let current_vm_usage = Cpu_monitor.measure vm.monitor now rusage in

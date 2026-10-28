@@ -16,9 +16,10 @@ let check_command command =
   if String.length command < 2 then
     Error (Fmt.str "Command is too short. got %s" (escape_string command))
   else
-    let kind = String.sub command 0 1 in
-    let rest = String.sub command 1 (String.length command - 1) in
-    let segments = String.split_on_char ',' rest in
+    let segments =
+      String.split_on_char ','
+        (String.sub command 1 (String.length command - 1))
+    in
     let is_valid_level s = Result.is_ok (Logs.level_of_string s) in
     let is_valid_metric s =
       match s with "enable" | "disable" -> true | _ -> false
@@ -37,7 +38,7 @@ let check_command command =
         | [ name; val_ ] -> is_valid_source name && is_valid_val val_
         | _ -> false
     in
-    match kind with
+    match String.sub command 0 1 with
     | "L" ->
         if segments = [ "" ] then
           Error

@@ -367,9 +367,10 @@ module Auth = struct
         with
         | Error err -> api_response ~title:"Failure" ~data:err `Bad_request req
         | Ok (name, email) -> (
-            let existing_name = Storage.find_by_name storage name in
-            let existing_email = Storage.find_by_email storage email in
-            match (existing_name, existing_email) with
+            match
+              ( Storage.find_by_name storage name,
+                Storage.find_by_email storage email )
+            with
             | Some _, Some _ ->
                 api_response ~title:"Failure"
                   ~data:"A user with this name or email already exist."
@@ -1221,10 +1222,12 @@ module Unikernel = struct
         | Error `Invalid_multipart_form ->
             generate_http_error_response "Invalid multipart form" `Bad_request
         | Ok stream -> (
-            let parts = Models.Multipart.parse_stream stream in
             let albatross_instances = !(Vifu.Server.device albatross server) in
             let he = Vifu.Server.device happy_eyeballs server in
-            match Models.Unikernel.create_of_parts parts with
+            match
+              Models.Unikernel.create_of_parts
+                (Models.Multipart.parse_stream stream)
+            with
             | Ok form -> (
                 let process_unikernel_create albatross_inst unikernel_name =
                   match Albatross_json.config_of_json form.unikernel_config with
@@ -2198,9 +2201,8 @@ module Admin = struct
 
   let view_user (page : [ `Profile | `Unikernels | `Policy ]) req server env =
     with_uuid_admin_page req server (fun uuid user ->
-        let store = Vifu.Server.device storage server in
         let albatross_instances = !(Vifu.Server.device albatross server) in
-        match Storage.find_by_uuid store uuid with
+        match Storage.find_by_uuid (Vifu.Server.device storage server) uuid with
         | Some u -> (
             let unikernels =
               Albatross_client.user_unikernels env.tcp albatross_instances
@@ -2254,8 +2256,9 @@ module Admin = struct
   let edit_policy req server env =
     with_uuid_admin_page req server (fun uuid user ->
         with_instance req server (fun albatross_inst ->
-            let store = Vifu.Server.device storage server in
-            match Storage.find_by_uuid store uuid with
+            match
+              Storage.find_by_uuid (Vifu.Server.device storage server) uuid
+            with
             | Some u -> (
                 let user_policy =
                   Option.value ~default:Albatross_client.empty_policy
@@ -2475,12 +2478,10 @@ module Scheduler = struct
     match Albatross_client.policy ~domain:user_name albatross_inst with
     | None -> Error "No policy found for user"
     | Some p -> (
-        let cpu_usage_count = Utils.cpu_usage_count p unikernels in
-        let sorted_cpus =
-          cpu_usage_count
+        match
+          Utils.cpu_usage_count p unikernels
           |> List.sort (fun (_, c1) (_, c2) -> Int.compare c1 c2)
-        in
-        match sorted_cpus with
+        with
         | (id, _) :: _ -> Ok id
         | [] -> Error "No cpuids available in user policy")
 
@@ -2914,11 +2915,10 @@ module Scheduler = struct
           active_streams := Vmm_core.String_set.remove key !active_streams)
         (fun () ->
           let rec stream_loop () =
-            let res =
+            match
               try Ok (unikernels_stats tcp instance store)
               with exn -> Error exn
-            in
-            match res with
+            with
             | Ok (Ok ()) ->
                 Mkernel.sleep (Int64.to_int (Duration.of_sec 10));
                 (stream_loop [@tailcall]) ()

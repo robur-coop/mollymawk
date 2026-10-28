@@ -57,8 +57,9 @@ module TimeHelper = struct
 
   (* calculate the diff between two timestamps *)
   let diff_in_seconds ~current_time ~check_time =
-    let span = Ptime.diff current_time check_time in
-    match Ptime.Span.to_int_s span with Some s -> s | None -> 0
+    match Ptime.Span.to_int_s (Ptime.diff current_time check_time) with
+    | Some s -> s
+    | None -> 0
 
   let is_within_seconds ~current_time ~check_time ttl =
     diff_in_seconds ~current_time ~check_time < ttl

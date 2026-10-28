@@ -407,8 +407,7 @@ let init tcp (configuration : Models.Configuration.t) =
       state.status <- Status.update state.status (Status.make `Certificate err);
       Error (state, err)
   | Ok (key, cert) -> (
-      let certificates = `Single ([ cert ], key) in
-      match raw_query tcp state certificates cmd reply with
+      match raw_query tcp state (`Single ([ cert ], key)) cmd reply with
       | Ok (_hdr, `Success (`Policies ps)) ->
           let policies =
             List.fold_left
