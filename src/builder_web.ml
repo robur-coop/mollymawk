@@ -275,12 +275,17 @@ let send_http_request ?(path = "") ~base_url ~happy_eyeballs () =
     else buf
   in
   let buf = Buffer.create 0x1000 in
-  match
-    Mhttp_client.request ~happy_eyeballs
-      ~headers:[ ("Accept", "application/json") ]
-      ~fn ~uri buf
-  with
-  | Error err -> Error (`Msg (Format.asprintf "%a" Mhttp_client.pp_error err))
+  let res =
+    try
+      Mhttp_client.request ?authenticator:Utils.authenticator ~happy_eyeballs
+        ~headers:[ ("Accept", "application/json") ]
+        ~fn ~uri buf
+      |> Result.map_error (fun err ->
+          `Msg (Format.asprintf "%a" Mhttp_client.pp_error err))
+    with exn -> Error (`Msg (Printexc.to_string exn))
+  in
+  match res with
+  | Error _ as err -> err
   | Ok (resp, buf) ->
       if Mhttp_client.Status.is_successful resp.status then
         Ok (Buffer.contents buf)
@@ -314,11 +319,16 @@ let fetch_unikernel_binary_image happy_eyeballs ~job ~version push_chunks =
     if Mhttp_client.Status.is_successful resp.status then push_chunks chunk
   in
   let res =
-    Mhttp_client.request ~happy_eyeballs ~follow_redirect:true ~fn ~uri ()
+    try
+      Mhttp_client.request ?authenticator:Utils.authenticator ~happy_eyeballs
+        ~follow_redirect:true ~fn ~uri ()
+      |> Result.map_error (fun err ->
+          `Msg (Format.asprintf "%a" Mhttp_client.pp_error err))
+    with exn -> Error (`Msg (Printexc.to_string exn))
   in
   push_chunks None;
   match res with
-  | Error err -> Error (`Msg (Format.asprintf "%a" Mhttp_client.pp_error err))
+  | Error _ as err -> err
   | Ok (resp, ()) ->
       if Mhttp_client.Status.is_successful resp.status then Ok ()
       else if resp.status = `Not_found then Error (`Msg "returned not found")

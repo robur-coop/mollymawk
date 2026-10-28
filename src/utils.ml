@@ -4,6 +4,13 @@ module UM = Map.Make (Uuidm)
 
 let now () = try Mkernel.now () with _ -> Ptime.epoch
 
+let authenticator =
+  let time () = Some (now ()) in
+  Result.to_option
+    (Result.map
+       (fun cas -> X509.Authenticator.chain_of_trust ~time cas)
+       Ca_certs_nss.trust_anchors)
+
 module Json = struct
   let get key mems = Option.map snd (Jsont.Json.find_mem key mems)
 
