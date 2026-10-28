@@ -3,7 +3,7 @@
  (enabled_if
   (= %{context_name} "solo5"))
  (link_flags :standard -cclib "-z solo5-abi=hvt")
- (modules main assets controller app store filesystem liveliness_checks)
+ (modules main assets etag controller app store filesystem liveliness_checks)
  (libraries
   mkernel
   mnet
@@ -49,7 +49,7 @@
   (run solo5-elftool gen-manifest manifest.json manifest.c)))
 
 (rule
- (targets assets.ml)
+ (targets assets.ml etag.ml)
  (deps
   (source_tree assets))
  (action
@@ -58,6 +58,7 @@
    (run
     mcrunch
     -s
+    --checksums=etag.ml
     --file=dashboard_1_png:assets/dashboard_1.png
     --file=grafana_json:assets/grafana.json
     --file=interconnections_by_guerrillabuzz_jpg:assets/interconnections_by_guerrillabuzz.jpg

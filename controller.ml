@@ -93,12 +93,20 @@ let error_page_response ?(title = "Error") ~data http_status req =
   let* () = Vifu.Response.with_tyxml req ty in
   Vifu.Response.respond http_status
 
-let static_asset_response ~mime ~content req (_server : Vifu.Server.t) _env =
-  let open Vifu.Response.Syntax in
-  (* TODO: if-none-match / etag *)
-  let* () = Vifu.Response.add ~field:"Content-Type" mime in
-  let* () = Vifu.Response.with_string req content in
-  Vifu.Response.respond `OK
+let static_asset_response ~etag =
+  let etag = Fmt.str {|"%s"|} (Ohex.encode etag) in
+  fun ~mime ~content req (_server : Vifu.Server.t) _env ->
+    let open Vifu.Response.Syntax in
+    let hdrs = Vifu.Request.headers req in
+    match Vifu.Headers.get hdrs "if-none-match" with
+    | Some etag' when String.equal etag etag' ->
+        let* () = Vifu.Response.with_string req "" in
+        Vifu.Response.respond `Not_modified
+    | _ ->
+        let* () = Vifu.Response.add ~field:"Content-Type" mime in
+        let* () = Vifu.Response.add ~field:"ETag" etag in
+        let* () = Vifu.Response.with_string req content in
+        Vifu.Response.respond `OK
 
 let pct_encode str = Uri.pct_encode ~component:`Authority str
 

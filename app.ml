@@ -23,35 +23,43 @@ let routes () =
     (* Static routes *)
     get (rel / "style.css" /?? nil)
     --> static_asset_response ~mime:"text/css;charset=utf-8"
-          ~content:Assets.style_css;
+          ~content:Assets.style_css ~etag:Etag.style_css;
     get (rel / "main.js" /?? nil)
     --> static_asset_response ~mime:"text/javascript;charset=utf-8"
-          ~content:Assets.main_js;
+          ~content:Assets.main_js ~etag:Etag.main_js;
     get (rel / "grafana.json" /?? nil)
     --> static_asset_response ~mime:"application/json; charset=utf-8"
-          ~content:Assets.grafana_json;
+          ~content:Assets.grafana_json ~etag:Etag.grafana_json;
     get (rel / "images" / "robur.png" /?? nil)
-    --> static_asset_response ~mime:"image/png" ~content:Assets.robur_png;
+    --> static_asset_response ~mime:"image/png" ~content:Assets.robur_png
+          ~etag:Etag.robur_png;
     get (rel / "images" / "dashboard_1.png" /?? nil)
-    --> static_asset_response ~mime:"image/png" ~content:Assets.dashboard_1_png;
+    --> static_asset_response ~mime:"image/png" ~content:Assets.dashboard_1_png
+          ~etag:Etag.dashboard_1_png;
     get (rel / "images" / "molly_bird.jpeg" /?? nil)
     --> static_asset_response ~mime:"image/jpeg"
-          ~content:Assets.mollymawk_bird_by_katelyn_jpg;
+          ~content:Assets.mollymawk_bird_by_katelyn_jpg
+          ~etag:Etag.mollymawk_bird_by_katelyn_jpg;
     get (rel / "images" / "mollymawk_bird_by_katelyn.jpg" /?? nil)
     --> static_asset_response ~mime:"image/jpeg"
-          ~content:Assets.mollymawk_bird_by_katelyn_jpg;
+          ~content:Assets.mollymawk_bird_by_katelyn_jpg
+          ~etag:Etag.mollymawk_bird_by_katelyn_jpg;
     get (rel / "images" / "albatross_1.png" /?? nil)
     --> static_asset_response ~mime:"image/jpeg"
-          ~content:Assets.interconnections_by_guerrillabuzz_jpg;
+          ~content:Assets.interconnections_by_guerrillabuzz_jpg
+          ~etag:Etag.interconnections_by_guerrillabuzz_jpg;
     get (rel / "images" / "interconnections_by_guerrillabuzz.jpg" /?? nil)
     --> static_asset_response ~mime:"image/jpeg"
-          ~content:Assets.interconnections_by_guerrillabuzz_jpg;
+          ~content:Assets.interconnections_by_guerrillabuzz_jpg
+          ~etag:Etag.interconnections_by_guerrillabuzz_jpg;
     get (rel / "images" / "mirage_os_1.png" /?? nil)
     --> static_asset_response ~mime:"image/jpeg"
-          ~content:Assets.server_room_by_yuriy_vertikov_jpg;
+          ~content:Assets.server_room_by_yuriy_vertikov_jpg
+          ~etag:Etag.server_room_by_yuriy_vertikov_jpg;
     get (rel / "images" / "server_room_by_yuriy-vertikov.jpg" /?? nil)
     --> static_asset_response ~mime:"image/jpeg"
-          ~content:Assets.server_room_by_yuriy_vertikov_jpg;
+          ~content:Assets.server_room_by_yuriy_vertikov_jpg
+          ~etag:Etag.server_room_by_yuriy_vertikov_jpg;
     get (rel /?? nil)
     --> page_response
           (Guest_layout.guest_layout
