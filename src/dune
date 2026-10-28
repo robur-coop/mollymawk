@@ -18,5 +18,6 @@
   tyxml
   ohex
   vifu
+  ca-certs-nss
   digestif)
  (wrapped false))
