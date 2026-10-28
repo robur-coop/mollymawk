@@ -61,11 +61,11 @@
     --checksums=etag.ml
     --file=dashboard_1_png:assets/dashboard_1.png
     --file=grafana_json:assets/grafana.json
-    --file=interconnections_by_guerrillabuzz_jpg:assets/interconnections_by_guerrillabuzz.jpg
+    --file=albatross_1_jpg:assets/interconnections_by_guerrillabuzz.jpg
     --file=main_js:assets/main.js
-    --file=mollymawk_bird_by_katelyn_jpg:assets/mollymawk_bird_by_katelyn.jpg
+    --file=mollymawk_bird_jpg:assets/mollymawk_bird_by_katelyn.jpg
     --file=robur_png:assets/robur.png
-    --file=server_room_by_yuriy_vertikov_jpg:assets/server_room_by_yuriy-vertikov.jpg
+    --file=mirage_os_1_jpg:assets/server_room_by_yuriy-vertikov.jpg
     --file=style_css:assets/style.css))))
 
 (vendored_dirs vendors)

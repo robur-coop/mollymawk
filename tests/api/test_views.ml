@@ -104,7 +104,7 @@ let check_static_image_molly_bird () =
 
 let check_static_image_albatross () =
   let _store = init_mock_store () in
-  let req = make_get_request ~path:"/images/albatross_1.png" () in
+  let req = make_get_request ~path:"/images/albatross_1.jpg" () in
   let resp = query_endpoint req in
   Alcotest.(check bool)
     "Response has HTTP 200 OK" true
@@ -128,7 +128,7 @@ let check_static_image_dashboard () =
 
 let check_static_image_mirage () =
   let _store = init_mock_store () in
-  let req = make_get_request ~path:"/images/mirage_os_1.png" () in
+  let req = make_get_request ~path:"/images/mirage_os_1.jpg" () in
   let resp = query_endpoint req in
   Alcotest.(check bool)
     "Response has HTTP 200 OK" true
@@ -978,13 +978,13 @@ let tests =
     ( "Static image (/images/molly_bird.jpeg)",
       `Quick,
       check_static_image_molly_bird );
-    ( "Static image (/images/albatross_1.png)",
+    ( "Static image (/images/albatross_1.jpg)",
       `Quick,
       check_static_image_albatross );
     ( "Static image (/images/dashboard_1.png)",
       `Quick,
       check_static_image_dashboard );
-    ("Static image (/images/mirage_os_1.png)", `Quick, check_static_image_mirage);
+    ("Static image (/images/mirage_os_1.jpg)", `Quick, check_static_image_mirage);
     ( "Dashboard (/dashboard) authenticated",
       `Quick,
       check_dashboard_authenticated );
