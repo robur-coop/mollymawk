@@ -575,6 +575,31 @@ module Mnet_happy_eyeballs = struct
   let connect ~kind:_ _ _ _ = Error (`Msg "uninitialized")
 end
 
+module Builder_web = struct
+  include Builder_web
+
+  let send_http_request ?path:_ ~base_url:_ ~happy_eyeballs:_ () =
+    Error (`Msg "Mock happy_eyeballs: no network")
+
+  let fetch_unikernel_jobs _happy_eyeballs = []
+
+  let fetch_unikernel_binary_image _happy_eyeballs ~job:_ ~version:_ push_chunks
+      =
+    push_chunks None;
+    Error (`Msg "Mock happy_eyeballs: no network")
+end
+
+module Email_client = struct
+  include Email_client
+
+  let send_email ?references:_ _happy_eyeballs _email_config _user_email
+      ~subject:_ ~body:_ =
+    Error "Connection failed"
+
+  let test_email_configuration _happy_eyeballs _email_settings _recipient =
+    Error "Connection failed"
+end
+
 module Albatross_client = struct
   include Albatross_client
 

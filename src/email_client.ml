@@ -17,11 +17,8 @@ let send_email ?references happy_eyeballs (email_config : Models.Email.t)
   let domain = Colombe.Domain.IPv4 addr in
   let res =
     try
-      if Obj.magic happy_eyeballs == Obj.magic () then
-        Error (`Msg "Connection failed")
-      else
-        Msendmail.sendmail ~domain ~destination:(`Ips [ ip ])
-          ~port:email_config.port happy_eyeballs sender recipients stream
+      Msendmail.sendmail ~domain ~destination:(`Ips [ ip ])
+        ~port:email_config.port happy_eyeballs sender recipients stream
     with exn -> Error (`Msg (Printexc.to_string exn))
   in
   match res with

@@ -275,25 +275,22 @@ let send_http_request ?(path = "") ~base_url ~happy_eyeballs () =
     else buf
   in
   let buf = Buffer.create 0x1000 in
-  if Obj.magic happy_eyeballs == Obj.magic () then
-    Error (`Msg "Mock happy_eyeballs: no network")
-  else
-    match
-      Mhttp_client.request ~happy_eyeballs
-        ~headers:[ ("Accept", "application/json") ]
-        ~fn ~uri buf
-    with
-    | Error err -> Error (`Msg (Format.asprintf "%a" Mhttp_client.pp_error err))
-    | Ok (resp, buf) ->
-        if Mhttp_client.Status.is_successful resp.status then
-          Ok (Buffer.contents buf)
-        else if resp.status = `Not_found then Error `Not_found
-        else
-          Error
-            (`Msg
-               ("accessing " ^ uri ^ " resulted in an error: "
-               ^ Mhttp_client.Status.to_string resp.status
-               ^ " " ^ resp.reason))
+  match
+    Mhttp_client.request ~happy_eyeballs
+      ~headers:[ ("Accept", "application/json") ]
+      ~fn ~uri buf
+  with
+  | Error err -> Error (`Msg (Format.asprintf "%a" Mhttp_client.pp_error err))
+  | Ok (resp, buf) ->
+      if Mhttp_client.Status.is_successful resp.status then
+        Ok (Buffer.contents buf)
+      else if resp.status = `Not_found then Error `Not_found
+      else
+        Error
+          (`Msg
+             ("accessing " ^ uri ^ " resulted in an error: "
+             ^ Mhttp_client.Status.to_string resp.status
+             ^ " " ^ resp.reason))
 
 let fetch_unikernel_jobs happy_eyeballs =
   match send_http_request ~path:"/all-builds" ~base_url ~happy_eyeballs () with
@@ -317,9 +314,7 @@ let fetch_unikernel_binary_image happy_eyeballs ~job ~version push_chunks =
     if Mhttp_client.Status.is_successful resp.status then push_chunks chunk
   in
   let res =
-    if Obj.magic happy_eyeballs == Obj.magic () then
-      Error (`Msg "Mock happy_eyeballs: no network")
-    else Mhttp_client.request ~happy_eyeballs ~follow_redirect:true ~fn ~uri ()
+    Mhttp_client.request ~happy_eyeballs ~follow_redirect:true ~fn ~uri ()
   in
   push_chunks None;
   match res with
