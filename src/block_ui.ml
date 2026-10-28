@@ -1,9 +1,21 @@
 let create_block instance_name total_free_space =
+  let instance_str = Models.Configuration.name_to_str instance_name in
   Tyxml_html.(
-    section
-      ~a:[ a_id "block-create"; a_class [ "w-full mx-auto" ] ]
+    form
+      ~a:
+        [
+          a_id "block-create";
+          a_class [ "w-full mx-auto" ];
+          Unsafe.string_attrib "hx-post" "/api/block/create";
+          Unsafe.string_attrib "hx-encoding" "multipart/form-data";
+          Unsafe.string_attrib "hx-include" "#molly-csrf";
+          Unsafe.string_attrib "hx-swap" "none";
+          Unsafe.string_attrib "hx-on::config-request"
+            (Fmt.str "window.prepareCreateBlock(event, '%s')" instance_str);
+          Unsafe.string_attrib "hx-on::after-request"
+            "window.parseXhrResponse(event.detail.xhr)";
+        ]
       [
-        p ~a:[ a_id "create-block-form-alert"; a_class [ "my-4 hidden" ] ] [];
         Ui.form_input ~label_text:"Block device name" "block_name";
         div
           ~a:[ a_class [ "py-3" ] ]
@@ -37,23 +49,33 @@ let create_block instance_name total_free_space =
           ~a:[ a_class [ "my-6" ] ]
           [
             Ui.button_component
-              ~attribs:
-                [
-                  a_id "create-block-button";
-                  a_onclick
-                    ("createBlock('"
-                    ^ Models.Configuration.name_to_str instance_name
-                    ^ "')");
-                ]
+              ~attribs:[ a_id "create-block-button"; a_button_type `Submit ]
               ~content:(txt "Create Block device")
               ~btn_type:`Primary_full ();
           ];
       ])
 
 let download_block ~instance_name ~block_name =
+  let instance_str = Models.Configuration.name_to_str instance_name in
   Tyxml_html.(
-    section
-      ~a:[ a_id ("block-download-" ^ block_name); a_class [ "w-full mx-auto" ] ]
+    form
+      ~a:
+        [
+          a_id ("block-download-" ^ block_name);
+          a_class [ "w-full mx-auto" ];
+          Unsafe.string_attrib "hx-post" "/api/block/download";
+          Unsafe.string_attrib "hx-ext" "form-json";
+          Unsafe.string_attrib "hx-include" "#molly-csrf";
+          Unsafe.string_attrib "hx-vals"
+            (Fmt.str
+               "js:{block_name: '%s', albatross_instance: '%s', \
+                compression_level: \
+                Number(document.getElementById('compression-level-%s').innerText)}"
+               block_name instance_str block_name);
+          Unsafe.string_attrib "hx-swap" "none";
+          Unsafe.string_attrib "hx-on::after-request"
+            "window.handleBlockDownloadResponse(event.detail.xhr)";
+        ]
       [
         div
           [
@@ -63,7 +85,6 @@ let download_block ~instance_name ~block_name =
                   a_class [ "block my-2 font-medium" ]; a_label_for "block name";
                 ]
               [ txt block_name ];
-            p ~a:[ a_id "download-alert"; a_class [ "my-2 hidden" ] ] [];
             label
               ~a:
                 [
@@ -78,10 +99,7 @@ let download_block ~instance_name ~block_name =
               ~attribs:
                 [
                   a_id ("download-block-button-" ^ block_name);
-                  a_onclick
-                    ("downloadBlock('" ^ block_name ^ "', '"
-                    ^ Models.Configuration.name_to_str instance_name
-                    ^ "')");
+                  a_button_type `Submit;
                 ]
               ~content:(txt ("Download " ^ block_name))
               ~btn_type:`Primary_full ();
@@ -89,9 +107,23 @@ let download_block ~instance_name ~block_name =
       ])
 
 let upload_to_block ~instance_name ~block_name =
+  let instance_str = Models.Configuration.name_to_str instance_name in
   Tyxml_html.(
-    section
-      ~a:[ a_id ("block-upload-" ^ block_name); a_class [ "w-full mx-auto" ] ]
+    form
+      ~a:
+        [
+          a_id ("block-upload-" ^ block_name);
+          a_class [ "w-full mx-auto" ];
+          Unsafe.string_attrib "hx-post" "/api/block/upload";
+          Unsafe.string_attrib "hx-encoding" "multipart/form-data";
+          Unsafe.string_attrib "hx-include" "#molly-csrf";
+          Unsafe.string_attrib "hx-swap" "none";
+          Unsafe.string_attrib "hx-on::config-request"
+            (Fmt.str "window.prepareUploadBlock(event, '%s', '%s')" block_name
+               instance_str);
+          Unsafe.string_attrib "hx-on::after-request"
+            "window.parseXhrResponse(event.detail.xhr)";
+        ]
       [
         Ui.form_input ~label_text:"Select a file to dump to the Block device"
           ~attribs:[ a_input_type `File ]
@@ -117,10 +149,7 @@ let upload_to_block ~instance_name ~block_name =
               ~attribs:
                 [
                   a_id ("upload-block-button-" ^ block_name);
-                  a_onclick
-                    ("uploadToBlock('" ^ block_name ^ "', '"
-                    ^ Models.Configuration.name_to_str instance_name
-                    ^ "')");
+                  a_button_type `Submit;
                 ]
               ~content:(txt "Upload data") ~btn_type:`Primary_full ();
           ];

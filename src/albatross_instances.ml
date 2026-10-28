@@ -9,7 +9,6 @@ let select_instance (user : Models.User.user) albatross_instances
     section
       ~a:[ a_id "instance-form"; a_class [ "p-4 bg-gray-50 my-1" ] ]
       [
-        p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
         h2
           ~a:[ a_class [ "font-semibold text-2xl" ] ]
           [
@@ -114,8 +113,11 @@ let select_instance (user : Models.User.user) albatross_instances
                            ~attribs:
                              [
                                a_id ("retry-btn-" ^ name);
-                               a_onclick
-                                 ("retryConnectingAlbatross(`" ^ name ^ "`)");
+                               Unsafe.string_attrib "hx-get"
+                                 ("/api/admin/albatross/retry?instance=" ^ name);
+                               Unsafe.string_attrib "hx-swap" "none";
+                               Unsafe.string_attrib "hx-on::after-request"
+                                 "window.parseXhrResponse(event.detail.xhr)";
                              ]
                            ~content:(txt "Retry connecting")
                            ~btn_type:`Danger_outlined ();

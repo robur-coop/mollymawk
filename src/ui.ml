@@ -446,6 +446,7 @@ let alpine_multiselect ~id ~label_text ~button_label ?(option_prefix = "")
                         button_component
                           ~attribs:
                             [
+                              a_button_type `Button;
                               Unsafe.string_attrib "x-on:click"
                                 "removeItem(index)";
                             ]
@@ -460,7 +461,8 @@ let alpine_multiselect ~id ~label_text ~button_label ?(option_prefix = "")
                   a_class [ "dropdown my-3" ];
                 ]
               [
-                button_component ~attribs:[]
+                button_component
+                  ~attribs:[ a_button_type `Button ]
                   ~content:
                     (span
                        [

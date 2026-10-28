@@ -188,28 +188,27 @@ function closeBanner() {
 	banner.style.display = "none";
 }
 
-function showError(formAlertElement, msg, isSuccess = false) {
-	formAlertElement.classList.remove("hidden", "text-primary-500", "text-secondary-500");
-	formAlertElement.classList.add(isSuccess ? "text-primary-500" : "text-secondary-500");
-	formAlertElement.textContent = msg;
-}
-
 function postAlert(bg_color, content) {
 	const alertContainer = document.getElementById("alert-container");
-	alertContainer.classList.remove("hidden")
-	alertContainer.classList.add("block", `${bg_color}`, "text-white", "transition", "ease-in-out", "delay-150", "duration-300")
+	if (!alertContainer) return;
+	alertContainer.classList.remove("hidden", "bg-primary-300", "bg-secondary-300");
+	alertContainer.classList.add("block", `${bg_color}`, "text-white", "transition", "ease-in-out", "delay-150", "duration-300");
 	const alert = document.createElement("div");
 	alert.className = `text-white transition ease-in-out delay-150 duration-300 ${bg_color}`;
 	alert.textContent = content;
 	alertContainer.appendChild(alert);
 	setTimeout(() => {
-		alertContainer.classList.remove("block", `${bg_color}`)
-		alertContainer.classList.add("hidden")
-		alertContainer.removeChild(alert);
+		if (alert.parentNode === alertContainer) {
+			alertContainer.removeChild(alert);
+		}
+		if (alertContainer.children.length === 0) {
+			alertContainer.classList.remove("block", `${bg_color}`);
+			alertContainer.classList.add("hidden");
+		}
 	}, 4000);
 }
 
-function gatherFieldsForDevices(fieldId, targetKey, formAlert) {
+function gatherFieldsForDevices(fieldId, targetKey) {
 	const result = [];
 	let index = 0;
 	let loop = true;
@@ -220,7 +219,6 @@ function gatherFieldsForDevices(fieldId, targetKey, formAlert) {
 
 		// Case: One of them exists but the other doesn't
 		if ((selectEl && !inputEl) || (!selectEl && inputEl)) {
-			showError(formAlert, `Please fill in both the ${fieldId} device and its associated name.`);
 			postAlert("bg-secondary-300", `Please fill in both the ${fieldId} device and its associated name.`);
 			return null;
 		}
@@ -236,7 +234,6 @@ function gatherFieldsForDevices(fieldId, targetKey, formAlert) {
 
 		// check for empty strings:
 		if (!selectValue || !inputValue) {
-			showError(formAlert, `Please fill in both the ${fieldId} device and its associated name.`);
 			postAlert("bg-secondary-300", `Please fill in both the ${fieldId} device and its associated name.`);
 			return null;
 		}
@@ -252,116 +249,86 @@ function gatherFieldsForDevices(fieldId, targetKey, formAlert) {
 	return { [targetKey]: result };
 }
 
-async function deployUnikernel(albatross_instance) {
-	const formAlert = document.getElementById("form-alert");
-	const deployButton = document.getElementById("deploy-button");
+function prepareDeployUnikernel(event, albatross_instance) {
 	const handleFailure = (msg) => {
+		event.preventDefault();
 		postAlert("bg-secondary-300", msg);
-		showError(formAlert, msg);
-		buttonLoading(deployButton, false, "Deploy");
 	};
-	try {
-		const name = document.getElementById("unikernel-name").value;
-		const typ = document.getElementById("unikernel-type").value;
-		const startup = document.getElementById("startup-priority").innerText;
-		const fail_behaviour = document.getElementById("restart-on-fail").checked;
-		const force_create = document.getElementById("force-create").checked;
-		const memory = document.getElementById("unikernel-memory").innerText;
-		const molly_csrf = document.getElementById("molly-csrf").value;
-		const cpuidsStr = document.getElementById("cpuids").value;
-		const deployModeNode = document.querySelector('input[name="deploy_mode"]:checked');
-		const deploy_mode = deployModeNode ? deployModeNode.value : 'manual';
-		const binaryInput = document.getElementById("unikernel-binary");
-		const binary = (binaryInput && binaryInput.files) ? binaryInput.files[0] : null;
-		if (!isValidName(name, formAlert, "unikernel-name")) {
-			buttonLoading(deployButton, false, "Deploy");
-			return;
-		}
+	const name = document.getElementById("unikernel-name").value;
+	const typ = document.getElementById("unikernel-type").value;
+	const startup = document.getElementById("startup-priority").innerText;
+	const fail_behaviour = document.getElementById("restart-on-fail").checked;
+	const force_create = document.getElementById("force-create").checked;
+	const memory = document.getElementById("unikernel-memory").innerText;
+	const molly_csrf = document.getElementById("molly-csrf").value;
+	const cpuidsStr = document.getElementById("cpuids").value;
+	const deployModeNode = document.querySelector('input[name="deploy_mode"]:checked');
+	const deploy_mode = deployModeNode ? deployModeNode.value : 'manual';
+	const binaryInput = document.getElementById("unikernel-binary");
+	const binary = (binaryInput && binaryInput.files) ? binaryInput.files[0] : null;
+	if (!isValidName(name, "unikernel-name")) {
+		event.preventDefault();
+		return;
+	}
 
-		const networkData = gatherFieldsForDevices("network", "network_interfaces", formAlert);
-		const blockData = gatherFieldsForDevices("block", "block_devices", formAlert);
-		if (!networkData || !blockData) {
-			return;
-		}
-		if (deploy_mode === 'manual' && !binary) {
-			showError(formAlert, "Please upload the unikernel image");
-			return;
-		}
+	const networkData = gatherFieldsForDevices("network", "network_interfaces");
+	const blockData = gatherFieldsForDevices("block", "block_devices");
+	if (!networkData || !blockData) {
+		event.preventDefault();
+		return;
+	}
+	if (deploy_mode === 'manual' && !binary) {
+		handleFailure("Please upload the unikernel image");
+		return;
+	}
 
-		buttonLoading(deployButton, true, "Deploying...");
+	let specificConfig = {};
 
-		let specificConfig = {};
-
-		if (typ === 'solo5') {
-			const argumentsString = document.getElementById("unikernel-arguments").value.trim();
-			specificConfig = {
-				arguments: argumentsString ? argumentsString.split(/\s+/) : []
-			};
-		} else if (typ === 'bhyve') {
-			const vcpus = document.getElementById("numcpus").innerText;
-			const bootPartition = document.getElementById("linux-boot-partition").value;
-			specificConfig = {
-				vcpus: Number(vcpus),
-				linux_boot_partition: bootPartition === "" ? null : bootPartition
-			};
-		}
-
-		const unikernel_config = {
-			typ: typ,
-			cpuids: cpuidsStr ? cpuidsStr.split(',').map(Number) : [],
-			startup: Number(startup),
-			fail_behaviour: fail_behaviour ? { "restart": fail_behaviour } : "quit",
-			memory: Number(memory),
-			...networkData,
-			...blockData,
-			...specificConfig
+	if (typ === 'solo5') {
+		const argumentsString = document.getElementById("unikernel-arguments").value.trim();
+		specificConfig = {
+			arguments: argumentsString ? argumentsString.split(/\s+/) : []
 		};
-
-		const formData = new FormData();
-		formData.append("albatross_instance", albatross_instance);
-		formData.append("unikernel_name", name);
-		formData.append("unikernel_config", JSON.stringify(unikernel_config));
-		formData.append("unikernel_force_create", force_create);
-		formData.append("molly_csrf", molly_csrf);
-		formData.append("deploy_mode", deploy_mode);
-
-		if (deploy_mode === 'builder') {
-			const builderJobSelect = document.getElementById("builder-job-select");
-			if (builderJobSelect) formData.append("builder_job", builderJobSelect.value);
-			formData.append("binary", "");
-		} else {
-			formData.append("binary", binary);
-		}
-
-		const response = await fetch("/api/unikernel/create", {
-			method: 'POST',
-			body: formData
-		});
-		const data = await response.json();
-
-		if (data.status === 200 && data.success) {
-			showError(formAlert, "Successfully updated", true);
-			postAlert("bg-primary-300", `${name} has been deployed successfully.`);
-			setTimeout(() => {
-				window.location.href = "/dashboard";
-			}, 2000);
-		} else {
-			handleFailure(data.data || "An error occurred during deployment.");
-		}
-	} catch (error) {
-		handleFailure(error.message || "A network error occurred.");
+	} else if (typ === 'bhyve') {
+		const vcpus = document.getElementById("numcpus").innerText;
+		const bootPartition = document.getElementById("linux-boot-partition").value;
+		specificConfig = {
+			vcpus: Number(vcpus),
+			linux_boot_partition: bootPartition === "" ? null : bootPartition
+		};
 	}
-}
 
-function buttonLoading(btn, load, text) {
-	if (load) {
-		btn.disabled = true;
-		btn.innerHTML = `<i class="fa-solid fa-spinner animate-spin mr-2"></i> ${text}`;
+	const unikernel_config = {
+		typ: typ,
+		cpuids: cpuidsStr ? cpuidsStr.split(',').map(Number) : [],
+		startup: Number(startup),
+		fail_behaviour: fail_behaviour ? { "restart": fail_behaviour } : "quit",
+		memory: Number(memory),
+		...networkData,
+		...blockData,
+		...specificConfig
+	};
+
+	const p = event.detail.parameters;
+	for (const key of Object.keys(p)) {
+		delete p[key];
+	}
+	p.albatross_instance = albatross_instance;
+	p.unikernel_name = name;
+	p.unikernel_config = JSON.stringify(unikernel_config);
+	p.unikernel_force_create = String(force_create);
+	p.molly_csrf = molly_csrf;
+	p.deploy_mode = deploy_mode;
+
+	if (deploy_mode === 'builder') {
+		const builderJobSelect = document.getElementById("builder-job-select");
+		if (builderJobSelect) p.builder_job = builderJobSelect.value;
+		p.binary = "";
 	} else {
-		btn.disabled = false;
-		btn.innerHTML = text;
+		p.binary = binary;
 	}
 }
+window.prepareDeployUnikernel = prepareDeployUnikernel;
 
 function multiselect(selected, options) {
 	return {
@@ -444,151 +411,95 @@ function sort_data() {
 	};
 }
 
-async function createBlock(albatross_instance) {
-	const createButton = document.getElementById("create-block-button");
+function prepareCreateBlock(event, albatross_instance) {
 	const block_name = document.getElementById("block_name").value;
 	const block_size = document.getElementById("block_size").innerText;
 	const data_toggle = document.getElementById("dataToggle").checked;
 	const molly_csrf = document.getElementById("molly-csrf").value;
-	const formAlert = document.getElementById("create-block-form-alert");
 	const block_compressed = document.getElementById("block_compressed").checked;
 	const block_data = document.getElementById("block_data").files[0];
 
-	if (!isValidName(block_name, formAlert)) {
-		buttonLoading(createButton, false, "Create Block device");
+	if (!isValidName(block_name, "block_name")) {
+		event.preventDefault();
 		return;
 	}
 	if (Number(block_size) < 1) {
-		showError(formAlert, "Block device size must be 1MB or greater.");
-		buttonLoading(createButton, false, "Create Block device")
+		const msg = "Block device size must be 1MB or greater.";
+		postAlert("bg-secondary-300", msg);
+		event.preventDefault();
 		return;
 	}
 	if (data_toggle && !block_data) {
-		showError(formAlert, "You must upload a file else switch 'Dump data to this Block device' off");
-		buttonLoading(createButton, false, "Create Block device")
+		const msg = "You must upload a file else switch 'Dump data to this Block device' off";
+		postAlert("bg-secondary-300", msg);
+		event.preventDefault();
 		return;
 	}
 
-	try {
-		buttonLoading(createButton, true, "Creating...")
-		let formData = new FormData();
-		let json_data = JSON.stringify(
-			{
-				"block_name": block_name,
-				"block_size": Number(block_size),
-				"block_compressed": block_compressed
-			})
-		formData.append("molly_csrf", molly_csrf)
-		formData.append("albatross_instance", albatross_instance)
-		formData.append("json_data", json_data)
-		formData.append("block_data", block_data)
-		const response = await fetch("/api/block/create", {
-			method: 'POST',
-			body: formData
-		})
-		const data = await response.json();
-		if (data.status === 200) {
-			showError(formAlert, "Successfully created", true);
-			postAlert("bg-primary-300", "Block device created successfully");
-			setTimeout(() => window.location.reload(), 1000);
-			buttonLoading(createButton, false, "Create Block device")
-		} else {
-			showError(formAlert, data.data);
-			buttonLoading(createButton, false, "Create Block device")
-		}
-	} catch (error) {
-		showError(formAlert, error);
-		buttonLoading(createButton, false, "Create Block device")
+	const json_data = JSON.stringify({
+		"block_name": block_name,
+		"block_size": Number(block_size),
+		"block_compressed": block_compressed
+	});
+	const p = event.detail.parameters;
+	for (const key of Object.keys(p)) {
+		delete p[key];
+	}
+	p.molly_csrf = molly_csrf;
+	p.albatross_instance = albatross_instance;
+	p.json_data = json_data;
+	p.block_data = block_data || "";
+}
+window.prepareCreateBlock = prepareCreateBlock;
+
+function handleBlockDownloadResponse(xhr) {
+	if (xhr.status >= 200 && xhr.status < 300) {
+		const disposition = xhr.getResponseHeader('content-disposition') || '';
+		const parts = disposition.split(';');
+		const filename = parts.length > 1 && parts[1].includes('=')
+			? parts[1].split('=')[1].replace(/"/g, '').trim()
+			: 'block_dump';
+		const blob = new Blob([xhr.response], { type: 'application/octet-stream' });
+		const downloadLink = document.createElement('a');
+		downloadLink.href = URL.createObjectURL(blob);
+		downloadLink.download = filename;
+		downloadLink.click();
+		URL.revokeObjectURL(downloadLink.href);
+		postAlert("bg-primary-300", "Download in progress");
+	} else {
+		parseXhrResponse(xhr);
 	}
 }
+window.handleBlockDownloadResponse = handleBlockDownloadResponse;
 
-async function downloadBlock(block_name, albatross_instance) {
-	const downloadButton = document.getElementById(`download-block-button-${block_name}`);
-	const compression_level = document.getElementById(`compression-level-${block_name}`).innerText;
-	const molly_csrf = document.getElementById("molly-csrf").value;
-	try {
-		buttonLoading(downloadButton, true, "Downloading...")
-		const response = await fetch("/api/block/download", {
-			method: 'POST',
-			headers: {
-				"Content-Type": "application/json",
-				"Accept": "application/octet-stream,application/json"
-			},
-			body: JSON.stringify(
-				{
-					"block_name": block_name,
-					"albatross_instance": albatross_instance,
-					"compression_level": Number(compression_level),
-					"molly_csrf": molly_csrf
-				})
-		})
-		if (!response.ok) {
-			const data = await response.json();
-			postAlert("bg-secondary-300", data.data);
-			buttonLoading(downloadButton, false, `Download ${block_name}`)
-		} else {
-			// trigger a download
-			const filename = response.headers.get('content-disposition')
-				.split(';')[1].split('=')[1].replace(/"/g, '');
-			const blob = await response.blob();
-			const downloadLink = document.createElement('a');
-			downloadLink.href = URL.createObjectURL(blob);
-			downloadLink.download = filename;
-			downloadLink.click();
-			URL.revokeObjectURL(downloadLink.href);
-			postAlert("bg-primary-300", "Download in progress");
-			buttonLoading(downloadButton, false, `Download ${block_name}`)
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-		buttonLoading(downloadButton, false, `Download ${block_name}`)
-	}
-}
-
-async function uploadToBlock(block_name, albatross_instance) {
-	const uploadButton = document.getElementById(`upload-block-button-${block_name}`);
+function prepareUploadBlock(event, block_name, albatross_instance) {
 	const block_compressed = document.getElementById(`block_compressed-${block_name}`).checked;
 	const block_data = document.getElementById(`block_data_upload-${block_name}`).files[0];
 	const molly_csrf = document.getElementById("molly-csrf").value;
 
 	if (!block_data) {
-		postAlert("bg-secondary-300", "Please select a file to be uploaded");
-		buttonLoading(uploadButton, false, "Upload data")
+		const msg = "Please select a file to be uploaded";
+		postAlert("bg-secondary-300", msg);
+		event.preventDefault();
 		return;
 	}
 
-	try {
-		buttonLoading(uploadButton, true, "Uploading...")
-		let formData = new FormData();
-		let json_data = JSON.stringify(
-			{
-				"block_name": block_name,
-				"block_compressed": block_compressed
-			})
-		formData.append("json_data", json_data)
-		formData.append("albatross_instance", albatross_instance)
-		formData.append("molly_csrf", molly_csrf)
-		formData.append("block_data", block_data)
-		const response = await fetch("/api/block/upload", {
-			method: 'POST',
-			body: formData
-		})
-		const data = await response.json();
-		if (data.status === 200) {
-			postAlert("bg-primary-300", `Upload is successful: ${data.data}`);
-			setTimeout(() => window.location.reload(), 1000);
-			buttonLoading(uploadButton, false, "Upload data")
-		} else {
-			postAlert("bg-secondary-300", data.data);
-			buttonLoading(uploadButton, false, "Upload data")
-		}
-	} catch (error) {
-		postAlert("bg-secondary-300", error);
-		buttonLoading(uploadButton, false, "Upload data")
+	const json_data = JSON.stringify({
+		"block_name": block_name,
+		"block_compressed": block_compressed
+	});
+	const p = event.detail.parameters;
+	for (const key of Object.keys(p)) {
+		delete p[key];
 	}
+	p.json_data = json_data;
+	p.albatross_instance = albatross_instance;
+	p.molly_csrf = molly_csrf;
+	p.block_data = block_data;
 }
+window.prepareUploadBlock = prepareUploadBlock;
 
-function isValidName(s, formAlert = null, inputElement = null) {
+function isValidName(s, inputElement = null) {
 	let error = null;
 	if (!s || s === '') {
 		error = "Please enter a name";
@@ -610,9 +521,7 @@ function isValidName(s, formAlert = null, inputElement = null) {
 		if (inputEl) {
 			inputEl.classList.add("border-secondary-500", "ring-secondary-500");
 		}
-		if (formAlert) {
-			showError(formAlert, error);
-		}
+		postAlert("bg-secondary-300", error);
 		return false;
 	}
 	return true;
@@ -654,13 +563,9 @@ window.mapFields = function (field_id, detail, options) {
 };
 
 function parseXhrResponse(xhr, redirectUrl = null) {
-	const formAlert = document.getElementById("form-alert");
 	try {
 		const res = JSON.parse(xhr.responseText);
 		if (xhr.status >= 200 && xhr.status < 300) {
-			if (formAlert) {
-				showError(formAlert, res.data || "Successful", true);
-			}
 			postAlert("bg-primary-300", res.data || "Successful");
 			setTimeout(() => {
 				if (redirectUrl) {
@@ -670,15 +575,9 @@ function parseXhrResponse(xhr, redirectUrl = null) {
 				}
 			}, 1000);
 		} else {
-			if (formAlert) {
-				showError(formAlert, res.data || "An error occurred");
-			}
 			postAlert("bg-secondary-300", res.data || "An error occurred");
 		}
 	} catch (error) {
-		if (formAlert) {
-			showError(formAlert, error);
-		}
 		postAlert("bg-secondary-300", error);
 	}
 }

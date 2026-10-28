@@ -19,7 +19,6 @@ let login_page csrf =
                  '/dashboard')";
             ]
           [
-            p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
             Ui.csrf_input csrf;
             Ui.form_input "email";
             Ui.form_input ~attribs:[ a_input_type `Password ] "password";

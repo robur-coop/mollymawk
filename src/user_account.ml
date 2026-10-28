@@ -72,7 +72,6 @@ let user_account_layout (user : Models.User.user) sessions ~active_cookie_value
                         "window.parseXhrResponse(event.detail.xhr)";
                     ]
                   [
-                    p ~a:[ a_id "form-alert"; a_class [ "my-4" ] ] [];
                     Ui.form_input ~label_text:"Current Password"
                       ~attribs:[ a_input_type `Password; a_required () ]
                       "current_password";

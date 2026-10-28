@@ -154,7 +154,8 @@ let dashboard_layout ~csrf (user : Models.User.user)
                              Unsafe.string_attrib "hx-include" "#molly-csrf";
                              Unsafe.string_attrib "hx-swap" "none";
                              Unsafe.string_attrib "hx-on::after-request"
-                               "window.location.reload()";
+                               "window.parseXhrResponse(event.detail.xhr, \
+                                '/sign-in')";
                            ]
                          ~content:(txt "Logout") ~btn_type:`Danger_full ();
                      ];

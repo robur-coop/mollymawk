@@ -29,7 +29,6 @@ let email_config_layout (current_config : Models.Email.t option) =
                 "window.parseXhrResponse(event.detail.xhr)";
             ]
           [
-            p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
             Ui.form_input ~label_text:"Server IP address"
               ~attribs:[ a_value ip_val; a_required () ]
               "server";

@@ -1,8 +1,32 @@
 let update_policy_layout (user : Models.User.user) ~user_policy
     ~unallocated_resources instance_name =
   Tyxml_html.(
-    section
-      ~a:[ a_id "policy-form" ]
+    form
+      ~a:
+        [
+          a_id "policy-form";
+          Unsafe.string_attrib "hx-post" "/api/admin/u/policy/update";
+          Unsafe.string_attrib "hx-ext" "form-json";
+          Unsafe.string_attrib "hx-include" "#molly-csrf";
+          Unsafe.string_attrib "hx-vals"
+            (Fmt.str
+               "js:{albatross_instance: '%s', user_uuid: '%s', unikernels: \
+                Number(document.getElementById('f_allowed_unikernels').innerText), \
+                memory: \
+                Number(document.getElementById('f_allowed_memory').innerText), \
+                block: \
+                Number(document.getElementById('f_allowed_storage').innerText), \
+                cpuids: document.getElementById('selectedCPUs').value, \
+                bridges: document.getElementById('selectedBridges').value}"
+               (Models.Configuration.name_to_str instance_name)
+               (Uuidm.to_string user.uuid));
+          Unsafe.string_attrib "hx-swap" "none";
+          Unsafe.string_attrib "hx-on::after-request"
+            (Fmt.str
+               "window.parseXhrResponse(event.detail.xhr, \
+                '/admin/user/policy?uuid=%s')"
+               (Uuidm.to_string user.uuid));
+        ]
       [
         h2
           ~a:[ a_class [ "font-semibold text-2xl" ] ]
@@ -13,7 +37,6 @@ let update_policy_layout (user : Models.User.user) ~user_policy
               ^ "on albatross instance "
               ^ Models.Configuration.name_to_str instance_name);
           ];
-        p ~a:[ a_id "form-alert"; a_class [ "my-4" ] ] [];
         p
           ~a:[ a_id "user_id"; a_class [ "hidden" ] ]
           [ txt (Uuidm.to_string user.uuid) ];
@@ -80,33 +103,7 @@ let update_policy_layout (user : Models.User.user) ~user_policy
           ~a:[ a_class [ "my-3" ] ]
           [
             Ui.button_component
-              ~attribs:
-                [
-                  a_id "set-policy-btn";
-                  Unsafe.string_attrib "hx-post" "/api/admin/u/policy/update";
-                  Unsafe.string_attrib "hx-ext" "form-json";
-                  Unsafe.string_attrib "hx-include" "#molly-csrf";
-                  Unsafe.string_attrib "hx-vals"
-                    (Fmt.str
-                       "js:{albatross_instance: '%s', user_uuid: '%s', \
-                        unikernels: \
-                        Number(document.getElementById('f_allowed_unikernels').innerText), \
-                        memory: \
-                        Number(document.getElementById('f_allowed_memory').innerText), \
-                        block: \
-                        Number(document.getElementById('f_allowed_storage').innerText), \
-                        cpuids: document.getElementById('selectedCPUs').value, \
-                        bridges: \
-                        document.getElementById('selectedBridges').value}"
-                       (Models.Configuration.name_to_str instance_name)
-                       (Uuidm.to_string user.uuid));
-                  Unsafe.string_attrib "hx-swap" "none";
-                  Unsafe.string_attrib "hx-on::after-request"
-                    (Fmt.str
-                       "window.parseXhrResponse(event.detail.xhr, \
-                        '/admin/user/policy?uuid=%s')"
-                       (Uuidm.to_string user.uuid));
-                ]
+              ~attribs:[ a_id "set-policy-btn"; a_button_type `Submit ]
               ~content:(txt "Set Policy") ~btn_type:`Primary_full ();
           ];
       ])

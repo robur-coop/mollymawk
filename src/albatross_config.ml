@@ -116,7 +116,6 @@ let albatross_config_layout albatross_instances =
                 "window.parseXhrResponse(event.detail.xhr)";
             ]
           [
-            p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
             Ui.hidden_input ~attribs:[ a_id "config-name-edit" ] ();
             div
               ~a:[ a_class [ "bg-gray-50 px-4 pb-4 pt-5 sm:p-6 sm:pb-4 my-4" ] ]

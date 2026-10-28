@@ -242,7 +242,6 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                           ];
                       ];
                   ];
-                p ~a:[ a_id "form-alert"; a_class [ "my-3" ] ] [];
                 div
                   ~a:[ a_class [ "grid grid-cols-3 gap-3 text-white my-3" ] ]
                   [

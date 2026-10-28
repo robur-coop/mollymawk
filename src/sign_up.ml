@@ -17,7 +17,6 @@ let register_page csrf =
                 "window.parseXhrResponse(event.detail.xhr, '/dashboard')";
             ]
           [
-            p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
             Ui.csrf_input csrf;
             Ui.form_input "name";
             Ui.form_input "email";

@@ -65,6 +65,7 @@ let cpu_multiselect cpu_usage_count =
                         Ui.button_component
                           ~attribs:
                             [
+                              a_button_type `Button;
                               Unsafe.string_attrib "x-on:click.stop"
                                 "toggle(id)";
                             ]
@@ -518,7 +519,7 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
         script
           (Unsafe.data
              (Printf.sprintf "window.builderJobs = %s;" builder_jobs_json));
-        section
+        form
           ~a:
             [
               a_id "unikernel-create-form";
@@ -527,6 +528,15 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
               Unsafe.string_attrib "x-init"
                 "$watch('deploy_mode', val => { if(val === 'builder') typ = \
                  'solo5'; })";
+              Unsafe.string_attrib "hx-post" "/api/unikernel/create";
+              Unsafe.string_attrib "hx-encoding" "multipart/form-data";
+              Unsafe.string_attrib "hx-include" "#molly-csrf";
+              Unsafe.string_attrib "hx-swap" "none";
+              Unsafe.string_attrib "hx-on::config-request"
+                (Fmt.str "window.prepareDeployUnikernel(event, '%s')"
+                   (Models.Configuration.name_to_str albatross_instance));
+              Unsafe.string_attrib "hx-on::after-request"
+                "window.parseXhrResponse(event.detail.xhr, '/dashboard')";
             ]
           [
             div
@@ -540,7 +550,6 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
             div
               ~a:[ a_class [ "space-y-6 mt-8 p-6 max-w-5xl mx-auto" ] ]
               [
-                p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
                 deploy_mode_toggles ();
                 type_and_name_section ();
                 builder_source_section builder_jobs available_networks
@@ -585,15 +594,7 @@ let unikernel_create_layout ~(user_policy : Vmm_core.Policy.t) unikernels
                     ]
                   [
                     Ui.button_component
-                      ~attribs:
-                        [
-                          a_id "deploy-button";
-                          a_onclick
-                            ("deployUnikernel('"
-                            ^ Models.Configuration.name_to_str
-                                albatross_instance
-                            ^ "')");
-                        ]
+                      ~attribs:[ a_id "deploy-button"; a_button_type `Submit ]
                       ~content:(txt "Deploy") ~btn_type:`Primary_full ();
                   ];
               ];

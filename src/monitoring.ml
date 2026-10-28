@@ -325,7 +325,8 @@ let render_log_sources log_entries unikernel_name =
               div
                 ~a:[ a_class [ "mt-4" ] ]
                 [
-                  Ui.button_component ~btn_type:`Primary_full ~attribs:[]
+                  Ui.button_component ~btn_type:`Primary_full
+                    ~attribs:[ a_button_type `Submit ]
                     ~content:(txt "Update Logging") ();
                 ];
             ];
@@ -431,7 +432,8 @@ let render_metric_sources metric_entries unikernel_name =
               div
                 ~a:[ a_class [ "mt-4" ] ]
                 [
-                  Ui.button_component ~btn_type:`Primary_full ~attribs:[]
+                  Ui.button_component ~btn_type:`Primary_full
+                    ~attribs:[ a_button_type `Submit ]
                     ~content:(txt "Update Metrics") ();
                 ];
             ];

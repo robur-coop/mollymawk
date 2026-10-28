@@ -102,7 +102,6 @@ let block_index_layout instance_name blocks policy =
                 ];
               div [ Ui.search_input () ];
               hr ~a:[ a_class [ "border border-primary-500 my-5" ] ] ();
-              p ~a:[ a_id "form-alert"; a_class [ "my-4 hidden" ] ] [];
               Ui.data_table
                 ~headers:
                   [
