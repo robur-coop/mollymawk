@@ -20,7 +20,7 @@ let email_config_layout (current_config : Models.Email.t option) =
             [
               a_class [ "space-y-4 px-4" ];
               Unsafe.string_attrib "hx-ext" "form-json";
-              Unsafe.string_attrib "hx-include" "#molly-csrf";
+              Unsafe.string_attrib "hx-include" "closest form, #molly-csrf";
               Unsafe.string_attrib "hx-swap" "none";
               Unsafe.string_attrib "hx-on::config-request"
                 "if (!event.detail.parameters['to_email']) delete \
