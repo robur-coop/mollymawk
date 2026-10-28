@@ -162,8 +162,20 @@ module Session = struct
   let session : (env, string) Vifu.Middleware.t =
     Vifu.Middlewares.v ~name:session_cookie @@ fun req _target server _env ->
     match Vifu.Cookie.get ~encrypted:false ~name:session_cookie server req with
-    | Error _ -> None
-    | Ok cookie -> Some cookie
+    (* open an issue on vif to get multiple cookies *)
+    | Ok cookie when not (String.equal cookie "") -> Some cookie
+    | _ -> (
+        match
+          Vifu.Headers.get (Vifu.Request.headers_of_request req) "Cookie"
+        with
+        | None -> None
+        | Some cookies ->
+            String.split_on_char ';' cookies
+            |> List.find_map (fun c ->
+                match String.split_on_char '=' c with
+                | [ k; v ] when String.equal k session_cookie ->
+                    if String.equal v "" then None else Some v
+                | _ -> None))
 
   let validate_user_session ?(require_admin = false) req storage server =
     let store = Vifu.Server.device storage server in

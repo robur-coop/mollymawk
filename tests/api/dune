@@ -41,7 +41,6 @@
   mnet-happy-eyeballs
   mnet-tls
   utcp
-  gmp
   msendmail
   colombe
   colombe.emile
