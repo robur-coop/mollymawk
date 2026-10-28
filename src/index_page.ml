@@ -152,7 +152,7 @@ let index_page =
                                h-96 relative overflow-hidden";
                             ];
                           a_style
-                            "background-image: url('/images/albatross_1.png');";
+                            "background-image: url('/images/albatross_1.jpg');";
                         ]
                       [
                         div
@@ -200,7 +200,7 @@ let index_page =
                                h-96 relative overflow-hidden";
                             ];
                           a_style
-                            "background-image: url('/images/mirage_os_1.png');";
+                            "background-image: url('/images/mirage_os_1.jpg');";
                         ]
                       [
                         div
