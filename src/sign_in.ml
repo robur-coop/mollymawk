@@ -11,7 +11,6 @@ let login_page csrf =
               a_class [ "space-y-6 mt-8 shadow-md p-6" ];
               Unsafe.string_attrib "hx-ext" "form-json";
               Unsafe.string_attrib "hx-post" "/api/login";
-              Unsafe.string_attrib "hx-include" "#molly-csrf";
               Unsafe.string_attrib "hx-swap" "none";
               Unsafe.string_attrib "hx-on::after-request"
                 "window.parseXhrResponse(event.detail.xhr, new \
