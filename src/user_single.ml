@@ -1,14 +1,10 @@
 type users_tab = Profile | Unikernels | Policy
 
-let policy_row ?(error = "") instance_name policy (user : Models.User.user) =
+let policy_row instance_name policy (user : Models.User.user) =
   Tyxml_html.(
     tr
       [
-        Ui.td_cell
-          [
-            txt (Models.Configuration.name_to_str instance_name);
-            p ~a:[ a_class [ "text-red-500 text-sm" ] ] [ txt error ];
-          ];
+        Ui.td_txt (Models.Configuration.name_to_str instance_name);
         Ui.td_txt (string_of_int policy.Vmm_core.Policy.unikernels);
         Ui.td_txt (string_of_int policy.memory ^ " MB");
         Ui.td_txt (string_of_int (Option.value policy.block ~default:0) ^ " MB");
@@ -142,31 +138,27 @@ let user_policy ~empty_policy (user : Models.User.user) policies =
     section
       ~a:[ a_id "policy-table" ]
       [
-        (match policies with
-        | [] ->
-            Ui.link_button
-              ~href:("/admin/u/policy/edit/" ^ Uuidm.to_string user.uuid)
-              ~content:(txt "Add Policy") ~btn_type:`Primary_outlined ()
-        | policy ->
-            Ui.simple_table
-              ~headers:
-                [
-                  Ui.static_th "Albatross instance";
-                  Ui.static_th "Allowed unikernels";
-                  Ui.static_th "Allowed Memory";
-                  Ui.static_th "Allowed Storage";
-                  Ui.static_th "CPU IDs";
-                  Ui.static_th "Network Bridges";
-                  Ui.static_th "Action";
-                ]
-              (List.map
-                 (fun (instance_name, policy) ->
-                   match policy with
-                   | Error error ->
-                       policy_row instance_name empty_policy user ~error
-                   | Ok (Some p) -> policy_row instance_name p user
-                   | Ok None -> policy_row instance_name empty_policy user)
-                 policy));
+        (if Utils.LM.is_empty policies then
+           Ui.link_button
+             ~href:("/admin/u/policy/edit/" ^ Uuidm.to_string user.uuid)
+             ~content:(txt "Add Policy") ~btn_type:`Primary_outlined ()
+         else
+           Ui.simple_table
+             ~headers:
+               [
+                 Ui.static_th "Albatross instance";
+                 Ui.static_th "Allowed unikernels";
+                 Ui.static_th "Allowed Memory";
+                 Ui.static_th "Allowed Storage";
+                 Ui.static_th "CPU IDs";
+                 Ui.static_th "Network Bridges";
+                 Ui.static_th "Action";
+               ]
+             (Utils.LM.fold
+                (fun instance_name policy acc ->
+                  let p = Option.value ~default:empty_policy policy in
+                  policy_row instance_name p user :: acc)
+                policies []));
       ])
 
 let user_single_layout ~active_tab content (uuid : Uuidm.t) =

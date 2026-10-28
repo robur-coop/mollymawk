@@ -53,10 +53,10 @@ let deceased_unikernels_table deceased_unikernels_by_albatross_instance =
     Ui.simple_table
       ~headers:
         [ Ui.static_th "Instance"; Ui.static_th "Name"; Ui.static_th "Action" ]
-      (List.map
-         (fun (instance_name, names) ->
-           List.map
-             (fun name ->
+      (Utils.LM.fold
+         (fun instance_name names acc ->
+           List.fold_left
+             (fun acc name ->
                let name_str =
                  Option.value ~default:"no name"
                    (Option.map Vmm_core.Name.Label.to_string
@@ -78,34 +78,26 @@ let deceased_unikernels_table deceased_unikernels_by_albatross_instance =
                          ~content:(txt "View logs") ~btn_type:`Primary_outlined
                          ();
                      ];
-                 ])
-             names)
-         deceased_unikernels_by_albatross_instance
-      |> List.flatten))
+                 ]
+               :: acc)
+             acc names)
+         deceased_unikernels_by_albatross_instance []))
 
 let unikernel_index_layout unikernels_by_albatross_instance
     deceased_unikernels_by_albatross_instance current_time =
-  let online_instances_count =
-    List.fold_left
-      (fun count (_, unikernels) ->
-        if List.length unikernels > 0 then count + 1 else count)
-      0 unikernels_by_albatross_instance
+  let online_instances_count, total_unikernels_count =
+    Utils.LM.fold
+      (fun _ unikernels (inst_count, total) ->
+        let len = List.length unikernels in
+        ((if len > 0 then inst_count + 1 else inst_count), total + len))
+      unikernels_by_albatross_instance (0, 0)
   in
-  let total_unikernels_count =
-    List.fold_left
-      (fun acc (_, us) -> acc + List.length us)
-      0 unikernels_by_albatross_instance
-  in
-  let deceased_instances_count =
-    List.fold_left
-      (fun count (_, unikernels) ->
-        if List.length unikernels > 0 then count + 1 else count)
-      0 deceased_unikernels_by_albatross_instance
-  in
-  let total_deceased_count =
-    List.fold_left
-      (fun acc (_, us) -> acc + List.length us)
-      0 deceased_unikernels_by_albatross_instance
+  let deceased_instances_count, total_deceased_count =
+    Utils.LM.fold
+      (fun _ unikernels (inst_count, total) ->
+        let len = List.length unikernels in
+        ((if len > 0 then inst_count + 1 else inst_count), total + len))
+      deceased_unikernels_by_albatross_instance (0, 0)
   in
   Tyxml_html.(
     section
@@ -189,16 +181,17 @@ let unikernel_index_layout unikernels_by_albatross_instance
                       a_onchange "filterAlbatrossInstance(event)";
                     ]
                   (option ~a:[ a_value "all" ] (txt "All instances")
-                  :: List.map
-                       (fun (name, unikernels) ->
+                  :: Utils.LM.fold
+                       (fun name unikernels acc ->
                          option
                            ~a:
                              [ a_value (Models.Configuration.name_to_str name) ]
                            (txt
                               (Fmt.str "%s (%u unikernels)"
                                  (Models.Configuration.name_to_str name)
-                                 (List.length unikernels))))
-                       unikernels_by_albatross_instance);
+                                 (List.length unikernels)))
+                         :: acc)
+                       unikernels_by_albatross_instance []);
                 Ui.raw_select
                   ~attribs:
                     [
@@ -208,16 +201,17 @@ let unikernel_index_layout unikernels_by_albatross_instance
                       a_onchange "filterAlbatrossInstance(event)";
                     ]
                   (option ~a:[ a_value "all" ] (txt "All instances")
-                  :: List.map
-                       (fun (name, deceased_unikernels) ->
+                  :: Utils.LM.fold
+                       (fun name deceased_unikernels acc ->
                          option
                            ~a:
                              [ a_value (Models.Configuration.name_to_str name) ]
                            (txt
                               (Fmt.str "%s (%u unikernels)"
                                  (Models.Configuration.name_to_str name)
-                                 (List.length deceased_unikernels))))
-                       deceased_unikernels_by_albatross_instance);
+                                 (List.length deceased_unikernels)))
+                         :: acc)
+                       deceased_unikernels_by_albatross_instance []);
                 Ui.search_input ();
               ];
           ];
@@ -306,12 +300,12 @@ let unikernel_index_layout unikernels_by_albatross_instance
                        Ui.sortable_th "Created";
                        Ui.static_th "Action";
                      ]
-                   (List.map
-                      (fun (instance_name, unikernels) ->
-                        instance_unikernels instance_name unikernels
-                          current_time)
-                      unikernels_by_albatross_instance
-                   |> List.flatten));
+                   (Utils.LM.fold
+                      (fun instance_name unikernels acc ->
+                        acc
+                        @ instance_unikernels instance_name unikernels
+                            current_time)
+                      unikernels_by_albatross_instance []));
           ];
         div
           ~a:

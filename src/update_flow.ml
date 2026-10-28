@@ -3,9 +3,8 @@ let ( let* ) = Result.bind
 type user_unikernel_available_updates = {
   user : Models.User.user;
   available_updates :
-    (Utils.LM.key
-    * (Vmm_core.Name.t * Vmm_core.Unikernel.info * Builder_web.compare) list)
-    list;
+    (Vmm_core.Name.t * Vmm_core.Unikernel.info * Builder_web.compare) list
+    Utils.LM.t;
 }
 
 type error =

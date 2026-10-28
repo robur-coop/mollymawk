@@ -206,38 +206,41 @@ let updated_unikernels (updates : Update_flow.user_unikernel_available_updates)
       in
 
       let rows =
-        updates.available_updates
-        |> List.concat_map (fun (instance, unikernels) ->
-            unikernels
-            |> List.map (fun (name, _info, _comparison) ->
-                let unikernel_name =
-                  Option.value ~default:"no name"
-                    (Option.map Vmm_core.Name.Label.to_string
-                       (Vmm_core.Name.name name))
-                in
-                tr
-                  [
-                    td
-                      ~a:[ a_style cell_style ]
-                      [ txt (Models.Configuration.name_to_str instance) ];
-                    td ~a:[ a_style cell_style ] [ txt unikernel_name ];
-                    td
-                      ~a:[ a_style cell_style ]
-                      [
-                        a
-                          ~a:
-                            [
-                              a_href
-                                (Fmt.str
-                                   "%s/unikernel/update/compare-changes?instance=%s&unikernel=%s"
-                                   email_config.base_url
-                                   (Models.Configuration.name_to_str instance)
-                                   unikernel_name);
-                              a_target "_blank";
-                            ]
-                          [ txt "View changes" ];
-                      ];
-                  ]))
+        Utils.LM.fold
+          (fun instance unikernels acc ->
+            acc
+            @ List.map
+                (fun (name, _info, _comparison) ->
+                  let unikernel_name =
+                    Option.value ~default:"no name"
+                      (Option.map Vmm_core.Name.Label.to_string
+                         (Vmm_core.Name.name name))
+                  in
+                  tr
+                    [
+                      td
+                        ~a:[ a_style cell_style ]
+                        [ txt (Models.Configuration.name_to_str instance) ];
+                      td ~a:[ a_style cell_style ] [ txt unikernel_name ];
+                      td
+                        ~a:[ a_style cell_style ]
+                        [
+                          a
+                            ~a:
+                              [
+                                a_href
+                                  (Fmt.str
+                                     "%s/unikernel/update/compare-changes?instance=%s&unikernel=%s"
+                                     email_config.base_url
+                                     (Models.Configuration.name_to_str instance)
+                                     unikernel_name);
+                                a_target "_blank";
+                              ]
+                            [ txt "View changes" ];
+                        ];
+                    ])
+                unikernels)
+          updates.available_updates []
       in
 
       table
