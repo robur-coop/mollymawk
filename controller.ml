@@ -170,7 +170,6 @@ module Session = struct
   let session : (env, string) Vifu.Middleware.t =
     Vifu.Middlewares.v ~name:session_cookie @@ fun req _target server _env ->
     match Vifu.Cookie.get ~encrypted:false ~name:session_cookie server req with
-    (* open an issue on vif to get multiple cookies *)
     | Ok cookie when not (String.equal cookie "") -> Some cookie
     | _ -> (
         match
@@ -271,7 +270,10 @@ let with_admin_cookie_api req server fn =
 
 let verify_csrf env req csrf =
   match Vifu.Request.get Session.session req with
-  | None -> false
+  | None ->
+      Logs.debug (fun m ->
+          m "csrf verification: no molly-session cookie in header.");
+      false
   | Some session_cookie ->
       Csrf.verify ~key:env.csrf_key ~session_cookie ~token:csrf ()
 
@@ -429,7 +431,7 @@ module Auth = struct
     with_json_csrf req env
       ~csrf_of:(fun (f : Models.Login.t) -> f.molly_csrf)
       (fun ({ email; password; _ } : Models.Login.t) ->
-        if email = "" || password = "" then
+        if String.equal email "" || String.equal password "" then
           api_response ~title:"Failure" ~data:"All fields must be filled."
             `Bad_request req
         else
