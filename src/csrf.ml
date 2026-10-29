@@ -19,12 +19,20 @@ let verify_token ~key ~session_cookie ~token =
             mac ~key ~msg:(session_cookie ^ "." ^ nonce ^ "." ^ ts)
           in
           let now = now () in
-          if not (Digestif.SHA256.equal sig_digest expected) then
-            Error `Invalid_signature
-          else if now - issued > csrf_expiry || issued > now then Error `Expired
+          if not (Digestif.SHA256.equal sig_digest expected) then (
+            Logs.debug (fun m -> m "csrf verification: invalid signature");
+            Error `Invalid_signature)
+          else if now - issued > csrf_expiry || issued > now then
+            Error
+              (Logs.debug (fun m -> m "csrf verification: token expired");
+               `Expired)
           else Ok ()
-      | _ -> Error `Invalid_format)
-  | _ -> Error `Invalid_format
+      | _ ->
+          Logs.debug (fun m -> m "csrf verification: invalid format");
+          Error `Invalid_format)
+  | _ ->
+      Logs.debug (fun m -> m "csrf verification: invalid format");
+      Error `Invalid_format
 
 let verify ~key ~session_cookie ~token () =
   Result.is_ok (verify_token ~key ~session_cookie ~token)
