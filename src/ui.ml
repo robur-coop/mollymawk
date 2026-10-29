@@ -211,21 +211,25 @@ let switch_button ~switch_id ~switch_label ?(initial_state = false) html_content
           [ html_content ];
       ])
 
+let btn_class = "py-2 px-2 block rounded"
+
 let btn_classes = function
   | `Primary_full ->
-      "py-2 px-2 rounded bg-primary-500 hover:bg-primary-800 text-gray-50 \
-       font-semibold"
+      btn_class
+      ^ " bg-primary-500 hover:bg-primary-800 text-gray-50 font-semibold"
   | `Primary_outlined ->
-      "py-2 px-2 rounded border border-1 border-primary-400 text-primary-600 \
-       hover:text-gray-50 focus:outline-none hover:bg-primary-800 \
-       font-semibold"
+      btn_class
+      ^ " border border-1 border-primary-400 text-primary-600 \
+         hover:text-gray-50 focus:outline-none hover:bg-primary-800 \
+         font-semibold"
   | `Danger_full ->
-      "py-2 px-2 rounded bg-secondary-500 hover:bg-secondary-800 text-gray-50 \
-       font-semibold"
+      btn_class
+      ^ " bg-secondary-500 hover:bg-secondary-800 text-gray-50 font-semibold"
   | `Danger_outlined ->
-      "py-2 px-2 rounded border border-1 border-secondary-400 \
-       text-secondary-600 hover:text-gray-50 focus:outline-none \
-       hover:bg-secondary-800 font-semibold"
+      btn_class
+      ^ " border border-1 border-secondary-400 text-secondary-600 \
+         hover:text-gray-50 focus:outline-none hover:bg-secondary-800 \
+         font-semibold"
   | `Custom css -> css
 
 let button_component ~attribs ~content ~btn_type () =
