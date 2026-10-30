@@ -333,7 +333,9 @@ let fetch_unikernel_binary_image happy_eyeballs ~job ~version =
     with exn -> Error (`Msg (Printexc.to_string exn))
   in
   match res with
-  | Error _ as err -> err
+  | Error _ as err ->
+    Flux.Bqueue.halt q;
+    err
   | Ok (resp, _q) ->
       if Mhttp_client.Status.is_successful resp.status then
         Ok (Flux.Source.bqueue ~stop:`Halt q)

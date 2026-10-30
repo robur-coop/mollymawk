@@ -1219,10 +1219,10 @@ module Unikernel = struct
                         then `Unikernel_cmd (`Unikernel_force_create cfg)
                         else `Unikernel_cmd (`Unikernel_create cfg)
                       in
-                      let execute_albatross_cmd push =
+                      let execute_albatross_cmd source =
                         match
                           Albatross_client.query env.tcp albatross_inst
-                            ~domain:user.name ~name:unikernel_name ~push
+                            ~domain:user.name ~name:unikernel_name ~push:source
                             albatross_cmd
                         with
                         | Error err ->
@@ -2522,14 +2522,14 @@ module Scheduler = struct
                       cpuids = Vmm_core.IS.singleton cpuid;
                     }
                   in
-                  let buf = Buffer.create 65536 in
+                  let q = Flux.Bqueue.(create with_close_and_halt) 128 in
                   match
                     Albatross_client.query_unikernel_binary tcp albatross_inst
                       ~domain:user_name ~name:unikernel_name (fun binary_str ->
-                        Buffer.add_string buf binary_str;
-                        Ok ())
+                          Flux.Bqueue.put q binary_str; Ok ())
                   with
                   | Error err ->
+                      Flux.Bqueue.halt q;
                       put_group ~user_name ~unikernel_name
                         (Autoscaler.Cluster_manager.remove_cooldown group);
                       Log.err (fun m ->
@@ -2538,10 +2538,10 @@ module Scheduler = struct
                             err);
                       Error err
                   | Ok () -> (
-                      let push = make_string_stream (Buffer.contents buf) in
+                      let source = Flux.Source.bqueue ~stop:`Halt q in
                       match
                         Unikernel.force_create_unikernel tcp albatross_inst
-                          ~unikernel_name:clone_name ~push config user
+                          ~unikernel_name:clone_name ~push:source config user
                       with
                       | Error (`Msg err, _status) ->
                           put_group ~user_name ~unikernel_name
