@@ -1244,22 +1244,16 @@ module Unikernel = struct
                       | "builder" -> (
                           match form.builder_job with
                           | Some job -> (
-                              let buf = Buffer.create 65536 in
-                              let push_chunks = function
-                                | Some chunk -> Buffer.add_string buf chunk
-                                | None -> ()
-                              in
                               match
                                 Builder_web.fetch_unikernel_binary_image he ~job
-                                  ~version:"latest" push_chunks
+                                  ~version:"latest"
                               with
                               | Error (`Msg err) ->
                                   generate_http_error_response
                                     ("Builder Error: " ^ err)
                                     `Internal_server_error
-                              | Ok () ->
-                                  execute_albatross_cmd
-                                    (make_string_stream (Buffer.contents buf)))
+                              | Ok source ->
+                                  execute_albatross_cmd source)
                           | None ->
                               generate_http_error_response
                                 "Missing builder job or uuid" `Bad_request)
@@ -1466,15 +1460,9 @@ module Unikernel = struct
              ^ data),
             `Internal_server_error )
     | Ok () -> (
-        let buf = Buffer.create 65536 in
-        let push_chunks = function
-          | Some chunk -> Buffer.add_string buf chunk
-          | None -> ()
-        in
         match
           Builder_web.fetch_unikernel_binary_image he ~job
             ~version:(Uuidm.to_string to_be_updated_unikernel)
-            push_chunks
         with
         | Error (`Msg err) ->
             Logs.err (fun m ->
@@ -1489,9 +1477,8 @@ module Unikernel = struct
                  ^ " :an error occured while fetching the binary from \
                     builds.robur.coop with error: " ^ err),
                 `Internal_server_error )
-        | Ok () ->
-            let push = make_string_stream (Buffer.contents buf) in
-            force_create_unikernel env.tcp albatross_inst ~unikernel_name ~push
+        | Ok source ->
+            force_create_unikernel env.tcp albatross_inst ~unikernel_name ~push:source
               unikernel_cfg user)
 
   let process_rollback env albatross_inst ~unikernel_name current_time store he

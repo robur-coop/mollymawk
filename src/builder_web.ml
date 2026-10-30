@@ -313,24 +313,30 @@ let fetch_unikernel_jobs happy_eyeballs =
           m "send_http_request: Failed to fetch jobs: Not found");
       []
 
-let fetch_unikernel_binary_image happy_eyeballs ~job ~version push_chunks =
+let fetch_unikernel_binary_image happy_eyeballs ~job ~version =
   let uri = base_url ^ "/job/" ^ job ^ "/build/" ^ version ^ "/main-binary" in
-  let fn _meta _req (resp : Mhttp_client.response) () chunk =
-    if Mhttp_client.Status.is_successful resp.status then push_chunks chunk
+  let fn _meta _req (resp : Mhttp_client.response) q = function
+    | None ->
+      Flux.Bqueue.close q; q
+    | Some chunk ->
+      if Mhttp_client.Status.is_successful resp.status then
+        Flux.Bqueue.put q chunk;
+      q
   in
+  let q = Flux.Bqueue.(create with_close_and_halt) 128 in
   let res =
     try
       Mhttp_client.request ?authenticator:Utils.authenticator ~happy_eyeballs
-        ~follow_redirect:true ~fn ~uri ()
+        ~follow_redirect:true ~fn ~uri q
       |> Result.map_error (fun err ->
           `Msg (Format.asprintf "%a" Mhttp_client.pp_error err))
     with exn -> Error (`Msg (Printexc.to_string exn))
   in
-  push_chunks None;
   match res with
   | Error _ as err -> err
-  | Ok (resp, ()) ->
-      if Mhttp_client.Status.is_successful resp.status then Ok ()
+  | Ok (resp, _q) ->
+      if Mhttp_client.Status.is_successful resp.status then
+        Ok (Flux.Source.bqueue ~stop:`Halt q)
       else if resp.status = `Not_found then Error (`Msg "returned not found")
       else
         Error
