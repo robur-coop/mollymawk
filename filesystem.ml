@@ -181,9 +181,8 @@ let write_data block old_superblock data =
     let rec write_one dst_sector data acc =
       let* next =
         if Cstruct.length data <= data_per_sector then Ok 0
-        else is_free ((dst_sector / ss) + 1)
+        else is_free (dst_sector + 1)
       in
-      let next = next * ss in
       Bstr.set_int64_be data_sector 0 (Int64.of_int next);
       let len = Int.min (Cstruct.length data) data_per_sector in
       Cstruct.blit data 0 (Cstruct.of_bigarray data_sector) 8 len;
