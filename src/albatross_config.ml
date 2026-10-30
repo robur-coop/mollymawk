@@ -120,7 +120,7 @@ let albatross_config_layout albatross_instances =
             div
               ~a:[ a_class [ "bg-gray-50 px-4 pb-4 pt-5 sm:p-6 sm:pb-4 my-4" ] ]
               [
-                Ui.form_input ~label_text:"Albatross_client Instance Name*"
+                Ui.form_input ~label_text:"Albatross Instance Name*"
                   ~attribs:[ a_required () ]
                   "name";
               ];
@@ -178,7 +178,7 @@ let albatross_config_layout albatross_instances =
                     (span
                        [
                          i ~a:[ a_class [ "fa-solid fa-plus mr-2" ] ] [];
-                         txt "Add Albatross_client Instance";
+                         txt "Add Albatross Instance";
                        ])
                   ~btn_type:`Primary_outlined ();
               ];
