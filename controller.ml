@@ -252,12 +252,7 @@ let with_json_csrf req env ~csrf_of f =
           `Bad_request req
 
 let make_string_stream str =
-  let sent = ref false in
-  fun () ->
-    if !sent then None
-    else (
-      sent := true;
-      Some str)
+  Flux.Source.list [ str ]
 
 let with_instance ?endpoint req server fn =
   let albatross_instances = !(Vifu.Server.device albatross server) in

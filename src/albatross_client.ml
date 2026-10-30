@@ -341,28 +341,37 @@ let connect_tls tcp t certificates =
               t.status <- Status.update t.status (Status.make `Credentials err);
               Error err))
 
-let send_push t tls_flow push_fn =
+let send_push t tls_flow source =
   let config_name = Models.Configuration.name_to_str t.configuration.name in
-  let rec loop () =
-    match push_fn () with
-    | None -> (
-        match Vmm_tls_mnet.write_tls_chunk tls_flow "" with
-        | Ok () -> Ok ()
-        | Error `Exception ->
-            let err = "Error sending trailing chunk" in
-            Logs.err (fun m -> m "albatross %s: %s" config_name err);
-            t.status <- Status.update t.status (Status.make `Network err);
-            Error err)
-    | Some data -> (
-        match Vmm_tls_mnet.write_tls_chunk tls_flow data with
-        | Ok () -> loop ()
-        | Error `Exception ->
-            let err = "Error pushing data chunk" in
-            Logs.err (fun m -> m "albatross %s: %s" config_name err);
-            t.status <- Status.update t.status (Status.make `Network err);
-            Error err)
+  let sink =
+    let init () = `Continue
+    and push state data =
+      match state with
+      | `Continue ->
+        begin
+          match Vmm_tls_mnet.write_tls_chunk tls_flow data with
+          | Ok () -> `Continue
+          | Error e -> `Error e
+        end
+      | state -> state
+    and full = function
+      | `Continue -> false
+      | `Error _ -> true
+    and stop = function
+      | `Continue ->
+        Vmm_tls_mnet.write_tls_chunk tls_flow ""
+      | `Error e -> Error e
+    in
+    Flux.Sink { init; push; full; stop }
   in
-  loop ()
+  let stream = Flux.Stream.from source in
+  match Flux.Stream.into sink stream with
+  | Ok () -> Ok ()
+  | Error `Exception ->
+    let err = "Error pushing data chunk" in
+    Logs.err (fun m -> m "albatross %s: %s" config_name err);
+    t.status <- Status.update t.status (Status.make `Network err);
+    Error err
 
 let raw_query tcp t ?(name = Vmm_core.Name.root) certificates cmd ?push f =
   let config_name = Models.Configuration.name_to_str t.configuration.name in
@@ -370,7 +379,7 @@ let raw_query tcp t ?(name = Vmm_core.Name.root) certificates cmd ?push f =
   let push_res =
     match push with
     | None -> Ok ()
-    | Some push_fn -> send_push t tls_flow push_fn
+    | Some source -> send_push t tls_flow source
   in
   match push_res with
   | Error _ as e ->
