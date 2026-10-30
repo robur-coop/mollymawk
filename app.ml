@@ -5,6 +5,7 @@ type env = Controller.env = {
   udp : Mnet.UDP.state;
   m_tcp : Mnet.TCP.state;
   m_udp : Mnet.UDP.state;
+  m_dns : Dns.proto * Mnet_dns_cli.nameserver list;
   block : Mkernel.Block.t;
   csrf_key : string;
 }
@@ -209,7 +210,7 @@ let http =
   in
   `H1 h1
 
-let run stack management_stack secret _name =
+let run stack management_stack m_dns secret _name =
   Mkernel.(run [ rng; stack; management_stack; block "data" ])
   @@ fun _rng (_, tcp, udp) (_, m_tcp, m_udp) block () ->
   let port = 80 in
@@ -229,6 +230,6 @@ let run stack management_stack secret _name =
         Scheduler.device;
       ]
   in
-  let env = { tcp; udp; m_tcp; m_udp; block; csrf_key } in
+  let env = { tcp; udp; m_tcp; m_udp; m_dns; block; csrf_key } in
   let middlewares = Vifu.Middlewares.[ Session.session ] in
   Vifu.run ~middlewares ~devices ~cfg tcp (routes ()) env

@@ -15,6 +15,7 @@ let mock_env : Controller.env =
     udp = Obj.magic ();
     m_tcp = Obj.magic ();
     m_udp = Obj.magic ();
+    m_dns = Obj.magic ();
     block = Obj.magic ();
     csrf_key = Test_utils.csrf_key;
   }

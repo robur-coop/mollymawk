@@ -37,6 +37,7 @@
   mnet
   mnet-cli
   mnet-dns
+  mnet-dns.cli
   mkernel
   mnet-happy-eyeballs
   mnet-tls

@@ -3,6 +3,7 @@ type env = {
   udp : Mnet.UDP.state;
   m_tcp : Mnet.TCP.state;
   m_udp : Mnet.UDP.state;
+  m_dns : Dns.proto * Mnet_dns_cli.nameserver list;
   block : Mkernel.Block.t;
   csrf_key : string;
 }
@@ -24,10 +25,10 @@ let make_happy_eyeballs ~name get_stack =
     Option.iter Mnet_happy_eyeballs.kill !daemon_ref
   in
   Vifu.Device.v ~name ~finally [] @@ fun env ->
-  let tcp, udp = get_stack env in
+  let tcp, udp, nameservers = get_stack env in
   let daemon, he = Mnet_happy_eyeballs.create tcp in
   let stack = Mnet_dns.Transport.stack udp he in
-  let dns = Mnet_dns.create stack in
+  let dns = Mnet_dns.create ?nameservers stack in
   let dns_daemon = Mnet_dns.transport dns in
   let getaddrinfo record domain_name =
     let ( let* ) = Result.bind in
@@ -47,11 +48,12 @@ let make_happy_eyeballs ~name get_stack =
   he
 
 let happy_eyeballs =
-  make_happy_eyeballs ~name:"happy-eyeballs" (fun env -> (env.tcp, env.udp))
+  make_happy_eyeballs ~name:"happy-eyeballs" (fun env ->
+      (env.tcp, env.udp, None))
 
 let management_happy_eyeballs =
   make_happy_eyeballs ~name:"management-happy-eyeballs" (fun env ->
-      (env.m_tcp, env.m_udp))
+      (env.m_tcp, env.m_udp, Some env.m_dns))
 
 let albatross = Albatross_client.make_device storage (fun env -> env.tcp)
 
