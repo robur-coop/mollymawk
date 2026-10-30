@@ -11,6 +11,7 @@
   mnet-happy-eyeballs
   mnet-dns
   mnet-dns.cli
+  mnet-dhcp
   vifu
   mirage-crypto-rng-mkernel
   utcp

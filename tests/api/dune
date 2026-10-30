@@ -36,6 +36,7 @@
   digestif
   mnet
   mnet-cli
+  mnet-dhcp
   mnet-dns
   mnet-dns.cli
   mkernel

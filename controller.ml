@@ -4,6 +4,7 @@ type env = {
   m_tcp : Mnet.TCP.state;
   m_udp : Mnet.UDP.state;
   m_dns : Dns.proto * Mnet_dns_cli.nameserver list;
+  m_domain : [ `host ] Domain_name.t;
   block : Mkernel.Block.t;
   csrf_key : string;
 }

@@ -48,6 +48,7 @@ depends: [
   "solo5-elftool" {>= "0.4.0"}
   "mkernel" {>= "0.0.5"}
   "mnet" {>= "0.0.9"}
+  "mnet-dhcp"
   "mnet-cli" {>= "0.0.9"}
   "mnet-dns" {>= "0.0.9"}
   "mnet-happy-eyeballs" {>= "0.0.9"}

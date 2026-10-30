@@ -24,12 +24,19 @@ let secret =
     & opt (some secret_conv) None
     & info [ "secret" ] ~doc ~docv:"SECRET")
 
+let management =
+  let config =
+    Mnet_dhcp.with_requests
+      Dhcp_wire.[ DOMAIN_NAME; DNS_SERVERS; SUBNET_MASK; ROUTERS ]
+      Mnet_dhcp.accept_all
+  in
+  Mnet_dhcp.stack ~name:"management" config
+
 let term =
   let open Term in
   const (fun _ -> App.run)
-  $ Mnet_cli.setup_logs $ Mnet_cli.setup "service"
-  $ Mnet_cli.setup "management"
-  $ Mnet_dns_cli.setup () $ secret $ name
+  $ Mnet_cli.setup_logs $ Mnet_cli.setup "service" $ const management $ secret
+  $ name
 
 let cmd =
   let info = Cmd.info "mollymawk" in

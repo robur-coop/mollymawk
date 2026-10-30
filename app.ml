@@ -6,6 +6,7 @@ type env = Controller.env = {
   m_tcp : Mnet.TCP.state;
   m_udp : Mnet.UDP.state;
   m_dns : Dns.proto * Mnet_dns_cli.nameserver list;
+  m_domain : [ `host ] Domain_name.t;
   block : Mkernel.Block.t;
   csrf_key : string;
 }
@@ -210,9 +211,9 @@ let http =
   in
   `H1 h1
 
-let run stack management_stack m_dns secret _name =
+let run stack management_stack secret _name =
   Mkernel.(run [ rng; stack; management_stack; block "data" ])
-  @@ fun _rng (_, tcp, udp) (_, m_tcp, m_udp) block () ->
+  @@ fun _rng (_, tcp, udp) (_, m_tcp, m_udp, m_lease) block () ->
   let port = 80 in
   let cookie_secret, csrf_key = derive_keys secret in
   let cfg =
@@ -230,6 +231,13 @@ let run stack management_stack m_dns secret _name =
         Scheduler.device;
       ]
   in
-  let env = { tcp; udp; m_tcp; m_udp; m_dns; block; csrf_key } in
-  let middlewares = Vifu.Middlewares.[ Session.session ] in
-  Vifu.run ~middlewares ~devices ~cfg tcp (routes ()) env
+  let m_dns = Mnet_dhcp.dns_servers m_lease in
+  let m_dns =
+    (`Udp, List.map (fun ipv4 -> `Plaintext (Ipaddr.V4 ipv4, 53)) m_dns)
+  in
+  match Mnet_dhcp.domain_name m_lease with
+  | None -> failwith "management: could not get domain name from lease"
+  | Some m_domain ->
+      let env = { tcp; udp; m_tcp; m_udp; m_dns; m_domain; block; csrf_key } in
+      let middlewares = Vifu.Middlewares.[ Session.session ] in
+      Vifu.run ~middlewares ~devices ~cfg tcp (routes ()) env
