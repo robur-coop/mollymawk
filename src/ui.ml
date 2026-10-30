@@ -211,7 +211,7 @@ let switch_button ~switch_id ~switch_label ?(initial_state = false) html_content
           [ html_content ];
       ])
 
-let btn_class = "py-2 px-2 block rounded"
+let btn_class = "py-2 px-2 block rounded flex justify-center"
 
 let btn_classes = function
   | `Primary_full ->
