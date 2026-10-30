@@ -32,11 +32,16 @@ let management =
   in
   Mnet_dhcp.stack ~name:"management" config
 
+let port =
+  let doc = "The HTTP port." in
+  let open Arg in
+  value & opt int 8080 & info [ "p"; "port" ] ~doc ~docv:"PORT"
+
 let term =
   let open Term in
   const (fun _ -> App.run)
   $ Mnet_cli.setup_logs $ Mnet_cli.setup "service" $ const management $ secret
-  $ name
+  $ port $ name
 
 let cmd =
   let info = Cmd.info "mollymawk" in

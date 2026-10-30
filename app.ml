@@ -211,10 +211,9 @@ let http =
   in
   `H1 h1
 
-let run stack management_stack secret _name =
+let run stack management_stack secret port _name =
   Mkernel.(run [ rng; stack; management_stack; block "data" ])
   @@ fun _rng (_, tcp, udp) (_, m_tcp, m_udp, m_lease) block () ->
-  let port = 80 in
   let cookie_secret, csrf_key = derive_keys secret in
   let cfg =
     Vifu.Config.v
