@@ -29,7 +29,7 @@ let term =
   const (fun _ -> App.run)
   $ Mnet_cli.setup_logs $ Mnet_cli.setup "service"
   $ Mnet_cli.setup "management"
-  $ secret $ name
+  $ Mnet_dns_cli.setup () $ secret $ name
 
 let cmd =
   let info = Cmd.info "mollymawk" in
