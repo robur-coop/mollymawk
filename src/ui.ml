@@ -211,7 +211,7 @@ let switch_button ~switch_id ~switch_label ?(initial_state = false) html_content
           [ html_content ];
       ])
 
-let btn_class = "py-2 px-2 block rounded"
+let btn_class = "py-2 px-2 block rounded flex justify-center"
 
 let btn_classes = function
   | `Primary_full ->
@@ -709,42 +709,47 @@ let increment_or_decrement_ui ~max_value ~min_value ?(step = 1)
         label
           ~a:[ a_class [ "block font-medium my-2" ] ]
           [ txt (Fmt.str "%s (max %d %s)" label' max_value figure_unit) ];
-        button_component
-          ~attribs:
-            [
-              a_button_type `Button;
-              Unsafe.string_attrib "x-on:click"
-                (Fmt.str "if (count > %d) count = count - %d" min_value step);
-            ]
-          ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
-          ~btn_type:`Danger_outlined ();
-        span
-          ~a:
-            [
-              a_id id;
-              a_contenteditable `True;
-              a_class [ "text-4xl border px-4" ];
-              Unsafe.string_attrib "@keydown.enter.prevent" "";
-              Unsafe.string_attrib "x-text" "count";
-              Unsafe.string_attrib "x-on:blur"
-                (Fmt.str
-                   "let rawValue = parseInt($el.innerText.replace(/[^0-9-]/g, \
-                    '')) || 0; count = Math.max(%d, Math.min(%d, rawValue)); \
-                    $el.innerText = count;"
-                   min_value max_value);
-              Unsafe.string_attrib "x-init" "$el.innerText = count";
-            ]
-          [];
-        span ~a:[ a_class [ "text-4xl" ] ] [ txt figure_unit ];
-        button_component
-          ~attribs:
-            [
-              a_button_type `Button;
-              Unsafe.string_attrib "x-on:click"
-                (Fmt.str "if (count < %d) count = count + %d" max_value step);
-            ]
-          ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
-          ~btn_type:`Primary_outlined ();
+        div
+          ~a:[ a_class [ "flex space-x-2 my-2" ] ]
+          [
+            button_component
+              ~attribs:
+                [
+                  a_button_type `Button;
+                  Unsafe.string_attrib "x-on:click"
+                    (Fmt.str "if (count > %d) count = count - %d" min_value step);
+                ]
+              ~content:(i ~a:[ a_class [ "fa-solid fa-minus" ] ] [])
+              ~btn_type:`Danger_outlined ();
+            span
+              ~a:
+                [
+                  a_id id;
+                  a_contenteditable `True;
+                  a_class [ "text-4xl border px-4" ];
+                  Unsafe.string_attrib "@keydown.enter.prevent" "";
+                  Unsafe.string_attrib "x-text" "count";
+                  Unsafe.string_attrib "x-on:blur"
+                    (Fmt.str
+                       "let rawValue = \
+                        parseInt($el.innerText.replace(/[^0-9-]/g, '')) || 0; \
+                        count = Math.max(%d, Math.min(%d, rawValue)); \
+                        $el.innerText = count;"
+                       min_value max_value);
+                  Unsafe.string_attrib "x-init" "$el.innerText = count";
+                ]
+              [];
+            span ~a:[ a_class [ "text-4xl" ] ] [ txt figure_unit ];
+            button_component
+              ~attribs:
+                [
+                  a_button_type `Button;
+                  Unsafe.string_attrib "x-on:click"
+                    (Fmt.str "if (count < %d) count = count + %d" max_value step);
+                ]
+              ~content:(i ~a:[ a_class [ "fa-solid fa-plus" ] ] [])
+              ~btn_type:`Primary_outlined ();
+          ];
       ])
 
 let display_banner = function

@@ -5,7 +5,7 @@ let create_block instance_name total_free_space =
       ~a:
         [
           a_id "block-create";
-          a_class [ "w-full mx-auto" ];
+          a_class [ "w-full mx-auto py-2" ];
           Unsafe.string_attrib "hx-post" "/api/block/create";
           Unsafe.string_attrib "hx-encoding" "multipart/form-data";
           Unsafe.string_attrib "hx-include" "#molly-csrf";
@@ -46,7 +46,7 @@ let create_block instance_name total_free_space =
                  ];
              ]);
         div
-          ~a:[ a_class [ "my-6" ] ]
+          ~a:[ a_class [ "my-2" ] ]
           [
             Ui.button_component
               ~attribs:[ a_id "create-block-button"; a_button_type `Submit ]
