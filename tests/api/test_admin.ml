@@ -21,7 +21,6 @@ let setup_admin_and_user ?(user_active = true) store =
   let admin, session_cookie = make_admin in
   let target_user, _ = make_user ~active:user_active () in
   Storage.add_user store admin;
-  Controller.Session.add_session admin.uuid session_cookie;
   Storage.add_user store target_user;
   let csrf = make_csrf_token ~session_cookie:session_cookie.value () in
   (admin, session_cookie.value, csrf, target_user)
@@ -29,7 +28,6 @@ let setup_admin_and_user ?(user_active = true) store =
 let setup_admin_only store =
   let admin, session_cookie = make_admin in
   Storage.add_user store admin;
-  Controller.Session.add_session admin.uuid session_cookie;
   let csrf = make_csrf_token ~session_cookie:session_cookie.value () in
   (admin, session_cookie.value, csrf)
 

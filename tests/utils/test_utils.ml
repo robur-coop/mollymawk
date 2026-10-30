@@ -332,12 +332,20 @@ let eq_config (config_1 : Models.Configuration.t Utils.LM.t)
     (config_2 : Models.Configuration.t Utils.LM.t) =
   Utils.LM.equal eq_config_pair config_1 config_2
 
+let eq_cookie (c1 : Models.User.cookie) (c2 : Models.User.cookie) =
+  String.equal c1.value c2.value
+  && Int.equal c1.expires_in c2.expires_in
+  && Ptime.equal c1.created_at c2.created_at
+  && Ptime.equal c1.last_access c2.last_access
+  && Option.equal String.equal c1.user_agent c2.user_agent
+
 let eq_user_pair (u1 : Models.User.user) (u2 : Models.User.user) =
   let {
     Models.User.name = n1;
     email = e1;
     password = p1;
     uuid = id1;
+    cookies = c1;
     active = a1;
     super_user = s1;
     updated_at = uat1;
@@ -353,6 +361,7 @@ let eq_user_pair (u1 : Models.User.user) (u2 : Models.User.user) =
     email = e2;
     password = p2;
     uuid = id2;
+    cookies = c2;
     active = a2;
     super_user = s2;
     updated_at = uat2;
@@ -366,6 +375,7 @@ let eq_user_pair (u1 : Models.User.user) (u2 : Models.User.user) =
   in
   Vmm_core.Name.Label.equal n1 n2
   && Mrmime.Mailbox.equal e1 e2 && String.equal p1 p2 && Uuidm.equal id1 id2
+  && Utils.SM.equal eq_cookie c1 c2
   && Bool.equal a1 a2 && Bool.equal s1 s2 && Ptime.equal uat1 uat2
   && Ptime.equal cat1 cat2
   && Option.equal Ptime.equal ev1 ev2
