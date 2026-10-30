@@ -593,9 +593,8 @@ module Builder_web = struct
 
   let fetch_unikernel_jobs _happy_eyeballs = []
 
-  let fetch_unikernel_binary_image _happy_eyeballs ~job:_ ~version:_ push_chunks
+  let fetch_unikernel_binary_image _happy_eyeballs ~job:_ ~version:_
       =
-    push_chunks None;
     Error (`Msg "Mock happy_eyeballs: no network")
 end
 
@@ -620,7 +619,7 @@ module Albatross_client = struct
     if is_failing configuration then Error (state, "albatross failure")
     else Ok state
 
-  let query _tcp t ~domain ?(name = dot_name) ?push:_ cmd =
+  let query _tcp t ~domain ?(name = dot_name) ?source:_ cmd =
     let vmm_name =
       Vmm_core.Name.make (Vmm_core.Name.Path.of_label domain) name
     in

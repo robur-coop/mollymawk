@@ -373,11 +373,11 @@ let send_push t tls_flow source =
     t.status <- Status.update t.status (Status.make `Network err);
     Error err
 
-let raw_query tcp t ?(name = Vmm_core.Name.root) certificates cmd ?push f =
+let raw_query tcp t ?(name = Vmm_core.Name.root) certificates cmd ?source f =
   let config_name = Models.Configuration.name_to_str t.configuration.name in
   let* tls_flow = connect_tls tcp t certificates in
   let push_res =
-    match push with
+    match source with
     | None -> Ok ()
     | Some source -> send_push t tls_flow source
   in
@@ -477,11 +477,11 @@ let certs t domain name cmd =
       msg)
     (Result.map (fun c -> (vmm_name, c)) (gen_cert t ~domain cmd name))
 
-let query tcp t ~domain ?(name = dot_name) ?push cmd =
+let query tcp t ~domain ?(name = dot_name) ?source cmd =
   match certs t domain name cmd with
   | Error str -> Error str
   | Ok (vmm_name, certificates) ->
-      raw_query tcp t ~name:vmm_name certificates cmd ?push reply
+      raw_query tcp t ~name:vmm_name certificates cmd ?source reply
 
 let query_console tcp t ~domain ~name f =
   let cmd = `Console_cmd (`Console_subscribe (`Count 40)) in

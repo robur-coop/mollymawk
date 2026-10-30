@@ -18,4 +18,5 @@
   ipaddr
   ohex
   emile
-  tyxml))
+  tyxml
+  flux))
