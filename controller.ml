@@ -116,56 +116,7 @@ let query_param req name =
   | [] -> Error (Fmt.str "Couldn't find %s in query params" name)
 
 module Session = struct
-  type t = { mutable sessions : (Uuidm.t * Models.User.cookie) Utils.SM.t }
-
   let session_cookie = "molly_session"
-  let state = { sessions = Utils.SM.empty }
-
-  let add_session user_uuid (cookie : Models.User.cookie) =
-    state.sessions <-
-      Utils.SM.add cookie.value (user_uuid, cookie) state.sessions
-
-  let remove_session cookie_value =
-    state.sessions <- Utils.SM.remove cookie_value state.sessions
-
-  let find_session cookie_value = Utils.SM.find_opt cookie_value state.sessions
-
-  let update_cookie_usage (cookie : Models.User.cookie) user_agent now =
-    let cookie = { cookie with user_agent; last_access = now } in
-    state.sessions <-
-      Utils.SM.update cookie.value
-        (function Some (uuid, _) -> Some (uuid, cookie) | None -> None)
-        state.sessions
-
-  let user_sessions user_uuid =
-    Utils.SM.fold
-      (fun _ (uuid, (cookie : Models.User.cookie)) acc ->
-        if Uuidm.equal uuid user_uuid then Utils.SM.add cookie.value cookie acc
-        else acc)
-      state.sessions Utils.SM.empty
-
-  let close_other_sessions user_uuid active_cookie_value =
-    state.sessions <-
-      Utils.SM.filter
-        (fun _ (uuid, (cookie : Models.User.cookie)) ->
-          (not (Uuidm.equal uuid user_uuid))
-          || String.equal cookie.value active_cookie_value)
-        state.sessions
-
-  let prune_expired_sessions now =
-    state.sessions <-
-      Utils.SM.filter
-        (fun _ (_, (cookie : Models.User.cookie)) ->
-          Models.User.is_valid_cookie cookie now)
-        state.sessions
-
-  let remove_user_sessions user_uuid =
-    state.sessions <-
-      Utils.SM.filter
-        (fun _ (uuid, _) -> not (Uuidm.equal uuid user_uuid))
-        state.sessions
-
-  let reset_state () = state.sessions <- Utils.SM.empty
 
   let session : (env, string) Vifu.Middleware.t =
     Vifu.Middlewares.v ~name:session_cookie @@ fun req _target server _env ->
@@ -186,24 +137,25 @@ module Session = struct
 
   let validate_user_session ?(require_admin = false) req storage server =
     let store = Vifu.Server.device storage server in
-    match Option.bind (Vifu.Request.get session req) find_session with
+    match
+      Option.bind (Vifu.Request.get session req) (Storage.find_by_cookie store)
+    with
     | None -> Error "No molly-session in cookie header. User not found"
-    | Some (user_uuid, cookie) -> (
-        match Storage.find_by_uuid store user_uuid with
-        | None -> Error "User not found"
-        | Some user ->
-            if not (Models.User.is_valid_cookie cookie (now ())) then
-              Error "Cookie expired."
-            else (
-              update_cookie_usage cookie
-                (Vifu.Headers.get (Vifu.Request.headers req) "User-Agent")
-                (now ());
-              if not user.active then Error "User account is deactivated"
-              else if require_admin && not user.super_user then
-                Error
-                  "You don't have the necessary permissions to access this \
-                   service."
-              else Ok (user, cookie)))
+    | Some (user, cookie) ->
+        if not (Models.User.is_valid_cookie cookie (now ())) then (
+          Storage.remove_session store cookie.value;
+          Error "Cookie expired.")
+        else
+          let user, cookie =
+            Storage.update_cookie_usage store cookie
+              (Vifu.Headers.get (Vifu.Request.headers req) "User-Agent")
+              (now ()) user
+          in
+          if not user.active then Error "User account is deactivated"
+          else if require_admin && not user.super_user then
+            Error
+              "You don't have the necessary permissions to access this service."
+          else Ok (user, cookie)
 end
 
 let redirect_to_page ~path ?(clear_session = false) ?(with_error = false)
@@ -372,9 +324,10 @@ module Auth = struct
       (Guest_layout.guest_layout ~page_title:"Sign in" (Sign_in.login_page csrf))
       req server env
 
-  let set_cookie_header cookie =
+  let set_cookie_header (cookie : Models.User.cookie) =
     let cookie_value =
-      Session.session_cookie ^ "=" ^ cookie ^ ";Path=/;HttpOnly=true"
+      Fmt.str "%s=%s;Path=/;Max-Age=%d;HttpOnly=true" Session.session_cookie
+        cookie.value cookie.expires_in
     in
     [ ("Set-Cookie", cookie_value); ("location", "/dashboard") ]
 
@@ -413,15 +366,12 @@ module Auth = struct
                     ~created_at:(now ()) ~active ~super_user ~user_agent
                 in
                 Storage.add_user storage user;
-                Session.add_session user.uuid cookie;
                 match Store.write_data storage env.block with
                 | Ok () ->
-                    api_response
-                      ~headers:(set_cookie_header cookie.value)
+                    api_response ~headers:(set_cookie_header cookie)
                       ~title:"Success" ~data:"Registration successful" `OK req
                 | Error (`Msg err) ->
                     Storage.delete_user storage user;
-                    Session.remove_session cookie.value;
                     api_response ~title:"Failure" ~data:err
                       `Internal_server_error req)))
 
@@ -447,21 +397,26 @@ module Auth = struct
               with
               | Error (`Msg err) ->
                   api_response ~title:"Failure" ~data:err `Bad_request req
-              | Ok (user, cookie) ->
-                  Session.prune_expired_sessions (now ());
-                  Session.add_session user.uuid cookie;
-                  api_response
-                    ~headers:(set_cookie_header cookie.value)
-                    ~title:"Success" ~data:"Login successful" `OK req))
+              | Ok (user, cookie) -> (
+                  Storage.update_user storage user;
+                  match Store.write_data storage env.block with
+                  | Ok () ->
+                      api_response ~headers:(set_cookie_header cookie)
+                        ~title:"Success" ~data:"Login successful" `OK req
+                  | Error (`Msg err) ->
+                      Storage.remove_session storage cookie.value;
+                      api_response ~title:"Failure" ~data:err
+                        `Internal_server_error req)))
 
   let logout_user req server env =
     with_user_cookie_api ~error_title:"Failure" ~error_status:`Unauthorized req
       server (fun _user session_cookie ->
+        let storage = Vifu.Server.device storage server in
         with_json_csrf req env
           ~csrf_of:(fun (f : Models.Close_sessions.t) -> f.molly_csrf)
           (fun (_ : Models.Close_sessions.t) ->
-            Session.remove_session session_cookie.value;
-            api_response ~title:"Success" ~data:"Logout successful" `OK req))
+            Storage.remove_session storage session_cookie.value;
+            write_data ~success_msg:"Logout successful" storage env req))
 
   let update_password req server env =
     with_user_cookie_api ~error_title:"Failure" ~error_status:`Unauthorized req
@@ -501,32 +456,33 @@ module Auth = struct
   let close_all_sessions req server env =
     with_user_cookie_api ~error_title:"Failure" ~error_status:`Unauthorized req
       server (fun user session_cookie ->
+        let storage = Vifu.Server.device storage server in
         with_json_csrf req env
           ~csrf_of:(fun (f : Models.Close_sessions.t) -> f.molly_csrf)
           (fun (_ : Models.Close_sessions.t) ->
-            Session.close_other_sessions user.uuid session_cookie.value;
-            api_response ~title:"Success"
-              ~data:"Closed all sessions successfully" `OK req))
+            Storage.close_other_sessions storage user.uuid session_cookie.value;
+            write_data ~success_msg:"Closed all sessions successfully" storage
+              env req))
 
   let close_session req server env =
     with_user_cookie_api ~error_title:"Failure" ~error_status:`Unauthorized req
       server (fun _user _session_cookie ->
+        let storage = Vifu.Server.device storage server in
         with_json_csrf req env
           ~csrf_of:(fun (f : Models.Close_session.t) -> f.molly_csrf)
           (fun ({ session_value; _ } : Models.Close_session.t) ->
-            Session.remove_session session_value;
-            api_response ~title:"Success" ~data:"Session closed successfully"
-              `OK req))
+            Storage.remove_session storage session_value;
+            write_data ~success_msg:"Session closed successfully" storage env
+              req))
 
   let account_page req server env =
     with_user_cookie_page req server (fun user cookie ->
         let csrf = generate_csrf_token env req in
-        let sessions = Session.user_sessions user.uuid in
         page_response
           ~headers:[ ("X-MOLLY-CSRF", csrf) ]
           (Dashboard.dashboard_layout ~csrf user ~page_title:"Account"
              ~content:
-               (User_account.user_account_layout user sessions
+               (User_account.user_account_layout user user.cookies
                   ~active_cookie_value:cookie.value (now ()))
              ())
           req server env)
@@ -2159,6 +2115,8 @@ module Albatross_admin = struct
                             api_response ~title:"Success"
                               ~data:"Configuration updated successfully" `OK req
                         | Error (`Msg err) ->
+                            Storage.delete_configuration store
+                              configuration_settings.name;
                             api_response ~title:"Internal Server Error"
                               ~data:err `Internal_server_error req))
                 | Error (_, err) ->
@@ -2474,7 +2432,6 @@ module Admin = struct
                   `Not_found req
             | Some user -> (
                 Storage.delete_user store user;
-                Session.remove_user_sessions user.uuid;
                 match Store.write_data store env.block with
                 | Ok () ->
                     api_response ~title:"Success"
@@ -2911,6 +2868,9 @@ module Scheduler = struct
       Logs.info (fun m -> m "Next background update in %d seconds" delay);
       Mkernel.sleep (Int64.to_int (Duration.of_sec delay));
       (try
+         (* prune expired cookie sessions everyday *)
+         Logs.info (fun m -> m "Pruning expired sessions...");
+         ignore (Storage.prune_expired_sessions store (now ()));
          Logs.info (fun m -> m "Starting background update...");
          run_background_update_check he (Storage.users store) tcp
            (Storage.email store) !albatross_instances_ref

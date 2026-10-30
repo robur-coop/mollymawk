@@ -261,6 +261,9 @@ let check_login_endpoint () =
     "Sets session cookie" true
     (String.includes ~affix:"Set-Cookie: molly_session=" resp);
   Alcotest.(check bool)
+    "Sets Max-Age on session cookie" true
+    (String.includes ~affix:"Max-Age=604800" resp);
+  Alcotest.(check bool)
     "Redirects to dashboard" true
     (String.includes ~affix:"location: /dashboard"
        (String.lowercase_ascii resp));
@@ -269,7 +272,7 @@ let check_login_endpoint () =
     (String.includes ~affix:"Login successful" resp);
   Alcotest.(check bool)
     "Session recorded in storage" true
-    (not (Utils.SM.is_empty (Controller.Session.user_sessions user.uuid)))
+    (not (Utils.SM.is_empty (Storage.user_sessions store user.uuid)))
 
 let check_logout_endpoint () =
   let store = init_mock_store () in
@@ -287,7 +290,7 @@ let check_logout_endpoint () =
     (String.includes ~affix:"Logout successful" resp);
   Alcotest.(check bool)
     "Session cookie removed after logout" true
-    (Option.is_none (Controller.Session.find_session session_cookie))
+    (Option.is_none (Storage.find_by_cookie store session_cookie))
 
 let check_update_password_endpoint () =
   let store = init_mock_store () in
@@ -332,7 +335,7 @@ let check_close_sessions_endpoint () =
       ~session_cookie:Test_utils.session_cookie ~csrf_token:login_csrf ()
   in
   let _login_resp = query_endpoint login_req in
-  let user_sessions = Controller.Session.user_sessions user.uuid in
+  let user_sessions = Storage.user_sessions store user.uuid in
   let session_cookie_2 =
     (Utils.SM.fold
        (fun _ (c : Models.User.cookie) acc ->
@@ -356,7 +359,7 @@ let check_close_sessions_endpoint () =
   Alcotest.(check bool)
     "Closed all sessions message" true
     (String.includes ~affix:"Closed all sessions successfully" resp);
-  let updated_sessions = Controller.Session.user_sessions user.uuid in
+  let updated_sessions = Storage.user_sessions store user.uuid in
   Alcotest.(check bool)
     "Current session still active" true
     (Utils.SM.mem session_cookie_1 updated_sessions);
@@ -378,7 +381,7 @@ let check_close_session_endpoint () =
       ~session_cookie:Test_utils.session_cookie ~csrf_token:login_csrf ()
   in
   let _login_resp = query_endpoint login_req in
-  let user_sessions = Controller.Session.user_sessions user.uuid in
+  let user_sessions = Storage.user_sessions store user.uuid in
   let session_cookie_2 =
     (Utils.SM.fold
        (fun _ (c : Models.User.cookie) acc ->
@@ -405,7 +408,7 @@ let check_close_session_endpoint () =
   Alcotest.(check bool)
     "Session closed message" true
     (String.includes ~affix:"Session closed successfully" resp);
-  let updated_sessions = Controller.Session.user_sessions user.uuid in
+  let updated_sessions = Storage.user_sessions store user.uuid in
   Alcotest.(check bool)
     "Current session still active" true
     (Utils.SM.mem session_cookie_1 updated_sessions);
@@ -503,10 +506,10 @@ let check_login_prunes_expired_cookies () =
   let expired_cookie =
     Models.User.generate_cookie ~expires_in:86400 two_days_ago None ()
   in
-  Controller.Session.add_session user.uuid expired_cookie;
+  Storage.add_session store user.uuid expired_cookie;
   Alcotest.(check bool)
     "Expired cookie is in sessions before login" true
-    (Option.is_some (Controller.Session.find_session expired_cookie.value));
+    (Option.is_some (Storage.find_by_cookie store expired_cookie.value));
   let login_csrf = Test_utils.make_csrf_token () in
   let login_body =
     Fmt.str
@@ -523,25 +526,51 @@ let check_login_prunes_expired_cookies () =
     (String.starts_with ~prefix:"HTTP/1.1 200 OK" resp);
   Alcotest.(check bool)
     "Expired cookie was pruned after login" false
-    (Option.is_some (Controller.Session.find_session expired_cookie.value));
+    (Option.is_some (Storage.find_by_cookie store expired_cookie.value));
   Alcotest.(check bool)
     "Valid session_cookie_1 is retained" true
-    (Option.is_some (Controller.Session.find_session session_cookie_1))
+    (Option.is_some (Storage.find_by_cookie store session_cookie_1))
+
+let check_lazy_prune_on_expired_access () =
+  let store = init_mock_store () in
+  let user, _session_cookie, _csrf = setup_user store in
+  let now = Utils.now () in
+  let two_days_ago =
+    Option.get (Ptime.sub_span now (Ptime.Span.of_int_s (86400 * 2)))
+  in
+  let expired_cookie =
+    Models.User.generate_cookie ~expires_in:86400 two_days_ago None ()
+  in
+  Storage.add_session store user.uuid expired_cookie;
+  Alcotest.(check bool)
+    "Expired cookie is in sessions before access" true
+    (Option.is_some (Storage.find_by_cookie store expired_cookie.value));
+  let req =
+    make_get_request ~path:"/account" ~session_cookie:expired_cookie.value ()
+  in
+  let resp = query_endpoint req in
+  Alcotest.(check bool)
+    "Expired cookie access redirects" true
+    (String.starts_with ~prefix:"HTTP/1.1 302 Found" resp);
+  Alcotest.(check bool)
+    "Expired cookie was lazily pruned from storage" false
+    (Option.is_some (Storage.find_by_cookie store expired_cookie.value))
 
 let check_update_cookie_usage_updates_last_access () =
   let store = init_mock_store () in
   let _user, session_cookie, _csrf = setup_user store in
-  let initial_cookie =
-    Option.get (Controller.Session.find_session session_cookie) |> snd
+  let user, initial_cookie =
+    Option.get (Storage.find_by_cookie store session_cookie)
   in
   let later =
     Option.get
       (Ptime.add_span initial_cookie.last_access (Ptime.Span.of_int_s 300))
   in
-  Controller.Session.update_cookie_usage initial_cookie (Some "New-User-Agent")
-    later;
+  ignore
+    (Storage.update_cookie_usage store initial_cookie (Some "New-User-Agent")
+       later user);
   let updated_cookie =
-    Option.get (Controller.Session.find_session session_cookie) |> snd
+    Option.get (Storage.find_by_cookie store session_cookie) |> snd
   in
   Alcotest.(check bool)
     "Last access timestamp updated" true
@@ -589,6 +618,9 @@ let tests =
     ( "Login prunes expired session cookies",
       `Quick,
       check_login_prunes_expired_cookies );
+    ( "Lazy prune on expired cookie access",
+      `Quick,
+      check_lazy_prune_on_expired_access );
     ( "Update cookie usage updates last_access and user_agent",
       `Quick,
       check_update_cookie_usage_updates_last_access );

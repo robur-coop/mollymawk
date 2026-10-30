@@ -312,6 +312,7 @@ module User = struct
     email_verified : Ptime.t option;
     password : string;
     uuid : Uuidm.t;
+    cookies : cookie Utils.SM.t;
     created_at : Ptime.t;
     updated_at : Ptime.t;
     email_verification_uuid : Uuidm.t option;
@@ -322,6 +323,31 @@ module User = struct
   }
 
   let week = 604800 (* a week = 7 days * 24 hours * 60 minutes * 60 seconds *)
+
+  let cookie_json =
+    let open Jsont in
+    let make value expires_in created_at last_access user_agent : cookie =
+      { value; expires_in; created_at; last_access; user_agent }
+    in
+    Object.map make
+    |> Object.mem "value" string ~enc:(fun (c : cookie) -> c.value)
+    |> Object.mem "expires_in" int ~enc:(fun (c : cookie) -> c.expires_in)
+    |> Object.mem "created_at" Utils.TimeHelper.ptime_json
+         ~enc:(fun (c : cookie) -> c.created_at)
+    |> Object.mem "last_access" Utils.TimeHelper.ptime_json
+         ~enc:(fun (c : cookie) -> c.last_access)
+    |> opt_nullable_mem "user_agent" string ~enc:(fun (c : cookie) ->
+        c.user_agent)
+    |> Object.finish
+
+  let cookies_map_json =
+    Jsont.map
+      ~dec:(fun cs ->
+        List.fold_left
+          (fun acc (c : cookie) -> Utils.SM.add c.value c acc)
+          Utils.SM.empty cs)
+      ~enc:(fun m -> Utils.SM.fold (fun _ c acc -> c :: acc) m [])
+      (Jsont.list cookie_json)
 
   let scaling_policy_json =
     let open Jsont in
@@ -389,8 +415,8 @@ module User = struct
 
   let user_json =
     let open Jsont in
-    let make name email email_verified password uuid created_at updated_at
-        email_verification_uuid active super_user unikernel_updates
+    let make name email email_verified password uuid cookies created_at
+        updated_at email_verification_uuid active super_user unikernel_updates
         scaling_policies =
       {
         name;
@@ -398,6 +424,7 @@ module User = struct
         email_verified;
         password;
         uuid;
+        cookies;
         created_at;
         updated_at;
         email_verification_uuid;
@@ -414,6 +441,8 @@ module User = struct
          ~enc:(fun u -> u.email_verified)
     |> Object.mem "password" string ~enc:(fun u -> u.password)
     |> Object.mem "uuid" Utils.Json.uuid_json ~enc:(fun u -> u.uuid)
+    |> Object.mem "cookies" cookies_map_json ~dec_absent:Utils.SM.empty
+         ~enc:(fun u -> u.cookies)
     |> Object.mem "created_at" Utils.TimeHelper.ptime_json ~enc:(fun u ->
         u.created_at)
     |> Object.mem "updated_at" Utils.TimeHelper.ptime_json ~enc:(fun u ->
@@ -460,6 +489,7 @@ module User = struct
         email_verified = None;
         password;
         uuid;
+        cookies = Utils.SM.singleton session.value session;
         created_at;
         updated_at = created_at;
         email_verification_uuid = None;
@@ -470,15 +500,16 @@ module User = struct
       },
       session )
 
-  let update_user user ?name ?email ?email_verified ?password ?updated_at
-      ?email_verification_uuid ?active ?super_user ?unikernel_updates
-      ?scaling_policies () =
+  let update_user user ?name ?email ?email_verified ?password ?cookies
+      ?updated_at ?email_verification_uuid ?active ?super_user
+      ?unikernel_updates ?scaling_policies () =
     {
       user with
       name = Option.value ~default:user.name name;
       email = Option.value ~default:user.email email;
       email_verified = Option.value ~default:user.email_verified email_verified;
       password = Option.value ~default:user.password password;
+      cookies = Option.value ~default:user.cookies cookies;
       updated_at = Option.value ~default:user.updated_at updated_at;
       email_verification_uuid =
         Option.value ~default:user.email_verification_uuid
@@ -530,7 +561,14 @@ module User = struct
             let new_session =
               generate_cookie ~expires_in:week now user_agent ()
             in
-            Ok (u, new_session)
+            let valid_cookies =
+              Utils.SM.filter (fun _ c -> is_valid_cookie c now) u.cookies
+            in
+            let cookies =
+              Utils.SM.add new_session.value new_session valid_cookies
+            in
+            let updated_user = update_user u ~cookies () in
+            Ok (updated_user, new_session)
           else Error (`Msg "Invalid email or password.")
 end
 

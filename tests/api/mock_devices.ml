@@ -133,7 +133,6 @@ let setup_user ?name ?email ?(password = "Password123!") store =
       ~user_agent:(Some "Alcotest-client")
   in
   Storage.add_user store user;
-  Controller.Session.add_session user.uuid cookie;
   let session_cookie = cookie.value in
   (user, session_cookie, Test_utils.make_csrf_token ~session_cookie ())
 

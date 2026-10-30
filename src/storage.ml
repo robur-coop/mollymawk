@@ -13,6 +13,7 @@ type t = {
   (* these fields below are not persisted to disk*)
   mutable by_name : Uuidm.t Utils.LM.t;
   mutable by_email : Uuidm.t Utils.SM.t;
+  mutable by_cookie : Uuidm.t Utils.SM.t;
   mutable by_verification_token : Uuidm.t Utils.SM.t;
 }
 
@@ -26,6 +27,10 @@ let email_to_key (email : Mrmime.Mailbox.t) =
 let register_user_indexes t (u : Models.User.user) =
   t.by_name <- Utils.LM.add u.name u.uuid t.by_name;
   t.by_email <- Utils.SM.add (email_to_key u.email) u.uuid t.by_email;
+  t.by_cookie <-
+    Utils.SM.fold
+      (fun _ (c : Models.User.cookie) acc -> Utils.SM.add c.value u.uuid acc)
+      u.cookies t.by_cookie;
   match u.email_verification_uuid with
   | Some ev ->
       t.by_verification_token <-
@@ -35,6 +40,10 @@ let register_user_indexes t (u : Models.User.user) =
 let unregister_user_indexes t (u : Models.User.user) =
   t.by_name <- Utils.LM.remove u.name t.by_name;
   t.by_email <- Utils.SM.remove (email_to_key u.email) t.by_email;
+  t.by_cookie <-
+    Utils.SM.fold
+      (fun _ (c : Models.User.cookie) acc -> Utils.SM.remove c.value acc)
+      u.cookies t.by_cookie;
   match u.email_verification_uuid with
   | Some ev ->
       t.by_verification_token <-
@@ -50,6 +59,7 @@ let create ?(users = Utils.UM.empty) ?(configurations = Utils.LM.empty) ?email
       email;
       by_name = Utils.LM.empty;
       by_email = Utils.SM.empty;
+      by_cookie = Utils.SM.empty;
       by_verification_token = Utils.SM.empty;
     }
   in
@@ -186,3 +196,70 @@ let update_user t (user : Models.User.user) =
   | None -> ());
   t.users <- Utils.UM.add user.uuid user t.users;
   register_user_indexes t user
+
+let find_by_cookie t cookie_value =
+  match Utils.SM.find_opt cookie_value t.by_cookie with
+  | Some uuid -> (
+      match Utils.UM.find_opt uuid t.users with
+      | Some user -> (
+          match Utils.SM.find_opt cookie_value user.cookies with
+          | Some c -> Some (user, c)
+          | None -> None)
+      | None -> None)
+  | None -> None
+
+let add_session t user_uuid (cookie : Models.User.cookie) =
+  match Utils.UM.find_opt user_uuid t.users with
+  | None -> ()
+  | Some user ->
+      let cookies = Utils.SM.add cookie.value cookie user.cookies in
+      update_user t (Models.User.update_user user ~cookies ())
+
+let remove_session t cookie_value =
+  match Utils.SM.find_opt cookie_value t.by_cookie with
+  | None -> ()
+  | Some uuid -> (
+      match Utils.UM.find_opt uuid t.users with
+      | None -> t.by_cookie <- Utils.SM.remove cookie_value t.by_cookie
+      | Some user ->
+          let cookies = Utils.SM.remove cookie_value user.cookies in
+          update_user t (Models.User.update_user user ~cookies ()))
+
+let update_cookie_usage t (cookie : Models.User.cookie) user_agent now
+    (user : Models.User.user) =
+  let cookie = { cookie with user_agent; last_access = now } in
+  let cookies = Utils.SM.add cookie.value cookie user.cookies in
+  let user = Models.User.update_user user ~cookies () in
+  update_user t user;
+  (user, cookie)
+
+let user_sessions t user_uuid =
+  match Utils.UM.find_opt user_uuid t.users with
+  | None -> Utils.SM.empty
+  | Some user -> user.cookies
+
+let close_other_sessions t user_uuid active_cookie_value =
+  match Utils.UM.find_opt user_uuid t.users with
+  | None -> ()
+  | Some user ->
+      let cookies =
+        Utils.SM.filter
+          (fun k _ -> String.equal k active_cookie_value)
+          user.cookies
+      in
+      update_user t (Models.User.update_user user ~cookies ())
+
+let prune_expired_sessions t now =
+  let pruned = ref false in
+  Utils.UM.iter
+    (fun _ (user : Models.User.user) ->
+      let valid_cookies =
+        Utils.SM.filter
+          (fun _ cookie -> Models.User.is_valid_cookie cookie now)
+          user.cookies
+      in
+      if Utils.SM.cardinal valid_cookies <> Utils.SM.cardinal user.cookies then (
+        pruned := true;
+        update_user t (Models.User.update_user user ~cookies:valid_cookies ())))
+    t.users;
+  !pruned

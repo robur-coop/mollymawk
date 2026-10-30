@@ -43,4 +43,7 @@ let connect disk =
   match read_data disk with
   | Error (`Msg e) -> failwith e
   | Ok (users, configurations, email) ->
-      Storage.create ~users ~configurations ?email ()
+      let store = Storage.create ~users ~configurations ?email () in
+      if Storage.prune_expired_sessions store (Utils.now ()) then
+        ignore (write_data store disk);
+      store

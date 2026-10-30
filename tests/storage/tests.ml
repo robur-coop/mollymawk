@@ -299,7 +299,7 @@ let albatross_config_tests =
       check_multiple_valid_albatross_configs_with_different_names );
   ]
 
-let check_cookies_not_persisted_in_v10 () =
+let check_cookies_persisted_in_v10 () =
   let user = make_mock_user ~name:"user1" ~email:"user1@robur.coop" () in
   let json =
     Storage.t_to_json ~version:10
@@ -311,7 +311,7 @@ let check_cookies_not_persisted_in_v10 () =
       match Utils.Json.get "users" xs with
       | Some (Jsont.Array ([ Jsont.Object (u_fields, _) ], _)) ->
           Alcotest.(
-            check bool "cookies field completely omitted from JSON in v10" false
+            check bool "cookies field present in JSON in v10" true
               (Option.is_some (Utils.Json.get "cookies" u_fields)))
       | _ -> Alcotest.fail "Expected single user in users list")
   | _ -> Alcotest.fail "Expected assoc in storage json"
@@ -406,9 +406,7 @@ let check_discard_malformed_unikernel_update () =
 
 let cookie_tests =
   [
-    ( "Cookies are not persisted in v10 and omitted from disk",
-      `Quick,
-      check_cookies_not_persisted_in_v10 );
+    ("Cookies are persisted in v10", `Quick, check_cookies_persisted_in_v10);
     ( "Discard malformed unikernel updates",
       `Quick,
       check_discard_malformed_unikernel_update );
