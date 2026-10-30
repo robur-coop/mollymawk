@@ -398,7 +398,6 @@ module Auth = struct
               | Error (`Msg err) ->
                   api_response ~title:"Failure" ~data:err `Bad_request req
               | Ok (user, cookie) -> (
-                  ignore (Storage.prune_expired_sessions storage (now ()));
                   Storage.update_user storage user;
                   match Store.write_data storage env.block with
                   | Ok () ->
@@ -2869,6 +2868,9 @@ module Scheduler = struct
       Logs.info (fun m -> m "Next background update in %d seconds" delay);
       Mkernel.sleep (Int64.to_int (Duration.of_sec delay));
       (try
+         (* prune expired cookie sessions everyday *)
+         Logs.info (fun m -> m "Pruning expired sessions...");
+         ignore (Storage.prune_expired_sessions store (now ()));
          Logs.info (fun m -> m "Starting background update...");
          run_background_update_check he (Storage.users store) tcp
            (Storage.email store) !albatross_instances_ref
