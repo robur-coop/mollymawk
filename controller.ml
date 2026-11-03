@@ -347,12 +347,23 @@ let query_albatross_api ?(parse_error_status = `Internal_server_error) ?push tcp
       | Error (`String err) ->
           api_response ~title:"Error" ~data:err parse_error_status req)
 
-let write_data ?(success_msg = "Updated password successfully") storage env req
-    =
+let dashboard_page ?page_title user ~content req server env =
+  let csrf = generate_csrf_token env req in
+  page_response
+    ~headers:[ ("X-MOLLY-CSRF", csrf) ]
+    (Dashboard.dashboard_layout ~csrf user ?page_title ~content ())
+    req server env
+
+let write_data ?headers ?(error_title = "Failure") ?(on_ok = ignore)
+    ?(on_error = Fun.id) ?(success_msg = "Updated password successfully")
+    storage env req =
   match Store.write_data storage env.block with
-  | Ok () -> api_response ~title:"Success" ~data:success_msg `OK req
+  | Ok () ->
+      on_ok ();
+      api_response ?headers ~title:"Success" ~data:success_msg `OK req
   | Error (`Msg err) ->
-      api_response ~title:"Failure" ~data:err `Internal_server_error req
+      let data = on_error err in
+      api_response ~title:error_title ~data `Internal_server_error req
 
 module Auth = struct
   (* new users have no sessions yet *)
@@ -413,14 +424,11 @@ module Auth = struct
                     ~created_at:(now ()) ~active ~super_user ~user_agent
                 in
                 Storage.add_user storage user;
-                match Store.write_data storage env.block with
-                | Ok () ->
-                    api_response ~headers:(set_cookie_header cookie)
-                      ~title:"Success" ~data:"Registration successful" `OK req
-                | Error (`Msg err) ->
+                write_data ~headers:(set_cookie_header cookie)
+                  ~on_error:(fun err ->
                     Storage.delete_user storage user;
-                    api_response ~title:"Failure" ~data:err
-                      `Internal_server_error req)))
+                    err)
+                  ~success_msg:"Registration successful" storage env req)))
 
   let login_user req server env =
     let storage = Vifu.Server.device storage server in
@@ -444,16 +452,13 @@ module Auth = struct
               with
               | Error (`Msg err) ->
                   api_response ~title:"Failure" ~data:err `Bad_request req
-              | Ok (user, cookie) -> (
+              | Ok (user, cookie) ->
                   Storage.update_user storage user;
-                  match Store.write_data storage env.block with
-                  | Ok () ->
-                      api_response ~headers:(set_cookie_header cookie)
-                        ~title:"Success" ~data:"Login successful" `OK req
-                  | Error (`Msg err) ->
+                  write_data ~headers:(set_cookie_header cookie)
+                    ~on_error:(fun err ->
                       Storage.remove_session storage cookie.value;
-                      api_response ~title:"Failure" ~data:err
-                        `Internal_server_error req)))
+                      err)
+                    ~success_msg:"Login successful" storage env req))
 
   let logout_user req server env =
     with_user_cookie_api ~error_title:"Failure" ~error_status:`Unauthorized req
@@ -524,20 +529,15 @@ module Auth = struct
 
   let account_page req server env =
     with_user_cookie_page req server (fun user cookie ->
-        let csrf = generate_csrf_token env req in
-        page_response
-          ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Account"
-             ~content:
-               (User_account.user_account_layout user user.cookies
-                  ~active_cookie_value:cookie.value (now ()))
-             ())
+        dashboard_page ~page_title:"Account" user
+          ~content:
+            (User_account.user_account_layout user user.cookies
+               ~active_cookie_value:cookie.value (now ()))
           req server env)
 
   let account_usage req server env =
     with_user_cookie_page req server (fun user _cookie ->
         with_instance ~endpoint:"/usage" req server (fun albatross_inst ->
-            let csrf = generate_csrf_token env req in
             let blocks =
               Albatross_client.user_blocks_by_instance env.tcp albatross_inst
                 user.name
@@ -550,13 +550,10 @@ module Auth = struct
               Option.value ~default:Albatross_client.empty_policy
                 (Albatross_client.policy albatross_inst ~domain:user.name)
             in
-            page_response
-              ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-              (Dashboard.dashboard_layout ~csrf user ~page_title:"Usage"
-                 ~content:
-                   (Account_usage.account_usage_layout
-                      albatross_inst.configuration.name policy unikernels blocks)
-                 ())
+            dashboard_page ~page_title:"Usage" user
+              ~content:
+                (Account_usage.account_usage_layout
+                   albatross_inst.configuration.name policy unikernels blocks)
               req server env))
 end
 
@@ -569,14 +566,10 @@ module Email = struct
   let email_settings req server env =
     with_admin_cookie_page req server (fun user _cookie ->
         let store = Vifu.Server.device storage server in
-        let csrf = generate_csrf_token env req in
-        page_response
-          ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Email Settings"
-             ~content:
-               (Settings_page.settings_layout ~active_tab:Email
-                  (Email_config.email_config_layout (Storage.email store)))
-             ())
+        dashboard_page ~page_title:"Email Settings" user
+          ~content:
+            (Settings_page.settings_layout ~active_tab:Email
+               (Email_config.email_config_layout (Storage.email store)))
           req server env)
 
   let update_email_configuration req server env =
@@ -587,15 +580,10 @@ module Email = struct
             let store = Vifu.Server.device storage server in
             with_valid_email_config form req (fun email_settings ->
                 Storage.store_email store (Some email_settings);
-                match Store.write_data store env.block with
-                | Ok () ->
-                    api_response ~title:"Success"
-                      ~data:"Email settings verified and saved successfully" `OK
-                      req
-                | Error (`Msg err) ->
-                    api_response ~title:"Internal Server Error"
-                      ~data:(Fmt.str "Save failed: %s" err)
-                      `Internal_server_error req)))
+                write_data ~error_title:"Internal Server Error"
+                  ~on_error:(Fmt.str "Save failed: %s")
+                  ~success_msg:"Email settings verified and saved successfully"
+                  store env req)))
 
   let test_email_configuration req server env =
     with_admin_cookie_api req server (fun _user _cookie ->
@@ -688,17 +676,14 @@ module Block = struct
             let policy =
               Albatross_client.policy ~domain:user.name albatross_inst
             in
-            let csrf = generate_csrf_token env req in
-            page_response
-              ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-              (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:
-                   (String.capitalize_ascii
-                      (Models.Configuration.name_to_str user.name))
-                 ~content:
-                   (Block_index.block_index_layout
-                      albatross_inst.configuration.name blocks policy)
-                 ())
+            dashboard_page
+              ~page_title:
+                (String.capitalize_ascii
+                   (Models.Configuration.name_to_str user.name))
+              user
+              ~content:
+                (Block_index.block_index_layout
+                   albatross_inst.configuration.name blocks policy)
               req server env))
 
   let delete_block req server env =
@@ -860,7 +845,6 @@ module Unikernel = struct
   let dashboard req server env =
     with_user_cookie_page req server (fun user _cookie ->
         let albatross_instances = !(Vifu.Server.device albatross server) in
-        let csrf = generate_csrf_token env req in
         let unikernels_by_albatross_instance =
           Albatross_client.user_unikernels env.tcp albatross_instances user.name
         in
@@ -868,14 +852,11 @@ module Unikernel = struct
           Albatross_client.user_deceased_by_instance env.tcp albatross_instances
             user.name
         in
-        page_response
-          ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-          (Dashboard.dashboard_layout ~csrf user
-             ~content:
-               (Unikernel_index.unikernel_index_layout
-                  unikernels_by_albatross_instance
-                  deceased_unikernels_by_albatross_instance (now ()))
-             ())
+        dashboard_page user
+          ~content:
+            (Unikernel_index.unikernel_index_layout
+               unikernels_by_albatross_instance
+               deceased_unikernels_by_albatross_instance (now ()))
           req server env)
 
   let deploy_form req server env =
@@ -892,19 +873,14 @@ module Unikernel = struct
               Albatross_client.user_blocks_by_instance env.tcp albatross_inst
                 user.name
             in
-            let csrf = generate_csrf_token env req in
             match Albatross_client.policy albatross_inst ~domain:user.name with
             | Some user_policy ->
-                page_response
-                  ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-                  (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:"Deploy a Unikernel"
-                     ~content:
-                       (Unikernel_create.unikernel_create_layout ~user_policy
-                          unikernels_by_albatross_instance
-                          blocks_by_albatross_instance
-                          albatross_inst.configuration.name builder_jobs)
-                     ())
+                dashboard_page ~page_title:"Deploy a Unikernel" user
+                  ~content:
+                    (Unikernel_create.unikernel_create_layout ~user_policy
+                       unikernels_by_albatross_instance
+                       blocks_by_albatross_instance
+                       albatross_inst.configuration.name builder_jobs)
                   req server env
             | None ->
                 error_page_response ~title:"Resource Policy error"
@@ -975,7 +951,6 @@ module Unikernel = struct
                 error_page_response ~title:"Unikernel Not Found" ~data
                   `Not_found req
             | Ok unikernel ->
-                let csrf = generate_csrf_token env req in
                 let last_update_time =
                   Option.map
                     (fun (u : Models.User.unikernel_update) -> u.timestamp)
@@ -990,15 +965,12 @@ module Unikernel = struct
                   Albatross_client.user_max_allowed_unikernel_instances
                     albatross_inst user.name
                 in
-                page_response
-                  ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-                  (Dashboard.dashboard_layout ~csrf user
-                     ~content:
-                       (Unikernel_single.unikernel_single_layout ~unikernel_name
-                          ~instance_name:albatross_inst.configuration.name
-                          ~max_allowed unikernel ~last_update_time
-                          ~current_time:(now ()) scaling_policy)
-                     ())
+                dashboard_page user
+                  ~content:
+                    (Unikernel_single.unikernel_single_layout ~unikernel_name
+                       ~instance_name:albatross_inst.configuration.name
+                       ~max_allowed unikernel ~last_update_time
+                       ~current_time:(now ()) scaling_policy)
                   req server env))
 
   let unikernel_console req server env =
@@ -1184,18 +1156,15 @@ module Unikernel = struct
             in
             match pipeline with
             | Ok (Update_available (name, unikernel, build_comparison)) ->
-                let csrf = generate_csrf_token env req in
-                page_response
-                  ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-                  (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:(Vmm_core.Name.to_string name ^ " Update")
-                     ~content:
-                       (Unikernel_update.unikernel_update_layout
-                          ~instance_name:albatross_inst.configuration.name
-                          ~unikernel_name:
-                            (Models.Configuration.name_to_str unikernel_name)
-                          (name, unikernel) (now ()) build_comparison)
-                     ())
+                dashboard_page
+                  ~page_title:(Vmm_core.Name.to_string name ^ " Update")
+                  user
+                  ~content:
+                    (Unikernel_update.unikernel_update_layout
+                       ~instance_name:albatross_inst.configuration.name
+                       ~unikernel_name:
+                         (Models.Configuration.name_to_str unikernel_name)
+                       (name, unikernel) (now ()) build_comparison)
                   req server env
             | Ok (No_update_needed (name, uuid)) ->
                 Logs.info (fun m ->
@@ -1629,15 +1598,10 @@ module Unikernel = struct
                     Models.User.update_user user ~scaling_policies ()
                   in
                   Storage.update_user store user;
-                  match Store.write_data store env.block with
-                  | Ok () ->
-                      api_response ~title:"Success"
-                        ~data:"Unikernel scaling policy updated successfully."
-                        `OK req
-                  | Error (`Msg err) ->
-                      api_response ~title:"Internal Server Error"
-                        ~data:(Fmt.str "Failed to save scaling policy: %s" err)
-                        `Internal_server_error req
+                  write_data ~error_title:"Internal Server Error"
+                    ~on_error:(Fmt.str "Failed to save scaling policy: %s")
+                    ~success_msg:"Unikernel scaling policy updated successfully."
+                    store env req
                 in
                 match (form.should_scale, form.max_instances) with
                 | true, Some max_instances ->
@@ -1837,41 +1801,26 @@ module Albatross_admin = struct
             ~path:(construct_instance_redirect_url callback instance_name)
             req ()
         else
-          let csrf = generate_csrf_token env req in
-          page_response
-            ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-            (Dashboard.dashboard_layout ~csrf user ~page_title:"Choose instance"
-               ~content:
-                 (Albatross_instances.select_instance user albatross_instances
-                    callback)
-               ())
+          dashboard_page ~page_title:"Choose instance" user
+            ~content:
+              (Albatross_instances.select_instance user albatross_instances
+                 callback)
             req server env)
 
   let albatross_settings req server env =
     with_admin_cookie_page req server (fun user _cookie ->
         let albatross_instances = !(Vifu.Server.device albatross server) in
-        let csrf = generate_csrf_token env req in
-        page_response
-          ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:"Albatross Settings"
-             ~content:
-               (Settings_page.settings_layout ~active_tab:Albatross
-                  (Albatross_config.albatross_config_layout albatross_instances))
-             ())
+        dashboard_page ~page_title:"Albatross Settings" user
+          ~content:
+            (Settings_page.settings_layout ~active_tab:Albatross
+               (Albatross_config.albatross_config_layout albatross_instances))
           req server env)
 
   let view_albatross_error_logs req server env =
     with_admin_cookie_page req server (fun user _cookie ->
         with_instance req server (fun albatross_inst ->
-            let csrf = generate_csrf_token env req in
-            page_response
-              ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-              (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:"Albatross Errors"
-                 ~content:
-                   (Albatross_status.albatross_status_layout albatross_inst)
-                 ())
+            dashboard_page ~page_title:"Albatross Errors" user
+              ~content:(Albatross_status.albatross_status_layout albatross_inst)
               req server env))
 
   let retry_initializing_instance req server env =
@@ -1913,20 +1862,19 @@ module Albatross_admin = struct
                     | Error err ->
                         api_response ~title:"Bad Request" ~data:err `Bad_request
                           req
-                    | Ok () -> (
-                        match Store.write_data store env.block with
-                        | Ok () ->
+                    | Ok () ->
+                        write_data ~error_title:"Internal Server Error"
+                          ~on_ok:(fun () ->
                             albatross_instances :=
                               Utils.LM.update configuration_settings.name
                                 (fun _prev -> Some new_albatross_instance)
-                                !albatross_instances;
-                            api_response ~title:"Success"
-                              ~data:"Configuration updated successfully" `OK req
-                        | Error (`Msg err) ->
+                                !albatross_instances)
+                          ~on_error:(fun err ->
                             Storage.delete_configuration store
                               configuration_settings.name;
-                            api_response ~title:"Internal Server Error"
-                              ~data:err `Internal_server_error req))
+                            err)
+                          ~success_msg:"Configuration updated successfully"
+                          store env req)
                 | Error (_, err) ->
                     api_response ~title:"Internal Server Error" ~data:err
                       `Internal_server_error req)
@@ -1947,17 +1895,13 @@ module Albatross_admin = struct
             let store = Vifu.Server.device storage server in
             let albatross_instances = Vifu.Server.device albatross server in
             match Models.Configuration.name_of_str form.name with
-            | Ok name -> (
+            | Ok name ->
                 Storage.delete_configuration store name;
-                match Store.write_data store env.block with
-                | Ok () ->
+                write_data ~error_title:"Internal Server Error"
+                  ~on_ok:(fun () ->
                     albatross_instances :=
-                      Utils.LM.remove name !albatross_instances;
-                    api_response ~title:"Success"
-                      ~data:"Configuration delete successfully" `OK req
-                | Error (`Msg err) ->
-                    api_response ~title:"Internal Server Error" ~data:err
-                      `Internal_server_error req)
+                      Utils.LM.remove name !albatross_instances)
+                  ~success_msg:"Configuration delete successfully" store env req
             | Error (`Msg err) ->
                 api_response ~title:"Bad Request" ~data:err `Bad_request req))
 end
@@ -1978,13 +1922,9 @@ module Admin = struct
   let users req server env =
     with_admin_cookie_page req server (fun user _cookie ->
         let store = Vifu.Server.device storage server in
-        let csrf = generate_csrf_token env req in
-        page_response
-          ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Users"
-             ~content:
-               (Users_index.users_index_layout (Storage.users store) (now ()))
-             ())
+        dashboard_page ~page_title:"Users" user
+          ~content:
+            (Users_index.users_index_layout (Storage.users store) (now ()))
           req server env)
 
   let view_user (page : [ `Profile | `Unikernels | `Policy ]) req server env =
@@ -2001,16 +1941,12 @@ module Admin = struct
                 albatross_instances u.name
             in
             let current_time = now () in
-            let csrf = generate_csrf_token env req in
             let reply content =
-              page_response
-                ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-                (Dashboard.dashboard_layout ~csrf user
-                   ~page_title:
-                     (String.capitalize_ascii
-                        (Models.Configuration.name_to_str u.name))
-                   ~content ())
-                req server env
+              dashboard_page
+                ~page_title:
+                  (String.capitalize_ascii
+                     (Models.Configuration.name_to_str u.name))
+                user ~content req server env
             in
             match page with
             | `Profile ->
@@ -2056,18 +1992,15 @@ module Admin = struct
                   Albatross_client.policy_resource_avalaible albatross_inst
                 with
                 | Ok unallocated_resources ->
-                    let csrf = generate_csrf_token env req in
-                    page_response
-                      ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-                      (Dashboard.dashboard_layout ~csrf user
-                         ~page_title:
-                           (String.capitalize_ascii
-                              (Models.Configuration.name_to_str u.name))
-                         ~content:
-                           (Update_policy.update_policy_layout u
-                              albatross_inst.configuration.name ~user_policy
-                              ~unallocated_resources)
-                         ())
+                    dashboard_page
+                      ~page_title:
+                        (String.capitalize_ascii
+                           (Models.Configuration.name_to_str u.name))
+                      user
+                      ~content:
+                        (Update_policy.update_policy_layout u
+                           albatross_inst.configuration.name ~user_policy
+                           ~unallocated_resources)
                       req server env
                 | Error err ->
                     error_page_response ~title:"Bad Request"
@@ -2153,21 +2086,18 @@ module Admin = struct
     | None ->
         Logs.warn (fun m -> m "%s : Account not found" key);
         api_response ~title:"Not Found" ~data:"Account not found" `Not_found req
-    | Some user -> (
+    | Some user ->
         if error_on_last user then (
           Logs.warn (fun m -> m "%s : Can't perform action on last user" key);
           api_response ~title:"Forbidden" ~data:error_message `Forbidden req)
         else
           let updated_user = update_fn user in
           Storage.update_user store updated_user;
-          match Store.write_data store env.block with
-          | Ok () ->
-              api_response ~title:"Success" ~data:"Updated user successfully"
-                `OK req
-          | Error (`Msg msg) ->
+          write_data ~error_title:"Internal Server Error"
+            ~on_error:(fun msg ->
               Logs.warn (fun m -> m "%s : Storage error with %s" key msg);
-              api_response ~title:"Internal Server Error" ~data:msg
-                `Internal_server_error req)
+              msg)
+            ~success_msg:"Updated user successfully" store env req
 
   let toggle_account_activation req server env =
     with_admin_cookie_api req server (fun _user _cookie ->
@@ -2213,17 +2143,14 @@ module Admin = struct
                 Logs.warn (fun m -> m "delete-account : Account not found");
                 api_response ~title:"Not Found" ~data:"Account not found"
                   `Not_found req
-            | Some user -> (
+            | Some user ->
                 Storage.delete_user store user;
-                match Store.write_data store env.block with
-                | Ok () ->
-                    api_response ~title:"Success"
-                      ~data:"Deleted user successfully" `OK req
-                | Error (`Msg msg) ->
+                write_data ~error_title:"Internal Server Error"
+                  ~on_error:(fun msg ->
                     Logs.warn (fun m ->
                         m "delete-user : Storage error with %s" msg);
-                    api_response ~title:"Internal Server Error" ~data:msg
-                      `Internal_server_error req)))
+                    msg)
+                  ~success_msg:"Deleted user successfully" store env req))
 end
 
 module Scheduler = struct
