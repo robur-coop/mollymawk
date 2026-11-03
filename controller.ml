@@ -130,11 +130,13 @@ module Session = struct
           Vifu.Headers.get (Vifu.Request.headers_of_request req) "Cookie"
         with
         | None -> None
+        (* workaround for getting csrf tokens *)
         | Some cookies ->
             String.split_on_char ';' cookies
             |> List.find_map (fun c ->
                 match String.split_on_char '=' c with
-                | [ k; v ] when String.equal k session_cookie ->
+                | [ k; v ] when String.equal (String.trim k) session_cookie ->
+                    let v = String.trim v in
                     if String.equal v "" then None else Some v
                 | _ -> None))
 
