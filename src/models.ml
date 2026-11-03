@@ -761,6 +761,25 @@ module Unikernel = struct
     |> opt_nullable_mem "dns_name" string
     |> Object.finish
 
+  let dns_liveliness_opt_json =
+    let open Jsont in
+    let dec = function
+      | Null _ | String ("null", _) | String ("", _) -> None
+      | String (s, meta) -> (
+          match Jsont_bytesrw.decode_string dns_liveliness_json s with
+          | Ok v -> Some v
+          | Error msg -> Error.msg meta msg)
+      | j -> (
+          match Utils.Json.decode dns_liveliness_json j with
+          | Ok v -> Some v
+          | Error (`Msg msg) -> Error.msg Meta.none msg)
+    in
+    let enc = function
+      | None -> Null ((), Meta.none)
+      | Some v -> Utils.Json.encode dns_liveliness_json v
+    in
+    map ~dec ~enc json
+
   type update_t = {
     albatross_instance : string;
     job : string;
@@ -778,6 +797,11 @@ module Unikernel = struct
     let fn albatross_instance job to_be_updated_unikernel
         currently_running_unikernel unikernel_name http_liveliness_address
         dns_liveliness unikernel_arguments molly_csrf =
+      let http_liveliness_address =
+        match http_liveliness_address with
+        | Some ("null" | "") -> None
+        | other -> other
+      in
       {
         albatross_instance;
         job;
@@ -797,7 +821,7 @@ module Unikernel = struct
     |> Object.mem "currently_running_unikernel" string
     |> Object.mem "unikernel_name" string
     |> opt_nullable_mem "http_liveliness_address" string
-    |> opt_nullable_mem "dns_liveliness" dns_liveliness_json
+    |> Object.mem ~dec_absent:None "dns_liveliness" dns_liveliness_opt_json
     |> Object.opt_mem "unikernel_arguments" json
     |> csrf_mem |> Object.finish
 

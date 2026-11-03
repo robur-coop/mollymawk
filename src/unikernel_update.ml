@@ -16,20 +16,20 @@ let arg_modal ~unikernel_name ~instance_name
                "const p = event.detail.parameters; p.job = '%s'; \
                 p.to_be_updated_unikernel = '%s'; \
                 p.currently_running_unikernel = '%s'; p.unikernel_name = '%s'; \
-                p.albatross_instance = '%s'; p.http_liveliness_address = \
-                document.getElementById('http-toggle').checked ? \
-                (document.getElementById('http_address').value.trim() || null) \
-                : null; p.dns_liveliness = \
-                document.getElementById('dns-toggle').checked ? { dns_address: \
+                p.albatross_instance = '%s'; if \
+                (document.getElementById('http-toggle').checked) { const addr \
+                = document.getElementById('http_address').value.trim(); if \
+                (addr) p.http_liveliness_address = addr; } if \
+                (document.getElementById('dns-toggle').checked) { \
+                p.dns_liveliness = JSON.stringify({ dns_address: \
                 document.getElementById('dns_address').value.trim() || null, \
                 dns_name: document.getElementById('dns_name').value.trim() || \
-                null } : null; if \
+                null }); } if \
                 (document.getElementById('arguments-toggle').checked) { \
-                p.unikernel_arguments = JSON.parse(p.arguments); } delete \
-                p.arguments; delete p['liveliness-toggle']; delete \
-                p['http-toggle']; delete p['dns-toggle']; delete \
-                p['arguments-toggle']; delete p.http_address; delete \
-                p.dns_name; delete p.dns_address;"
+                p.unikernel_arguments = p.arguments; } delete p.arguments; \
+                delete p['liveliness-toggle']; delete p['http-toggle']; delete \
+                p['dns-toggle']; delete p['arguments-toggle']; delete \
+                p.http_address; delete p.dns_name; delete p.dns_address;"
                to_be_updated_unikernel.job to_be_updated_unikernel.uuid
                currently_running_unikernel.uuid unikernel_name instance_name_str);
           Unsafe.string_attrib "hx-on::after-request"

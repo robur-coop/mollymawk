@@ -1604,7 +1604,16 @@ module Unikernel = struct
             let albatross_instances = !(Vifu.Server.device albatross server) in
             let he = Vifu.Server.device happy_eyeballs server in
             let config_or_none field = function
-              | None | Some (Jsont.Null _) -> Ok None
+              | None | Some (Jsont.Null _) | Some (Jsont.String ("null", _)) ->
+                  Ok None
+              | Some (Jsont.String (str, _)) -> (
+                  match Albatross_json.config_of_json str with
+                  | Ok cfg -> Ok (Some cfg)
+                  | Error (`Msg err) ->
+                      Error
+                        (`Msg
+                           ("invalid json for " ^ field ^ ": " ^ str
+                          ^ "failed with: " ^ err)))
               | Some json -> (
                   match Albatross_json.config_of_jsont json with
                   | Ok cfg -> Ok (Some cfg)
