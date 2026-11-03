@@ -582,3 +582,25 @@ function parseXhrResponse(xhr, redirectUrl = null) {
 	}
 }
 window.parseXhrResponse = parseXhrResponse;
+
+document.addEventListener("htmx:beforeRequest", (event) => {
+	const elt = event.detail.elt;
+	const btn = elt.tagName === "BUTTON" ? elt : elt.querySelector('button[type="submit"]');
+	if (btn && !btn.dataset.originalHtml) {
+		btn.dataset.originalHtml = btn.innerHTML;
+		btn.disabled = true;
+		btn.innerHTML = btn.textContent.trim()
+			? `<i class="fa-solid fa-spinner animate-spin mr-2"></i> ${btn.dataset.originalHtml}`
+			: `<i class="fa-solid fa-spinner animate-spin"></i>`;
+	}
+});
+
+document.addEventListener("htmx:afterRequest", (event) => {
+	const elt = event.detail.elt;
+	const btn = elt.tagName === "BUTTON" ? elt : elt.querySelector('button[type="submit"]');
+	if (btn && btn.dataset.originalHtml) {
+		btn.disabled = false;
+		btn.innerHTML = btn.dataset.originalHtml;
+		delete btn.dataset.originalHtml;
+	}
+});

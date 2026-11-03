@@ -16,11 +16,13 @@ let arg_modal ~unikernel_name ~instance_name
                "const p = event.detail.parameters; p.job = '%s'; \
                 p.to_be_updated_unikernel = '%s'; \
                 p.currently_running_unikernel = '%s'; p.unikernel_name = '%s'; \
-                p.albatross_instance = '%s'; if \
-                (document.getElementById('http-toggle').checked) { const addr \
-                = document.getElementById('http_address').value.trim(); if \
-                (addr) p.http_liveliness_address = addr; } if \
-                (document.getElementById('dns-toggle').checked) { \
+                p.albatross_instance = '%s'; const liveliness = \
+                document.getElementById('liveliness-toggle').checked; if \
+                (liveliness && document.getElementById('http-toggle').checked) \
+                { const addr = \
+                document.getElementById('http_address').value.trim(); if \
+                (addr) p.http_liveliness_address = addr; } if (liveliness && \
+                document.getElementById('dns-toggle').checked) { \
                 p.dns_liveliness = JSON.stringify({ dns_address: \
                 document.getElementById('dns_address').value.trim() || null, \
                 dns_name: document.getElementById('dns_name').value.trim() || \
