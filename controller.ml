@@ -334,6 +334,19 @@ let with_api_instance_and_name ~instance_str ~name_str req server fn =
             `Bad_request req
       | Ok name -> fn albatross_inst name)
 
+let query_albatross_api ?(parse_error_status = `Internal_server_error) ?push tcp
+    albatross_inst ~domain ~name cmd req =
+  match Albatross_client.query tcp albatross_inst ~domain ~name ?push cmd with
+  | Error err ->
+      api_response ~title:"Internal Server Error"
+        ~data:("Error querying albatross: " ^ err)
+        `Internal_server_error req
+  | Ok (_hdr, res) -> (
+      match Albatross_json.res_to_string res with
+      | Ok res -> api_response ~title:"Success" ~data:res `OK req
+      | Error (`String err) ->
+          api_response ~title:"Error" ~data:err parse_error_status req)
+
 let write_data ?(success_msg = "Updated password successfully") storage env req
     =
   match Store.write_data storage env.block with
@@ -696,22 +709,8 @@ module Block = struct
              ->
             with_api_instance_and_name ~instance_str:albatross_instance
               ~name_str:block_name req server (fun albatross_inst block_name ->
-                match
-                  Albatross_client.query env.tcp albatross_inst
-                    ~domain:user.name ~name:block_name
-                    (`Block_cmd `Block_remove)
-                with
-                | Error err ->
-                    api_response ~title:"Internal Server Error"
-                      ~data:("Error querying albatross: " ^ err)
-                      `Internal_server_error req
-                | Ok (_hdr, res) -> (
-                    Albatross_client.set_online albatross_inst;
-                    match Albatross_json.res_to_string res with
-                    | Ok res -> api_response ~title:"Success" ~data:res `OK req
-                    | Error (`String err) ->
-                        api_response ~title:"Internal Server Error" ~data:err
-                          `Internal_server_error req))))
+                query_albatross_api env.tcp albatross_inst ~domain:user.name
+                  ~name:block_name (`Block_cmd `Block_remove) req)))
 
   let create_or_upload_block c_or_u req server env =
     with_user_cookie_api req server (fun user _cookie ->
@@ -740,23 +739,10 @@ module Block = struct
               Models.Block.upload_t) ->
             let stream_to_albatross albatross_inst block_name block_compressed =
               let push = make_string_stream block_data in
-              match
-                Albatross_client.query env.tcp albatross_inst ~domain:user.name
-                  ~name:block_name ~push
-                  (`Block_cmd (`Block_set block_compressed))
-              with
-              | Error err ->
-                  generate_http_error_response
-                    (Fmt.str "an error with albatross. got %s" err)
-                    `Internal_server_error
-              | Ok (_hdr, res) -> (
-                  Albatross_client.set_online albatross_inst;
-                  match Albatross_json.res_to_string res with
-                  | Error (`String err) ->
-                      generate_http_error_response
-                        (Fmt.str "unexpected field. got %s" err)
-                        `Bad_request
-                  | Ok res -> api_response ~title:"Success" ~data:res `OK req)
+              query_albatross_api ~parse_error_status:`Bad_request ~push env.tcp
+                albatross_inst ~domain:user.name ~name:block_name
+                (`Block_cmd (`Block_set block_compressed))
+                req
             in
             let add_block albatross_inst block_name block_size block_compressed
                 =
@@ -770,7 +756,6 @@ module Block = struct
                     (Fmt.str "an error with albatross. got %s" err)
                     `Internal_server_error
               | Ok (_hdr, res) -> (
-                  Albatross_client.set_online albatross_inst;
                   match Albatross_json.res res with
                   | Error (`String err) ->
                       generate_http_error_response
@@ -854,7 +839,7 @@ module Block = struct
                               albatross_inst ~domain:user.name
                               ~name:block_name_obj compression_level cb
                           in
-                          Albatross_client.set_online albatross_inst))
+                          ()))
                 in
                 let open Vifu.Response.Syntax in
                 let* () =
@@ -944,7 +929,6 @@ module Unikernel = struct
                   in
                   (successes, failure :: failures)
               | Ok (_hdr, res) -> (
-                  Albatross_client.set_online instance;
                   match Albatross_json.res res with
                   | Error (`String err) ->
                       Logs.err (fun m ->
@@ -1037,7 +1021,7 @@ module Unikernel = struct
                         Albatross_client.query_console env.tcp albatross_inst
                           ~domain:user.name ~name:unikernel_name cb
                       in
-                      Albatross_client.set_online albatross_inst))
+                      ()))
             in
             let open Vifu.Response.Syntax in
             let* () =
@@ -1066,22 +1050,8 @@ module Unikernel = struct
             with_api_instance_and_name ~instance_str:form.albatross_instance
               ~name_str:form.name req server
               (fun albatross_inst unikernel_name ->
-                match
-                  Albatross_client.query env.tcp albatross_inst
-                    ~domain:user.name ~name:unikernel_name
-                    (`Unikernel_cmd `Unikernel_destroy)
-                with
-                | Error msg ->
-                    api_response ~title:"Internal Server Error"
-                      ~data:("Error querying albatross: " ^ msg)
-                      `Internal_server_error req
-                | Ok (_hdr, res) -> (
-                    Albatross_client.set_online albatross_inst;
-                    match Albatross_json.res_to_string res with
-                    | Ok res -> api_response ~title:"Success" ~data:res `OK req
-                    | Error (`String err) ->
-                        api_response ~title:"Internal Server Error" ~data:err
-                          `Internal_server_error req))))
+                query_albatross_api env.tcp albatross_inst ~domain:user.name
+                  ~name:unikernel_name (`Unikernel_cmd `Unikernel_destroy) req)))
 
   let unikernel_restart req server env =
     with_user_cookie_api req server (fun user _cookie ->
@@ -1091,23 +1061,10 @@ module Unikernel = struct
               ~csrf_of:(fun (f : Models.Unikernel.restart_t) -> f.molly_csrf)
               (fun (form : Models.Unikernel.restart_t) ->
                 let restart ?arguments () =
-                  match
-                    Albatross_client.query env.tcp albatross_inst
-                      ~domain:user.name ~name:unikernel_name
-                      (`Unikernel_cmd (`Unikernel_restart arguments))
-                  with
-                  | Error msg ->
-                      api_response ~title:"Internal Server Error"
-                        ~data:("Error querying albatross: " ^ msg)
-                        `Internal_server_error req
-                  | Ok (_hdr, res) -> (
-                      Albatross_client.set_online albatross_inst;
-                      match Albatross_json.res_to_string res with
-                      | Ok res ->
-                          api_response ~title:"Success" ~data:res `OK req
-                      | Error (`String err) ->
-                          api_response ~title:"Internal Server Error" ~data:err
-                            `Internal_server_error req)
+                  query_albatross_api env.tcp albatross_inst ~domain:user.name
+                    ~name:unikernel_name
+                    (`Unikernel_cmd (`Unikernel_restart arguments))
+                    req
                 in
                 match form.arguments with
                 | Some arguments -> (
@@ -1155,25 +1112,9 @@ module Unikernel = struct
                         else `Unikernel_cmd (`Unikernel_create cfg)
                       in
                       let execute_albatross_cmd push =
-                        match
-                          Albatross_client.query env.tcp albatross_inst
-                            ~domain:user.name ~name:unikernel_name ~push
-                            albatross_cmd
-                        with
-                        | Error err ->
-                            generate_http_error_response
-                              ("Albatross Query Error: " ^ err)
-                              `Internal_server_error
-                        | Ok (_hdr, res) -> (
-                            Albatross_client.set_online albatross_inst;
-                            match Albatross_json.res_to_string res with
-                            | Ok res_json ->
-                                api_response ~title:"Success" ~data:res_json `OK
-                                  req
-                            | Error (`String err_str) ->
-                                generate_http_error_response
-                                  ("Albatross Response Error: " ^ err_str)
-                                  `Internal_server_error)
+                        query_albatross_api ~push env.tcp albatross_inst
+                          ~domain:user.name ~name:unikernel_name albatross_cmd
+                          req
                       in
                       match form.deploy_mode with
                       | "builder" -> (
@@ -1324,7 +1265,6 @@ module Unikernel = struct
         let unikernel_name_str =
           Models.Configuration.name_to_str unikernel_name
         in
-        Albatross_client.set_online albatross_inst;
         match Albatross_json.res_to_string res with
         | Error (`String err) ->
             Logs.warn (fun m ->
@@ -2441,7 +2381,6 @@ module Scheduler = struct
               err);
         Error err
     | Ok (_hdr, res) -> (
-        Albatross_client.set_online albatross_inst;
         match Albatross_json.res res with
         | Ok _res -> (
             match

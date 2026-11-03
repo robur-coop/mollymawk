@@ -378,7 +378,9 @@ let raw_query tcp t ?(name = Vmm_core.Name.root) certificates cmd ?push f =
       e
   | Ok () -> (
       match f tls_flow with
-      | Ok res -> Ok res
+      | Ok res ->
+          set_online t;
+          Ok res
       | Error msg ->
           Vmm_tls_mnet.close tls_flow;
           Logs.err (fun m ->
@@ -504,7 +506,6 @@ let query_stats tcp t f =
       t.status <- Status.update t.status (Status.make `Certificate err);
       Error err
   | Ok certificates ->
-      set_online t;
       raw_query tcp t ~name:vmm_name certificates cmd (stats_data vmm_name f)
 
 let set_policy tcp t ~domain policy =
@@ -532,9 +533,7 @@ let make_device store_device get_tcp =
 let user_blocks_by_instance tcp (state : t) user_name =
   match query tcp state ~domain:user_name (`Block_cmd `Block_info) with
   | Error _msg -> []
-  | Ok (_hdr, `Success (`Block_devices blocks)) ->
-      set_online state;
-      blocks
+  | Ok (_hdr, `Success (`Block_devices blocks)) -> blocks
   | Ok reply ->
       Logs.err (fun m ->
           m "Expected block info reply, got %a"
@@ -548,7 +547,6 @@ let user_unikernels_by_instance tcp (state : t) user_name =
   | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
   | Ok (_hdr, `Success (`Old_unikernel_info5 unikernels))
   | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
-      set_online state;
       unikernels
   | Ok reply ->
       Logs.err (fun m ->
@@ -565,9 +563,7 @@ let user_deceased_by_instance tcp (albatross_instances : a_map) user_name =
           (`Console_cmd `Console_list_inactive)
       with
       | Error _msg -> []
-      | Ok (_hdr, `Success (`Consoles names)) ->
-          set_online instance;
-          names
+      | Ok (_hdr, `Success (`Consoles names)) -> names
       | Ok _reply -> [])
     albatross_instances
 
@@ -581,7 +577,6 @@ let user_unikernels tcp (albatross_instances : a_map) user_name =
       | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
       | Ok (_hdr, `Success (`Old_unikernel_info5 unikernels))
       | Ok (_hdr, `Success (`Unikernel_info unikernels)) ->
-          set_online instance;
           unikernels
       | Ok _reply -> [])
     albatross_instances
@@ -605,7 +600,6 @@ let user_unikernel tcp state ~user_name ~unikernel_name =
   | Ok (_hdr, `Success (`Unikernel_info [ unikernel ]))
   | Ok (_hdr, `Success (`Old_unikernel_info4 [ unikernel ]))
   | Ok (_hdr, `Success (`Old_unikernel_info5 [ unikernel ])) ->
-      set_online state;
       Ok unikernel
   | Ok (_hdr, `Success (`Unikernel_info unikernels))
   | Ok (_hdr, `Success (`Old_unikernel_info4 unikernels))
