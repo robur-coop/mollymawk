@@ -172,17 +172,6 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                    ~instance_name u_data)
                               ();
                           ];
-                        div
-                          [
-                            Ui.link_button
-                              ~href:
-                                ("/unikernel/update?unikernel="
-                               ^ unikernel_name_str ^ "&instance="
-                                ^ Models.Configuration.name_to_str instance_name
-                                )
-                              ~content:(txt "Update")
-                              ~btn_type:`Primary_outlined ();
-                          ];
                         (* check that the last update happened less than 10 minutes ago (600 seconds)*)
                         (let instance_name_str =
                            Models.Configuration.name_to_str instance_name
@@ -215,7 +204,17 @@ let unikernel_single_layout ~unikernel_name ~instance_name
                                    ~content:(txt "Rollback")
                                    ~btn_type:`Primary_outlined ();
                                ]
-                         | _ -> div []);
+                         | _ ->
+                             div
+                               [
+                                 Ui.link_button
+                                   ~href:
+                                     ("/unikernel/update?unikernel="
+                                    ^ unikernel_name_str ^ "&instance="
+                                    ^ instance_name_str)
+                                   ~content:(txt "Update")
+                                   ~btn_type:`Primary_outlined ();
+                               ]);
                         div
                           [
                             Ui.button_component
