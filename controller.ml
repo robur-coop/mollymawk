@@ -1048,6 +1048,15 @@ module Unikernel = struct
                     | Ok arguments -> restart ~arguments ())
                 | None -> restart ())))
 
+  let fetch_binary_stream he ~job ~version =
+    let buf = Buffer.create 65536 in
+    let push_chunks = function
+      | Some chunk -> Buffer.add_string buf chunk
+      | None -> ()
+    in
+    Builder_web.fetch_unikernel_binary_image he ~job ~version push_chunks
+    |> Result.map (fun () -> make_string_stream (Buffer.contents buf))
+
   let unikernel_create req server env =
     with_user_cookie_api req server (fun user _cookie ->
         let generate_http_error_response msg code =
@@ -1092,22 +1101,14 @@ module Unikernel = struct
                       | "builder" -> (
                           match form.builder_job with
                           | Some job -> (
-                              let buf = Buffer.create 65536 in
-                              let push_chunks = function
-                                | Some chunk -> Buffer.add_string buf chunk
-                                | None -> ()
-                              in
                               match
-                                Builder_web.fetch_unikernel_binary_image he ~job
-                                  ~version:"latest" push_chunks
+                                fetch_binary_stream he ~job ~version:"latest"
                               with
                               | Error (`Msg err) ->
                                   generate_http_error_response
                                     ("Builder Error: " ^ err)
                                     `Internal_server_error
-                              | Ok () ->
-                                  execute_albatross_cmd
-                                    (make_string_stream (Buffer.contents buf)))
+                              | Ok push -> execute_albatross_cmd push)
                           | None ->
                               generate_http_error_response
                                 "Missing builder job or uuid" `Bad_request)
@@ -1290,15 +1291,9 @@ module Unikernel = struct
              ^ data),
             `Internal_server_error )
     | Ok () -> (
-        let buf = Buffer.create 65536 in
-        let push_chunks = function
-          | Some chunk -> Buffer.add_string buf chunk
-          | None -> ()
-        in
         match
-          Builder_web.fetch_unikernel_binary_image he ~job
+          fetch_binary_stream he ~job
             ~version:(Uuidm.to_string to_be_updated_unikernel)
-            push_chunks
         with
         | Error (`Msg err) ->
             Logs.err (fun m ->
@@ -1313,8 +1308,7 @@ module Unikernel = struct
                  ^ " :an error occured while fetching the binary from \
                     builds.robur.coop with error: " ^ err),
                 `Internal_server_error )
-        | Ok () ->
-            let push = make_string_stream (Buffer.contents buf) in
+        | Ok push ->
             force_create_unikernel env.tcp albatross_inst ~unikernel_name ~push
               unikernel_cfg user)
 
@@ -1419,30 +1413,6 @@ module Unikernel = struct
           (fun (form : Models.Unikernel.update_t) ->
             let store = Vifu.Server.device storage server in
             let he = Vifu.Server.device happy_eyeballs server in
-            let config_or_none field = function
-              | None | Some (Jsont.Null _) | Some (Jsont.String ("null", _)) ->
-                  Ok None
-              | Some (Jsont.String (str, _)) -> (
-                  match Albatross_json.config_of_json str with
-                  | Ok cfg -> Ok (Some cfg)
-                  | Error (`Msg err) ->
-                      Error
-                        (`Msg
-                           ("invalid json for " ^ field ^ ": " ^ str
-                          ^ "failed with: " ^ err)))
-              | Some json -> (
-                  match Albatross_json.config_of_jsont json with
-                  | Ok cfg -> Ok (Some cfg)
-                  | Error (`Msg err) ->
-                      let json_str =
-                        Result.value ~default:""
-                          (Jsont_bytesrw.encode_string Jsont.json json)
-                      in
-                      Error
-                        (`Msg
-                           ("invalid json for " ^ field ^ ": " ^ json_str
-                          ^ "failed with: " ^ err)))
-            in
             let http_liveliness_address = form.http_liveliness_address in
             let dns_liveliness = form.dns_liveliness in
             match
@@ -1454,7 +1424,7 @@ module Unikernel = struct
                   ~name_str:form.unikernel_name req server
                   (fun albatross_inst unikernel_name ->
                     match
-                      config_or_none "unikernel_arguments"
+                      Models.Unikernel.config_or_none "unikernel_arguments"
                         form.unikernel_arguments
                     with
                     | Error (`Msg err) ->
@@ -1500,47 +1470,9 @@ module Unikernel = struct
                                             albatross_inst.configuration.name
                                         ^ " with error: " ^ err)
                                       `Bad_request req
-                                | Ok (_n, (info : Vmm_core.Unikernel.info)) ->
-                                    let (cfg : Vmm_core.Unikernel.config) =
-                                      {
-                                        Vmm_core.Unikernel.typ = info.typ;
-                                        compressed = false;
-                                        image = "";
-                                        add_name = true;
-                                        startup = info.startup;
-                                        fail_behaviour = info.fail_behaviour;
-                                        cpuids = info.cpuids;
-                                        memory = info.memory;
-                                        block_devices =
-                                          List.map
-                                            (fun {
-                                                   Vmm_core.Unikernel
-                                                   .unikernel_device;
-                                                   host_device;
-                                                   sector_size;
-                                                   _;
-                                                 } ->
-                                              ( unikernel_device,
-                                                Some host_device,
-                                                Some sector_size ))
-                                            info.block_devices;
-                                        bridges =
-                                          List.map
-                                            (fun {
-                                                   Vmm_core.Unikernel
-                                                   .unikernel_device;
-                                                   host_device;
-                                                   mac;
-                                                 } ->
-                                              ( unikernel_device,
-                                                Some host_device,
-                                                Some mac ))
-                                            info.bridges;
-                                        argv = info.argv;
-                                        numcpus = info.numcpus;
-                                        linux_boot_partition =
-                                          info.linux_boot_partition;
-                                      }
+                                | Ok (_n, info) ->
+                                    let cfg =
+                                      Models.Unikernel.config_of_info info
                                     in
                                     process_unikernel_update ~unikernel_name
                                       ~job:form.job ~to_be_updated_unikernel
@@ -2230,22 +2162,10 @@ module Scheduler = struct
                         |> List.filter (fun s -> s <> ""))
                       unikernel.argv
                   in
-                  let config : Vmm_core.Unikernel.config =
-                    {
-                      typ = unikernel.typ;
-                      fail_behaviour = unikernel.fail_behaviour;
-                      startup = unikernel.startup;
-                      memory = unikernel.memory;
-                      block_devices = [];
-                      add_name = true;
-                      bridges;
-                      argv;
-                      numcpus = unikernel.numcpus;
-                      linux_boot_partition = unikernel.linux_boot_partition;
-                      compressed = true;
-                      image = "";
-                      cpuids = Vmm_core.IS.singleton cpuid;
-                    }
+                  let config =
+                    Models.Unikernel.config_of_info ~compressed:true
+                      ~cpuids:(Vmm_core.IS.singleton cpuid)
+                      ~block_devices:[] ~bridges ~argv unikernel
                   in
                   let buf = Buffer.create 65536 in
                   match

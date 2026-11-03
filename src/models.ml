@@ -825,6 +825,71 @@ module Unikernel = struct
     |> Object.opt_mem "unikernel_arguments" json
     |> csrf_mem |> Object.finish
 
+  let config_or_none field = function
+    | None | Some (Jsont.Null _) | Some (Jsont.String ("null", _)) -> Ok None
+    | Some (Jsont.String (str, _)) -> (
+        match Albatross_json.config_of_json str with
+        | Ok cfg -> Ok (Some cfg)
+        | Error (`Msg err) ->
+            Error
+              (`Msg
+                 ("invalid json for " ^ field ^ ": " ^ str ^ "failed with: "
+                ^ err)))
+    | Some json -> (
+        match Albatross_json.config_of_jsont json with
+        | Ok cfg -> Ok (Some cfg)
+        | Error (`Msg err) ->
+            let json_str =
+              Result.value ~default:""
+                (Jsont_bytesrw.encode_string Jsont.json json)
+            in
+            Error
+              (`Msg
+                 ("invalid json for " ^ field ^ ": " ^ json_str
+                ^ "failed with: " ^ err)))
+
+  let config_of_info ?(compressed = false) ?(add_name = true) ?cpuids
+      ?block_devices ?bridges ?argv (info : Vmm_core.Unikernel.info) :
+      Vmm_core.Unikernel.config =
+    let block_devices =
+      match block_devices with
+      | Some bd -> bd
+      | None ->
+          List.map
+            (fun {
+                   Vmm_core.Unikernel.unikernel_device;
+                   host_device;
+                   sector_size;
+                   _;
+                 } ->
+              (unikernel_device, Some host_device, Some sector_size))
+            info.block_devices
+    in
+    let bridges =
+      match bridges with
+      | Some br -> br
+      | None ->
+          List.map
+            (fun { Vmm_core.Unikernel.unikernel_device; host_device; mac } ->
+              (unikernel_device, Some host_device, Some mac))
+            info.bridges
+    in
+    {
+      Vmm_core.Unikernel.typ = info.typ;
+      compressed;
+      image = "";
+      add_name;
+      startup = info.startup;
+      fail_behaviour = info.fail_behaviour;
+      cpuids = Option.value ~default:info.cpuids cpuids;
+      memory = info.memory;
+      block_devices;
+      bridges;
+      argv = Option.value ~default:info.argv argv;
+      numcpus = info.numcpus;
+      linux_boot_partition = info.linux_boot_partition;
+    }
+
   type create_t = {
     albatross_instance : string;
     unikernel_name : string;
