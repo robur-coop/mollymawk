@@ -8,6 +8,7 @@
   x509
   mrmime
   mnet
+  mnet-happy-eyeballs
   mnet-tls
   mhttp-client
   msendmail

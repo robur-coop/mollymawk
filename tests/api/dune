@@ -59,4 +59,4 @@
   (run ./api_tests.exe)))
 
 (copy_files#
- ../../{app,controller,store,filesystem,assets,etag,liveliness_checks}.ml)
+ ../../{app,controller,scheduler,store,filesystem,assets,etag,liveliness_checks}.ml)

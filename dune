@@ -3,7 +3,7 @@
  (enabled_if
   (= %{context_name} "solo5"))
  (link_flags :standard -cclib "-z solo5-abi=hvt")
- (modules main assets etag controller app store filesystem liveliness_checks)
+ (modules main assets etag controller scheduler app store filesystem liveliness_checks)
  (libraries
   mkernel
   mnet

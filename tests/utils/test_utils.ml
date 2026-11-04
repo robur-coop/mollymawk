@@ -579,10 +579,13 @@ let is_failing (config : Models.Configuration.t) =
     (Models.Configuration.name_to_str config.name)
   || config.server_port = failure_cfg.server_port
 
-module Mnet_happy_eyeballs = struct
-  include Mnet_happy_eyeballs
+module Monitoring = struct
+  include Monitoring
 
-  let connect ~kind:_ _ _ _ = Error (`Msg "uninitialized")
+  let send_tcp_command _happy_eyeballs ~command:_ ~target =
+    Error
+      (Fmt.str "[monitoring] Failed to connect to %s:2323, error uninitialized"
+         target)
 end
 
 module Builder_web = struct
