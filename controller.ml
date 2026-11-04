@@ -1563,14 +1563,16 @@ module Unikernel = struct
                       ~data:"Missing max number of clones to spawn."
                       `Bad_request req)))
 
-  let unikernel_monitoring_status req server _env =
+  let unikernel_monitoring_status req server env =
     with_user_cookie_api req server (fun _user _cookie ->
         with_unikernel req (fun unikernel_name ->
             let he = Vifu.Server.device management_happy_eyeballs server in
             let target = Models.Configuration.name_to_str unikernel_name in
-            let logs = Monitoring.send_tcp_command he ~command:"l*" ~target in
+            let logs =
+              Monitoring.send_tcp_command he ~command:"l*" ~target env.m_domain
+            in
             let metrics =
-              Monitoring.send_tcp_command he ~command:"m*" ~target
+              Monitoring.send_tcp_command he ~command:"m*" ~target env.m_domain
             in
             let status =
               match (logs, metrics) with
@@ -1597,7 +1599,7 @@ module Unikernel = struct
                 | Ok command -> (
                     match
                       Monitoring.send_tcp_command he ~command
-                        ~target:unikernel_name
+                        ~target:unikernel_name env.m_domain
                     with
                     | Error err ->
                         api_response ~title:"Bad Request"

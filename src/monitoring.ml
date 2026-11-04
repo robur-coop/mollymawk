@@ -505,8 +505,9 @@ let monitoring_status_html ~name ~logs ~metrics =
             ]);
     ]
 
-let send_tcp_command happy_eyeballs ~command ~target =
+let send_tcp_command happy_eyeballs ~command ~target management_domain =
   let port = 2323 in
+  let target = target ^ "." ^ Domain_name.to_string management_domain in
   try
     match
       Mnet_happy_eyeballs.connect ~kind:Mnet.TCP.direct happy_eyeballs target

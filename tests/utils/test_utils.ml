@@ -582,7 +582,7 @@ let is_failing (config : Models.Configuration.t) =
 module Monitoring = struct
   include Monitoring
 
-  let send_tcp_command _happy_eyeballs ~command:_ ~target =
+  let send_tcp_command _happy_eyeballs ~command:_ ~target _management_domain =
     Error
       (Fmt.str "[monitoring] Failed to connect to %s:2323, error uninitialized"
          target)
