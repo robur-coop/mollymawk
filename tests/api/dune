@@ -2,7 +2,7 @@
  (name api_tests)
  (enabled_if
   (= %{context_name} "default"))
- (modules :standard)
+ (modules (:standard \ main))
  (flags
   (:standard -open Test_utils))
  (instrumentation
@@ -58,5 +58,4 @@
  (action
   (run ./api_tests.exe)))
 
-(copy_files#
- ../../{app,controller,scheduler,store,filesystem,assets,etag,liveliness_checks}.ml)
+(copy_files# ../../*.ml)

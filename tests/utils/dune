@@ -6,6 +6,8 @@
   mollymawk_libraries
   mkernel
   mnet-happy-eyeballs
+  mhttp-client
+  msendmail
   alcotest
   albatross
   mrmime
