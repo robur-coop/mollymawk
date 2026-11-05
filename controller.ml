@@ -56,7 +56,7 @@ let management_happy_eyeballs =
   make_happy_eyeballs ~name:"management-happy-eyeballs" (fun env ->
       (env.m_tcp, env.m_udp, Some env.m_dns))
 
-let albatross = Albatross_client.make_device storage (fun env -> env.tcp)
+let albatross = Albatross.make_device storage (fun env -> env.tcp)
 
 let rec add_headers =
   let open Vifu.Response.Syntax in
@@ -269,8 +269,7 @@ let with_instance ?endpoint req server fn =
       match Models.Configuration.name_of_str instance with
       | Ok instance_name -> (
           match
-            Albatross_client.find_instance_by_name albatross_instances
-              instance_name
+            Albatross.find_instance_by_name albatross_instances instance_name
           with
           | Ok albatross_inst -> fn albatross_inst
           | Error _ ->
@@ -316,7 +315,7 @@ let with_api_instance ~instance_str req server fn =
         `Bad_request req
   | Ok instance_name -> (
       match
-        Albatross_client.find_instance_by_name albatross_instances instance_name
+        Albatross.find_instance_by_name albatross_instances instance_name
       with
       | Ok albatross_inst -> fn albatross_inst
       | Error _ ->
@@ -338,7 +337,7 @@ let with_api_instance_and_name ~instance_str ~name_str req server fn =
 
 let query_albatross_api ?(parse_error_status = `Internal_server_error) ?push tcp
     albatross_inst ~domain ~name cmd req =
-  match Albatross_client.query tcp albatross_inst ~domain ~name ?push cmd with
+  match Albatross.query tcp albatross_inst ~domain ~name ?push cmd with
   | Error err ->
       api_response ~title:"Internal Server Error"
         ~data:("Error querying albatross: " ^ err)
@@ -541,16 +540,15 @@ module Auth = struct
     with_user_cookie_page req server (fun user _cookie ->
         with_instance ~endpoint:"/usage" req server (fun albatross_inst ->
             let blocks =
-              Albatross_client.user_blocks_by_instance env.tcp albatross_inst
-                user.name
+              Albatross.user_blocks_by_instance env.tcp albatross_inst user.name
             in
             let unikernels =
-              Albatross_client.user_unikernels_by_instance env.tcp
-                albatross_inst user.name
+              Albatross.user_unikernels_by_instance env.tcp albatross_inst
+                user.name
             in
             let policy =
-              Option.value ~default:Albatross_client.empty_policy
-                (Albatross_client.policy albatross_inst ~domain:user.name)
+              Option.value ~default:Albatross.empty_policy
+                (Albatross.policy albatross_inst ~domain:user.name)
             in
             dashboard_page ~page_title:"Usage" user
               ~content:
@@ -672,12 +670,9 @@ module Block = struct
     with_user_cookie_page req server (fun user _cookie ->
         with_instance ~endpoint:"/blocks" req server (fun albatross_inst ->
             let blocks =
-              Albatross_client.user_blocks_by_instance env.tcp albatross_inst
-                user.name
+              Albatross.user_blocks_by_instance env.tcp albatross_inst user.name
             in
-            let policy =
-              Albatross_client.policy ~domain:user.name albatross_inst
-            in
+            let policy = Albatross.policy ~domain:user.name albatross_inst in
             dashboard_page
               ~page_title:
                 (String.capitalize_ascii
@@ -757,8 +752,8 @@ module Block = struct
                     `Bad_request
               | `Create, Some block_size -> (
                   match
-                    Albatross_client.query env.tcp albatross_inst
-                      ~domain:user.name ~name:block_name
+                    Albatross.query env.tcp albatross_inst ~domain:user.name
+                      ~name:block_name
                       (`Block_cmd (`Block_add block_size))
                   with
                   | Error err ->
@@ -809,9 +804,9 @@ module Block = struct
                                 Ok ()
                           in
                           let _ =
-                            Albatross_client.query_block_dump env.tcp
-                              albatross_inst ~domain:user.name
-                              ~name:block_name_obj compression_level cb
+                            Albatross.query_block_dump env.tcp albatross_inst
+                              ~domain:user.name ~name:block_name_obj
+                              compression_level cb
                           in
                           ()))
                 in
@@ -835,10 +830,10 @@ module Unikernel = struct
     with_user_cookie_page req server (fun user _cookie ->
         let albatross_instances = !(Vifu.Server.device albatross server) in
         let unikernels_by_albatross_instance =
-          Albatross_client.user_unikernels env.tcp albatross_instances user.name
+          Albatross.user_unikernels env.tcp albatross_instances user.name
         in
         let deceased_unikernels_by_albatross_instance =
-          Albatross_client.user_deceased_by_instance env.tcp albatross_instances
+          Albatross.user_deceased_by_instance env.tcp albatross_instances
             user.name
         in
         dashboard_page user
@@ -855,14 +850,13 @@ module Unikernel = struct
             let he = Vifu.Server.device happy_eyeballs server in
             let builder_jobs = Builder_web.fetch_unikernel_jobs he in
             let unikernels_by_albatross_instance =
-              Albatross_client.user_unikernels_by_instance env.tcp
-                albatross_inst user.name
-            in
-            let blocks_by_albatross_instance =
-              Albatross_client.user_blocks_by_instance env.tcp albatross_inst
+              Albatross.user_unikernels_by_instance env.tcp albatross_inst
                 user.name
             in
-            match Albatross_client.policy albatross_inst ~domain:user.name with
+            let blocks_by_albatross_instance =
+              Albatross.user_blocks_by_instance env.tcp albatross_inst user.name
+            in
+            match Albatross.policy albatross_inst ~domain:user.name with
             | Some user_policy ->
                 dashboard_page ~page_title:"Deploy a Unikernel" user
                   ~content:
@@ -880,9 +874,9 @@ module Unikernel = struct
         let albatross_instances = !(Vifu.Server.device albatross server) in
         let successes, failures =
           Utils.LM.fold
-            (fun name (instance : Albatross_client.t) (successes, failures) ->
+            (fun name (instance : Albatross.t) (successes, failures) ->
               match
-                Albatross_client.query env.tcp instance ~domain:user.name
+                Albatross.query env.tcp instance ~domain:user.name
                   (`Unikernel_cmd `Unikernel_info)
               with
               | Error msg ->
@@ -925,7 +919,7 @@ module Unikernel = struct
         with_unikernel_and_instance req server
           (fun albatross_inst unikernel_name ->
             match
-              Albatross_client.user_unikernel env.tcp albatross_inst
+              Albatross.user_unikernel env.tcp albatross_inst
                 ~user_name:user.name ~unikernel_name
             with
             | Error err ->
@@ -951,8 +945,8 @@ module Unikernel = struct
                     user.scaling_policies
                 in
                 let max_allowed =
-                  Albatross_client.user_max_allowed_unikernel_instances
-                    albatross_inst user.name
+                  Albatross.user_max_allowed_unikernel_instances albatross_inst
+                    user.name
                 in
                 dashboard_page user
                   ~content:
@@ -979,7 +973,7 @@ module Unikernel = struct
                         Ok ()
                       in
                       let _ =
-                        Albatross_client.query_console env.tcp albatross_inst
+                        Albatross.query_console env.tcp albatross_inst
                           ~domain:user.name ~name:unikernel_name cb
                       in
                       ()))
@@ -1124,7 +1118,7 @@ module Unikernel = struct
             let pipeline =
               let ( let* ) = Result.bind in
               let* name, unikernel =
-                Albatross_client.user_unikernel env.tcp albatross_inst
+                Albatross.user_unikernel env.tcp albatross_inst
                   ~user_name:user.name ~unikernel_name
                 |> Result.map_error (fun e -> Albatross_err e)
               in
@@ -1198,8 +1192,8 @@ module Unikernel = struct
   let force_create_unikernel tcp albatross_inst ~unikernel_name ~push
       (unikernel_cfg : Vmm_core.Unikernel.config) (user : Models.User.user) =
     match
-      Albatross_client.query tcp albatross_inst ~domain:user.name
-        ~name:unikernel_name ~push
+      Albatross.query tcp albatross_inst ~domain:user.name ~name:unikernel_name
+        ~push
         (`Unikernel_cmd (`Unikernel_force_create unikernel_cfg))
     with
     | Error err ->
@@ -1443,7 +1437,7 @@ module Unikernel = struct
                   match cfg_opt with
                   | Some cfg -> Ok cfg
                   | None ->
-                      Albatross_client.user_unikernel env.tcp albatross_inst
+                      Albatross.user_unikernel env.tcp albatross_inst
                         ~user_name:user.name ~unikernel_name
                       |> Result.map (fun (_n, info) ->
                           Models.Unikernel.config_of_info info)
@@ -1511,7 +1505,7 @@ module Unikernel = struct
                         update_unikernel_scaling scaling_policies
                       else
                         let max_allowed =
-                          Albatross_client.user_max_allowed_unikernel_instances
+                          Albatross.user_max_allowed_unikernel_instances
                             albatross_inst user.name
                         in
                         if max_instances > max_allowed then
@@ -1667,9 +1661,7 @@ module Albatross_admin = struct
     with_admin_cookie_api req server (fun _user _cookie ->
         with_instance req server (fun albatross_inst ->
             let albatross_instances = Vifu.Server.device albatross server in
-            match
-              Albatross_client.init env.tcp albatross_inst.configuration
-            with
+            match Albatross.init env.tcp albatross_inst.configuration with
             | Ok new_albatross_instance ->
                 albatross_instances :=
                   Utils.LM.update albatross_inst.configuration.name
@@ -1697,7 +1689,7 @@ module Albatross_admin = struct
                   api_response ~title:"Bad Request" ~data:err `Bad_request req)
             in
             let*? new_albatross_instance =
-              Albatross_client.init env.tcp configuration_settings
+              Albatross.init env.tcp configuration_settings
               |> Result.map_error (fun (_, err) ->
                   api_response ~title:"Internal Server Error" ~data:err
                     `Internal_server_error req)
@@ -1771,12 +1763,11 @@ module Admin = struct
         match Storage.find_by_uuid (Vifu.Server.device storage server) uuid with
         | Some u -> (
             let unikernels =
-              Albatross_client.user_unikernels env.tcp albatross_instances
-                u.name
+              Albatross.user_unikernels env.tcp albatross_instances u.name
             in
             let deceased_unikernels =
-              Albatross_client.user_deceased_by_instance env.tcp
-                albatross_instances u.name
+              Albatross.user_deceased_by_instance env.tcp albatross_instances
+                u.name
             in
             let current_time = now () in
             let reply content =
@@ -1802,8 +1793,8 @@ module Admin = struct
                 reply
                   (User_single.user_single_layout ~active_tab:Policy
                      (User_single.user_policy u
-                        ~empty_policy:Albatross_client.empty_policy
-                        (Albatross_client.all_policies ~domain:u.name
+                        ~empty_policy:Albatross.empty_policy
+                        (Albatross.all_policies ~domain:u.name
                            albatross_instances))
                      u.uuid))
         | None ->
@@ -1823,12 +1814,10 @@ module Admin = struct
             with
             | Some u -> (
                 let user_policy =
-                  Option.value ~default:Albatross_client.empty_policy
-                    (Albatross_client.policy albatross_inst ~domain:u.name)
+                  Option.value ~default:Albatross.empty_policy
+                    (Albatross.policy albatross_inst ~domain:u.name)
                 in
-                match
-                  Albatross_client.policy_resource_avalaible albatross_inst
-                with
+                match Albatross.policy_resource_avalaible albatross_inst with
                 | Ok unallocated_resources ->
                     dashboard_page
                       ~page_title:
@@ -1874,7 +1863,7 @@ module Admin = struct
                         req)
                 in
                 let*? root_policy =
-                  Albatross_client.policy albatross_inst
+                  Albatross.policy albatross_inst
                   |> Option.to_result ~none:()
                   |> Result.map_error (fun () ->
                       Logs.err (fun m -> m "policy: root policy can't be null ");
@@ -1893,8 +1882,8 @@ module Admin = struct
                         `Bad_request req)
                 in
                 let*? _policy =
-                  Albatross_client.set_policy env.tcp albatross_inst
-                    ~domain:u.name policy
+                  Albatross.set_policy env.tcp albatross_inst ~domain:u.name
+                    policy
                   |> Result.map_error (fun err ->
                       Logs.err (fun m ->
                           m "error setting policy %a for %s: %s"

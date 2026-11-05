@@ -3,7 +3,7 @@
  (enabled_if
   (= %{context_name} "default"))
  (modules
-  (:standard \ main))
+  (:standard \ main albatross))
  (flags
   (:standard -open Test_utils))
  (instrumentation

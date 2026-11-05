@@ -10,11 +10,11 @@ module Log = (val Logs.src_log Autoscaler.a_logs : Logs.LOG)
 
 let least_used_cpuid tcp albatross_inst user_name =
   let unikernels =
-    Albatross_client.user_unikernels_by_instance tcp albatross_inst user_name
+    Albatross.user_unikernels_by_instance tcp albatross_inst user_name
   in
   let* p =
     Option.to_result ~none:"No policy found for user"
-      (Albatross_client.policy ~domain:user_name albatross_inst)
+      (Albatross.policy ~domain:user_name albatross_inst)
   in
   match
     Utils.cpu_usage_count p unikernels
@@ -41,8 +41,7 @@ let spawn_clone tcp store albatross_inst ~unikernel_name ~clone_name ~user_name
       (Storage.find_by_name store user_name)
   in
   let* _, unikernel =
-    Albatross_client.user_unikernel tcp albatross_inst ~user_name
-      ~unikernel_name
+    Albatross.user_unikernel tcp albatross_inst ~user_name ~unikernel_name
     |> Result.map_error (fun err ->
         Fmt.str "An error occured trying to fetch %s from albatross: %s"
           (Models.Configuration.name_to_str unikernel_name)
@@ -81,8 +80,8 @@ let spawn_clone tcp store albatross_inst ~unikernel_name ~clone_name ~user_name
     in
     let buf = Buffer.create 65536 in
     let* () =
-      Albatross_client.query_unikernel_binary tcp albatross_inst
-        ~domain:user_name ~name:unikernel_name (fun binary_str ->
+      Albatross.query_unikernel_binary tcp albatross_inst ~domain:user_name
+        ~name:unikernel_name (fun binary_str ->
           Buffer.add_string buf binary_str;
           Ok ())
       |> Result.map_error (fun err ->
@@ -131,8 +130,8 @@ let prune_clone tcp albatross_inst group ~unikernel_name ~clone_to_kill
     err
   in
   let* _hdr, res =
-    Albatross_client.query tcp albatross_inst ~domain:user_name
-      ~name:clone_to_kill (`Unikernel_cmd `Unikernel_destroy)
+    Albatross.query tcp albatross_inst ~domain:user_name ~name:clone_to_kill
+      (`Unikernel_cmd `Unikernel_destroy)
     |> Result.map_error log_prune_err
   in
   let* _res =
@@ -293,7 +292,7 @@ let handle_stats tcp state ((rusage, _, _) : Vmm_core.Stats.t) name store =
               else Ok ())
       | _ -> Error "VM path must contain exactly one user domain level")
 
-let unikernels_stats tcp (instance : Albatross_client.t) store =
+let unikernels_stats tcp (instance : Albatross.t) store =
   let cb name st =
     (match handle_stats tcp instance st name store with
     | Ok () -> ()
@@ -304,7 +303,7 @@ let unikernels_stats tcp (instance : Albatross_client.t) store =
               err));
     Ok ()
   in
-  match Albatross_client.query_stats tcp instance cb with
+  match Albatross.query_stats tcp instance cb with
   | Error err ->
       Error
         (Fmt.str "Error fetching stats for albatross instance %s: %s"
@@ -321,7 +320,7 @@ let seconds_until_next_midnight () =
 let check_user_unikernel_updates tcp albatross_instances
     (user : Models.User.user) he =
   let unikernels_per_instance =
-    Albatross_client.user_unikernels tcp albatross_instances user.name
+    Albatross.user_unikernels tcp albatross_instances user.name
   in
   let available_updates =
     Utils.LM.filter_map
@@ -416,7 +415,7 @@ let start_background_scaler_scheduler tcp store albatross_instances_ref =
         clean_orphans ()
     | _ -> ()
   in
-  let spawn_stats_stream key (instance : Albatross_client.t) =
+  let spawn_stats_stream key (instance : Albatross.t) =
     Fun.protect
       ~finally:(fun () ->
         active_streams := Vmm_core.String_set.remove key !active_streams)
@@ -478,8 +477,7 @@ let run_prune_dead_clusters tcp albatross_instances_ref =
        Utils.LM.iter
          (fun user_name unikernel_map ->
            let results =
-             Albatross_client.user_unikernels tcp !albatross_instances_ref
-               user_name
+             Albatross.user_unikernels tcp !albatross_instances_ref user_name
            in
            let active_vm_names =
              Utils.LM.fold

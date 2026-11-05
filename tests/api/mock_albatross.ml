@@ -28,8 +28,8 @@ let make_default_policies ~domain ?(unikernels = 10) ?(memory = 1024)
   fst (Vmm_trie.insert name policy trie)
 
 let default_instances ?(policies = Vmm_trie.empty) () =
-  let make configuration : Albatross_client.t =
-    { configuration; policies; status = Albatross_client.Status.Online }
+  let make configuration : Albatross.t =
+    { configuration; policies; status = Albatross.Status.Online }
   in
   Utils.LM.empty
   |> Utils.LM.add success_cfg.name (make success_cfg)

@@ -29,7 +29,7 @@ let select_instance (user : Models.User.user) albatross_instances
                 ];
             ]
           (Utils.LM.fold
-             (fun instance (pol : Albatross_client.t) acc ->
+             (fun instance (pol : Albatross.t) acc ->
                let name = Models.Configuration.name_to_str instance in
                let row =
                  match pol.status with
@@ -70,9 +70,7 @@ let select_instance (user : Models.User.user) albatross_instances
                                          [ "text-primary-500 font-semibold" ];
                                      ]
                                    [
-                                     txt
-                                       (Albatross_client.Status.to_string
-                                          pol.status);
+                                     txt (Albatross.Status.to_string pol.status);
                                    ];
                                ];
                              div
@@ -104,10 +102,7 @@ let select_instance (user : Models.User.user) albatross_instances
                                    a_class
                                      [ "text-secondary-500 font-semibold" ];
                                  ]
-                               [
-                                 txt
-                                   (Albatross_client.Status.to_string pol.status);
-                               ];
+                               [ txt (Albatross.Status.to_string pol.status) ];
                            ];
                          Ui.button_component
                            ~attribs:

@@ -1,9 +1,13 @@
 (library
  (name test_utils)
+ (wrapped false)
  (enabled_if
   (= %{context_name} "default"))
  (libraries
   mollymawk_libraries
+  vifu
+  mnet
+  mnet-tls
   mkernel
   mnet-happy-eyeballs
   mhttp-client
@@ -21,3 +25,5 @@
   ohex
   emile
   tyxml))
+
+(copy_files# ../../albatross.ml)

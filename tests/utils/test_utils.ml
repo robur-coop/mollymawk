@@ -605,8 +605,8 @@ module Msendmail = struct
     Error (`Msg "Connection failed")
 end
 
-module Albatross_client = struct
-  include Albatross_client
+module Albatross = struct
+  include Albatross
 
   let init _tcp (configuration : Models.Configuration.t) =
     let state : t =

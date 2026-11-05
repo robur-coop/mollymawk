@@ -1,6 +1,6 @@
-let render_log log = Fmt.str "%a" Albatross_client.Status.pp_error log
+let render_log log = Fmt.str "%a" Albatross.Status.pp_error log
 
-let albatross_status_layout (albatross : Albatross_client.t) =
+let albatross_status_layout (albatross : Albatross.t) =
   Tyxml_html.(
     section
       ~a:[ a_class [ "col-span-7 p-4 bg-gray-50 my-1" ] ]
