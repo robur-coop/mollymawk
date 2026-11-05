@@ -305,12 +305,67 @@ let with_unikernel_and_instance ?endpoint req server fn =
       with_unikernel req (fun unikernel_name ->
           fn albatross_inst unikernel_name))
 
-let write_data ?(success_msg = "Updated password successfully") storage env req
-    =
-  match Store.write_data storage env.block with
-  | Ok () -> api_response ~title:"Success" ~data:success_msg `OK req
+let ( let*? ) r f = match r with Ok x -> f x | Error resp -> resp
+
+let with_api_instance ~instance_str req server fn =
+  let albatross_instances = !(Vifu.Server.device albatross server) in
+  match Models.Configuration.name_of_str instance_str with
   | Error (`Msg err) ->
-      api_response ~title:"Failure" ~data:err `Internal_server_error req
+      api_response ~title:"Bad Request"
+        ~data:("Couldn't convert name to albatross instance: " ^ err)
+        `Bad_request req
+  | Ok instance_name -> (
+      match
+        Albatross_client.find_instance_by_name albatross_instances instance_name
+      with
+      | Ok albatross_inst -> fn albatross_inst
+      | Error _ ->
+          let name_str = Models.Configuration.name_to_str instance_name in
+          Logs.err (fun m ->
+              m "Couldn't find albatross instance with name %s" name_str);
+          api_response ~title:"Not Found"
+            ~data:("Couldn't find albatross instance with name: " ^ name_str)
+            `Not_found req)
+
+let with_api_instance_and_name ~instance_str ~name_str req server fn =
+  with_api_instance ~instance_str req server (fun albatross_inst ->
+      match Models.Configuration.name_of_str name_str with
+      | Error (`Msg err) ->
+          api_response ~title:"Bad Request"
+            ~data:("Couldn't convert name: " ^ err)
+            `Bad_request req
+      | Ok name -> fn albatross_inst name)
+
+let query_albatross_api ?(parse_error_status = `Internal_server_error) ?push tcp
+    albatross_inst ~domain ~name cmd req =
+  match Albatross_client.query tcp albatross_inst ~domain ~name ?push cmd with
+  | Error err ->
+      api_response ~title:"Internal Server Error"
+        ~data:("Error querying albatross: " ^ err)
+        `Internal_server_error req
+  | Ok (_hdr, res) -> (
+      match Albatross_json.res_to_string res with
+      | Ok res -> api_response ~title:"Success" ~data:res `OK req
+      | Error (`String err) ->
+          api_response ~title:"Error" ~data:err parse_error_status req)
+
+let dashboard_page ?page_title user ~content req server env =
+  let csrf = generate_csrf_token env req in
+  page_response
+    ~headers:[ ("X-MOLLY-CSRF", csrf) ]
+    (Dashboard.dashboard_layout ~csrf user ?page_title ~content ())
+    req server env
+
+let write_data ?headers ?(error_title = "Failure") ?(on_ok = ignore)
+    ?(on_error = Fun.id) ?(success_msg = "Updated password successfully")
+    storage env req =
+  match Store.write_data storage env.block with
+  | Ok () ->
+      on_ok ();
+      api_response ?headers ~title:"Success" ~data:success_msg `OK req
+  | Error (`Msg err) ->
+      let data = on_error err in
+      api_response ~title:error_title ~data `Internal_server_error req
 
 module Auth = struct
   (* new users have no sessions yet *)
@@ -361,7 +416,7 @@ module Auth = struct
             | None, Some _ ->
                 api_response ~title:"Failure"
                   ~data:"A user with this email already exist." `Bad_request req
-            | None, None -> (
+            | None, None ->
                 let active, super_user =
                   if Storage.count_users storage = 0 then (true, true)
                   else (false, false)
@@ -371,14 +426,11 @@ module Auth = struct
                     ~created_at:(now ()) ~active ~super_user ~user_agent
                 in
                 Storage.add_user storage user;
-                match Store.write_data storage env.block with
-                | Ok () ->
-                    api_response ~headers:(set_cookie_header cookie)
-                      ~title:"Success" ~data:"Registration successful" `OK req
-                | Error (`Msg err) ->
+                write_data ~headers:(set_cookie_header cookie)
+                  ~on_error:(fun err ->
                     Storage.delete_user storage user;
-                    api_response ~title:"Failure" ~data:err
-                      `Internal_server_error req)))
+                    err)
+                  ~success_msg:"Registration successful" storage env req))
 
   let login_user req server env =
     let storage = Vifu.Server.device storage server in
@@ -402,16 +454,13 @@ module Auth = struct
               with
               | Error (`Msg err) ->
                   api_response ~title:"Failure" ~data:err `Bad_request req
-              | Ok (user, cookie) -> (
+              | Ok (user, cookie) ->
                   Storage.update_user storage user;
-                  match Store.write_data storage env.block with
-                  | Ok () ->
-                      api_response ~headers:(set_cookie_header cookie)
-                        ~title:"Success" ~data:"Login successful" `OK req
-                  | Error (`Msg err) ->
+                  write_data ~headers:(set_cookie_header cookie)
+                    ~on_error:(fun err ->
                       Storage.remove_session storage cookie.value;
-                      api_response ~title:"Failure" ~data:err
-                        `Internal_server_error req)))
+                      err)
+                    ~success_msg:"Login successful" storage env req))
 
   let logout_user req server env =
     with_user_cookie_api ~error_title:"Failure" ~error_status:`Unauthorized req
@@ -482,20 +531,15 @@ module Auth = struct
 
   let account_page req server env =
     with_user_cookie_page req server (fun user cookie ->
-        let csrf = generate_csrf_token env req in
-        page_response
-          ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Account"
-             ~content:
-               (User_account.user_account_layout user user.cookies
-                  ~active_cookie_value:cookie.value (now ()))
-             ())
+        dashboard_page ~page_title:"Account" user
+          ~content:
+            (User_account.user_account_layout user user.cookies
+               ~active_cookie_value:cookie.value (now ()))
           req server env)
 
   let account_usage req server env =
     with_user_cookie_page req server (fun user _cookie ->
         with_instance ~endpoint:"/usage" req server (fun albatross_inst ->
-            let csrf = generate_csrf_token env req in
             let blocks =
               Albatross_client.user_blocks_by_instance env.tcp albatross_inst
                 user.name
@@ -508,13 +552,10 @@ module Auth = struct
               Option.value ~default:Albatross_client.empty_policy
                 (Albatross_client.policy albatross_inst ~domain:user.name)
             in
-            page_response
-              ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-              (Dashboard.dashboard_layout ~csrf user ~page_title:"Usage"
-                 ~content:
-                   (Account_usage.account_usage_layout
-                      albatross_inst.configuration.name policy unikernels blocks)
-                 ())
+            dashboard_page ~page_title:"Usage" user
+              ~content:
+                (Account_usage.account_usage_layout
+                   albatross_inst.configuration.name policy unikernels blocks)
               req server env))
 end
 
@@ -527,14 +568,10 @@ module Email = struct
   let email_settings req server env =
     with_admin_cookie_page req server (fun user _cookie ->
         let store = Vifu.Server.device storage server in
-        let csrf = generate_csrf_token env req in
-        page_response
-          ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Email Settings"
-             ~content:
-               (Settings_page.settings_layout ~active_tab:Email
-                  (Email_config.email_config_layout (Storage.email store)))
-             ())
+        dashboard_page ~page_title:"Email Settings" user
+          ~content:
+            (Settings_page.settings_layout ~active_tab:Email
+               (Email_config.email_config_layout (Storage.email store)))
           req server env)
 
   let update_email_configuration req server env =
@@ -545,15 +582,10 @@ module Email = struct
             let store = Vifu.Server.device storage server in
             with_valid_email_config form req (fun email_settings ->
                 Storage.store_email store (Some email_settings);
-                match Store.write_data store env.block with
-                | Ok () ->
-                    api_response ~title:"Success"
-                      ~data:"Email settings verified and saved successfully" `OK
-                      req
-                | Error (`Msg err) ->
-                    api_response ~title:"Internal Server Error"
-                      ~data:(Fmt.str "Save failed: %s" err)
-                      `Internal_server_error req)))
+                write_data ~error_title:"Internal Server Error"
+                  ~on_error:(Fmt.str "Save failed: %s")
+                  ~success_msg:"Email settings verified and saved successfully"
+                  store env req)))
 
   let test_email_configuration req server env =
     with_admin_cookie_api req server (fun _user _cookie ->
@@ -646,189 +678,106 @@ module Block = struct
             let policy =
               Albatross_client.policy ~domain:user.name albatross_inst
             in
-            let csrf = generate_csrf_token env req in
-            page_response
-              ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-              (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:
-                   (String.capitalize_ascii
-                      (Models.Configuration.name_to_str user.name))
-                 ~content:
-                   (Block_index.block_index_layout
-                      albatross_inst.configuration.name blocks policy)
-                 ())
+            dashboard_page
+              ~page_title:
+                (String.capitalize_ascii
+                   (Models.Configuration.name_to_str user.name))
+              user
+              ~content:
+                (Block_index.block_index_layout
+                   albatross_inst.configuration.name blocks policy)
               req server env))
 
   let delete_block req server env =
     with_user_cookie_api req server (fun user _cookie ->
         with_json_csrf req env
           ~csrf_of:(fun (f : Models.Block.delete_t) -> f.molly_csrf)
-          (fun ({ block_name; albatross_instance = instance_name; _ } :
-                 Models.Block.delete_t)
+          (fun ({ block_name; albatross_instance; _ } : Models.Block.delete_t)
              ->
-            let albatross_instances = !(Vifu.Server.device albatross server) in
-            match
-              ( Models.Configuration.name_of_str instance_name,
-                Models.Configuration.name_of_str block_name )
-            with
-            | Ok instance_name, Ok block_name -> (
-                match
-                  Albatross_client.find_instance_by_name albatross_instances
-                    instance_name
-                with
-                | Ok albatross_inst -> (
-                    match
-                      Albatross_client.query env.tcp albatross_inst
-                        ~domain:user.name ~name:block_name
-                        (`Block_cmd `Block_remove)
-                    with
-                    | Error err ->
-                        api_response ~title:"Internal Server Error"
-                          ~data:("Error querying albatross: " ^ err)
-                          `Internal_server_error req
-                    | Ok (_hdr, res) -> (
-                        Albatross_client.set_online albatross_inst;
-                        match Albatross_json.res_to_string res with
-                        | Ok res ->
-                            api_response ~title:"Success" ~data:res `OK req
-                        | Error (`String err) ->
-                            api_response ~title:"Internal Server Error"
-                              ~data:err `Internal_server_error req))
-                | Error _ ->
-                    Logs.err (fun m ->
-                        m "Couldn't find albatross instance with name %s"
-                          (Models.Configuration.name_to_str instance_name));
-                    api_response ~title:"Not Found"
-                      ~data:
-                        ("Couldn't find albatross instance with name: "
-                        ^ Models.Configuration.name_to_str instance_name)
-                      `Not_found req)
-            | Error (`Msg err), _ ->
-                api_response ~title:"Bad Request"
-                  ~data:("Couldn't convert instance name: " ^ err)
-                  `Bad_request req
-            | _, Error (`Msg err) ->
-                api_response ~title:"Bad Request"
-                  ~data:("Couldn't convert block name: " ^ err)
-                  `Bad_request req))
+            with_api_instance_and_name ~instance_str:albatross_instance
+              ~name_str:block_name req server (fun albatross_inst block_name ->
+                query_albatross_api env.tcp albatross_inst ~domain:user.name
+                  ~name:block_name (`Block_cmd `Block_remove) req)))
 
   let create_or_upload_block c_or_u req server env =
     with_user_cookie_api req server (fun user _cookie ->
         let cmd_name =
           match c_or_u with `Create -> "create" | `Upload -> "upload"
         in
-        let generate_http_error_response msg code =
+        let err_resp msg code =
           Logs.warn (fun m -> m "Block %s error: %s" cmd_name msg);
-          api_response ~title:"Error" ~data:msg code req
+          Error (api_response ~title:"Error" ~data:msg code req)
         in
-        match Vifu.Request.of_multipart_form req with
-        | Error (`Not_found _) ->
-            Logs.info (fun m -> m "Missing Fields");
-            generate_http_error_response
-              "One or more required fields are missing." `Bad_request
-        | Error `Invalid_multipart_form ->
-            generate_http_error_response "Couldn't decode multipart data"
-              `Bad_request
-        | Ok
-            ({
-               albatross_instance;
-               molly_csrf = csrf;
-               json_data = json;
-               block_data;
-             } :
-              Models.Block.upload_t) -> (
-            let albatross_instances = !(Vifu.Server.device albatross server) in
-            let stream_to_albatross albatross_inst block_name block_compressed =
-              let push = make_string_stream block_data in
+        let*? {
+                albatross_instance;
+                molly_csrf = csrf;
+                json_data = json;
+                block_data;
+              } =
+          match Vifu.Request.of_multipart_form req with
+          | Ok form -> Ok (form : Models.Block.upload_t)
+          | Error (`Not_found _) ->
+              Logs.info (fun m -> m "Missing Fields");
+              err_resp "One or more required fields are missing." `Bad_request
+          | Error `Invalid_multipart_form ->
+              err_resp "Couldn't decode multipart data" `Bad_request
+        in
+        with_api_instance ~instance_str:albatross_instance req server
+          (fun albatross_inst ->
+            let*? { block_name; block_size; block_compressed } =
               match
-                Albatross_client.query env.tcp albatross_inst ~domain:user.name
-                  ~name:block_name ~push
-                  (`Block_cmd (`Block_set block_compressed))
+                Jsont_bytesrw.decode_string Models.Block.block_json_form json
               with
+              | Ok v -> Ok v
               | Error err ->
-                  generate_http_error_response
-                    (Fmt.str "an error with albatross. got %s" err)
-                    `Internal_server_error
-              | Ok (_hdr, res) -> (
-                  Albatross_client.set_online albatross_inst;
-                  match Albatross_json.res_to_string res with
-                  | Error (`String err) ->
-                      generate_http_error_response
-                        (Fmt.str "unexpected field. got %s" err)
-                        `Bad_request
-                  | Ok res -> api_response ~title:"Success" ~data:res `OK req)
+                  err_resp (Fmt.str "unexpected field. got %s" err) `Bad_request
             in
-            let add_block albatross_inst block_name block_size block_compressed
-                =
-              match
-                Albatross_client.query env.tcp albatross_inst ~domain:user.name
-                  ~name:block_name
-                  (`Block_cmd (`Block_add block_size))
-              with
-              | Error err ->
-                  generate_http_error_response
-                    (Fmt.str "an error with albatross. got %s" err)
-                    `Internal_server_error
-              | Ok (_hdr, res) -> (
-                  Albatross_client.set_online albatross_inst;
-                  match Albatross_json.res res with
-                  | Error (`String err) ->
-                      generate_http_error_response
-                        (Fmt.str "unexpected field. got %s" err)
-                        `Bad_request
-                  | Ok _ ->
-                      stream_to_albatross albatross_inst block_name
-                        block_compressed)
+            let*? block_name =
+              match Models.Configuration.name_of_str block_name with
+              | Ok name -> Ok name
+              | Error (`Msg err) ->
+                  err_resp (Fmt.str "Invalid block name: %s" err) `Bad_request
             in
-            match Models.Configuration.name_of_str albatross_instance with
-            | Ok albatross_instance -> (
-                match
-                  Albatross_client.find_instance_by_name albatross_instances
-                    albatross_instance
-                with
-                | Ok albatross_inst -> (
-                    match
-                      Jsont_bytesrw.decode_string Models.Block.block_json_form
-                        json
-                    with
-                    | Ok { block_name; block_size; block_compressed } -> (
-                        match Models.Configuration.name_of_str block_name with
-                        | Error (`Msg err) ->
-                            generate_http_error_response
-                              (Fmt.str "Invalid block name: %s" err)
-                              `Bad_request
-                        | Ok block_name ->
-                            if verify_csrf env req csrf then
-                              match (c_or_u, block_size) with
-                              | `Create, Some block_size ->
-                                  add_block albatross_inst block_name block_size
-                                    block_compressed
-                              | `Create, None ->
-                                  generate_http_error_response
-                                    (Fmt.str "unexpected field. got %s" json)
-                                    `Bad_request
-                              | `Upload, _ ->
-                                  stream_to_albatross albatross_inst block_name
-                                    block_compressed
-                            else
-                              api_response ~title:"CSRF Token Mismatch"
-                                ~data:
-                                  "CSRF token mismatch error. Please refresh \
-                                   and try again."
-                                `Bad_request req)
-                    | Error err ->
-                        generate_http_error_response
-                          (Fmt.str "unexpected field. got %s" err)
-                          `Bad_request)
-                | Error _ ->
-                    generate_http_error_response
-                      (Fmt.str "Couldn't find albatross instance with name %s"
-                         (Models.Configuration.name_to_str albatross_instance))
-                      `Not_found)
-            | Error (`Msg err) ->
-                generate_http_error_response
-                  (Fmt.str "Couldn't convert name to albatross instance %s" err)
-                  `Bad_request))
+            let*? () =
+              if verify_csrf env req csrf then Ok ()
+              else
+                Error
+                  (api_response ~title:"CSRF Token Mismatch"
+                     ~data:
+                       "CSRF token mismatch error. Please refresh and try \
+                        again."
+                     `Bad_request req)
+            in
+            let*? () =
+              match (c_or_u, block_size) with
+              | `Upload, _ -> Ok ()
+              | `Create, None ->
+                  err_resp
+                    (Fmt.str "unexpected field. got %s" json)
+                    `Bad_request
+              | `Create, Some block_size -> (
+                  match
+                    Albatross_client.query env.tcp albatross_inst
+                      ~domain:user.name ~name:block_name
+                      (`Block_cmd (`Block_add block_size))
+                  with
+                  | Error err ->
+                      err_resp
+                        (Fmt.str "an error with albatross. got %s" err)
+                        `Internal_server_error
+                  | Ok (_hdr, res) -> (
+                      match Albatross_json.res res with
+                      | Error (`String err) ->
+                          err_resp
+                            (Fmt.str "unexpected field. got %s" err)
+                            `Bad_request
+                      | Ok _ -> Ok ()))
+            in
+            let push = make_string_stream block_data in
+            query_albatross_api ~parse_error_status:`Bad_request ~push env.tcp
+              albatross_inst ~domain:user.name ~name:block_name
+              (`Block_cmd (`Block_set block_compressed))
+              req))
 
   let create_block req server env =
     create_or_upload_block `Create req server env
@@ -840,87 +789,51 @@ module Block = struct
     with_user_cookie_api req server (fun user _cookie ->
         with_json_csrf req env
           ~csrf_of:(fun (f : Models.Block.download_t) -> f.molly_csrf)
-          (fun ({
-                  albatross_instance = instance_name;
-                  block_name;
-                  compression_level;
-                  _;
-                } :
+          (fun ({ albatross_instance; block_name; compression_level; _ } :
                  Models.Block.download_t)
              ->
-            let albatross_instances = !(Vifu.Server.device albatross server) in
-            match
-              ( Models.Configuration.name_of_str instance_name,
-                Models.Configuration.name_of_str block_name )
-            with
-            | Ok instance_name_obj, Ok block_name_obj -> (
-                match
-                  Albatross_client.find_instance_by_name albatross_instances
-                    instance_name_obj
-                with
-                | Ok albatross_inst ->
-                    let filename = block_name ^ "_dump" in
-                    let disposition =
-                      "attachment; filename=\"" ^ filename ^ "\""
-                    in
-                    let src =
-                      Flux.Source.with_task ~size:0x7ff (fun q ->
-                          Fun.protect
-                            ~finally:(fun () -> Flux.Bqueue.close q)
-                            (fun () ->
-                              let cb = function
-                                | None -> Ok ()
-                                | Some data ->
-                                    Flux.Bqueue.put q data;
-                                    Ok ()
-                              in
-                              let _ =
-                                Albatross_client.query_block_dump env.tcp
-                                  albatross_inst ~domain:user.name
-                                  ~name:block_name_obj compression_level cb
-                              in
-                              Albatross_client.set_online albatross_inst))
-                    in
-                    let open Vifu.Response.Syntax in
-                    let* () =
-                      Vifu.Response.add ~field:"Content-type"
-                        "application/octet-stream"
-                    in
-                    let* () =
-                      Vifu.Response.add ~field:"Content-Disposition" disposition
-                    in
-                    let* _ =
-                      Vifu.Response.add_unless_exists ~field:"connection"
-                        "close"
-                    in
-                    let* () = Vifu.Response.with_source req src in
-                    Vifu.Response.respond `OK
-                | Error err ->
-                    Logs.err (fun m ->
-                        m "Couldn't find albatross instance with name %s: %s"
-                          (Models.Configuration.name_to_str instance_name_obj)
-                          err);
-                    api_response ~title:"Not Found"
-                      ~data:
-                        ("Couldn't find albatross instance with name: "
-                        ^ Models.Configuration.name_to_str instance_name_obj)
-                      `Not_found req)
-            | Error (`Msg err), _ ->
-                api_response ~title:"Bad Request"
-                  ~data:("Couldn't convert instance name: " ^ err)
-                  `Bad_request req
-            | _, Error (`Msg err) ->
-                api_response ~title:"Bad Request"
-                  ~data:
-                    ("Couldn't convert block name: " ^ block_name ^ ": " ^ err)
-                  `Bad_request req))
+            with_api_instance_and_name ~instance_str:albatross_instance
+              ~name_str:block_name req server
+              (fun albatross_inst block_name_obj ->
+                let filename = block_name ^ "_dump" in
+                let disposition = "attachment; filename=\"" ^ filename ^ "\"" in
+                let src =
+                  Flux.Source.with_task ~size:0x7ff (fun q ->
+                      Fun.protect
+                        ~finally:(fun () -> Flux.Bqueue.close q)
+                        (fun () ->
+                          let cb = function
+                            | None -> Ok ()
+                            | Some data ->
+                                Flux.Bqueue.put q data;
+                                Ok ()
+                          in
+                          let _ =
+                            Albatross_client.query_block_dump env.tcp
+                              albatross_inst ~domain:user.name
+                              ~name:block_name_obj compression_level cb
+                          in
+                          ()))
+                in
+                let open Vifu.Response.Syntax in
+                let* () =
+                  Vifu.Response.add ~field:"Content-type"
+                    "application/octet-stream"
+                in
+                let* () =
+                  Vifu.Response.add ~field:"Content-Disposition" disposition
+                in
+                let* _ =
+                  Vifu.Response.add_unless_exists ~field:"connection" "close"
+                in
+                let* () = Vifu.Response.with_source req src in
+                Vifu.Response.respond `OK)))
 end
 
 module Unikernel = struct
   let dashboard req server env =
     with_user_cookie_page req server (fun user _cookie ->
         let albatross_instances = !(Vifu.Server.device albatross server) in
-        let csrf = generate_csrf_token env req in
         let unikernels_by_albatross_instance =
           Albatross_client.user_unikernels env.tcp albatross_instances user.name
         in
@@ -928,14 +841,11 @@ module Unikernel = struct
           Albatross_client.user_deceased_by_instance env.tcp albatross_instances
             user.name
         in
-        page_response
-          ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-          (Dashboard.dashboard_layout ~csrf user
-             ~content:
-               (Unikernel_index.unikernel_index_layout
-                  unikernels_by_albatross_instance
-                  deceased_unikernels_by_albatross_instance (now ()))
-             ())
+        dashboard_page user
+          ~content:
+            (Unikernel_index.unikernel_index_layout
+               unikernels_by_albatross_instance
+               deceased_unikernels_by_albatross_instance (now ()))
           req server env)
 
   let deploy_form req server env =
@@ -952,19 +862,14 @@ module Unikernel = struct
               Albatross_client.user_blocks_by_instance env.tcp albatross_inst
                 user.name
             in
-            let csrf = generate_csrf_token env req in
             match Albatross_client.policy albatross_inst ~domain:user.name with
             | Some user_policy ->
-                page_response
-                  ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-                  (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:"Deploy a Unikernel"
-                     ~content:
-                       (Unikernel_create.unikernel_create_layout ~user_policy
-                          unikernels_by_albatross_instance
-                          blocks_by_albatross_instance
-                          albatross_inst.configuration.name builder_jobs)
-                     ())
+                dashboard_page ~page_title:"Deploy a Unikernel" user
+                  ~content:
+                    (Unikernel_create.unikernel_create_layout ~user_policy
+                       unikernels_by_albatross_instance
+                       blocks_by_albatross_instance
+                       albatross_inst.configuration.name builder_jobs)
                   req server env
             | None ->
                 error_page_response ~title:"Resource Policy error"
@@ -989,7 +894,6 @@ module Unikernel = struct
                   in
                   (successes, failure :: failures)
               | Ok (_hdr, res) -> (
-                  Albatross_client.set_online instance;
                   match Albatross_json.res res with
                   | Error (`String err) ->
                       Logs.err (fun m ->
@@ -1036,7 +940,6 @@ module Unikernel = struct
                 error_page_response ~title:"Unikernel Not Found" ~data
                   `Not_found req
             | Ok unikernel ->
-                let csrf = generate_csrf_token env req in
                 let last_update_time =
                   Option.map
                     (fun (u : Models.User.unikernel_update) -> u.timestamp)
@@ -1051,15 +954,12 @@ module Unikernel = struct
                   Albatross_client.user_max_allowed_unikernel_instances
                     albatross_inst user.name
                 in
-                page_response
-                  ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-                  (Dashboard.dashboard_layout ~csrf user
-                     ~content:
-                       (Unikernel_single.unikernel_single_layout ~unikernel_name
-                          ~instance_name:albatross_inst.configuration.name
-                          ~max_allowed unikernel ~last_update_time
-                          ~current_time:(now ()) scaling_policy)
-                     ())
+                dashboard_page user
+                  ~content:
+                    (Unikernel_single.unikernel_single_layout ~unikernel_name
+                       ~instance_name:albatross_inst.configuration.name
+                       ~max_allowed unikernel ~last_update_time
+                       ~current_time:(now ()) scaling_policy)
                   req server env))
 
   let unikernel_console req server env =
@@ -1082,7 +982,7 @@ module Unikernel = struct
                         Albatross_client.query_console env.tcp albatross_inst
                           ~domain:user.name ~name:unikernel_name cb
                       in
-                      Albatross_client.set_online albatross_inst))
+                      ()))
             in
             let open Vifu.Response.Syntax in
             let* () =
@@ -1108,51 +1008,11 @@ module Unikernel = struct
         with_json_csrf req env
           ~csrf_of:(fun (f : Models.Unikernel.destroy_t) -> f.molly_csrf)
           (fun (form : Models.Unikernel.destroy_t) ->
-            let albatross_instances = !(Vifu.Server.device albatross server) in
-            match
-              ( Models.Configuration.name_of_str form.albatross_instance,
-                Models.Configuration.name_of_str form.name )
-            with
-            | Ok instance_name, Ok unikernel_name -> (
-                match
-                  Albatross_client.find_instance_by_name albatross_instances
-                    instance_name
-                with
-                | Ok albatross_inst -> (
-                    match
-                      Albatross_client.query env.tcp albatross_inst
-                        ~domain:user.name ~name:unikernel_name
-                        (`Unikernel_cmd `Unikernel_destroy)
-                    with
-                    | Error msg ->
-                        api_response ~title:"Internal Server Error"
-                          ~data:("Error querying albatross: " ^ msg)
-                          `Internal_server_error req
-                    | Ok (_hdr, res) -> (
-                        Albatross_client.set_online albatross_inst;
-                        match Albatross_json.res_to_string res with
-                        | Ok res ->
-                            api_response ~title:"Success" ~data:res `OK req
-                        | Error (`String err) ->
-                            api_response ~title:"Internal Server Error"
-                              ~data:err `Internal_server_error req))
-                | Error _ ->
-                    Logs.err (fun m ->
-                        m "Error finding albatross instance %s"
-                          (Models.Configuration.name_to_str instance_name));
-                    api_response ~title:"Not Found"
-                      ~data:
-                        ("Error finding albatross instance: "
-                        ^ Models.Configuration.name_to_str instance_name)
-                      `Not_found req)
-            | Error (`Msg err), _ ->
-                api_response ~title:"Bad Request"
-                  ~data:("Error converting instance name: " ^ err)
-                  `Bad_request req
-            | _, Error (`Msg err) ->
-                api_response ~title:"Bad Request"
-                  ~data:("Error converting unikernel name: " ^ err)
-                  `Bad_request req))
+            with_api_instance_and_name ~instance_str:form.albatross_instance
+              ~name_str:form.name req server
+              (fun albatross_inst unikernel_name ->
+                query_albatross_api env.tcp albatross_inst ~domain:user.name
+                  ~name:unikernel_name (`Unikernel_cmd `Unikernel_destroy) req)))
 
   let unikernel_restart req server env =
     with_user_cookie_api req server (fun user _cookie ->
@@ -1162,23 +1022,10 @@ module Unikernel = struct
               ~csrf_of:(fun (f : Models.Unikernel.restart_t) -> f.molly_csrf)
               (fun (form : Models.Unikernel.restart_t) ->
                 let restart ?arguments () =
-                  match
-                    Albatross_client.query env.tcp albatross_inst
-                      ~domain:user.name ~name:unikernel_name
-                      (`Unikernel_cmd (`Unikernel_restart arguments))
-                  with
-                  | Error msg ->
-                      api_response ~title:"Internal Server Error"
-                        ~data:("Error querying albatross: " ^ msg)
-                        `Internal_server_error req
-                  | Ok (_hdr, res) -> (
-                      Albatross_client.set_online albatross_inst;
-                      match Albatross_json.res_to_string res with
-                      | Ok res ->
-                          api_response ~title:"Success" ~data:res `OK req
-                      | Error (`String err) ->
-                          api_response ~title:"Internal Server Error" ~data:err
-                            `Internal_server_error req)
+                  query_albatross_api env.tcp albatross_inst ~domain:user.name
+                    ~name:unikernel_name
+                    (`Unikernel_cmd (`Unikernel_restart arguments))
+                    req
                 in
                 match form.arguments with
                 | Some arguments -> (
@@ -1190,133 +1037,83 @@ module Unikernel = struct
                     | Ok arguments -> restart ~arguments ())
                 | None -> restart ())))
 
+  let fetch_binary_stream he ~job ~version =
+    let buf = Buffer.create 65536 in
+    let push_chunks = function
+      | Some chunk -> Buffer.add_string buf chunk
+      | None -> ()
+    in
+    Builder_web.fetch_unikernel_binary_image he ~job ~version push_chunks
+    |> Result.map (fun () -> make_string_stream (Buffer.contents buf))
+
   let unikernel_create req server env =
     with_user_cookie_api req server (fun user _cookie ->
-        let generate_http_error_response msg code =
+        let err_resp msg code =
           Logs.warn (fun m -> m "Unikernel_create error: %s" msg);
-          api_response ~title:"Error" ~data:msg code req
+          Error (api_response ~title:"Error" ~data:msg code req)
         in
-        match Vifu.Request.of_multipart_form req with
-        | Error (`Msg msg) -> generate_http_error_response msg `Bad_request
-        | Error (`Not_found field) ->
-            generate_http_error_response
-              ("Missing field: " ^ field)
-              `Bad_request
-        | Error `Invalid_multipart_form ->
-            generate_http_error_response "Invalid multipart form" `Bad_request
-        | Ok stream -> (
-            let albatross_instances = !(Vifu.Server.device albatross server) in
-            let he = Vifu.Server.device happy_eyeballs server in
-            match
-              Models.Unikernel.create_of_parts
-                (Models.Multipart.parse_stream stream)
-            with
-            | Ok form -> (
-                let process_unikernel_create albatross_inst unikernel_name =
-                  match Albatross_json.config_of_json form.unikernel_config with
+        let*? stream =
+          match Vifu.Request.of_multipart_form req with
+          | Ok stream -> Ok stream
+          | Error (`Msg msg) -> err_resp msg `Bad_request
+          | Error (`Not_found field) ->
+              err_resp ("Missing field: " ^ field) `Bad_request
+          | Error `Invalid_multipart_form ->
+              err_resp "Invalid multipart form" `Bad_request
+        in
+        let he = Vifu.Server.device happy_eyeballs server in
+        let*? form =
+          match
+            Models.Unikernel.create_of_parts
+              (Models.Multipart.parse_stream stream)
+          with
+          | Ok form -> Ok form
+          | Error msg ->
+              Logs.info (fun m -> m "Missing Fields");
+              err_resp msg `Bad_request
+        in
+        with_api_instance_and_name ~instance_str:form.albatross_instance
+          ~name_str:form.unikernel_name req server
+          (fun albatross_inst unikernel_name ->
+            let*? () =
+              if verify_csrf env req form.molly_csrf then Ok ()
+              else
+                Error
+                  (api_response ~title:"CSRF Token Mismatch"
+                     ~data:
+                       "CSRF token mismatch error. Please refresh and try \
+                        again."
+                     `Bad_request req)
+            in
+            let*? cfg =
+              match Albatross_json.config_of_json form.unikernel_config with
+              | Ok cfg -> Ok cfg
+              | Error (`Msg err) ->
+                  err_resp ("Invalid unikernel arguments: " ^ err) `Bad_request
+            in
+            let*? push =
+              match (form.deploy_mode, form.builder_job, form.binary) with
+              | "builder", Some job, _ -> (
+                  match fetch_binary_stream he ~job ~version:"latest" with
+                  | Ok push -> Ok push
                   | Error (`Msg err) ->
-                      generate_http_error_response
-                        ("Invalid unikernel arguments: " ^ err)
-                        `Bad_request
-                  | Ok cfg -> (
-                      let albatross_cmd =
-                        if
-                          bool_of_string_opt form.unikernel_force_create
-                          = Some true
-                        then `Unikernel_cmd (`Unikernel_force_create cfg)
-                        else `Unikernel_cmd (`Unikernel_create cfg)
-                      in
-                      let execute_albatross_cmd push =
-                        match
-                          Albatross_client.query env.tcp albatross_inst
-                            ~domain:user.name ~name:unikernel_name ~push
-                            albatross_cmd
-                        with
-                        | Error err ->
-                            generate_http_error_response
-                              ("Albatross Query Error: " ^ err)
-                              `Internal_server_error
-                        | Ok (_hdr, res) -> (
-                            Albatross_client.set_online albatross_inst;
-                            match Albatross_json.res_to_string res with
-                            | Ok res_json ->
-                                api_response ~title:"Success" ~data:res_json `OK
-                                  req
-                            | Error (`String err_str) ->
-                                generate_http_error_response
-                                  ("Albatross Response Error: " ^ err_str)
-                                  `Internal_server_error)
-                      in
-                      match form.deploy_mode with
-                      | "builder" -> (
-                          match form.builder_job with
-                          | Some job -> (
-                              let buf = Buffer.create 65536 in
-                              let push_chunks = function
-                                | Some chunk -> Buffer.add_string buf chunk
-                                | None -> ()
-                              in
-                              match
-                                Builder_web.fetch_unikernel_binary_image he ~job
-                                  ~version:"latest" push_chunks
-                              with
-                              | Error (`Msg err) ->
-                                  generate_http_error_response
-                                    ("Builder Error: " ^ err)
-                                    `Internal_server_error
-                              | Ok () ->
-                                  execute_albatross_cmd
-                                    (make_string_stream (Buffer.contents buf)))
-                          | None ->
-                              generate_http_error_response
-                                "Missing builder job or uuid" `Bad_request)
-                      | "manual" -> (
-                          match form.binary with
-                          | Some binary_data ->
-                              execute_albatross_cmd
-                                (make_string_stream binary_data)
-                          | None ->
-                              generate_http_error_response
-                                "One or more required fields are missing."
-                                `Bad_request)
-                      | _ ->
-                          generate_http_error_response "Invalid deploy mode"
-                            `Bad_request)
-                in
-                match
-                  ( Models.Configuration.name_of_str form.albatross_instance,
-                    Models.Configuration.name_of_str form.unikernel_name )
-                with
-                | Ok instance_name, Ok unikernel_name -> (
-                    match
-                      Albatross_client.find_instance_by_name albatross_instances
-                        instance_name
-                    with
-                    | Ok albatross_inst ->
-                        if verify_csrf env req form.molly_csrf then
-                          process_unikernel_create albatross_inst unikernel_name
-                        else
-                          api_response ~title:"CSRF Token Mismatch"
-                            ~data:
-                              "CSRF token mismatch error. Please refresh and \
-                               try again."
-                            `Bad_request req
-                    | Error _ ->
-                        generate_http_error_response
-                          ("Error finding albatross instance: "
-                          ^ Models.Configuration.name_to_str instance_name)
-                          `Not_found)
-                | Error (`Msg err), _ ->
-                    generate_http_error_response
-                      ("Error converting instance name: " ^ err)
-                      `Bad_request
-                | _, Error (`Msg err) ->
-                    generate_http_error_response
-                      ("Error converting unikernel name: " ^ err)
-                      `Bad_request)
-            | Error msg ->
-                Logs.info (fun m -> m "Missing Fields");
-                generate_http_error_response msg `Bad_request))
+                      err_resp ("Builder Error: " ^ err) `Internal_server_error)
+              | "builder", None, _ ->
+                  err_resp "Missing builder job or uuid" `Bad_request
+              | "manual", _, Some binary_data ->
+                  Ok (make_string_stream binary_data)
+              | "manual", _, None ->
+                  err_resp "One or more required fields are missing."
+                    `Bad_request
+              | _ -> err_resp "Invalid deploy mode" `Bad_request
+            in
+            let albatross_cmd =
+              if bool_of_string_opt form.unikernel_force_create = Some true then
+                `Unikernel_cmd (`Unikernel_force_create cfg)
+              else `Unikernel_cmd (`Unikernel_create cfg)
+            in
+            query_albatross_api ~push env.tcp albatross_inst ~domain:user.name
+              ~name:unikernel_name albatross_cmd req))
 
   let unikernel_prepare_update req server env =
     with_user_cookie_page req server (fun user _cookie ->
@@ -1335,18 +1132,15 @@ module Unikernel = struct
             in
             match pipeline with
             | Ok (Update_available (name, unikernel, build_comparison)) ->
-                let csrf = generate_csrf_token env req in
-                page_response
-                  ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-                  (Dashboard.dashboard_layout ~csrf user
-                     ~page_title:(Vmm_core.Name.to_string name ^ " Update")
-                     ~content:
-                       (Unikernel_update.unikernel_update_layout
-                          ~instance_name:albatross_inst.configuration.name
-                          ~unikernel_name:
-                            (Models.Configuration.name_to_str unikernel_name)
-                          (name, unikernel) (now ()) build_comparison)
-                     ())
+                dashboard_page
+                  ~page_title:(Vmm_core.Name.to_string name ^ " Update")
+                  user
+                  ~content:
+                    (Unikernel_update.unikernel_update_layout
+                       ~instance_name:albatross_inst.configuration.name
+                       ~unikernel_name:
+                         (Models.Configuration.name_to_str unikernel_name)
+                       (name, unikernel) (now ()) build_comparison)
                   req server env
             | Ok (No_update_needed (name, uuid)) ->
                 Logs.info (fun m ->
@@ -1416,7 +1210,6 @@ module Unikernel = struct
         let unikernel_name_str =
           Models.Configuration.name_to_str unikernel_name
         in
-        Albatross_client.set_online albatross_inst;
         match Albatross_json.res_to_string res with
         | Error (`String err) ->
             Logs.warn (fun m ->
@@ -1473,15 +1266,9 @@ module Unikernel = struct
              ^ data),
             `Internal_server_error )
     | Ok () -> (
-        let buf = Buffer.create 65536 in
-        let push_chunks = function
-          | Some chunk -> Buffer.add_string buf chunk
-          | None -> ()
-        in
         match
-          Builder_web.fetch_unikernel_binary_image he ~job
+          fetch_binary_stream he ~job
             ~version:(Uuidm.to_string to_be_updated_unikernel)
-            push_chunks
         with
         | Error (`Msg err) ->
             Logs.err (fun m ->
@@ -1496,8 +1283,7 @@ module Unikernel = struct
                  ^ " :an error occured while fetching the binary from \
                     builds.robur.coop with error: " ^ err),
                 `Internal_server_error )
-        | Ok () ->
-            let push = make_string_stream (Buffer.contents buf) in
+        | Ok push ->
             force_create_unikernel env.tcp albatross_inst ~unikernel_name ~push
               unikernel_cfg user)
 
@@ -1601,184 +1387,79 @@ module Unikernel = struct
           ~csrf_of:(fun (f : Models.Unikernel.update_t) -> f.molly_csrf)
           (fun (form : Models.Unikernel.update_t) ->
             let store = Vifu.Server.device storage server in
-            let albatross_instances = !(Vifu.Server.device albatross server) in
             let he = Vifu.Server.device happy_eyeballs server in
-            let config_or_none field = function
-              | None | Some (Jsont.Null _) | Some (Jsont.String ("null", _)) ->
-                  Ok None
-              | Some (Jsont.String (str, _)) -> (
-                  match Albatross_json.config_of_json str with
-                  | Ok cfg -> Ok (Some cfg)
-                  | Error (`Msg err) ->
-                      Error
-                        (`Msg
-                           ("invalid json for " ^ field ^ ": " ^ str
-                          ^ "failed with: " ^ err)))
-              | Some json -> (
-                  match Albatross_json.config_of_jsont json with
-                  | Ok cfg -> Ok (Some cfg)
-                  | Error (`Msg err) ->
-                      let json_str =
-                        Result.value ~default:""
-                          (Jsont_bytesrw.encode_string Jsont.json json)
-                      in
-                      Error
-                        (`Msg
-                           ("invalid json for " ^ field ^ ": " ^ json_str
-                          ^ "failed with: " ^ err)))
-            in
             let http_liveliness_address = form.http_liveliness_address in
             let dns_liveliness = form.dns_liveliness in
-            match
+            let*? () =
               Liveliness_checks.liveliness_checks ~http_liveliness_address
                 ~dns_liveliness ~udp:env.udp ~happy_eyeballs:he
-            with
-            | Ok () -> (
-                match
-                  ( Models.Configuration.name_of_str form.albatross_instance,
-                    Models.Configuration.name_of_str form.unikernel_name )
-                with
-                | Ok instance_name, Ok unikernel_name -> (
-                    match
-                      Albatross_client.find_instance_by_name albatross_instances
-                        instance_name
-                    with
-                    | Ok albatross_inst -> (
-                        match
-                          config_or_none "unikernel_arguments"
-                            form.unikernel_arguments
-                        with
-                        | Error (`Msg err) ->
-                            api_response
-                              ~title:"Error with Unikernel Arguments Json"
-                              ~data:
-                                ("Could not get the unikernel arguments json: "
-                               ^ err)
-                              `Bad_request req
-                        | Ok cfg_opt -> (
-                            match
-                              ( Uuidm.of_string form.to_be_updated_unikernel,
-                                Uuidm.of_string form.currently_running_unikernel
-                              )
-                            with
-                            | None, _ ->
-                                api_response
-                                  ~title:
-                                    "Error: Bad to-be-updated unikernel UUID"
-                                  ~data:
-                                    "Couldn't convert the to-be-updated \
-                                     unikernel build UUID"
-                                  `Bad_request req
-                            | _, None ->
-                                api_response
-                                  ~title:
-                                    "Error: Bad currently running unikernel \
-                                     UUID"
-                                  ~data:
-                                    "Couldn't convert the currently running \
-                                     unikernel build UUID"
-                                  `Bad_request req
-                            | ( Some to_be_updated_unikernel,
-                                Some currently_running_unikernel ) -> (
-                                match cfg_opt with
-                                | None -> (
-                                    match
-                                      Albatross_client.user_unikernel env.tcp
-                                        albatross_inst ~user_name:user.name
-                                        ~unikernel_name
-                                    with
-                                    | Error err ->
-                                        api_response ~title:"Bad Request"
-                                          ~data:
-                                            ("Couldn't find albatross \
-                                              instance, "
-                                            ^ Models.Configuration.name_to_str
-                                                instance_name
-                                            ^ " with error: " ^ err)
-                                          `Bad_request req
-                                    | Ok (_n, (info : Vmm_core.Unikernel.info))
-                                      ->
-                                        let (cfg : Vmm_core.Unikernel.config) =
-                                          {
-                                            Vmm_core.Unikernel.typ = info.typ;
-                                            compressed = false;
-                                            image = "";
-                                            add_name = true;
-                                            startup = info.startup;
-                                            fail_behaviour = info.fail_behaviour;
-                                            cpuids = info.cpuids;
-                                            memory = info.memory;
-                                            block_devices =
-                                              List.map
-                                                (fun {
-                                                       Vmm_core.Unikernel
-                                                       .unikernel_device;
-                                                       host_device;
-                                                       sector_size;
-                                                       _;
-                                                     } ->
-                                                  ( unikernel_device,
-                                                    Some host_device,
-                                                    Some sector_size ))
-                                                info.block_devices;
-                                            bridges =
-                                              List.map
-                                                (fun {
-                                                       Vmm_core.Unikernel
-                                                       .unikernel_device;
-                                                       host_device;
-                                                       mac;
-                                                     } ->
-                                                  ( unikernel_device,
-                                                    Some host_device,
-                                                    Some mac ))
-                                                info.bridges;
-                                            argv = info.argv;
-                                            numcpus = info.numcpus;
-                                            linux_boot_partition =
-                                              info.linux_boot_partition;
-                                          }
-                                        in
-                                        process_unikernel_update ~unikernel_name
-                                          ~job:form.job ~to_be_updated_unikernel
-                                          ~currently_running_unikernel
-                                          ~http_liveliness_address
-                                          ~dns_liveliness env cfg user store he
-                                          albatross_inst req)
-                                | Some cfg ->
-                                    process_unikernel_update ~unikernel_name
-                                      ~job:form.job ~to_be_updated_unikernel
-                                      ~currently_running_unikernel
-                                      ~http_liveliness_address ~dns_liveliness
-                                      env cfg user store he albatross_inst req))
-                        )
-                    | Error _ ->
-                        api_response ~title:"Albatross Instance Error"
-                          ~data:
-                            ("An error occured while finding albatross \
-                              instance "
-                            ^ Models.Configuration.name_to_str instance_name)
-                          `Not_found req)
-                | Error (`Msg err), _ ->
-                    api_response ~title:"Error: Bad instance name"
-                      ~data:("Couldn't convert the instance name, error: " ^ err)
-                      `Bad_request req
-                | _, Error (`Msg err) ->
-                    api_response ~title:"Error: Bad unikernel name"
-                      ~data:
-                        ("Couldn't convert the unikernel name, error: " ^ err)
-                      `Bad_request req)
-            | Error (`Msg err) ->
-                Logs.info (fun m ->
-                    m
-                      "Liveliness check of currentyly running unikernel failed \
-                       with: %s"
-                      err);
-                api_response ~title:"Error: Liveliness check failed"
-                  ~data:
-                    ("Liveliness check of currentyly running unikernel failed \
-                      with error: " ^ err)
-                  `Internal_server_error req))
+              |> Result.map_error (fun (`Msg err) ->
+                  Logs.info (fun m ->
+                      m
+                        "Liveliness check of currentyly running unikernel \
+                         failed with: %s"
+                        err);
+                  api_response ~title:"Error: Liveliness check failed"
+                    ~data:
+                      ("Liveliness check of currentyly running unikernel \
+                        failed with error: " ^ err)
+                    `Internal_server_error req)
+            in
+            with_api_instance_and_name ~instance_str:form.albatross_instance
+              ~name_str:form.unikernel_name req server
+              (fun albatross_inst unikernel_name ->
+                let*? cfg_opt =
+                  Models.Unikernel.config_or_none "unikernel_arguments"
+                    form.unikernel_arguments
+                  |> Result.map_error (fun (`Msg err) ->
+                      api_response ~title:"Error with Unikernel Arguments Json"
+                        ~data:
+                          ("Could not get the unikernel arguments json: " ^ err)
+                        `Bad_request req)
+                in
+                let*? to_be_updated_unikernel =
+                  Option.to_result
+                    ~none:
+                      (api_response
+                         ~title:"Error: Bad to-be-updated unikernel UUID"
+                         ~data:
+                           "Couldn't convert the to-be-updated unikernel build \
+                            UUID"
+                         `Bad_request req)
+                    (Uuidm.of_string form.to_be_updated_unikernel)
+                in
+                let*? currently_running_unikernel =
+                  Option.to_result
+                    ~none:
+                      (api_response
+                         ~title:"Error: Bad currently running unikernel UUID"
+                         ~data:
+                           "Couldn't convert the currently running unikernel \
+                            build UUID"
+                         `Bad_request req)
+                    (Uuidm.of_string form.currently_running_unikernel)
+                in
+                let*? cfg =
+                  match cfg_opt with
+                  | Some cfg -> Ok cfg
+                  | None ->
+                      Albatross_client.user_unikernel env.tcp albatross_inst
+                        ~user_name:user.name ~unikernel_name
+                      |> Result.map (fun (_n, info) ->
+                          Models.Unikernel.config_of_info info)
+                      |> Result.map_error (fun err ->
+                          api_response ~title:"Bad Request"
+                            ~data:
+                              ("Couldn't find albatross instance, "
+                              ^ Models.Configuration.name_to_str
+                                  albatross_inst.configuration.name
+                              ^ " with error: " ^ err)
+                            `Bad_request req)
+                in
+                process_unikernel_update ~unikernel_name ~job:form.job
+                  ~to_be_updated_unikernel ~currently_running_unikernel
+                  ~http_liveliness_address ~dns_liveliness env cfg user store he
+                  albatross_inst req)))
 
   let unikernel_rollback req server env =
     with_user_cookie_api req server (fun user _cookie ->
@@ -1786,34 +1467,12 @@ module Unikernel = struct
           ~csrf_of:(fun (f : Models.Unikernel.rollback_t) -> f.molly_csrf)
           (fun (form : Models.Unikernel.rollback_t) ->
             let store = Vifu.Server.device storage server in
-            let albatross_instances = !(Vifu.Server.device albatross server) in
             let he = Vifu.Server.device happy_eyeballs server in
-            match
-              ( Models.Configuration.name_of_str form.albatross_instance,
-                Models.Configuration.name_of_str form.unikernel_name )
-            with
-            | Ok instance_name, Ok unikernel_name -> (
-                match
-                  Albatross_client.find_instance_by_name albatross_instances
-                    instance_name
-                with
-                | Ok albatross_inst ->
-                    process_rollback env albatross_inst ~unikernel_name (now ())
-                      store he req user
-                | Error _ ->
-                    api_response ~title:"Not Found"
-                      ~data:
-                        ("Couldn't find albatross instance, "
-                        ^ Models.Configuration.name_to_str instance_name)
-                      `Not_found req)
-            | Error (`Msg err), _ ->
-                api_response ~title:"Bad Request"
-                  ~data:("Couldn't convert instance name, " ^ err)
-                  `Bad_request req
-            | _, Error (`Msg err) ->
-                api_response ~title:"Bad Request"
-                  ~data:("Couldn't convert unikernel name, " ^ err)
-                  `Bad_request req))
+            with_api_instance_and_name ~instance_str:form.albatross_instance
+              ~name_str:form.unikernel_name req server
+              (fun albatross_inst unikernel_name ->
+                process_rollback env albatross_inst ~unikernel_name (now ())
+                  store he req user)))
 
   let unikernel_scaling_policy_update req server env =
     with_user_cookie_api req server (fun user _cookie ->
@@ -1835,15 +1494,11 @@ module Unikernel = struct
                     Models.User.update_user user ~scaling_policies ()
                   in
                   Storage.update_user store user;
-                  match Store.write_data store env.block with
-                  | Ok () ->
-                      api_response ~title:"Success"
-                        ~data:"Unikernel scaling policy updated successfully."
-                        `OK req
-                  | Error (`Msg err) ->
-                      api_response ~title:"Internal Server Error"
-                        ~data:(Fmt.str "Failed to save scaling policy: %s" err)
-                        `Internal_server_error req
+                  write_data ~error_title:"Internal Server Error"
+                    ~on_error:(Fmt.str "Failed to save scaling policy: %s")
+                    ~success_msg:
+                      "Unikernel scaling policy updated successfully."
+                    store env req
                 in
                 match (form.should_scale, form.max_instances) with
                 | true, Some max_instances ->
@@ -1906,73 +1561,16 @@ module Unikernel = struct
                       ~data:"Missing max number of clones to spawn."
                       `Bad_request req)))
 
-  let send_monitoring_tcp_command happy_eyeballs ~command ~target =
-    let port = 2323 in
-    try
-      match
-        Mnet_happy_eyeballs.connect ~kind:Mnet.TCP.direct happy_eyeballs target
-          [ port ]
-      with
-      | Error (`Msg err) ->
-          let msg =
-            Fmt.str "[monitoring] Failed to connect to %s:%d, error %s" target
-              port err
-          in
-          Logs.info (fun m -> m "%s" msg);
-          Error msg
-      | Ok ((_ip, _port), flow) -> (
-          try
-            Mnet.TCP.write flow command;
-            match Mnet.TCP.read flow with
-            | Ok [] | Error `Eof ->
-                Mnet.TCP.close flow;
-                let msg =
-                  Fmt.str
-                    "[monitoring] Received eof while reading from %s:%d \
-                     (command: %s)"
-                    target port command
-                in
-                Logs.info (fun m -> m "%s" msg);
-                Error msg
-            | Error `Refused ->
-                Mnet.TCP.close flow;
-                let msg =
-                  Fmt.str
-                    "[monitoring] Connection refused while reading from %s:%d \
-                     (command: %s)"
-                    target port command
-                in
-                Logs.info (fun m -> m "%s" msg);
-                Error msg
-            | Ok chunks ->
-                Mnet.TCP.close flow;
-                Ok (String.concat "" chunks)
-          with exn ->
-            (try Mnet.TCP.close flow with _ -> ());
-            let msg =
-              Fmt.str
-                "[monitoring] Failed communicating with %s:%d (command: %s), \
-                 error %s"
-                target port command (Printexc.to_string exn)
-            in
-            Logs.info (fun m -> m "%s" msg);
-            Error msg)
-    with exn ->
-      let msg =
-        Fmt.str "[monitoring] Failed to connect to %s:%d, error %s" target port
-          (Printexc.to_string exn)
-      in
-      Logs.info (fun m -> m "%s" msg);
-      Error msg
-
-  let unikernel_monitoring_status req server _env =
+  let unikernel_monitoring_status req server env =
     with_user_cookie_api req server (fun _user _cookie ->
         with_unikernel req (fun unikernel_name ->
             let he = Vifu.Server.device management_happy_eyeballs server in
             let target = Models.Configuration.name_to_str unikernel_name in
-            let logs = send_monitoring_tcp_command he ~command:"l*" ~target in
+            let logs =
+              Monitoring.send_tcp_command he ~command:"l*" ~target env.m_domain
+            in
             let metrics =
-              send_monitoring_tcp_command he ~command:"m*" ~target
+              Monitoring.send_tcp_command he ~command:"m*" ~target env.m_domain
             in
             let status =
               match (logs, metrics) with
@@ -1998,8 +1596,8 @@ module Unikernel = struct
                 match Monitoring.check_command command_str with
                 | Ok command -> (
                     match
-                      send_monitoring_tcp_command he ~command
-                        ~target:unikernel_name
+                      Monitoring.send_tcp_command he ~command
+                        ~target:unikernel_name env.m_domain
                     with
                     | Error err ->
                         api_response ~title:"Bad Request"
@@ -2043,41 +1641,26 @@ module Albatross_admin = struct
             ~path:(construct_instance_redirect_url callback instance_name)
             req ()
         else
-          let csrf = generate_csrf_token env req in
-          page_response
-            ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-            (Dashboard.dashboard_layout ~csrf user ~page_title:"Choose instance"
-               ~content:
-                 (Albatross_instances.select_instance user albatross_instances
-                    callback)
-               ())
+          dashboard_page ~page_title:"Choose instance" user
+            ~content:
+              (Albatross_instances.select_instance user albatross_instances
+                 callback)
             req server env)
 
   let albatross_settings req server env =
     with_admin_cookie_page req server (fun user _cookie ->
         let albatross_instances = !(Vifu.Server.device albatross server) in
-        let csrf = generate_csrf_token env req in
-        page_response
-          ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-          (Dashboard.dashboard_layout ~csrf user
-             ~page_title:"Albatross Settings"
-             ~content:
-               (Settings_page.settings_layout ~active_tab:Albatross
-                  (Albatross_config.albatross_config_layout albatross_instances))
-             ())
+        dashboard_page ~page_title:"Albatross Settings" user
+          ~content:
+            (Settings_page.settings_layout ~active_tab:Albatross
+               (Albatross_config.albatross_config_layout albatross_instances))
           req server env)
 
   let view_albatross_error_logs req server env =
     with_admin_cookie_page req server (fun user _cookie ->
         with_instance req server (fun albatross_inst ->
-            let csrf = generate_csrf_token env req in
-            page_response
-              ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-              (Dashboard.dashboard_layout ~csrf user
-                 ~page_title:"Albatross Errors"
-                 ~content:
-                   (Albatross_status.albatross_status_layout albatross_inst)
-                 ())
+            dashboard_page ~page_title:"Albatross Errors" user
+              ~content:(Albatross_status.albatross_status_layout albatross_inst)
               req server env))
 
   let retry_initializing_instance req server env =
@@ -2108,36 +1691,33 @@ module Albatross_admin = struct
           (fun (form : Models.Configuration.form_t) ->
             let store = Vifu.Server.device storage server in
             let albatross_instances = Vifu.Server.device albatross server in
-            match Models.Configuration.to_configuration form (now ()) with
-            | Ok configuration_settings -> (
-                match Albatross_client.init env.tcp configuration_settings with
-                | Ok new_albatross_instance -> (
-                    match
-                      Storage.upsert_configuration store configuration_settings
-                        update_or_create
-                    with
-                    | Error err ->
-                        api_response ~title:"Bad Request" ~data:err `Bad_request
-                          req
-                    | Ok () -> (
-                        match Store.write_data store env.block with
-                        | Ok () ->
-                            albatross_instances :=
-                              Utils.LM.update configuration_settings.name
-                                (fun _prev -> Some new_albatross_instance)
-                                !albatross_instances;
-                            api_response ~title:"Success"
-                              ~data:"Configuration updated successfully" `OK req
-                        | Error (`Msg err) ->
-                            Storage.delete_configuration store
-                              configuration_settings.name;
-                            api_response ~title:"Internal Server Error"
-                              ~data:err `Internal_server_error req))
-                | Error (_, err) ->
-                    api_response ~title:"Internal Server Error" ~data:err
-                      `Internal_server_error req)
-            | Error (`Msg err) ->
-                api_response ~title:"Bad Request" ~data:err `Bad_request req))
+            let*? configuration_settings =
+              Models.Configuration.to_configuration form (now ())
+              |> Result.map_error (fun (`Msg err) ->
+                  api_response ~title:"Bad Request" ~data:err `Bad_request req)
+            in
+            let*? new_albatross_instance =
+              Albatross_client.init env.tcp configuration_settings
+              |> Result.map_error (fun (_, err) ->
+                  api_response ~title:"Internal Server Error" ~data:err
+                    `Internal_server_error req)
+            in
+            let*? () =
+              Storage.upsert_configuration store configuration_settings
+                update_or_create
+              |> Result.map_error (fun err ->
+                  api_response ~title:"Bad Request" ~data:err `Bad_request req)
+            in
+            write_data ~error_title:"Internal Server Error"
+              ~on_ok:(fun () ->
+                albatross_instances :=
+                  Utils.LM.update configuration_settings.name
+                    (fun _prev -> Some new_albatross_instance)
+                    !albatross_instances)
+              ~on_error:(fun err ->
+                Storage.delete_configuration store configuration_settings.name;
+                err)
+              ~success_msg:"Configuration updated successfully" store env req))
 
   let create_albatross_configuration req server env =
     update_or_create_albatross_configuration `Create req server env
@@ -2153,17 +1733,13 @@ module Albatross_admin = struct
             let store = Vifu.Server.device storage server in
             let albatross_instances = Vifu.Server.device albatross server in
             match Models.Configuration.name_of_str form.name with
-            | Ok name -> (
+            | Ok name ->
                 Storage.delete_configuration store name;
-                match Store.write_data store env.block with
-                | Ok () ->
+                write_data ~error_title:"Internal Server Error"
+                  ~on_ok:(fun () ->
                     albatross_instances :=
-                      Utils.LM.remove name !albatross_instances;
-                    api_response ~title:"Success"
-                      ~data:"Configuration delete successfully" `OK req
-                | Error (`Msg err) ->
-                    api_response ~title:"Internal Server Error" ~data:err
-                      `Internal_server_error req)
+                      Utils.LM.remove name !albatross_instances)
+                  ~success_msg:"Configuration delete successfully" store env req
             | Error (`Msg err) ->
                 api_response ~title:"Bad Request" ~data:err `Bad_request req))
 end
@@ -2184,13 +1760,9 @@ module Admin = struct
   let users req server env =
     with_admin_cookie_page req server (fun user _cookie ->
         let store = Vifu.Server.device storage server in
-        let csrf = generate_csrf_token env req in
-        page_response
-          ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-          (Dashboard.dashboard_layout ~csrf user ~page_title:"Users"
-             ~content:
-               (Users_index.users_index_layout (Storage.users store) (now ()))
-             ())
+        dashboard_page ~page_title:"Users" user
+          ~content:
+            (Users_index.users_index_layout (Storage.users store) (now ()))
           req server env)
 
   let view_user (page : [ `Profile | `Unikernels | `Policy ]) req server env =
@@ -2207,16 +1779,12 @@ module Admin = struct
                 albatross_instances u.name
             in
             let current_time = now () in
-            let csrf = generate_csrf_token env req in
             let reply content =
-              page_response
-                ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-                (Dashboard.dashboard_layout ~csrf user
-                   ~page_title:
-                     (String.capitalize_ascii
-                        (Models.Configuration.name_to_str u.name))
-                   ~content ())
-                req server env
+              dashboard_page
+                ~page_title:
+                  (String.capitalize_ascii
+                     (Models.Configuration.name_to_str u.name))
+                user ~content req server env
             in
             match page with
             | `Profile ->
@@ -2262,18 +1830,15 @@ module Admin = struct
                   Albatross_client.policy_resource_avalaible albatross_inst
                 with
                 | Ok unallocated_resources ->
-                    let csrf = generate_csrf_token env req in
-                    page_response
-                      ~headers:[ ("X-MOLLY-CSRF", csrf) ]
-                      (Dashboard.dashboard_layout ~csrf user
-                         ~page_title:
-                           (String.capitalize_ascii
-                              (Models.Configuration.name_to_str u.name))
-                         ~content:
-                           (Update_policy.update_policy_layout u
-                              albatross_inst.configuration.name ~user_policy
-                              ~unallocated_resources)
-                         ())
+                    dashboard_page
+                      ~page_title:
+                        (String.capitalize_ascii
+                           (Models.Configuration.name_to_str u.name))
+                      user
+                      ~content:
+                        (Update_policy.update_policy_layout u
+                           albatross_inst.configuration.name ~user_policy
+                           ~unallocated_resources)
                       req server env
                 | Error err ->
                     error_page_response ~title:"Bad Request"
@@ -2291,90 +1856,57 @@ module Admin = struct
           ~csrf_of:(fun (f : Models.Policy.t) -> f.molly_csrf)
           (fun (form : Models.Policy.t) ->
             let store = Vifu.Server.device storage server in
-            let albatross_instances = !(Vifu.Server.device albatross server) in
-            match
+            let*? u =
               Option.bind
                 (Uuidm.of_string form.user_uuid)
                 (Storage.find_by_uuid store)
-            with
-            | Some u -> (
-                match
-                  Models.Configuration.name_of_str form.albatross_instance
-                with
-                | Ok instance_name -> (
-                    match
-                      Albatross_client.find_instance_by_name albatross_instances
-                        instance_name
-                    with
-                    | Ok albatross_inst -> (
-                        match Models.Policy.to_policy form with
-                        | Ok policy -> (
-                            match Albatross_client.policy albatross_inst with
-                            | Some root_policy -> (
-                                match
-                                  Vmm_core.Policy.is_smaller ~super:root_policy
-                                    ~sub:policy
-                                with
-                                | Error (`Msg err) ->
-                                    Logs.err (fun m ->
-                                        m
-                                          "policy %a is not smaller than root \
-                                           policy %a: %s"
-                                          Vmm_core.Policy.pp policy
-                                          Vmm_core.Policy.pp root_policy err);
-                                    api_response ~title:"Bad Request"
-                                      ~data:
-                                        ("Policy is not smaller than root \
-                                          policy: " ^ err)
-                                      `Bad_request req
-                                | Ok () -> (
-                                    match
-                                      Albatross_client.set_policy env.tcp
-                                        albatross_inst ~domain:u.name policy
-                                    with
-                                    | Error err ->
-                                        Logs.err (fun m ->
-                                            m
-                                              "error setting policy %a for %s: \
-                                               %s"
-                                              Vmm_core.Policy.pp policy
-                                              (Models.Configuration.name_to_str
-                                                 u.name)
-                                              err);
-                                        api_response
-                                          ~title:"Internal Server Error"
-                                          ~data:("error setting policy: " ^ err)
-                                          `Internal_server_error req
-                                    | Ok _policy ->
-                                        api_response ~title:"Success"
-                                          ~data:"Updated policy successfully"
-                                          `OK req))
-                            | None ->
-                                Logs.err (fun m ->
-                                    m "policy: root policy can't be null ");
-                                api_response ~title:"Internal Server Error"
-                                  ~data:"Root policy is null"
-                                  `Internal_server_error req)
-                        | Error (`Msg err) ->
-                            api_response ~title:"Bad Request" ~data:err
-                              `Bad_request req)
-                    | Error _ ->
-                        Logs.err (fun m ->
-                            m "Couldn't find albatross instance with name %s"
-                              (Models.Configuration.name_to_str instance_name));
-                        api_response ~title:"Not Found"
-                          ~data:
-                            ("Couldn't find albatross instance with name: "
-                            ^ Models.Configuration.name_to_str instance_name)
-                          `Not_found req)
-                | Error (`Msg err) ->
-                    api_response ~title:"Bad Request"
-                      ~data:
-                        ("Couldn't convert name to albatross instance: " ^ err)
-                      `Bad_request req)
-            | None ->
-                api_response ~title:"Not Found" ~data:"User not found"
-                  `Not_found req))
+              |> Option.to_result
+                   ~none:
+                     (api_response ~title:"Not Found" ~data:"User not found"
+                        `Not_found req)
+            in
+            with_api_instance ~instance_str:form.albatross_instance req server
+              (fun albatross_inst ->
+                let*? policy =
+                  Models.Policy.to_policy form
+                  |> Result.map_error (fun (`Msg err) ->
+                      api_response ~title:"Bad Request" ~data:err `Bad_request
+                        req)
+                in
+                let*? root_policy =
+                  Albatross_client.policy albatross_inst
+                  |> Option.to_result ~none:()
+                  |> Result.map_error (fun () ->
+                      Logs.err (fun m -> m "policy: root policy can't be null ");
+                      api_response ~title:"Internal Server Error"
+                        ~data:"Root policy is null" `Internal_server_error req)
+                in
+                let*? () =
+                  Vmm_core.Policy.is_smaller ~super:root_policy ~sub:policy
+                  |> Result.map_error (fun (`Msg err) ->
+                      Logs.err (fun m ->
+                          m "policy %a is not smaller than root policy %a: %s"
+                            Vmm_core.Policy.pp policy Vmm_core.Policy.pp
+                            root_policy err);
+                      api_response ~title:"Bad Request"
+                        ~data:("Policy is not smaller than root policy: " ^ err)
+                        `Bad_request req)
+                in
+                let*? _policy =
+                  Albatross_client.set_policy env.tcp albatross_inst
+                    ~domain:u.name policy
+                  |> Result.map_error (fun err ->
+                      Logs.err (fun m ->
+                          m "error setting policy %a for %s: %s"
+                            Vmm_core.Policy.pp policy
+                            (Models.Configuration.name_to_str u.name)
+                            err);
+                      api_response ~title:"Internal Server Error"
+                        ~data:("error setting policy: " ^ err)
+                        `Internal_server_error req)
+                in
+                api_response ~title:"Success"
+                  ~data:"Updated policy successfully" `OK req)))
 
   let toggle_account_attribute (form : Models.Admin_user.t) store env req ~key
       update_fn error_on_last ~error_message =
@@ -2384,21 +1916,18 @@ module Admin = struct
     | None ->
         Logs.warn (fun m -> m "%s : Account not found" key);
         api_response ~title:"Not Found" ~data:"Account not found" `Not_found req
-    | Some user -> (
+    | Some user ->
         if error_on_last user then (
           Logs.warn (fun m -> m "%s : Can't perform action on last user" key);
           api_response ~title:"Forbidden" ~data:error_message `Forbidden req)
         else
           let updated_user = update_fn user in
           Storage.update_user store updated_user;
-          match Store.write_data store env.block with
-          | Ok () ->
-              api_response ~title:"Success" ~data:"Updated user successfully"
-                `OK req
-          | Error (`Msg msg) ->
+          write_data ~error_title:"Internal Server Error"
+            ~on_error:(fun msg ->
               Logs.warn (fun m -> m "%s : Storage error with %s" key msg);
-              api_response ~title:"Internal Server Error" ~data:msg
-                `Internal_server_error req)
+              msg)
+            ~success_msg:"Updated user successfully" store env req
 
   let toggle_account_activation req server env =
     with_admin_cookie_api req server (fun _user _cookie ->
@@ -2444,599 +1973,12 @@ module Admin = struct
                 Logs.warn (fun m -> m "delete-account : Account not found");
                 api_response ~title:"Not Found" ~data:"Account not found"
                   `Not_found req
-            | Some user -> (
+            | Some user ->
                 Storage.delete_user store user;
-                match Store.write_data store env.block with
-                | Ok () ->
-                    api_response ~title:"Success"
-                      ~data:"Deleted user successfully" `OK req
-                | Error (`Msg msg) ->
+                write_data ~error_title:"Internal Server Error"
+                  ~on_error:(fun msg ->
                     Logs.warn (fun m ->
                         m "delete-user : Storage error with %s" msg);
-                    api_response ~title:"Internal Server Error" ~data:msg
-                      `Internal_server_error req)))
-end
-
-module Scheduler = struct
-  let scaling_groups :
-      Autoscaler.Cluster_manager.group Utils.LM.t Utils.LM.t ref =
-    ref Utils.LM.empty
-
-  module Log = (val Logs.src_log Autoscaler.a_logs : Logs.LOG)
-
-  let least_used_cpuid tcp albatross_inst user_name =
-    let unikernels =
-      Albatross_client.user_unikernels_by_instance tcp albatross_inst user_name
-    in
-    match Albatross_client.policy ~domain:user_name albatross_inst with
-    | None -> Error "No policy found for user"
-    | Some p -> (
-        match
-          Utils.cpu_usage_count p unikernels
-          |> List.sort (fun (_, c1) (_, c2) -> Int.compare c1 c2)
-        with
-        | (id, _) :: _ -> Ok id
-        | [] -> Error "No cpuids available in user policy")
-
-  let put_group ~(user_name : Vmm_core.Name.Label.t)
-      ~(unikernel_name : Vmm_core.Name.Label.t) group =
-    let unikernel_map =
-      Option.value ~default:Utils.LM.empty
-        (Utils.LM.find_opt user_name !scaling_groups)
-    in
-    scaling_groups :=
-      Utils.LM.add user_name
-        (Utils.LM.add unikernel_name group unikernel_map)
-        !scaling_groups
-
-  let spawn_clone tcp store albatross_inst ~unikernel_name ~clone_name
-      ~user_name group scaler =
-    match Storage.find_by_name store user_name with
-    | None -> Error "User not found"
-    | Some user -> (
-        match
-          Albatross_client.user_unikernel tcp albatross_inst ~user_name
-            ~unikernel_name
-        with
-        | Error err ->
-            Error
-              (Fmt.str "An error occured trying to fetch %s from albatross: %s"
-                 (Models.Configuration.name_to_str unikernel_name)
-                 err)
-        | Ok (_, unikernel) -> (
-            if unikernel.block_devices <> [] then (
-              Log.info (fun m ->
-                  m
-                    "spawn_clone: Aborting clone of %s because it has block \
-                     devices."
-                    (Models.Configuration.name_to_str unikernel_name));
-              Error "Unikernels with block devices cannot be safely cloned")
-            else
-              let bridges =
-                List.map
-                  (fun { Vmm_core.Unikernel.unikernel_device; host_device; _ }
-                     -> (unikernel_device, Some host_device, None))
-                  unikernel.bridges
-              in
-              match least_used_cpuid tcp albatross_inst user_name with
-              | Error err -> Error err
-              | Ok cpuid -> (
-                  let argv =
-                    Option.map
-                      (fun args ->
-                        List.map
-                          (fun arg ->
-                            String.split_on_char ' ' arg
-                            |> List.filter (fun s ->
-                                not (String.starts_with ~prefix:"--name=" s))
-                            |> String.concat " ")
-                          args
-                        |> List.filter (fun s -> s <> ""))
-                      unikernel.argv
-                  in
-                  let config : Vmm_core.Unikernel.config =
-                    {
-                      typ = unikernel.typ;
-                      fail_behaviour = unikernel.fail_behaviour;
-                      startup = unikernel.startup;
-                      memory = unikernel.memory;
-                      block_devices = [];
-                      add_name = true;
-                      bridges;
-                      argv;
-                      numcpus = unikernel.numcpus;
-                      linux_boot_partition = unikernel.linux_boot_partition;
-                      compressed = true;
-                      image = "";
-                      cpuids = Vmm_core.IS.singleton cpuid;
-                    }
-                  in
-                  let buf = Buffer.create 65536 in
-                  match
-                    Albatross_client.query_unikernel_binary tcp albatross_inst
-                      ~domain:user_name ~name:unikernel_name (fun binary_str ->
-                        Buffer.add_string buf binary_str;
-                        Ok ())
-                  with
-                  | Error err ->
-                      put_group ~user_name ~unikernel_name
-                        (Autoscaler.Cluster_manager.remove_cooldown group);
-                      Log.err (fun m ->
-                          m "Error getting binary for %s: %s"
-                            (Models.Configuration.name_to_str unikernel_name)
-                            err);
-                      Error err
-                  | Ok () -> (
-                      let push = make_string_stream (Buffer.contents buf) in
-                      match
-                        Unikernel.force_create_unikernel tcp albatross_inst
-                          ~unikernel_name:clone_name ~push config user
-                      with
-                      | Error (`Msg err, _status) ->
-                          put_group ~user_name ~unikernel_name
-                            (Autoscaler.Cluster_manager.remove_cooldown group);
-                          Error err
-                      | Ok () -> (
-                          match
-                            Autoscaler.Cluster_manager.register_clone group
-                              (clone_name, scaler)
-                          with
-                          | Error e ->
-                              Log.err (fun m ->
-                                  m "Error registering clone %s: %s"
-                                    (Models.Configuration.name_to_str clone_name)
-                                    e);
-                              Error
-                                (Fmt.str "Error registering clone %s: %s"
-                                   (Models.Configuration.name_to_str clone_name)
-                                   e)
-                          | Ok spawn_group ->
-                              Log.debug (fun m ->
-                                  m "Successfully cloned %s to %s"
-                                    (Models.Configuration.name_to_str
-                                       unikernel_name)
-                                    (Models.Configuration.name_to_str clone_name));
-                              put_group ~user_name ~unikernel_name spawn_group;
-                              Ok ())))))
-
-  let prune_clone tcp albatross_inst group ~unikernel_name ~clone_to_kill
-      ~user_name =
-    match
-      Albatross_client.query tcp albatross_inst ~domain:user_name
-        ~name:clone_to_kill (`Unikernel_cmd `Unikernel_destroy)
-    with
-    | Error err ->
-        Log.err (fun m ->
-            m "Error pruning unikernel %s: %s"
-              (Models.Configuration.name_to_str clone_to_kill)
-              err);
-        Error err
-    | Ok (_hdr, res) -> (
-        Albatross_client.set_online albatross_inst;
-        match Albatross_json.res res with
-        | Ok _res -> (
-            match
-              Autoscaler.Cluster_manager.remove_clone group clone_to_kill
-            with
-            | Error e ->
-                Log.err (fun m ->
-                    m "Error removing clone %s: %s"
-                      (Models.Configuration.name_to_str clone_to_kill)
-                      e);
-                Error e
-            | Ok post_prune_group ->
-                Log.debug (fun m ->
-                    m "Succesfully pruned %s"
-                      (Models.Configuration.name_to_str clone_to_kill));
-                put_group ~user_name ~unikernel_name post_prune_group;
-                Ok ())
-        | Error (`String err) ->
-            Log.err (fun m ->
-                m "Error pruning unikernel %s: %s"
-                  (Models.Configuration.name_to_str clone_to_kill)
-                  err);
-            Error err)
-
-  let evaluate_scaling tcp store albatross_inst group current_time user_name
-      unikernel_name =
-    match Autoscaler.Cluster_manager.evaluate_scaling group current_time with
-    | Error err ->
-        Error
-          (Fmt.str "Error evaluating scaling for cluster %s/%s: %s"
-             (Models.Configuration.name_to_str user_name)
-             (Models.Configuration.name_to_str unikernel_name)
-             err)
-    | Ok (status, group) -> (
-        put_group ~user_name ~unikernel_name group;
-        match status with
-        | Autoscaler.Normal _scaler -> Ok ()
-        | Autoscaler.Pending (`Spawn, ticks, scaler) ->
-            Log.info (fun m ->
-                m "%s/%s: high usage (%d%%), [ticks: %d/%d]"
-                  (Models.Configuration.name_to_str user_name)
-                  (Models.Configuration.name_to_str unikernel_name)
-                  scaler.last_cpu_usage ticks Autoscaler.scale_up_trigger_ticks);
-            Ok ()
-        | Autoscaler.Cooldown scaler ->
-            Log.info (fun m ->
-                m "%s/%s: cooldown (usage: %d%%)"
-                  (Models.Configuration.name_to_str user_name)
-                  (Models.Configuration.name_to_str unikernel_name)
-                  scaler.last_cpu_usage);
-            Ok ()
-        | Autoscaler.Pending (`Prune, ticks, scaler) ->
-            Log.info (fun m ->
-                m "%s/%s: low usage (%d%%), [ticks: %d/%d]"
-                  (Models.Configuration.name_to_str user_name)
-                  (Models.Configuration.name_to_str unikernel_name)
-                  scaler.last_cpu_usage ticks
-                  Autoscaler.scale_down_trigger_ticks);
-            Ok ()
-        | Autoscaler.Overloaded scaler -> (
-            match Autoscaler.Cluster_manager.next_clone_name group with
-            | Error (`Msg e) -> Error (Fmt.str "Error: %s" e)
-            | Ok next_name ->
-                Log.info (fun m ->
-                    m "%s/%s: overloaded (%d%%), spawning new clone: %s"
-                      (Models.Configuration.name_to_str user_name)
-                      (Models.Configuration.name_to_str unikernel_name)
-                      scaler.last_cpu_usage
-                      (Models.Configuration.name_to_str next_name));
-                spawn_clone tcp store albatross_inst ~unikernel_name
-                  ~clone_name:next_name ~user_name group scaler)
-        | Autoscaler.Underloaded (clone_to_kill, scaler) ->
-            Log.info (fun m ->
-                m "[%s/%s]: underloaded (%d%%), pruning: %s"
-                  (Models.Configuration.name_to_str user_name)
-                  (Models.Configuration.name_to_str unikernel_name)
-                  scaler.last_cpu_usage
-                  (Models.Configuration.name_to_str clone_to_kill));
-            prune_clone tcp albatross_inst group ~unikernel_name ~clone_to_kill
-              ~user_name)
-
-  let handle_stats tcp state ((rusage, _, _) : Vmm_core.Stats.t) name store =
-    match Vmm_core.Name.name name with
-    | None -> Error "VM name has no unikernel label"
-    | Some unikernel_name -> (
-        match Vmm_core.Name.Path.to_labels (Vmm_core.Name.path name) with
-        | [ user_label ] -> (
-            match Storage.find_by_name store user_label with
-            | None ->
-                Error
-                  (Fmt.str "User %s not found."
-                     (Models.Configuration.name_to_str user_label))
-            | Some user ->
-                let primary_name =
-                  Option.value ~default:unikernel_name
-                    (Option.map fst
-                       (Autoscaler.Cluster_manager.extract_name_and_clone_id
-                          unikernel_name))
-                in
-                let is_scaling_enabled =
-                  Models.User.Scaling_policy_map.exists
-                    (fun (p_name, _) _ ->
-                      Vmm_core.Name.Label.equal p_name primary_name)
-                    user.scaling_policies
-                in
-                if is_scaling_enabled then (
-                  Log.debug (fun m ->
-                      m "[Stats] Received stats for %s as %a"
-                        (Models.Configuration.name_to_str unikernel_name)
-                        Vmm_core.Stats.pp_rusage rusage);
-                  let current_time = now () in
-                  let group =
-                    let unikernel_map =
-                      Option.value ~default:Utils.LM.empty
-                        (Utils.LM.find_opt user.name !scaling_groups)
-                    in
-                    match Utils.LM.find_opt primary_name unikernel_map with
-                    | Some g -> g
-                    | None ->
-                        let primary_vm =
-                          (primary_name, Autoscaler.create current_time rusage)
-                        in
-                        Autoscaler.Cluster_manager.create_group primary_vm
-                  in
-                  let group =
-                    if
-                      (not
-                         (Vmm_core.Name.Label.equal unikernel_name primary_name))
-                      && not (List.mem_assoc unikernel_name group.clones)
-                    then (
-                      let clone_vm =
-                        (unikernel_name, Autoscaler.create current_time rusage)
-                      in
-                      match
-                        Autoscaler.Cluster_manager.register_clone group clone_vm
-                      with
-                      | Ok updated_g -> updated_g
-                      | Error err ->
-                          Log.err (fun m ->
-                              m "Error registering clone %s: %s"
-                                (Models.Configuration.name_to_str unikernel_name)
-                                err);
-                          group)
-                    else group
-                  in
-                  match
-                    Autoscaler.Cluster_manager.update_vm_metrics group
-                      unikernel_name current_time rusage
-                  with
-                  | Error err ->
-                      Error
-                        (Fmt.str "Error updating metrics for unikernel %s: %s"
-                           (Models.Configuration.name_to_str unikernel_name)
-                           err)
-                  | Ok (_, updated_group) ->
-                      put_group ~user_name:user.name
-                        ~unikernel_name:primary_name updated_group;
-                      if Vmm_core.Name.Label.equal unikernel_name primary_name
-                      then
-                        evaluate_scaling tcp store state updated_group
-                          current_time user.name primary_name
-                      else Ok ())
-                else Ok ())
-        | _ -> Error "VM path must contain exactly one user domain level")
-
-  let unikernels_stats tcp (instance : Albatross_client.t) store =
-    let cb name st =
-      (match handle_stats tcp instance st name store with
-      | Ok () -> ()
-      | Error err ->
-          Log.err (fun m ->
-              m "Error handling stats for %s: %s"
-                (Vmm_core.Name.to_string name)
-                err));
-      Ok ()
-    in
-    match Albatross_client.query_stats tcp instance cb with
-    | Error err ->
-        Error
-          (Fmt.str "Error fetching stats for albatross instance %s: %s"
-             (Models.Configuration.name_to_str instance.configuration.name)
-             err)
-    | Ok () -> Ok ()
-
-  let seconds_until_next_midnight () =
-    let current_time = now () in
-    let _, ((hour, min, sec), _) = Ptime.to_date_time current_time in
-    let passed = (hour * 3600) + (min * 60) + sec in
-    86_400 - passed
-
-  let check_user_unikernel_updates tcp albatross_instances
-      (user : Models.User.user) he =
-    let unikernels_per_instance =
-      Albatross_client.user_unikernels tcp albatross_instances user.name
-    in
-    let available_updates =
-      Utils.LM.filter_map
-        (fun _instance_name unikernels ->
-          let updates =
-            List.filter_map
-              (fun (name, unikernel) ->
-                match Update_flow.check_for_update name unikernel he with
-                | Ok
-                    (Update_flow.Update_available (name, unikernel, comparison))
-                  ->
-                    Some (name, unikernel, comparison)
-                | _ -> None)
-              unikernels
-          in
-          if updates = [] then None else Some updates)
-        unikernels_per_instance
-    in
-    { Update_flow.user; available_updates }
-
-  let check_available_unikernel_updates tcp albatross_instances
-      (users : Models.User.user Utils.UM.t) he =
-    Utils.UM.fold
-      (fun _ user acc ->
-        let update_report =
-          check_user_unikernel_updates tcp albatross_instances user he
-        in
-        if Utils.LM.is_empty update_report.available_updates then acc
-        else update_report :: acc)
-      users []
-
-  let run_background_update_check he users tcp email_config albatross_instances
-      =
-    match email_config with
-    | None ->
-        Logs.info (fun m ->
-            m "Email not configured, skipping background update check")
-    | Some email_config -> (
-        try
-          Logs.info (fun m ->
-              m "Starting background update check for all users' unikernels");
-          let reports =
-            check_available_unikernel_updates tcp albatross_instances users he
-          in
-          List.iter
-            (fun (report : Update_flow.user_unikernel_available_updates) ->
-              let references =
-                Fmt.str "updates-%s@robur.coop"
-                  (Uuidm.to_string report.user.uuid)
-              in
-              match
-                Email_client.send_email ~references he email_config
-                  report.user.email ~subject:"Unikernel updates available"
-                  ~body:(Email_templates.updated_unikernels report email_config)
-              with
-              | Ok () ->
-                  Logs.info (fun m ->
-                      m "Sent update report email to %s"
-                        (Emile.to_string report.user.email))
-              | Error err ->
-                  Logs.err (fun m ->
-                      m "Failed to send update report email to %s: %s"
-                        (Emile.to_string report.user.email)
-                        err))
-            reports
-        with exn ->
-          Logs.err (fun m ->
-              m "Background update check failed: %s" (Printexc.to_string exn)))
-
-  let start_background_scheduler he tcp store albatross_instances_ref =
-    let rec loop () =
-      let delay = seconds_until_next_midnight () in
-      Logs.info (fun m -> m "Next background update in %d seconds" delay);
-      Mkernel.sleep (Int64.to_int (Duration.of_sec delay));
-      (try
-         (* prune expired cookie sessions everyday *)
-         Logs.info (fun m -> m "Pruning expired sessions...");
-         ignore (Storage.prune_expired_sessions store (now ()));
-         Logs.info (fun m -> m "Starting background update...");
-         run_background_update_check he (Storage.users store) tcp
-           (Storage.email store) !albatross_instances_ref
-       with exn ->
-         Logs.err (fun m ->
-             m "Background update failed: %s" (Printexc.to_string exn)));
-      loop ()
-    in
-    loop ()
-
-  let start_background_scaler_scheduler tcp store albatross_instances_ref =
-    let active_streams = ref Vmm_core.String_set.empty in
-    let orphans = Miou.orphans () in
-    let rec clean_orphans () =
-      match Miou.care orphans with
-      | Some (Some prm) ->
-          let _ = Miou.await prm in
-          clean_orphans ()
-      | _ -> ()
-    in
-    let spawn_stats_stream key (instance : Albatross_client.t) =
-      Fun.protect
-        ~finally:(fun () ->
-          active_streams := Vmm_core.String_set.remove key !active_streams)
-        (fun () ->
-          let rec stream_loop () =
-            match
-              try Ok (unikernels_stats tcp instance store)
-              with exn -> Error exn
-            with
-            | Ok (Ok ()) ->
-                Mkernel.sleep (Int64.to_int (Duration.of_sec 10));
-                (stream_loop [@tailcall]) ()
-            | Ok (Error err) ->
-                Log.err (fun m ->
-                    m "Stats stream for %s failed: %s"
-                      (Models.Configuration.name_to_str
-                         instance.configuration.name)
-                      err)
-            | Error exn ->
-                Log.err (fun m ->
-                    m "Exception in stats stream for %s: %s. Retrying in 10s..."
-                      (Models.Configuration.name_to_str
-                         instance.configuration.name)
-                      (Printexc.to_string exn));
-                Mkernel.sleep (Int64.to_int (Duration.of_sec 10));
-                (stream_loop [@tailcall]) ()
-          in
-          stream_loop ())
-    in
-    let rec loop () =
-      clean_orphans ();
-      let current_instances = !albatross_instances_ref in
-      Utils.LM.iter
-        (fun instance_name instance ->
-          let key = Models.Configuration.name_to_str instance_name in
-          if not (Vmm_core.String_set.mem key !active_streams) then (
-            Log.debug (fun m ->
-                m "Spawning new stats stream for albatross instance %s" key);
-            active_streams := Vmm_core.String_set.add key !active_streams;
-            ignore
-              (Miou.async ~orphans (fun () -> spawn_stats_stream key instance))))
-        current_instances;
-      Mkernel.sleep (Int64.to_int (Duration.of_sec 30));
-      loop ()
-    in
-    loop ()
-
-  let run_prune_dead_clusters tcp albatross_instances_ref =
-    let rec loop () =
-      Log.debug (fun m ->
-          m "Pruning dead clusters in %a" Ptime.Span.pp Autoscaler.death_timeout);
-      let sleep_ns =
-        Int64.to_int
-          (Duration.of_sec
-             (Option.value ~default:600
-                (Ptime.Span.to_int_s Autoscaler.death_timeout)))
-      in
-      (try
-         Log.debug (fun m -> m "Starting background pruning...");
-         Utils.LM.iter
-           (fun user_name unikernel_map ->
-             let results =
-               Albatross_client.user_unikernels tcp !albatross_instances_ref
-                 user_name
-             in
-             let active_vm_names =
-               Utils.LM.fold
-                 (fun _instance_name vms acc ->
-                   let names =
-                     List.filter_map
-                       (fun (name, _info) -> Vmm_core.Name.name name)
-                       vms
-                   in
-                   acc @ names)
-                 results []
-             in
-             Utils.LM.iter
-               (fun unikernel_name group ->
-                 match
-                   Autoscaler.Cluster_manager.sync_group group active_vm_names
-                 with
-                 | Ok updated_group ->
-                     put_group ~user_name ~unikernel_name updated_group
-                 | Error `Primary_dead ->
-                     Log.warn (fun m ->
-                         m "Primary dead for %s/%s. Removing cluster."
-                           (Models.Configuration.name_to_str user_name)
-                           (Models.Configuration.name_to_str unikernel_name));
-                     let updated_unikernel_map =
-                       Utils.LM.remove unikernel_name unikernel_map
-                     in
-                     if Utils.LM.is_empty updated_unikernel_map then
-                       scaling_groups :=
-                         Utils.LM.remove user_name !scaling_groups
-                     else
-                       scaling_groups :=
-                         Utils.LM.add user_name updated_unikernel_map
-                           !scaling_groups)
-               unikernel_map)
-           !scaling_groups
-       with exn ->
-         Log.err (fun m ->
-             m "Background pruning failed: %s" (Printexc.to_string exn)));
-      Mkernel.sleep sleep_ns;
-      loop ()
-    in
-    loop ()
-
-  let device : (env, unit Miou.t * unit Miou.t * unit Miou.t) Vifu.Device.device
-      =
-    let finally (p1, p2, p3) =
-      Miou.cancel p1;
-      Miou.cancel p2;
-      Miou.cancel p3
-    in
-    let open Vifu.Device in
-    v ~name:"scheduler" ~finally
-      [ value storage; value happy_eyeballs; value albatross ]
-    @@ fun store he albatross_instances_ref env ->
-    let p1 =
-      Miou.async (fun () : unit ->
-          start_background_scheduler he env.tcp store albatross_instances_ref)
-    in
-    let p2 =
-      Miou.async (fun () : unit ->
-          start_background_scaler_scheduler env.tcp store
-            albatross_instances_ref)
-    in
-    let p3 =
-      Miou.async (fun () : unit ->
-          run_prune_dead_clusters env.tcp albatross_instances_ref)
-    in
-    (p1, p2, p3)
+                    msg)
+                  ~success_msg:"Deleted user successfully" store env req))
 end

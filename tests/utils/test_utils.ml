@@ -582,32 +582,27 @@ let is_failing (config : Models.Configuration.t) =
 module Mnet_happy_eyeballs = struct
   include Mnet_happy_eyeballs
 
-  let connect ~kind:_ _ _ _ = Error (`Msg "uninitialized")
+  let connect ?aaaa_timeout:_ ?connect_delay:_ ?connect_timeout:_
+      ?resolve_timeout:_ ?resolve_retries:_ ~kind:_ _t _host _ports =
+    Error (`Msg "uninitialized")
 end
 
-module Builder_web = struct
-  include Builder_web
+module Mhttp_client = struct
+  include Mhttp_client
 
-  let send_http_request ?path:_ ~base_url:_ ~happy_eyeballs:_ () =
-    Error (`Msg "Mock happy_eyeballs: no network")
-
-  let fetch_unikernel_jobs _happy_eyeballs = []
-
-  let fetch_unikernel_binary_image _happy_eyeballs ~job:_ ~version:_ push_chunks
-      =
-    push_chunks None;
+  let request ?config:_ ?tls_config:_ ?authenticator:_ ?meth:_ ?headers:_
+      ?body:_ ?max_redirect:_ ?follow_redirect:_ ~happy_eyeballs:_ ?cookies:_
+      ~fn:_ ~uri:_ (_acc : 'a) : (response * 'a, error) result =
     Error (`Msg "Mock happy_eyeballs: no network")
 end
 
-module Email_client = struct
-  include Email_client
+module Msendmail = struct
+  include Msendmail
 
-  let send_email ?references:_ _happy_eyeballs _email_config _user_email
-      ~subject:_ ~body:_ =
-    Error "Connection failed"
-
-  let test_email_configuration _happy_eyeballs _email_settings _recipient =
-    Error "Connection failed"
+  let sendmail ?encoder:_ ?decoder:_ ?queue:_ _he ~destination:_ ?port:_
+      ~domain:_ ?cfg:_ ?authenticator:_ ?authentication:_ _sender _recipients
+      _stream =
+    Error (`Msg "Connection failed")
 end
 
 module Albatross_client = struct

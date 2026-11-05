@@ -9,11 +9,6 @@
   mrmime
   mnet
   mnet-tls
-  mhttp-client
-  msendmail
-  colombe
-  colombe.emile
-  sendmail
   emile
   tyxml
   ohex

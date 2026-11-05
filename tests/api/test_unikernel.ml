@@ -141,7 +141,7 @@ let check_unikernel_create_unknown_instance () =
     (String.starts_with ~prefix:"HTTP/1.1 404 Not Found" resp);
   Alcotest.(check bool)
     "Response indicates error finding instance" true
-    (String.includes ~affix:"Error finding albatross instance" resp)
+    (String.includes ~affix:"Couldn't find albatross instance" resp)
 
 let check_unikernel_create_invalid_config () =
   let store = init_mock_store () in

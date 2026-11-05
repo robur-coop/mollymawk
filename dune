@@ -3,7 +3,7 @@
  (enabled_if
   (= %{context_name} "solo5"))
  (link_flags :standard -cclib "-z solo5-abi=hvt")
- (modules main assets etag controller app store filesystem liveliness_checks)
+ (modules :standard)
  (libraries
   mkernel
   mnet
@@ -30,6 +30,11 @@
   fmt
   mnet-tls
   tyxml
+  uuidm
+  ptime
+  mrmime
+  ca-certs-nss
+  digestif
   mollymawk_libraries)
  (foreign_stubs
   (language c)

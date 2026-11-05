@@ -504,3 +504,63 @@ let monitoring_status_html ~name ~logs ~metrics =
               render_metric_sources metric_entries name;
             ]);
     ]
+
+let send_tcp_command happy_eyeballs ~command ~target management_domain =
+  let port = 2323 in
+  let target = target ^ "." ^ Domain_name.to_string management_domain in
+  try
+    match
+      Mnet_happy_eyeballs.connect ~kind:Mnet.TCP.direct happy_eyeballs target
+        [ port ]
+    with
+    | Error (`Msg err) ->
+        let msg =
+          Fmt.str "[monitoring] Failed to connect to %s:%d, error %s" target
+            port err
+        in
+        Logs.info (fun m -> m "%s" msg);
+        Error msg
+    | Ok ((_ip, _port), flow) -> (
+        try
+          Mnet.TCP.write flow command;
+          match Mnet.TCP.read flow with
+          | Ok [] | Error `Eof ->
+              Mnet.TCP.close flow;
+              let msg =
+                Fmt.str
+                  "[monitoring] Received eof while reading from %s:%d \
+                   (command: %s)"
+                  target port command
+              in
+              Logs.info (fun m -> m "%s" msg);
+              Error msg
+          | Error `Refused ->
+              Mnet.TCP.close flow;
+              let msg =
+                Fmt.str
+                  "[monitoring] Connection refused while reading from %s:%d \
+                   (command: %s)"
+                  target port command
+              in
+              Logs.info (fun m -> m "%s" msg);
+              Error msg
+          | Ok chunks ->
+              Mnet.TCP.close flow;
+              Ok (String.concat "" chunks)
+        with exn ->
+          (try Mnet.TCP.close flow with _ -> ());
+          let msg =
+            Fmt.str
+              "[monitoring] Failed communicating with %s:%d (command: %s), \
+               error %s"
+              target port command (Printexc.to_string exn)
+          in
+          Logs.info (fun m -> m "%s" msg);
+          Error msg)
+  with exn ->
+    let msg =
+      Fmt.str "[monitoring] Failed to connect to %s:%d, error %s" target port
+        (Printexc.to_string exn)
+    in
+    Logs.info (fun m -> m "%s" msg);
+    Error msg
