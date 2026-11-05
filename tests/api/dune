@@ -2,7 +2,8 @@
  (name api_tests)
  (enabled_if
   (= %{context_name} "default"))
- (modules (:standard \ main))
+ (modules
+  (:standard \ main))
  (flags
   (:standard -open Test_utils))
  (instrumentation

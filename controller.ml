@@ -416,7 +416,7 @@ module Auth = struct
             | None, Some _ ->
                 api_response ~title:"Failure"
                   ~data:"A user with this email already exist." `Bad_request req
-            | None, None -> (
+            | None, None ->
                 let active, super_user =
                   if Storage.count_users storage = 0 then (true, true)
                   else (false, false)
@@ -430,7 +430,7 @@ module Auth = struct
                   ~on_error:(fun err ->
                     Storage.delete_user storage user;
                     err)
-                  ~success_msg:"Registration successful" storage env req)))
+                  ~success_msg:"Registration successful" storage env req))
 
   let login_user req server env =
     let storage = Vifu.Server.device storage server in
@@ -752,7 +752,9 @@ module Block = struct
               match (c_or_u, block_size) with
               | `Upload, _ -> Ok ()
               | `Create, None ->
-                  err_resp (Fmt.str "unexpected field. got %s" json) `Bad_request
+                  err_resp
+                    (Fmt.str "unexpected field. got %s" json)
+                    `Bad_request
               | `Create, Some block_size -> (
                   match
                     Albatross_client.query env.tcp albatross_inst
@@ -787,12 +789,7 @@ module Block = struct
     with_user_cookie_api req server (fun user _cookie ->
         with_json_csrf req env
           ~csrf_of:(fun (f : Models.Block.download_t) -> f.molly_csrf)
-          (fun ({
-                  albatross_instance;
-                  block_name;
-                  compression_level;
-                  _;
-                } :
+          (fun ({ albatross_instance; block_name; compression_level; _ } :
                  Models.Block.download_t)
              ->
             with_api_instance_and_name ~instance_str:albatross_instance
@@ -1499,7 +1496,8 @@ module Unikernel = struct
                   Storage.update_user store user;
                   write_data ~error_title:"Internal Server Error"
                     ~on_error:(Fmt.str "Failed to save scaling policy: %s")
-                    ~success_msg:"Unikernel scaling policy updated successfully."
+                    ~success_msg:
+                      "Unikernel scaling policy updated successfully."
                     store env req
                 in
                 match (form.should_scale, form.max_instances) with

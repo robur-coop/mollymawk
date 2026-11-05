@@ -861,8 +861,7 @@ module Unikernel = struct
                    host_device;
                    sector_size;
                    _;
-                 } ->
-              (unikernel_device, Some host_device, Some sector_size))
+                 } -> (unikernel_device, Some host_device, Some sector_size))
             info.block_devices
     in
     let bridges =

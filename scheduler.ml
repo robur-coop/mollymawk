@@ -149,8 +149,7 @@ let prune_clone tcp albatross_inst group ~unikernel_name ~clone_to_kill
         e)
   in
   Log.debug (fun m ->
-      m "Succesfully pruned %s"
-        (Models.Configuration.name_to_str clone_to_kill));
+      m "Succesfully pruned %s" (Models.Configuration.name_to_str clone_to_kill));
   put_group ~user_name ~unikernel_name post_prune_group;
   Ok ()
 
@@ -186,8 +185,7 @@ let evaluate_scaling tcp store albatross_inst group current_time user_name
               m "%s/%s: low usage (%d%%), [ticks: %d/%d]"
                 (Models.Configuration.name_to_str user_name)
                 (Models.Configuration.name_to_str unikernel_name)
-                scaler.last_cpu_usage ticks
-                Autoscaler.scale_down_trigger_ticks);
+                scaler.last_cpu_usage ticks Autoscaler.scale_down_trigger_ticks);
           Ok ()
       | Autoscaler.Overloaded scaler -> (
           match Autoscaler.Cluster_manager.next_clone_name group with
@@ -332,8 +330,7 @@ let check_user_unikernel_updates tcp albatross_instances
           List.filter_map
             (fun (name, unikernel) ->
               match Update_flow.check_for_update name unikernel he with
-              | Ok
-                  (Update_flow.Update_available (name, unikernel, comparison))
+              | Ok (Update_flow.Update_available (name, unikernel, comparison))
                 ->
                   Some (name, unikernel, comparison)
               | _ -> None)
@@ -370,8 +367,7 @@ let run_background_update_check he users tcp email_config albatross_instances =
         List.iter
           (fun (report : Update_flow.user_unikernel_available_updates) ->
             let references =
-              Fmt.str "updates-%s@robur.coop"
-                (Uuidm.to_string report.user.uuid)
+              Fmt.str "updates-%s@robur.coop" (Uuidm.to_string report.user.uuid)
             in
             match
               Email_client.send_update_report_email ~references he email_config
@@ -427,8 +423,7 @@ let start_background_scaler_scheduler tcp store albatross_instances_ref =
       (fun () ->
         let rec stream_loop () =
           match
-            try Ok (unikernels_stats tcp instance store)
-            with exn -> Error exn
+            try Ok (unikernels_stats tcp instance store) with exn -> Error exn
           with
           | Ok (Ok ()) ->
               Mkernel.sleep (Int64.to_int (Duration.of_sec 10));
@@ -513,8 +508,7 @@ let run_prune_dead_clusters tcp albatross_instances_ref =
                      Utils.LM.remove unikernel_name unikernel_map
                    in
                    if Utils.LM.is_empty updated_unikernel_map then
-                     scaling_groups :=
-                       Utils.LM.remove user_name !scaling_groups
+                     scaling_groups := Utils.LM.remove user_name !scaling_groups
                    else
                      scaling_groups :=
                        Utils.LM.add user_name updated_unikernel_map
@@ -529,8 +523,7 @@ let run_prune_dead_clusters tcp albatross_instances_ref =
   in
   loop ()
 
-let device : (env, unit Miou.t * unit Miou.t * unit Miou.t) Vifu.Device.device
-    =
+let device : (env, unit Miou.t * unit Miou.t * unit Miou.t) Vifu.Device.device =
   let finally (p1, p2, p3) =
     Miou.cancel p1;
     Miou.cancel p2;
